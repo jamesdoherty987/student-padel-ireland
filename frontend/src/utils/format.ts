@@ -2,12 +2,29 @@
 
 export function formatMoney(cents: number, currency = 'EUR') {
   try {
-    return new Intl.NumberFormat('en-IE', { style: 'currency', currency, maximumFractionDigits: 0 }).format(
-      cents / 100,
-    )
+    return new Intl.NumberFormat('en-IE', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    }).format(cents / 100)
   } catch {
-    return `€${(cents / 100).toFixed(0)}`
+    return `€${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`
   }
+}
+
+/** e.g. "12/48 doubles · €50/team" or when empty "€50/team · 48 doubles spots" */
+export function formatDoublesEntry(
+  registered: number,
+  maxTeams: number,
+  entryFeeCents: number,
+  currency = 'EUR',
+) {
+  const fee = `${formatMoney(entryFeeCents, currency)}/team`
+  if (registered <= 0) {
+    return `${fee} · ${maxTeams} doubles spots`
+  }
+  return `${registered}/${maxTeams} doubles · ${fee}`
 }
 
 export function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions) {
@@ -30,6 +47,7 @@ export function statusLabel(status: string) {
 export function statusBadgeClass(status: string) {
   if (status === 'LIVE') return 'badge-live'
   if (status === 'REGISTRATION_OPEN' || status === 'PAID' || status === 'COMPLETED') return 'badge-open'
+  if (status === 'CANCELLED') return 'badge-draft'
   return 'badge-draft'
 }
 

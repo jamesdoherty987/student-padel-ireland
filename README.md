@@ -75,8 +75,10 @@ Run `supabase/migrations/001_initial.sql` on Supabase before first deploy.
 1. **Foundation** — auth, roles (PLAYER / ORGANISER / ADMIN), schema, seed data  
 2. **Tournament** — create, register + pay (Stripe or demo), teams, configurable generator  
 3. **Live event** — fixtures, scoring (organiser only), standings, player mobile view, QR, TV `/tournament/:id/display`  
-4. **Platform (partial)** — public profiles, rankings list  
-5. **Business (stubs)** — sponsors table, announcements, organiser revenue stats  
+4. **Community** — friends, private competitions/ladders, log singles & doubles matches  
+5. **Ratings** — doubles-aware Elo (team average of partners vs both opponents); updates on tournament + community matches  
+6. **Platform** — public profiles, Ireland rankings board  
+7. **Business (stubs)** — sponsors table, announcements, organiser revenue stats  
 
 ## Environment
 

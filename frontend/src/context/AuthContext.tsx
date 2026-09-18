@@ -18,20 +18,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    const onSoftLogout = () => {
+      setToken(null)
+      setUser(null)
+      setLoading(false)
+    }
+    window.addEventListener('isp:logout', onSoftLogout)
+    return () => window.removeEventListener('isp:logout', onSoftLogout)
+  }, [])
+
+  useEffect(() => {
     if (!token) {
       setLoading(false)
       return
     }
+    let cancelled = false
+    setLoading(true)
     authApi
       .me()
-      .then((res) => setUser(res.data))
+      .then((res) => {
+        if (!cancelled) setUser(res.data)
+      })
       .catch(() => {
+        if (cancelled) return
         localStorage.removeItem('isp_token')
         localStorage.removeItem('isp_user')
         setToken(null)
         setUser(null)
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [token])
 
   const persist = (accessToken: string, nextUser: User) => {

@@ -9,9 +9,13 @@ import TournamentDetailPage from './pages/TournamentDetailPage'
 import JoinTournamentPage from './pages/JoinTournamentPage'
 import PlayerLivePage from './pages/PlayerLivePage'
 import TvDisplayPage from './pages/TvDisplayPage'
+import AdminDashboard from './pages/AdminDashboard'
 import OrganiserDashboard from './pages/OrganiserDashboard'
 import RankingsPage from './pages/RankingsPage'
 import PlayerProfilePage from './pages/PlayerProfilePage'
+import CommunityPage from './pages/CommunityPage'
+import CompetitionDetailPage from './pages/CompetitionDetailPage'
+import JoinCompetitionPage from './pages/JoinCompetitionPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 const queryClient = new QueryClient({
@@ -50,6 +54,14 @@ export default function App() {
             />
             <Route path="/tournament/:id/display" element={<TvDisplayPage />} />
             <Route
+              path="/admin"
+              element={
+                <ProtectedRoute roles={['ADMIN']}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/organiser"
               element={
                 <ProtectedRoute roles={['ORGANISER', 'ADMIN']}>
@@ -58,6 +70,23 @@ export default function App() {
               }
             />
             <Route path="/rankings" element={<RankingsPage />} />
+            <Route
+              path="/community"
+              element={
+                <ProtectedRoute>
+                  <CommunityPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/community/join/:code" element={<JoinCompetitionPage />} />
+            <Route
+              path="/community/:slug"
+              element={
+                <ProtectedRoute>
+                  <CompetitionDetailPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/players/:id" element={<PlayerProfilePage />} />
             <Route path="/404" element={<NotFoundPage />} />
             <Route path="*" element={<NotFoundPage />} />

@@ -47,13 +47,14 @@
   --shadow-md: 0 8px 24px rgba(10, 22, 40, 0.08);
   --shadow-lg: 0 20px 40px rgba(10, 22, 40, 0.12);
 
-  --font-display: 'Outfit', system-ui, sans-serif;
+  --font-display: 'Syne', 'Outfit', system-ui, sans-serif;
   --font-body: 'Outfit', system-ui, sans-serif;
   --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 html {
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   scroll-behavior: smooth;
 }
 
@@ -63,12 +64,21 @@ body {
   color: var(--text-primary);
   line-height: 1.55;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+body.mobile-menu-open,
+body.modal-open {
+  overflow: hidden;
+  touch-action: none;
 }
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 a {
@@ -190,6 +200,7 @@ img {
   border-radius: var(--radius-sm);
   background: var(--white);
   color: var(--ink);
+  font-size: 16px; /* avoid iOS zoom-on-focus */
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 
@@ -248,15 +259,16 @@ img {
   width: min(800px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 1.5rem 0 3.5rem;
+  padding-bottom: max(3.5rem, calc(2rem + env(safe-area-inset-bottom)));
 }
 
 .page-title {
-  font-family: var(--font-body);
-  font-size: clamp(1.5rem, 4vw, 2rem);
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 4vw, 2.15rem);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   text-transform: none;
-  line-height: 1.2;
+  line-height: 1.15;
   color: var(--court-deep);
 }
 
@@ -273,6 +285,7 @@ img {
   color: var(--court-mid);
 }
 
+.form-error,
 .auth-error {
   color: var(--danger);
   font-size: 0.9rem;
@@ -324,31 +337,42 @@ img {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.85rem 1.25rem;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  padding-top: max(0.85rem, env(safe-area-inset-top));
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
 }
 
 .app-nav-brand {
+  font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1rem;
-  letter-spacing: -0.01em;
+  font-size: 0.98rem;
+  letter-spacing: -0.02em;
   text-transform: none;
   color: var(--court-deep);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
+  z-index: 55;
 }
 
 .app-nav-brand::before {
-  display: none;
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ball);
+  box-shadow: 0 0 0 3px rgba(200, 230, 0, 0.25);
+  flex-shrink: 0;
 }
 
 .app-nav-links {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
 .app-nav-links a {
@@ -358,6 +382,9 @@ img {
   padding: 0.45rem 0.7rem;
   border-radius: 8px;
   transition: background 0.15s, color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .app-nav-links a:hover,
@@ -366,12 +393,161 @@ img {
   background: var(--brand-soft);
 }
 
-@media (max-width: 640px) {
+.nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--ball);
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.app-nav-user {
+  color: var(--muted);
+  font-size: 0.88rem;
+  padding: 0 0.35rem;
+}
+
+.app-nav-logout {
+  min-height: 40px;
+  padding: 0.4rem 0.85rem;
+}
+
+.app-nav-join {
+  min-height: 40px;
+  padding: 0.4rem 1rem;
+}
+
+.app-nav-menu-btn {
+  display: none;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  color: var(--court-deep);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  z-index: 55;
+}
+
+.app-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    radial-gradient(ellipse 50% 30% at 100% 0%, rgba(200, 230, 0, 0.08), transparent 50%),
+    var(--bg-primary);
+}
+
+@media (max-width: 768px) {
   .hide-mobile {
     display: none !important;
   }
 
   .app-nav {
     padding: 0.75rem 1rem;
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  .app-nav-brand {
+    font-size: 0.88rem;
+    max-width: calc(100vw - 5.5rem);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-nav-menu-btn {
+    display: inline-flex;
+  }
+
+  .app-nav-links {
+    position: fixed;
+    inset: 0;
+    background: #fff;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 0.35rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 50;
+    padding: max(5rem, calc(4rem + env(safe-area-inset-top))) max(1.5rem, env(safe-area-inset-right))
+      max(2rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
+  }
+
+  .app-nav-links.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .app-nav-links a {
+    font-size: 1.15rem;
+    padding: 0.85rem 1rem;
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: min(280px, 100%);
+  }
+
+  .app-nav-user {
+    margin: 0.35rem 0;
+    font-size: 0.95rem;
+  }
+
+  .app-nav-join,
+  .app-nav-logout {
+    width: min(280px, 100%);
+    justify-content: center;
+    min-height: 48px;
+  }
+
+  .page {
+    width: min(800px, calc(100% - 1.5rem));
+    padding-top: 1.15rem;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .page-header-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .header-actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .header-actions .btn {
+    flex: 1 1 auto;
+    min-width: min(100%, 140px);
+  }
+
+  /* Prefer tap over hover on phones */
+  @media (hover: none) {
+    .btn:hover {
+      transform: none;
+    }
   }
 }
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  .app-nav {
+    padding-top: max(0.85rem, env(safe-area-inset-top));
+  }
+}
+

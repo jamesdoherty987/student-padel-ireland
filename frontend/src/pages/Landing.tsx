@@ -1,18 +1,49 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
-import { platformApi, tournamentApi, type Tournament } from '../services/api'
-import { formatDate, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
+import { tournamentApi, type Tournament } from '../services/api'
+import { formatDoublesEntry, statusBadgeClass, statusLabel } from '../utils/format'
+import { FlipWords } from '../components/ui/FlipWords'
+import { InfiniteMovingCards } from '../components/ui/InfiniteMovingCards'
+import { Globe } from '../components/ui/Globe'
+import { HERO_ROTATION, LANDING_VIDEO } from '../data/landingImages'
 import './Landing.css'
+
+const CITY_WORDS = ['Dublin', 'Cork', 'Galway', 'Limerick', 'Belfast', 'Waterford']
+
+const CITY_CARDS = [
+  { title: 'Dublin', subtitle: 'Coming soon' },
+  { title: 'Cork', subtitle: 'Coming soon' },
+  { title: 'Galway', subtitle: 'Coming soon' },
+  { title: 'Limerick', subtitle: 'Coming soon' },
+  { title: 'Belfast', subtitle: 'Coming soon' },
+  { title: 'Waterford', subtitle: 'Coming soon' },
+]
+
+const STEPS = [
+  { n: '1', title: 'Find an event', body: 'Browse open tournaments near you.' },
+  { n: '2', title: 'Register your team', body: 'Sign up with your partner and pay online.' },
+  { n: '3', title: 'Play with friends', body: 'Start a private competition, share a code, confirm scores.' },
+]
+
+function eventDay(iso: string) {
+  const d = new Date(iso)
+  return {
+    day: d.toLocaleDateString('en-IE', { day: 'numeric' }),
+    month: d.toLocaleDateString('en-IE', { month: 'short' }),
+  }
+}
 
 export default function Landing() {
   const { user } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [heroIndex, setHeroIndex] = useState(0)
+  const featureVideoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8)
+    const onScroll = () => setScrolled(window.scrollY > 16)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -23,64 +54,92 @@ export default function Landing() {
     return () => document.body.classList.remove('mobile-menu-open')
   }, [menuOpen])
 
-  const { data: tournaments = [], isLoading: loadingTournaments } = useQuery({
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 768) setMenuOpen(false)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  useEffect(() => {
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduced || HERO_ROTATION.length < 2) return
+    const id = window.setInterval(() => {
+      setHeroIndex((i) => (i + 1) % HERO_ROTATION.length)
+    }, 3000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    const el = featureVideoRef.current
+    if (!el) return
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduced) {
+      el.removeAttribute('autoplay')
+      el.pause()
+      return
+    }
+
+    const tryPlay = () => {
+      void el.play().catch(() => {})
+    }
+
+    tryPlay()
+
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return
+        if (entry.isIntersecting) tryPlay()
+        else el.pause()
+      },
+      { threshold: 0.2 },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
+
+  const { data: tournaments = [], isLoading, isError } = useQuery({
     queryKey: ['tournaments', 'upcoming'],
     queryFn: async () => (await tournamentApi.list({ upcoming: true })).data,
   })
-  const { data: allTournaments = [] } = useQuery({
-    queryKey: ['tournaments', 'all-home'],
-    queryFn: async () => (await tournamentApi.list()).data,
-  })
-  const { data: rankings = [] } = useQuery({
-    queryKey: ['rankings', 'home'],
-    queryFn: async () => (await platformApi.rankings(8)).data,
-  })
-  const { data: universities = [] } = useQuery({
-    queryKey: ['universities'],
-    queryFn: async () => (await platformApi.universities()).data,
-  })
 
-  const list = tournaments.length > 0 ? tournaments : allTournaments.slice(0, 6)
+  const upcoming = tournaments.slice(0, 6)
   const close = () => setMenuOpen(false)
-
-  const createHref =
-    user?.role === 'ORGANISER' || user?.role === 'ADMIN'
-      ? '/organiser'
-      : user
-        ? '/organiser'
-        : '/signup?role=ORGANISER'
+  const isOrganiser = user?.role === 'ORGANISER' || user?.role === 'ADMIN'
+  const primaryHref = user?.role === 'ADMIN' ? '/admin' : isOrganiser ? '/organiser' : user ? '/tournaments' : '/signup'
+  const primaryLabel = user?.role === 'ADMIN' ? 'Admin' : isOrganiser ? 'Dashboard' : user ? 'Tournaments' : 'Sign up'
 
   return (
     <div className="landing">
-      <header className={`lp-header ${scrolled ? 'is-scrolled' : ''}`}>
+      <header className={`lp-header ${scrolled ? 'is-scrolled' : ''} ${menuOpen ? 'is-menu-open' : ''}`}>
         <div className="lp-header-inner">
           <a href="#top" className="lp-logo" onClick={close}>
             Student Padel Ireland
           </a>
           <nav className={`lp-nav ${menuOpen ? 'is-open' : ''}`}>
-            <a href="#tournaments" onClick={close}>
-              Tournaments
+            <a href="#upcoming" onClick={close}>
+              Upcoming
             </a>
             <a href="#how" onClick={close}>
               How it works
             </a>
-            <a href="#rankings" onClick={close}>
+            <Link to="/community" onClick={close}>
+              Community
+            </Link>
+            <Link to="/rankings" onClick={close}>
               Rankings
-            </a>
+            </Link>
             {user ? (
-              <Link
-                to={user.role === 'ORGANISER' || user.role === 'ADMIN' ? '/organiser' : '/tournaments'}
-                className="lp-nav-cta"
-                onClick={close}
-              >
-                Dashboard
+              <Link to={primaryHref} className="lp-btn lp-btn-solid" onClick={close}>
+                {primaryLabel}
               </Link>
             ) : (
               <>
                 <Link to="/login" onClick={close}>
                   Log in
                 </Link>
-                <Link to="/signup" className="lp-nav-cta" onClick={close}>
+                <Link to="/signup" className="lp-btn lp-btn-solid" onClick={close}>
                   Sign up
                 </Link>
               </>
@@ -90,6 +149,7 @@ export default function Landing() {
             type="button"
             className="lp-menu-btn"
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
           >
             <i className={`fas ${menuOpen ? 'fa-times' : 'fa-bars'}`} />
@@ -99,186 +159,168 @@ export default function Landing() {
 
       <main id="top">
         <section className="lp-hero">
-          <div className="lp-hero-frame">
-            <p className="lp-kicker">Student padel · Ireland</p>
-            <h1>Find a tournament. Enter with your partner. Follow scores live.</h1>
+          <div className="lp-hero-media" aria-hidden>
+            {HERO_ROTATION.map((src, i) => (
+              <img
+                key={src}
+                src={src}
+                alt=""
+                className={i === heroIndex ? 'is-active' : undefined}
+                loading={i === 0 ? 'eager' : 'lazy'}
+              />
+            ))}
+            <div className="lp-hero-scrim" />
+          </div>
+          <div className="lp-hero-content">
+            <h1>Student Padel Ireland</h1>
             <p className="lp-lead">
-              Student Padel Ireland is the place to browse events, register your team, pay entry, and
-              check fixtures from your phone on the day.
+              Coming soon to <FlipWords words={CITY_WORDS} duration={900} className="lp-flip" />
             </p>
             <div className="lp-actions">
-              <a href="#tournaments" className="btn btn-primary">
-                Browse tournaments
+              <a href="#upcoming" className="lp-btn lp-btn-primary">
+                Upcoming events
               </a>
-              {user ? (
-                <Link to="/tournaments" className="btn btn-outline">
-                  My tournaments
-                </Link>
-              ) : (
-                <Link to="/signup" className="btn btn-outline">
-                  Create account
+              {!user && (
+                <Link to="/signup" className="lp-btn lp-btn-ghost">
+                  Sign up
                 </Link>
               )}
             </div>
           </div>
         </section>
 
-        <section id="tournaments" className="lp-section">
+        <section className="lp-marquee" aria-label="Coming soon cities">
+          <InfiniteMovingCards items={CITY_CARDS} speed="normal" />
+        </section>
+
+        <section id="upcoming" className="lp-section">
           <div className="lp-wrap">
             <div className="lp-section-head">
               <div>
-                <h2>Tournaments</h2>
-                <p>Open an event to join, see fixtures, or follow live scores.</p>
+                <p className="lp-kicker">This season</p>
+                <h2>Upcoming events</h2>
               </div>
-              <Link to="/tournaments" className="lp-text-link">
+              <Link to="/tournaments" className="lp-link">
                 View all
               </Link>
             </div>
 
-            {loadingTournaments && <p className="lp-muted">Loading tournaments…</p>}
-
-            {!loadingTournaments && list.length === 0 && (
-              <div className="lp-empty">
-                <p>No tournaments listed yet.</p>
-                <Link to={createHref} className="btn btn-primary">
-                  Create a tournament
+            {isLoading && (
+              <div className="lp-stack">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="skeleton lp-skel" />
+                ))}
+              </div>
+            )}
+            {isError && <p className="lp-muted">Could not load events.</p>}
+            {!isLoading && !isError && upcoming.length === 0 && (
+              <div className="lp-empty-card">
+                <p>No upcoming events yet.</p>
+                <Link to="/tournaments" className="lp-link">
+                  Browse tournaments
                 </Link>
               </div>
             )}
 
-            <ul className="lp-event-list">
-              {list.map((t: Tournament) => (
-                <li key={t.id}>
-                  <Link to={`/t/${t.slug}`} className="lp-event">
-                    <div className="lp-event-main">
-                      <h3>{t.name}</h3>
-                      <p>
-                        {t.location} · {t.venue} · {formatDate(t.event_date)}
-                      </p>
-                    </div>
-                    <div className="lp-event-side">
-                      <span className={`badge ${statusBadgeClass(t.status)}`}>
-                        {statusLabel(t.status)}
-                      </span>
-                      <span className="lp-event-meta">
-                        {t.registered_teams}/{t.max_teams} teams ·{' '}
-                        {formatMoney(t.entry_fee_cents, t.currency)}
-                      </span>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-
-            <div className="lp-organiser-note">
-              <p>Running an event at your university?</p>
-              <Link to={createHref} className="btn btn-dark">
-                Create a tournament
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        <section id="how" className="lp-section lp-section-alt">
-          <div className="lp-wrap">
-            <div className="lp-section-head">
-              <div>
-                <h2>How it works</h2>
-                <p>Three steps — no app download needed.</p>
-              </div>
-            </div>
-            <ol className="lp-steps">
-              <li>
-                <span>1</span>
-                <div>
-                  <strong>Find an event</strong>
-                  <p>Pick a tournament above and open the page for details, rules, and entry.</p>
-                </div>
-              </li>
-              <li>
-                <span>2</span>
-                <div>
-                  <strong>Register your team</strong>
-                  <p>Sign up, add your partner, and pay the entry fee online.</p>
-                </div>
-              </li>
-              <li>
-                <span>3</span>
-                <div>
-                  <strong>Play and follow scores</strong>
-                  <p>On the day, open the tournament link for your next match, standings, and live courts.</p>
-                </div>
-              </li>
-            </ol>
-          </div>
-        </section>
-
-        <section id="rankings" className="lp-section">
-          <div className="lp-wrap">
-            <div className="lp-section-head">
-              <div>
-                <h2>Rankings</h2>
-                <p>National standings after verified results.</p>
-              </div>
-              <Link to="/rankings" className="lp-text-link">
-                Full rankings
-              </Link>
-            </div>
-            {rankings.length === 0 ? (
-              <p className="lp-muted">Rankings appear once tournaments are completed.</p>
-            ) : (
-              <ol className="lp-rankings">
-                {rankings.map((r) => (
-                  <li key={r.id}>
-                    <Link to={`/players/${r.id}`}>
-                      <span className="lp-rank-pos">#{r.rank_ireland ?? '—'}</span>
-                      <span className="lp-rank-name">{r.full_name}</span>
-                      <span className="lp-rank-uni">{r.university_short || '—'}</span>
-                      <span className="lp-rank-pts">{r.points}</span>
+            <ul className="lp-stack">
+              {upcoming.map((t: Tournament) => {
+                const { day, month } = eventDay(t.event_date)
+                return (
+                  <li key={t.id}>
+                    <Link to={`/t/${t.slug}`} className="lp-event">
+                      <div className="lp-event-date" aria-hidden>
+                        <span>{month}</span>
+                        <strong>{day}</strong>
+                      </div>
+                      <div className="lp-event-body">
+                        <h3>{t.name}</h3>
+                        <p>
+                          {t.location} · {t.venue}
+                        </p>
+                      </div>
+                      <div className="lp-event-side">
+                        <span className={`badge ${statusBadgeClass(t.status)}`}>{statusLabel(t.status)}</span>
+                        <span className="lp-event-fee">
+                          {formatDoublesEntry(t.registered_teams, t.max_teams, t.entry_fee_cents, t.currency)}
+                        </span>
+                      </div>
                     </Link>
                   </li>
-                ))}
-              </ol>
-            )}
+                )
+              })}
+            </ul>
           </div>
         </section>
 
-        <section className="lp-section lp-section-alt">
+        <section id="how" className="lp-section lp-section-muted">
           <div className="lp-wrap">
             <div className="lp-section-head">
-              <div>
-                <h2>Universities</h2>
-                <p>Represent your campus.</p>
-              </div>
+              <h2>How it works</h2>
             </div>
-            <div className="lp-unis">
-              {universities.map((u) => (
-                <div key={u.id} className="lp-uni">
-                  <strong>{u.short_name}</strong>
-                  <span>{u.name}</span>
+            <div className="lp-hover-grid">
+              {STEPS.map((step) => (
+                <div key={step.n} className="lp-hover-card">
+                  <span className="lp-hover-num">{step.n}</span>
+                  <strong>{step.title}</strong>
+                  <p>{step.body}</p>
                 </div>
               ))}
             </div>
+            <figure className="lp-shot lp-shot-wide lp-shot-video">
+              <video
+                ref={featureVideoRef}
+                className="lp-feature-video"
+                poster={LANDING_VIDEO.poster}
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="auto"
+                aria-label="Padel match footage"
+              >
+                <source src={LANDING_VIDEO.mp4} type='video/mp4; codecs="mp4v"' />
+                <source src={LANDING_VIDEO.mp4} type="video/quicktime" />
+                <source src={LANDING_VIDEO.webm} type="video/webm" />
+              </video>
+            </figure>
+          </div>
+        </section>
+
+        <section className="lp-globe-section">
+          <div className="lp-wrap lp-split lp-split-globe">
+            <div>
+              <p className="lp-kicker lp-kicker-light">Worldwide</p>
+              <h2>Join the fastest-growing sport on earth</h2>
+              <p>Coming soon across Ireland — Dublin, Cork, Galway, Limerick, Belfast &amp; Waterford and more.</p>
+              <a href="#upcoming" className="lp-btn lp-btn-primary">
+                See upcoming events
+              </a>
+            </div>
+            <div className="lp-globe-stage">
+              <Globe />
+            </div>
+          </div>
+        </section>
+
+        <section className="lp-cta">
+          <div className="lp-wrap lp-cta-inner">
+            <h2>Ready to play?</h2>
+            <Link to={user ? '/tournaments' : '/signup'} className="lp-btn lp-btn-primary">
+              {user ? 'Browse tournaments' : 'Get started'}
+            </Link>
           </div>
         </section>
       </main>
 
       <footer className="lp-footer">
-        <div className="lp-wrap lp-footer-grid">
-          <div>
-            <strong>Student Padel Ireland</strong>
-            <p>Tournaments, entries, and live scores for student padel.</p>
-          </div>
+        <div className="lp-wrap lp-footer-row">
+          <span>Student Padel Ireland</span>
           <div className="lp-footer-links">
-            <a href="#tournaments">Tournaments</a>
-            <Link to="/rankings">Rankings</Link>
-            <Link to="/signup">Sign up</Link>
+            <a href="#upcoming">Upcoming</a>
             <a href="mailto:hello@studentpadelireland.ie">Contact</a>
           </div>
         </div>
-        <div className="lp-wrap lp-footer-copy">
-          © {new Date().getFullYear()} Student Padel Ireland
-        </div>
+        <div className="lp-wrap lp-footer-copy">© {new Date().getFullYear()} Student Padel Ireland</div>
       </footer>
     </div>
   )

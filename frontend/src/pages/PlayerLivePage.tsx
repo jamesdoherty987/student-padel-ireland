@@ -16,7 +16,7 @@ export default function PlayerLivePage() {
 
   if (isLoading) {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="pl-page">
           <div className="skeleton" style={{ height: 28, width: '70%', marginBottom: 16 }} />
@@ -28,7 +28,7 @@ export default function PlayerLivePage() {
 
   if (isError || !data) {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="pl-page empty-state">
           <p>Could not load this tournament.</p>
@@ -49,7 +49,7 @@ export default function PlayerLivePage() {
   }>
 
   return (
-    <div>
+    <div className="app-shell">
       <NavBar />
       <main className="pl-page">
         <header className="pl-header">

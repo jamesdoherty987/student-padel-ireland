@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, tournaments
+from app.api import auth, community, profiles, tournaments
 from app.core.config import get_settings
 from app.db.session import init_db
 from app.db.seed import seed_if_empty
@@ -22,7 +25,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+(UPLOAD_DIR / "profiles").mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+
 app.include_router(auth.router, prefix="/api")
+app.include_router(community.router, prefix="/api")
+app.include_router(profiles.router, prefix="/api")
 app.include_router(tournaments.router, prefix="/api")
 
 

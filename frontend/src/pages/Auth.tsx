@@ -3,19 +3,31 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import { apiErrorMessage, platformApi } from '../services/api'
+import { safeNextPath } from '../utils/navigation'
 import './Auth.css'
 
 export function LoginPage() {
   const { login, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const next = params.get('next') || ''
+  const next = safeNextPath(params.get('next'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  if (!authLoading && user) {
+  if (authLoading) {
+    return (
+      <div className="auth-page">
+        <div className="auth-panel">
+          <div className="skeleton" style={{ height: 28, width: '55%', marginBottom: 16 }} />
+          <div className="skeleton" style={{ height: 120 }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (user) {
     const dest =
       next ||
       (user.role === 'ORGANISER' || user.role === 'ADMIN' ? '/organiser' : '/tournaments')
@@ -70,16 +82,18 @@ export function LoginPage() {
             />
           </div>
           {error && <p className="auth-error">{error}</p>}
-          <button className="btn btn-primary btn-block" disabled={loading || authLoading}>
+          <button className="btn btn-primary btn-block" disabled={loading}>
             {loading ? 'Signing in…' : 'Log in'}
           </button>
         </form>
         <p className="auth-foot">
-          No account? <Link to={next ? `/signup?next=${encodeURIComponent(next)}` : '/signup'}>Sign up</Link>
+          No account?{' '}
+          <Link to={next ? `/signup?next=${encodeURIComponent(next)}` : '/signup'}>Sign up</Link>
         </p>
         {import.meta.env.DEV && (
           <p className="auth-demo">
-            Dev: james@ul.ie / player12345 · organiser@studentpadelireland.ie / organiser123
+            Dev: james@ul.ie / player12345 · organiser@studentpadelireland.ie / organiser123 ·
+            admin@studentpadelireland.ie / admin12345
           </p>
         )}
       </div>
@@ -91,7 +105,7 @@ export function SignupPage() {
   const { register, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const next = params.get('next') || ''
+  const next = safeNextPath(params.get('next'))
   const defaultRole = params.get('role') === 'ORGANISER' ? 'ORGANISER' : 'PLAYER'
   const { data: universities = [] } = useQuery({
     queryKey: ['universities'],
@@ -110,7 +124,18 @@ export function SignupPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  if (!authLoading && user) {
+  if (authLoading) {
+    return (
+      <div className="auth-page">
+        <div className="auth-panel">
+          <div className="skeleton" style={{ height: 28, width: '55%', marginBottom: 16 }} />
+          <div className="skeleton" style={{ height: 160 }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (user) {
     const dest =
       next ||
       (user.role === 'ORGANISER' || user.role === 'ADMIN' ? '/organiser' : '/tournaments')
@@ -227,7 +252,8 @@ export function SignupPage() {
           </button>
         </form>
         <p className="auth-foot">
-          Already have an account? <Link to="/login">Log in</Link>
+          Already have an account?{' '}
+          <Link to={next ? `/login?next=${encodeURIComponent(next)}` : '/login'}>Log in</Link>
         </p>
       </div>
     </div>

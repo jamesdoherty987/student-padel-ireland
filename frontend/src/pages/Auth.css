@@ -1,38 +1,66 @@
 .auth-page {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
+  padding-top: max(2rem, env(safe-area-inset-top));
+  padding-bottom: max(2rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
   background:
-    radial-gradient(ellipse 55% 45% at 100% 0%, rgba(200, 230, 0, 0.16), transparent 55%),
-    radial-gradient(ellipse 45% 40% at 0% 100%, rgba(20, 102, 68, 0.12), transparent 50%),
-    var(--surface);
+    radial-gradient(ellipse 55% 45% at 100% 0%, rgba(200, 230, 0, 0.18), transparent 55%),
+    radial-gradient(ellipse 45% 40% at 0% 100%, rgba(20, 102, 68, 0.14), transparent 50%),
+    linear-gradient(160deg, #0b3d2e 0%, #146644 45%, #0b3d2e 100%);
+  position: relative;
+}
+
+.auth-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(200, 230, 0, 0.04) 50%, transparent 100%);
+  pointer-events: none;
 }
 
 .auth-panel {
+  position: relative;
+  z-index: 1;
   width: min(440px, 100%);
   background: var(--white);
   padding: 2rem 1.5rem;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .auth-brand {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   color: var(--court-deep);
   margin-bottom: 1.5rem;
 }
 
 .auth-brand::before {
-  display: none;
+  content: '';
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ball);
+  box-shadow: 0 0 0 3px rgba(200, 230, 0, 0.25);
+  flex-shrink: 0;
 }
 
 .auth-panel h1 {
-  font-size: 1.65rem;
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
   margin-bottom: 0.35rem;
   color: var(--ink);
 }
@@ -58,7 +86,6 @@
   margin-top: 1.15rem;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
-  font-size: 0.75rem;
+  font-size: 0.82rem;
   color: var(--muted);
-  line-height: 1.45;
 }

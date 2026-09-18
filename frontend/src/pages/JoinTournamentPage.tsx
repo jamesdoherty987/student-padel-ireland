@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import axios from 'axios'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { apiErrorMessage, platformApi, tournamentApi, type RegistrationConfirm } from '../services/api'
@@ -9,12 +10,13 @@ import './Tournament.css'
 
 function ConfirmView({ data }: { data: RegistrationConfirm }) {
   const slug = data.tournament?.slug
+  const paid = data.status === 'PAID'
   return (
-    <div>
+    <div className="app-shell">
       <NavBar />
       <main className="page confirm-page">
         <p className="eyebrow">Student Padel Ireland</p>
-        <h1 className="page-title">Registration confirmed</h1>
+        <h1 className="page-title">{paid ? 'Registration confirmed' : 'Registration received'}</h1>
         <p className="confirm-tour">{data.tournament?.name}</p>
         <div className="confirm-box">
           <div>
@@ -33,8 +35,8 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
           </div>
           <div>
             <span>Payment</span>
-            <strong className={data.status === 'PAID' ? 'paid' : ''}>
-              {formatMoney(data.amount_cents, data.currency)} {data.status}
+            <strong className={paid ? 'paid' : ''}>
+              {formatMoney(data.amount_cents, data.currency)} · {data.status}
             </strong>
           </div>
         </div>
@@ -59,6 +61,7 @@ export default function JoinTournamentPage() {
   const sessionId = params.get('session_id')
   const registrationId = params.get('registration_id')
   const isConfirmRoute = window.location.pathname.includes('/confirmed') || !!sessionId
+  const hasConfirmParams = !!sessionId || !!registrationId
 
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
@@ -66,22 +69,28 @@ export default function JoinTournamentPage() {
   const { data: tournament, isLoading: tLoading, isError: tError } = useQuery({
     queryKey: ['tournament', slug],
     queryFn: async () => (await tournamentApi.get(slug)).data,
-    enabled: !!slug,
+    enabled: !!slug && !isConfirmRoute,
   })
 
   const { data: universities = [] } = useQuery({
     queryKey: ['universities'],
     queryFn: async () => (await platformApi.universities()).data,
+    enabled: !isConfirmRoute,
   })
 
-  const { data: stripeConfirm, isLoading: confirming, isError: confirmError } = useQuery({
+  const {
+    data: stripeConfirm,
+    isLoading: confirming,
+    isError: confirmError,
+    error: confirmErr,
+  } = useQuery({
     queryKey: ['payment-confirm', sessionId, registrationId],
     queryFn: async () => {
       if (sessionId) return (await tournamentApi.confirmPaymentSession(sessionId)).data
       if (registrationId) return (await tournamentApi.getRegistration(registrationId)).data
       throw new Error('Missing session')
     },
-    enabled: isConfirmRoute && !!user && (!!sessionId || !!registrationId),
+    enabled: isConfirmRoute && !!user && hasConfirmParams,
     retry: 2,
   })
 
@@ -107,13 +116,31 @@ export default function JoinTournamentPage() {
     }
   }, [user])
 
-  if (authLoading || (isConfirmRoute && confirming)) {
+  if (authLoading || (isConfirmRoute && hasConfirmParams && confirming)) {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page">
           <div className="skeleton" style={{ height: 28, width: '50%', marginBottom: 12 }} />
           <div className="skeleton" style={{ height: 160 }} />
+        </main>
+      </div>
+    )
+  }
+
+  if (isConfirmRoute && !hasConfirmParams) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page empty-state">
+          <h1 className="page-title">Missing payment details</h1>
+          <p className="page-sub">
+            This confirmation link is incomplete. Open the tournament page and try again, or check your email for the
+            correct link.
+          </p>
+          <Link to={slug ? `/t/${slug}` : '/tournaments'} className="btn btn-primary">
+            {slug ? 'Back to tournament' : 'Browse tournaments'}
+          </Link>
         </main>
       </div>
     )
@@ -124,15 +151,23 @@ export default function JoinTournamentPage() {
   }
 
   if (isConfirmRoute && confirmError) {
+    const status = axios.isAxiosError(confirmErr) ? confirmErr.response?.status : undefined
+    const title =
+      status === 403 ? 'Wrong account' : status === 404 ? 'Registration not found' : 'Couldn’t confirm payment'
+    const copy =
+      status === 403
+        ? 'This registration belongs to another account. Log in with the email used at checkout.'
+        : status === 404
+          ? 'We could not find this registration. If you just paid, wait a moment and refresh.'
+          : "We couldn't verify this payment yet. If you were charged, your registration will appear shortly."
+
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Confirming payment…</h1>
-          <p className="page-sub">
-            We couldn&apos;t verify this payment yet. If you were charged, your registration will appear shortly.
-          </p>
-          <Link to={`/t/${slug}`} className="btn btn-primary">
+          <h1 className="page-title">{title}</h1>
+          <p className="page-sub">{copy}</p>
+          <Link to={slug ? `/t/${slug}` : '/tournaments'} className="btn btn-primary">
             Back to tournament
           </Link>
         </main>
@@ -143,7 +178,7 @@ export default function JoinTournamentPage() {
   if (!user) {
     const next = encodeURIComponent(`/t/${slug}/join`)
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
           <h1 className="page-title">Join tournament</h1>
@@ -158,7 +193,7 @@ export default function JoinTournamentPage() {
 
   if (tLoading) {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page">
           <div className="skeleton" style={{ height: 28, width: '60%' }} />
@@ -169,7 +204,7 @@ export default function JoinTournamentPage() {
 
   if (tError || !tournament) {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
           <p>Tournament not found.</p>
@@ -183,7 +218,7 @@ export default function JoinTournamentPage() {
 
   if (tournament.status !== 'REGISTRATION_OPEN') {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
           <h1 className="page-title">{tournament.name}</h1>
@@ -196,10 +231,34 @@ export default function JoinTournamentPage() {
     )
   }
 
+  const isFull = tournament.registered_teams >= tournament.max_teams
+
+  if (isFull) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page empty-state">
+          <h1 className="page-title">{tournament.name}</h1>
+          <p className="page-sub">This tournament is full ({tournament.max_teams} doubles teams).</p>
+          <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+            View tournament
+          </Link>
+        </main>
+      </div>
+    )
+  }
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+
+    if (form.partner_email.trim().toLowerCase() === user.email.toLowerCase()) {
+      setError('Partner email must be different from yours')
+      setLoading(false)
+      return
+    }
+
     try {
       const { data } = await tournamentApi.register(tournament.id, {
         tournament_id: tournament.id,
@@ -219,13 +278,13 @@ export default function JoinTournamentPage() {
   }
 
   return (
-    <div>
+    <div className="app-shell">
       <NavBar />
       <main className="page">
         <h1 className="page-title">Join {tournament.name}</h1>
         <p className="page-sub">
-          Entry {formatMoney(tournament.entry_fee_cents, tournament.currency)} · Two players per team ·{' '}
-          {tournament.registered_teams}/{tournament.max_teams} registered
+          Entry {formatMoney(tournament.entry_fee_cents, tournament.currency)} per doubles team ·{' '}
+          {tournament.registered_teams}/{tournament.max_teams} doubles registered
         </p>
         <form className="join-form" onSubmit={onSubmit}>
           <div className="form-group">
@@ -303,7 +362,12 @@ export default function JoinTournamentPage() {
           <button className="btn btn-primary btn-block" disabled={loading || tLoading}>
             {loading ? 'Processing…' : `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)}`}
           </button>
-          <button type="button" className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={() => navigate(`/t/${slug}`)}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-block"
+            style={{ marginTop: 8 }}
+            onClick={() => navigate(`/t/${slug}`)}
+          >
             Cancel
           </button>
         </form>

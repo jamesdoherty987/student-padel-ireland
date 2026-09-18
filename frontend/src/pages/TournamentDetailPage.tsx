@@ -33,7 +33,7 @@ export default function TournamentDetailPage() {
 
   if (isLoading) {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page">
           <div className="skeleton" style={{ width: '60%', height: 32, marginBottom: 12 }} />
@@ -45,7 +45,7 @@ export default function TournamentDetailPage() {
 
   if (isError || !tournament) {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
           <h1 className="page-title">Tournament not found</h1>
@@ -62,7 +62,7 @@ export default function TournamentDetailPage() {
   const qrUrl = `${window.location.origin}/t/${tournament.slug}`
 
   return (
-    <div>
+    <div className="app-shell">
       <NavBar />
       <main className="page tourney-detail">
         <p className="eyebrow">{tournament.location}</p>
@@ -73,11 +73,20 @@ export default function TournamentDetailPage() {
         </p>
 
         <div className="tour-actions">
-          {tournament.status === 'REGISTRATION_OPEN' && !playerView?.my_team && (
-            <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
-              Join Tournament
-            </Link>
-          )}
+          {tournament.status === 'REGISTRATION_OPEN' &&
+            !playerView?.my_team &&
+            tournament.registered_teams < tournament.max_teams && (
+              <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
+                Join Tournament
+              </Link>
+            )}
+          {tournament.status === 'REGISTRATION_OPEN' &&
+            !playerView?.my_team &&
+            tournament.registered_teams >= tournament.max_teams && (
+              <span className="btn btn-ghost" style={{ cursor: 'default', opacity: 0.85 }}>
+                Tournament full
+              </span>
+            )}
           {playerView?.my_team && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
               My matches · {playerView.my_team.name}
@@ -96,7 +105,7 @@ export default function TournamentDetailPage() {
         <div className="tour-stats">
           <div>
             <strong>{tournament.registered_teams}</strong>
-            <span>Teams</span>
+            <span>Doubles teams</span>
           </div>
           <div>
             <strong>{tournament.number_of_courts}</strong>
@@ -104,11 +113,11 @@ export default function TournamentDetailPage() {
           </div>
           <div>
             <strong>{formatMoney(tournament.entry_fee_cents, tournament.currency)}</strong>
-            <span>Entry</span>
+            <span>Per doubles team</span>
           </div>
           <div>
             <strong>{tournament.max_teams}</strong>
-            <span>Max teams</span>
+            <span>Max doubles</span>
           </div>
         </div>
 

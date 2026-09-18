@@ -1,14 +1,16 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { apiErrorMessage, platformApi, tournamentApi, type Match } from '../services/api'
+import { formatMoney } from '../utils/format'
 import './Organiser.css'
 
 export default function OrganiserDashboard() {
   const { user, loading: authLoading } = useAuth()
   const qc = useQueryClient()
+  const [params] = useSearchParams()
   const canOrganise = !!user && (user.role === 'ORGANISER' || user.role === 'ADMIN')
   const { data, isLoading } = useQuery({
     queryKey: ['organiser-dashboard'],
@@ -17,7 +19,7 @@ export default function OrganiserDashboard() {
   })
 
   const [toast, setToast] = useState<string | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(params.get('t'))
   const [showCreate, setShowCreate] = useState(false)
   const [confirmGenerate, setConfirmGenerate] = useState(false)
   const [announce, setAnnounce] = useState({ title: '', body: '' })
@@ -96,6 +98,15 @@ export default function OrganiserDashboard() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not open registration')),
   })
 
+  const closeRegMut = useMutation({
+    mutationFn: () => tournamentApi.update(tid!, { status: 'REGISTRATION_CLOSED' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      showToast('Registration closed')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not close registration')),
+  })
+
   const goLiveMut = useMutation({
     mutationFn: () => tournamentApi.update(tid!, { status: 'LIVE' }),
     onSuccess: () => {
@@ -141,7 +152,7 @@ export default function OrganiserDashboard() {
 
   if (authLoading) {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page">
           <div className="skeleton" style={{ height: 28, width: '40%' }} />
@@ -152,7 +163,7 @@ export default function OrganiserDashboard() {
 
   if (!canOrganise) {
     return (
-      <div>
+      <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
           <h1 className="page-title">Organiser access</h1>
@@ -184,15 +195,23 @@ export default function OrganiserDashboard() {
           <button className="btn btn-ghost btn-block" onClick={() => setShowCreate(true)}>
             + New tournament
           </button>
+          <div className="org-aside-note">
+            <strong>Running an event?</strong>
+            <p>Registration, payments, and live scoring — all in one place.</p>
+          </div>
         </aside>
 
         <main className="org-main">
           {isLoading && <p>Loading…</p>}
           {!active && !isLoading && (
-            <div>
-              <h1>No tournaments yet</h1>
+            <div className="org-empty">
+              <h1>Running an event?</h1>
+              <p>
+                Set up registration, payments, and live scoring for your university — create your first tournament to get
+                started.
+              </p>
               <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-                Create your first tournament
+                Create a tournament
               </button>
             </div>
           )}
@@ -214,6 +233,15 @@ export default function OrganiserDashboard() {
                       Open registration
                     </button>
                   )}
+                  {active.tournament.status === 'REGISTRATION_OPEN' && (
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => closeRegMut.mutate()}
+                      disabled={closeRegMut.isPending}
+                    >
+                      Close registration
+                    </button>
+                  )}
                   {(active.tournament.status === 'REGISTRATION_CLOSED' ||
                     active.tournament.status === 'REGISTRATION_OPEN') &&
                     matches.length > 0 && (
@@ -221,13 +249,17 @@ export default function OrganiserDashboard() {
                         Go LIVE
                       </button>
                     )}
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => setConfirmGenerate(true)}
-                    disabled={generateMut.isPending}
-                  >
-                    Generate Tournament
-                  </button>
+                  {(active.tournament.status === 'DRAFT' ||
+                    active.tournament.status === 'REGISTRATION_OPEN' ||
+                    active.tournament.status === 'REGISTRATION_CLOSED') && (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => setConfirmGenerate(true)}
+                      disabled={generateMut.isPending}
+                    >
+                      Generate Tournament
+                    </button>
+                  )}
                 </div>
               </header>
 
@@ -241,7 +273,7 @@ export default function OrganiserDashboard() {
                   <span>Teams</span>
                 </div>
                 <div>
-                  <strong>€{(active.revenue_cents / 100).toFixed(0)}</strong>
+                  <strong>{formatMoney(active.revenue_cents)}</strong>
                   <span>Revenue</span>
                 </div>
                 <div>
@@ -367,7 +399,15 @@ export default function OrganiserDashboard() {
         </main>
       </div>
 
-      {showCreate && <CreateTournamentModal onClose={() => setShowCreate(false)} onCreated={showToast} />}
+      {showCreate && (
+        <CreateTournamentModal
+          onClose={() => setShowCreate(false)}
+          onCreated={(msg, id) => {
+            showToast(msg)
+            if (id) setSelectedId(id)
+          }}
+        />
+      )}
 
       {confirmGenerate && (
         <div className="modal-backdrop" onClick={() => setConfirmGenerate(false)}>
@@ -481,7 +521,7 @@ function CreateTournamentModal({
   onCreated,
 }: {
   onClose: () => void
-  onCreated: (msg: string) => void
+  onCreated: (msg: string, id?: string) => void
 }) {
   const qc = useQueryClient()
   const [form, setForm] = useState({
@@ -502,7 +542,7 @@ function CreateTournamentModal({
     setError('')
     setSaving(true)
     try {
-      await tournamentApi.create({
+      const { data } = await tournamentApi.create({
         name: form.name,
         location: form.location,
         venue: form.venue,
@@ -514,7 +554,7 @@ function CreateTournamentModal({
         format: 'GROUP_KNOCKOUT',
       })
       await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
-      onCreated('Tournament created')
+      onCreated('Tournament created', data.id)
       onClose()
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Could not create tournament'))
@@ -560,7 +600,7 @@ function CreateTournamentModal({
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Max teams</label>
+            <label className="form-label">Max doubles teams</label>
             <input
               className="form-input"
               type="number"
@@ -571,7 +611,7 @@ function CreateTournamentModal({
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Entry fee (€)</label>
+            <label className="form-label">Entry fee (€ per doubles team)</label>
             <input
               className="form-input"
               type="number"

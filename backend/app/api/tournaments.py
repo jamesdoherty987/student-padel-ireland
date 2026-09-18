@@ -30,6 +30,7 @@ from app.models import (
     University,
     User,
 )
+from app.services.rating import INITIAL_RATING, rate_match
 from app.schemas import (
     AnnouncementCreate,
     AnnouncementOut,
@@ -225,13 +226,14 @@ def update_tournament(
         if hasattr(value, "value"):
             value = value.value
         setattr(t, field, value)
-    # Sync courts if court count changed
+    # Sync courts only when the count actually changes (avoid wiping mid-event)
     if body.number_of_courts is not None:
-        existing = db.query(Court).filter(Court.tournament_id == t.id).all()
-        for c in existing:
-            db.delete(c)
-        for i in range(1, body.number_of_courts + 1):
-            db.add(Court(tournament_id=t.id, name=f"Court {i}", court_number=i))
+        existing = db.query(Court).filter(Court.tournament_id == t.id).order_by(Court.court_number).all()
+        if len(existing) != body.number_of_courts:
+            for c in existing:
+                db.delete(c)
+            for i in range(1, body.number_of_courts + 1):
+                db.add(Court(tournament_id=t.id, name=f"Court {i}", court_number=i))
     db.commit()
     db.refresh(t)
     return _tournament_out(db, t)
@@ -633,6 +635,9 @@ def update_score(
     t = db.get(Tournament, m.tournament_id)
     _assert_organiser(user, t)
 
+    if getattr(m, "ratings_applied", False):
+        raise HTTPException(400, "This match already updated ratings and cannot be re-scored")
+
     if not m.score:
         m.score = MatchScore(match_id=m.id)
         db.add(m.score)
@@ -676,6 +681,42 @@ def update_score(
                     nxt.team_b_placeholder = None
     elif body.status == MatchStatus.COMPLETED:
         raise HTTPException(400, "Completed matches need a winner (or set scores that determine one)")
+
+    # Apply doubles/singles Elo once when a match first completes
+    if (
+        body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER)
+        and m.winner_id
+        and m.team_a_id
+        and m.team_b_id
+        and not m.ratings_applied
+    ):
+        side_a = [
+            tp.user_id
+            for tp in db.query(TeamPlayer).filter(TeamPlayer.team_id == m.team_a_id).all()
+        ]
+        side_b = [
+            tp.user_id
+            for tp in db.query(TeamPlayer).filter(TeamPlayer.team_id == m.team_b_id).all()
+        ]
+        if side_a and side_b:
+            sets = [
+                (body.set1_a, body.set1_b),
+                (body.set2_a, body.set2_b),
+                (body.set3_a, body.set3_b),
+            ]
+            sets_a = sum(1 for a, b in sets if a > b and (a or b))
+            sets_b = sum(1 for a, b in sets if b > a and (a or b))
+            rate_match(
+                db,
+                side_a_user_ids=side_a,
+                side_b_user_ids=side_b,
+                a_won=(m.winner_id == m.team_a_id),
+                sets_a=sets_a,
+                sets_b=sets_b,
+                tournament_id=m.tournament_id,
+                placement=f"t:{t.slug if t else m.round}"[:40],
+            )
+            m.ratings_applied = True
 
     db.commit()
     db.refresh(m)
@@ -900,6 +941,7 @@ def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
 @router.get("/rankings")
 def rankings(limit: int = 50, db: Session = Depends(get_db)):
     from app.models import Ranking
+    from app.api.profiles import _public_url
 
     rows = (
         db.query(Ranking, User, University)
@@ -921,32 +963,25 @@ def rankings(limit: int = 50, db: Session = Depends(get_db)):
             matches_played=r.matches_played,
             wins=r.wins,
             losses=r.losses,
+            bio=u.bio,
+            avatar_url=_public_url(u.avatar_url),
         )
         for i, (r, u, uni) in enumerate(rows)
     ]
 
 
 @router.get("/players/{user_id}", response_model=UserProfilePublic)
-def player_profile(user_id: UUID, db: Session = Depends(get_db)):
-    from app.models import Ranking
+def player_profile(
+    user_id: UUID,
+    viewer=Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    from app.api.profiles import _profile_out
 
     user = db.get(User, user_id)
-    if not user:
+    if not user or not user.is_active:
         raise HTTPException(404, "Player not found")
-    ranking = db.query(Ranking).filter(Ranking.user_id == user_id).first()
-    uni = db.get(University, user.university_id) if user.university_id else None
-    return UserProfilePublic(
-        id=user.id,
-        full_name=user.full_name,
-        university_name=uni.name if uni else None,
-        university_short=uni.short_name if uni else None,
-        points=ranking.points if ranking else 0,
-        rank_ireland=ranking.rank_ireland if ranking else None,
-        tournaments_played=ranking.tournaments_played if ranking else 0,
-        matches_played=ranking.matches_played if ranking else 0,
-        wins=ranking.wins if ranking else 0,
-        losses=ranking.losses if ranking else 0,
-    )
+    return _profile_out(db, user, viewer)
 
 
 @router.get("/organiser/dashboard")

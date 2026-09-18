@@ -6,6 +6,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.db.session import get_db
 from app.models import Ranking, User, UserRole
 from app.schemas import TokenResponse, UserCreate, UserLogin, UserPublic
+from app.services.rating import INITIAL_RATING
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -28,7 +29,7 @@ def register(body: UserCreate, db: Session = Depends(get_db)):
     )
     db.add(user)
     db.flush()
-    db.add(Ranking(user_id=user.id))
+    db.add(Ranking(user_id=user.id, points=INITIAL_RATING))
     db.commit()
     db.refresh(user)
     token = create_access_token(user.id, {"role": user.role})

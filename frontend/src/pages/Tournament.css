@@ -9,7 +9,7 @@
 }
 
 .tour-card {
-  padding: 1.2rem 1.25rem;
+  padding: 1.25rem 1.3rem;
   background: var(--white);
   border: 1px solid var(--line);
   border-left: 4px solid var(--court-deep);
@@ -32,10 +32,16 @@
   margin-bottom: 0.35rem;
 }
 
+.tour-card-top h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .tour-card h2 {
-  font-size: 1.1rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--court-deep);
 }
 
@@ -61,20 +67,23 @@
 
 .tour-stats div {
   background: var(--surface);
-  padding: 0.9rem;
+  padding: 0.95rem;
   text-align: center;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition: border-color 0.15s;
 }
 
 .tour-stats strong {
   display: block;
   font-family: var(--font-display);
   font-size: 1.55rem;
+  font-weight: 700;
   color: var(--court-deep);
 }
 
 .tour-stats span {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -165,6 +174,7 @@
   background: var(--surface);
   border-radius: var(--radius-md);
   width: fit-content;
+  border: 1px solid var(--line);
 }
 
 .qr-wrap code {
@@ -209,15 +219,49 @@
 
 .rank-page-list {
   list-style: none;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
 }
 
 .rank-page-row {
   display: grid;
-  grid-template-columns: 3.2rem 1fr auto;
-  gap: 0.85rem;
+  grid-template-columns: 3.2rem 2.5rem 1fr auto;
+  gap: 0.75rem;
   align-items: center;
-  padding: 0.95rem 0;
+  padding: 1rem 1.15rem;
   border-bottom: 1px solid var(--line);
+  transition: background 0.15s;
+  min-height: 64px;
+}
+
+.rank-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--surface);
+  border: 2px solid var(--line);
+}
+
+.rank-avatar.placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--court-deep);
+  background: var(--brand-soft);
+  border-color: transparent;
+}
+
+.rank-page-list li:last-child .rank-page-row {
+  border-bottom: none;
+}
+
+.rank-page-row:hover {
+  background: var(--surface);
 }
 
 .rank-page-row .rank-num {
@@ -234,10 +278,58 @@
 
 .rank-page-row .rank-pts {
   color: var(--court-mid);
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+.page-header-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.page-header-row .page-title {
+  margin: 0;
 }
 
 @media (max-width: 640px) {
   .tour-stats {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tour-actions {
+    flex-direction: column;
+  }
+
+  .tour-actions .btn {
+    width: 100%;
+  }
+
+  .live-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .qr-block .qr-wrap {
+    width: 100%;
+    align-items: center;
+    text-align: center;
+  }
+
+  .page-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .rank-page-row {
+    grid-template-columns: 2.5rem 2.25rem 1fr auto;
+    gap: 0.55rem;
+    padding: 0.85rem 0.9rem;
+  }
+
+  .rank-avatar {
+    width: 36px;
+    height: 36px;
   }
 }

@@ -50,6 +50,18 @@ class UserPublic(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ProfileMediaOut(BaseModel):
+    id: UUID
+    media_type: str
+    url: str
+    caption: Optional[str] = None
+    sort_order: int = 0
+    is_avatar: bool = False
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
 class UserProfilePublic(BaseModel):
     id: UUID
     full_name: str
@@ -61,6 +73,19 @@ class UserProfilePublic(BaseModel):
     matches_played: int = 0
     wins: int = 0
     losses: int = 0
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    media: list[ProfileMediaOut] = Field(default_factory=list)
+    is_own_profile: bool = False
+
+
+class ProfileUpdate(BaseModel):
+    bio: Optional[str] = Field(default=None, max_length=500)
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=200)
+
+
+class ProfileMediaCaptionUpdate(BaseModel):
+    caption: Optional[str] = Field(default=None, max_length=200)
 
 
 class UniversityOut(BaseModel):
@@ -262,6 +287,148 @@ class SponsorOut(BaseModel):
     level: str
 
     model_config = {"from_attributes": True}
+
+
+# ── Community / friends ───────────────────────────────────────
+
+class PlayerSearchOut(BaseModel):
+    id: UUID
+    full_name: str
+    university_short: Optional[str] = None
+    points: int = 1500
+    friendship_status: Optional[str] = None  # none | pending_out | pending_in | friends
+
+
+class FriendRequestCreate(BaseModel):
+    user_id: UUID
+
+
+class FriendshipOut(BaseModel):
+    id: UUID
+    user_id: UUID
+    full_name: str
+    university_short: Optional[str] = None
+    points: int = 1500
+    status: str
+    direction: str  # incoming | outgoing | friend
+    created_at: datetime
+
+
+class CompetitionCreate(BaseModel):
+    name: str = Field(min_length=3, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    format: str = "DOUBLES"  # SINGLES | DOUBLES | MIXED
+    max_players: int = Field(default=16, ge=2, le=64)
+    number_of_courts: int = Field(default=2, ge=1, le=12)
+    friend_ids: list[UUID] = Field(default_factory=list, max_length=32)
+
+
+class CompetitionMemberOut(BaseModel):
+    user_id: UUID
+    full_name: str
+    role: str
+    points: int = 1500
+    wins: int = 0
+    losses: int = 0
+    # Local to this competition (from completed matches here)
+    comp_wins: int = 0
+    comp_losses: int = 0
+
+
+class CompetitionOut(BaseModel):
+    id: UUID
+    name: str
+    slug: str
+    description: Optional[str] = None
+    format: str
+    status: str
+    invite_code: str
+    created_by_id: UUID
+    created_by_name: str
+    max_players: int
+    number_of_courts: int = 2
+    member_count: int
+    members: list[CompetitionMemberOut] = Field(default_factory=list)
+    is_member: bool = False
+    is_owner: bool = False
+
+
+class CompetitionInviteFriends(BaseModel):
+    friend_ids: list[UUID] = Field(min_length=1, max_length=32)
+
+
+class CommunityMatchCreate(BaseModel):
+    format: str = "DOUBLES"  # SINGLES | DOUBLES
+    player_a1_id: UUID
+    player_a2_id: Optional[UUID] = None
+    player_b1_id: UUID
+    player_b2_id: Optional[UUID] = None
+    court_number: Optional[int] = Field(default=None, ge=1, le=12)
+    notes: Optional[str] = Field(default=None, max_length=300)
+
+
+class CommunityMatchCourtUpdate(BaseModel):
+    court_number: Optional[int] = Field(default=None, ge=1, le=12)
+
+
+class CommunityMatchScore(BaseModel):
+    set1_a: int = Field(default=0, ge=0, le=7)
+    set1_b: int = Field(default=0, ge=0, le=7)
+    set2_a: int = Field(default=0, ge=0, le=7)
+    set2_b: int = Field(default=0, ge=0, le=7)
+    set3_a: int = Field(default=0, ge=0, le=7)
+    set3_b: int = Field(default=0, ge=0, le=7)
+    winner_side: Optional[str] = None  # A | B — inferred from sets if omitted
+    status: str = "AWAITING_CONFIRM"  # AWAITING_CONFIRM | CANCELLED
+
+
+class RatingDeltaOut(BaseModel):
+    user_id: UUID
+    full_name: str
+    delta: int
+    rating_after: int
+    won: bool
+
+
+class CommunityMatchOut(BaseModel):
+    id: UUID
+    competition_id: UUID
+    competition_name: Optional[str] = None
+    competition_slug: Optional[str] = None
+    format: str
+    status: str
+    player_a1_id: UUID
+    player_a1_name: str
+    player_a2_id: Optional[UUID] = None
+    player_a2_name: Optional[str] = None
+    player_b1_id: UUID
+    player_b1_name: str
+    player_b2_id: Optional[UUID] = None
+    player_b2_name: Optional[str] = None
+    winner_side: Optional[str] = None
+    set1_a: int = 0
+    set1_b: int = 0
+    set2_a: int = 0
+    set2_b: int = 0
+    set3_a: int = 0
+    set3_b: int = 0
+    played_at: Optional[datetime] = None
+    notes: Optional[str] = None
+    court_number: Optional[int] = None
+    ratings_applied: bool = False
+    recorded_by_id: Optional[UUID] = None
+    confirmed_by_id: Optional[UUID] = None
+    needs_my_confirm: bool = False
+    can_i_score: bool = False
+    rating_changes: list[RatingDeltaOut] = Field(default_factory=list)
+
+
+class CommunityHomeOut(BaseModel):
+    competitions: list[CompetitionOut]
+    needs_confirm: list[CommunityMatchOut]
+    needs_score: list[CommunityMatchOut]
+    my_next_matches: list[CommunityMatchOut] = Field(default_factory=list)
+    friend_request_count: int = 0
 
 
 TokenResponse.model_rebuild()

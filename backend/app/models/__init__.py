@@ -72,6 +72,26 @@ class PaymentStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class FriendshipStatus(StrEnum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    DECLINED = "DECLINED"
+    BLOCKED = "BLOCKED"
+
+
+class CompetitionStatus(StrEnum):
+    OPEN = "OPEN"
+    LIVE = "LIVE"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class CompetitionFormat(StrEnum):
+    SINGLES = "SINGLES"
+    DOUBLES = "DOUBLES"
+    MIXED = "MIXED"  # allow both within one competition
+
+
 class University(Base, TimestampMixin):
     __tablename__ = "universities"
 
@@ -96,9 +116,14 @@ class User(Base, TimestampMixin):
     student_number: Mapped[Optional[str]] = mapped_column(String(80))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False)
+    bio: Mapped[Optional[str]] = mapped_column(String(500))
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
 
     university: Mapped[Optional[University]] = relationship()
     ranking: Mapped[Optional["Ranking"]] = relationship(back_populates="user", uselist=False)
+    media: Mapped[list["ProfileMedia"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", order_by="ProfileMedia.sort_order"
+    )
 
 
 class Tournament(Base, TimestampMixin):
@@ -258,6 +283,7 @@ class Match(Base, TimestampMixin):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     next_match_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("matches.id"))
     next_match_slot: Mapped[Optional[str]] = mapped_column(String(1))  # A or B
+    ratings_applied: Mapped[bool] = mapped_column(Boolean, default=False)
 
     tournament: Mapped[Tournament] = relationship(back_populates="matches")
     score: Mapped[Optional["MatchScore"]] = relationship(back_populates="match", uselist=False, cascade="all, delete-orphan")
@@ -286,7 +312,7 @@ class Ranking(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), unique=True, nullable=False)
-    points: Mapped[int] = mapped_column(Integer, default=0)
+    points: Mapped[int] = mapped_column(Integer, default=1500)
     rank_ireland: Mapped[Optional[int]] = mapped_column(Integer)
     tournaments_played: Mapped[int] = mapped_column(Integer, default=0)
     matches_played: Mapped[int] = mapped_column(Integer, default=0)
@@ -301,10 +327,99 @@ class RankingHistory(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
-    tournament_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tournaments.id"), nullable=False)
+    tournament_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("tournaments.id"))
+    # Stored without FK to avoid create-order cycles with community_matches
+    community_match_id: Mapped[Optional[uuid.UUID]] = mapped_column(Uuid)
     points_delta: Mapped[int] = mapped_column(Integer, nullable=False)
     points_after: Mapped[int] = mapped_column(Integer, nullable=False)
     placement: Mapped[Optional[str]] = mapped_column(String(40))
+
+
+class Friendship(Base, TimestampMixin):
+    """Directed friend request; accepted pairs are mutual."""
+
+    __tablename__ = "friendships"
+    __table_args__ = (UniqueConstraint("requester_id", "addressee_id", name="uq_friendship_pair"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    requester_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    addressee_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default=FriendshipStatus.PENDING.value)
+
+    requester: Mapped[User] = relationship(foreign_keys=[requester_id])
+    addressee: Mapped[User] = relationship(foreign_keys=[addressee_id])
+
+
+class CommunityCompetition(Base, TimestampMixin):
+    """Private friend competition / ladder — no entry fee, invite-only."""
+
+    __tablename__ = "community_competitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    slug: Mapped[str] = mapped_column(String(120), unique=True, nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    format: Mapped[str] = mapped_column(String(20), default=CompetitionFormat.DOUBLES.value)
+    status: Mapped[str] = mapped_column(String(20), default=CompetitionStatus.OPEN.value)
+    invite_code: Mapped[str] = mapped_column(String(12), unique=True, nullable=False, index=True)
+    created_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    max_players: Mapped[int] = mapped_column(Integer, default=16)
+    number_of_courts: Mapped[int] = mapped_column(Integer, default=2)
+
+    created_by: Mapped[User] = relationship()
+    members: Mapped[list["CompetitionMember"]] = relationship(
+        back_populates="competition", cascade="all, delete-orphan"
+    )
+    matches: Mapped[list["CommunityMatch"]] = relationship(
+        back_populates="competition", cascade="all, delete-orphan"
+    )
+
+
+class CompetitionMember(Base, TimestampMixin):
+    __tablename__ = "competition_members"
+    __table_args__ = (UniqueConstraint("competition_id", "user_id", name="uq_competition_member"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    competition_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("community_competitions.id"), nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), default="PLAYER")  # OWNER | PLAYER
+
+    competition: Mapped[CommunityCompetition] = relationship(back_populates="members")
+    user: Mapped[User] = relationship()
+
+
+class CommunityMatch(Base, TimestampMixin):
+    __tablename__ = "community_matches"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    competition_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("community_competitions.id"), nullable=False)
+    format: Mapped[str] = mapped_column(String(20), default=CompetitionFormat.DOUBLES.value)
+    status: Mapped[str] = mapped_column(String(20), default=MatchStatus.SCHEDULED.value)
+    # Side A
+    player_a1_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    player_a2_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    # Side B
+    player_b1_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    player_b2_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    winner_side: Mapped[Optional[str]] = mapped_column(String(1))  # A | B
+    set1_a: Mapped[int] = mapped_column(Integer, default=0)
+    set1_b: Mapped[int] = mapped_column(Integer, default=0)
+    set2_a: Mapped[int] = mapped_column(Integer, default=0)
+    set2_b: Mapped[int] = mapped_column(Integer, default=0)
+    set3_a: Mapped[int] = mapped_column(Integer, default=0)
+    set3_b: Mapped[int] = mapped_column(Integer, default=0)
+    played_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    recorded_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    confirmed_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    ratings_applied: Mapped[bool] = mapped_column(Boolean, default=False)
+    notes: Mapped[Optional[str]] = mapped_column(String(300))
+    court_number: Mapped[Optional[int]] = mapped_column(Integer)
+
+    competition: Mapped[CommunityCompetition] = relationship(back_populates="matches")
+    player_a1: Mapped[User] = relationship(foreign_keys=[player_a1_id])
+    player_a2: Mapped[Optional[User]] = relationship(foreign_keys=[player_a2_id])
+    player_b1: Mapped[User] = relationship(foreign_keys=[player_b1_id])
+    player_b2: Mapped[Optional[User]] = relationship(foreign_keys=[player_b2_id])
 
 
 class Announcement(Base, TimestampMixin):
@@ -341,3 +456,19 @@ class PlatformSetting(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     key: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     value: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class ProfileMedia(Base, TimestampMixin):
+    """Photos / short clips on a player profile."""
+
+    __tablename__ = "profile_media"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    media_type: Mapped[str] = mapped_column(String(20), nullable=False)  # image | video
+    url: Mapped[str] = mapped_column(String(500), nullable=False)
+    caption: Mapped[Optional[str]] = mapped_column(String(200))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_avatar: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    user: Mapped[User] = relationship(back_populates="media")
