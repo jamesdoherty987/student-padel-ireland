@@ -1,0 +1,243 @@
+.tour-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tour-card-link {
+  display: block;
+}
+
+.tour-card {
+  padding: 1.2rem 1.25rem;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--court-deep);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s;
+}
+
+.tour-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(11, 61, 46, 0.2);
+}
+
+.tour-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 0.35rem;
+}
+
+.tour-card h2 {
+  font-size: 1.1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--court-deep);
+}
+
+.tour-card-meta {
+  margin-top: 0.4rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.tour-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+
+.tour-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.tour-stats div {
+  background: var(--surface);
+  padding: 0.9rem;
+  text-align: center;
+  border-radius: var(--radius-sm);
+}
+
+.tour-stats strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  color: var(--court-deep);
+}
+
+.tour-stats span {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.block {
+  margin-bottom: 2rem;
+}
+
+.block h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--court-deep);
+}
+
+.live-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.live-tile {
+  background: var(--court-deep);
+  color: #fff;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+}
+
+.live-court {
+  color: var(--ball);
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.live-score-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+  gap: 0.5rem;
+}
+
+.live-score-row strong {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  color: var(--ball);
+}
+
+.live-set {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.announce {
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.announce strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.announce p {
+  color: var(--ink-soft);
+}
+
+.rules {
+  white-space: pre-wrap;
+  color: var(--ink-soft);
+}
+
+.qr-block .qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 1.25rem;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  width: fit-content;
+}
+
+.qr-wrap code {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.join-form {
+  max-width: 420px;
+}
+
+.confirm-page .confirm-tour {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  color: var(--court-mid);
+  margin-bottom: 1.25rem;
+}
+
+.confirm-box {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 1px solid var(--line);
+}
+
+.confirm-box span {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+.confirm-box .paid {
+  color: var(--success);
+}
+
+.rank-page-list {
+  list-style: none;
+}
+
+.rank-page-row {
+  display: grid;
+  grid-template-columns: 3.2rem 1fr auto;
+  gap: 0.85rem;
+  align-items: center;
+  padding: 0.95rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rank-page-row .rank-num {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--court-deep);
+}
+
+.rank-page-row .rank-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.rank-page-row .rank-pts {
+  color: var(--court-mid);
+}
+
+@media (max-width: 640px) {
+  .tour-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

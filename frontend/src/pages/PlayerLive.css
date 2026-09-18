@@ -1,0 +1,157 @@
+.pl-page {
+  width: min(420px, 100%);
+  margin: 0 auto;
+  padding: 1rem 1rem 3rem;
+}
+
+.pl-header {
+  margin-bottom: 1.5rem;
+}
+
+.pl-brand {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--court-mid);
+  margin-bottom: 0.25rem;
+}
+
+.pl-header h1 {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin-bottom: 0.5rem;
+}
+
+.pl-next {
+  margin-bottom: 2rem;
+}
+
+.pl-next h2,
+.pl-block h2 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+}
+
+.pl-next-card {
+  background: var(--court-deep);
+  color: var(--white);
+  padding: 1.5rem 1.25rem;
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.pl-court {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--ball);
+}
+
+.pl-time {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0.25rem 0 1.25rem;
+}
+
+.pl-vs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1.35rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.pl-vs span {
+  font-family: var(--font-display);
+  color: var(--ball);
+  letter-spacing: 0.12em;
+  font-size: 0.95rem;
+}
+
+.pl-empty {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.pl-block {
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.pl-results {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.pl-results li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-weight: 600;
+}
+
+.pl-results li.win {
+  color: var(--success);
+}
+
+.pl-results li.loss {
+  color: var(--danger);
+}
+
+.pl-results li span {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.pl-table {
+  list-style: none;
+}
+
+.pl-table li {
+  display: grid;
+  grid-template-columns: 2rem 1fr auto;
+  gap: 0.5rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pl-table li.me {
+  background: rgba(200, 230, 0, 0.18);
+  margin: 0 -0.5rem;
+  padding-inline: 0.5rem;
+  border-radius: 6px;
+}
+
+.pl-table .pos {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pl-table .pts {
+  font-weight: 700;
+  color: var(--court-deep);
+}
+
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--live);
+  animation: blink 1.2s ease infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0.35;
+  }
+}
