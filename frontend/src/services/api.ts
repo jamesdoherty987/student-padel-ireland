@@ -31,11 +31,14 @@ api.interceptors.response.use(
 
         // Only bounce to login on routes that require auth — public pages stay put
         const path = window.location.pathname
+        const isTournamentJoin = /\/t\/[^/]+\/(join|confirmed)/.test(path)
+        const isCommunityPrivate =
+          path.startsWith('/community/') && !path.startsWith('/community/join/')
         const needsAuth =
           path.startsWith('/organiser') ||
-          path.startsWith('/community') ||
-          path.includes('/join') ||
-          path.includes('/confirmed')
+          path.startsWith('/admin') ||
+          isCommunityPrivate ||
+          isTournamentJoin
         if (needsAuth && !path.startsWith('/login') && !path.startsWith('/signup')) {
           const next = encodeURIComponent(path + window.location.search)
           window.location.assign(`/login?next=${next}`)
@@ -286,6 +289,8 @@ export const tournamentApi = {
 }
 
 export const platformApi = {
+  publicConfig: () =>
+    api.get<{ demo_payments: boolean; stripe_publishable_key: string | null }>('/api/config/public'),
   universities: () => api.get<University[]>('/api/universities'),
   rankings: (limit = 50) => api.get<RankingRow[]>('/api/rankings', { params: { limit } }),
   player: (id: string) => api.get<RankingRow>(`/api/players/${id}`),

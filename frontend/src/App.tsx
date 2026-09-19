@@ -70,14 +70,7 @@ export default function App() {
               }
             />
             <Route path="/rankings" element={<RankingsPage />} />
-            <Route
-              path="/community"
-              element={
-                <ProtectedRoute>
-                  <CommunityPage />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/community" element={<CommunityPage />} />
             <Route path="/community/join/:code" element={<JoinCompetitionPage />} />
             <Route
               path="/community/:slug"

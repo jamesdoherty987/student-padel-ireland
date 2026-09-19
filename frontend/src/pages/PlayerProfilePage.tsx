@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
-import { apiErrorMessage, platformApi, type ProfileMedia } from '../services/api'
+import { apiErrorMessage, communityApi, platformApi, type ProfileMedia } from '../services/api'
 import { mediaUrl } from '../utils/media'
 import './Tournament.css'
 import './Profile.css'
@@ -41,9 +41,25 @@ export default function PlayerProfilePage() {
   const isOwn = Boolean(player?.is_own_profile || (user && player && user.id === player.id))
   const media = player?.media || []
 
+  const friendsQ = useQuery({
+    queryKey: ['friends'],
+    queryFn: async () => (await communityApi.friends()).data,
+    enabled: !!user && !!player && !isOwn,
+  })
+  const relation = friendsQ.data?.find((f) => f.user_id === player?.id)
+
   useEffect(() => {
     document.body.classList.toggle('modal-open', !!lightbox)
     return () => document.body.classList.remove('modal-open')
+  }, [lightbox])
+
+  useEffect(() => {
+    if (!lightbox) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [lightbox])
 
   const startUpload = (file: File) => {
@@ -99,6 +115,23 @@ export default function PlayerProfilePage() {
     onError: (e) => setError(apiErrorMessage(e)),
   })
 
+  const friendMut = useMutation({
+    mutationFn: (userId: string) => communityApi.requestFriend(userId),
+    onSuccess: () => {
+      setError('')
+      qc.invalidateQueries({ queryKey: ['friends'] })
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  })
+  const acceptFriendMut = useMutation({
+    mutationFn: (friendshipId: string) => communityApi.acceptFriend(friendshipId),
+    onSuccess: () => {
+      setError('')
+      qc.invalidateQueries({ queryKey: ['friends'] })
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  })
+
   return (
     <div className="app-shell">
       <NavBar />
@@ -147,6 +180,41 @@ export default function PlayerProfilePage() {
                 <p className="page-sub" style={{ marginBottom: 0 }}>
                   {player.university_short || player.university_name || '—'}
                 </p>
+                {user && !isOwn && (
+                  <div className="profile-friend-action">
+                    {!relation && (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={friendMut.isPending}
+                        onClick={() => friendMut.mutate(player.id)}
+                      >
+                        Add friend
+                      </button>
+                    )}
+                    {relation?.direction === 'incoming' && (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={acceptFriendMut.isPending}
+                        onClick={() => acceptFriendMut.mutate(relation.id)}
+                      >
+                        Accept request
+                      </button>
+                    )}
+                    {relation?.direction === 'outgoing' && (
+                      <span className="muted-note">Friend request sent</span>
+                    )}
+                    {relation?.direction === 'friend' && <span className="muted-note">Friends</span>}
+                  </div>
+                )}
+                {!user && (
+                  <div className="profile-friend-action">
+                    <Link to={`/login?next=${encodeURIComponent(`/players/${player.id}`)}`} className="btn btn-ghost btn-sm">
+                      Log in to add friend
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
 

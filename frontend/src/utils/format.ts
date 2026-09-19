@@ -27,8 +27,31 @@ export function formatDoublesEntry(
   return `${registered}/${maxTeams} doubles · ${fee}`
 }
 
+export function spotsLeftLabel(registered: number, maxTeams: number) {
+  const left = Math.max(0, maxTeams - registered)
+  if (left === 0) return 'Full'
+  if (left === 1) return '1 doubles spot left'
+  return `${left} doubles spots left`
+}
+
+export function parseCalendarDate(iso: string) {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  }
+  return new Date(iso)
+}
+
+export function isPastCalendarDate(iso: string | null | undefined) {
+  if (!iso) return false
+  const d = parseCalendarDate(iso)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return today > d
+}
+
 export function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions) {
-  return new Date(iso).toLocaleDateString('en-IE', opts ?? { day: 'numeric', month: 'short', year: 'numeric' })
+  return parseCalendarDate(iso).toLocaleDateString('en-IE', opts ?? { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
 export function formatTime(iso: string | null | undefined) {

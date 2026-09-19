@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -21,6 +21,7 @@ from app.models import (
     MatchScore,
     MatchStatus,
     PaymentStatus,
+    Ranking,
     Registration,
     Sponsor,
     Team,
@@ -71,12 +72,32 @@ def _unique_slug(db: Session, name: str) -> str:
     return slug
 
 
-def _team_count(db: Session, tournament_id: UUID) -> int:
+def _paid_team_count(db: Session, tournament_id: UUID) -> int:
     return (
         db.query(Team)
-        .filter(Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
+        .join(Registration, Registration.team_id == Team.id)
+        .filter(
+            Team.tournament_id == tournament_id,
+            Team.withdrawn.is_(False),
+            Registration.status == PaymentStatus.PAID.value,
+        )
         .count()
     )
+
+
+def _team_count(db: Session, tournament_id: UUID) -> int:
+    return _paid_team_count(db, tournament_id)
+
+
+def _deadline_passed(t: Tournament) -> bool:
+    if not t.registration_deadline:
+        return False
+    return date.today() > t.registration_deadline.date()
+
+
+def _ensure_ranking(db: Session, user_id: UUID) -> None:
+    if not db.query(Ranking).filter(Ranking.user_id == user_id).first():
+        db.add(Ranking(user_id=user_id, points=INITIAL_RATING))
 
 
 def _tournament_out(db: Session, t: Tournament) -> TournamentOut:
@@ -253,7 +274,9 @@ def register_team(
         raise HTTPException(404, "Tournament not found")
     if t.status != TournamentStatus.REGISTRATION_OPEN.value:
         raise HTTPException(400, "Registration is not open")
-    if _team_count(db, t.id) >= t.max_teams:
+    if _deadline_passed(t):
+        raise HTTPException(400, "Registration deadline has passed")
+    if _paid_team_count(db, t.id) >= t.max_teams:
         raise HTTPException(400, "Tournament is full")
 
     # Partner user — create placeholder account if needed
@@ -265,26 +288,47 @@ def register_team(
             full_name=body.partner_name.strip(),
             role="PLAYER",
             university_id=body.university_id,
+            must_set_password=True,
         )
         db.add(partner)
         db.flush()
+        _ensure_ranking(db, partner.id)
 
     if partner.id == user.id:
         raise HTTPException(400, "Partner must be a different player")
 
-    # One active team per player per tournament
-    already = (
+    paid_already = (
         db.query(TeamPlayer)
         .join(Team)
+        .join(Registration, Registration.team_id == Team.id)
         .filter(
             Team.tournament_id == t.id,
             Team.withdrawn.is_(False),
             TeamPlayer.user_id.in_([user.id, partner.id]),
+            Registration.status == PaymentStatus.PAID.value,
         )
         .first()
     )
-    if already:
+    if paid_already:
         raise HTTPException(400, "You or your partner are already registered for this tournament")
+
+    pending_mine = (
+        db.query(Registration)
+        .join(Team, Registration.team_id == Team.id)
+        .join(TeamPlayer, TeamPlayer.team_id == Team.id)
+        .filter(
+            Team.tournament_id == t.id,
+            Team.withdrawn.is_(False),
+            TeamPlayer.user_id == user.id,
+            Registration.status == PaymentStatus.PENDING.value,
+        )
+        .first()
+    )
+    if pending_mine:
+        team = db.get(Team, pending_mine.team_id)
+        if team:
+            team.name = body.team_name.strip()
+        return _issue_checkout(db, t, team, pending_mine)
 
     team = Team(
         tournament_id=t.id,
@@ -306,6 +350,12 @@ def register_team(
     db.add(reg)
     db.flush()
 
+    return _issue_checkout(db, t, team, reg)
+
+
+def _issue_checkout(db: Session, t: Tournament, team: Team | None, reg: Registration) -> CheckoutResponse:
+    if not team:
+        raise HTTPException(404, "Team not found")
     settings = get_settings()
     if settings.stripe_secret_key:
         import stripe
@@ -336,7 +386,6 @@ def register_team(
             message="Redirect to Stripe Checkout",
         )
 
-    # Demo mode — mark paid immediately
     from app.services.payments import mark_registration_paid
 
     mark_registration_paid(db, reg, stripe_payment_id="demo_payment")
@@ -679,7 +728,7 @@ def update_score(
                 else:
                     nxt.team_b_id = winner_id
                     nxt.team_b_placeholder = None
-    elif body.status == MatchStatus.COMPLETED:
+    elif body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
         raise HTTPException(400, "Completed matches need a winner (or set scores that determine one)")
 
     # Apply doubles/singles Elo once when a match first completes

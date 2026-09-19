@@ -102,7 +102,7 @@ function payloadFromForm(form: TournamentFormState, previous?: Tournament) {
     description: form.description.trim() || null,
     rules: form.rules.trim() || null,
     registration_deadline: form.registration_deadline
-      ? `${form.registration_deadline}T23:59:00Z`
+      ? `${form.registration_deadline}T23:59:00`
       : null,
   }
 

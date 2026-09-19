@@ -27,6 +27,35 @@
   margin-bottom: 0.5rem;
 }
 
+.pl-updated {
+  margin-top: 0.45rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.pl-live-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.pl-live-list li {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  font-size: 0.92rem;
+}
+
+.pl-live-list strong {
+  color: var(--court-deep);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .pl-next {
   margin-bottom: 2rem;
 }

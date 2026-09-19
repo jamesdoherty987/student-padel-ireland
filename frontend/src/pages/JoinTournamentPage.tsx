@@ -5,7 +5,7 @@ import axios from 'axios'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { apiErrorMessage, platformApi, tournamentApi, type RegistrationConfirm } from '../services/api'
-import { formatMoney } from '../utils/format'
+import { formatMoney, isPastCalendarDate } from '../utils/format'
 import './Tournament.css'
 
 function ConfirmView({ data }: { data: RegistrationConfirm }) {
@@ -77,6 +77,12 @@ export default function JoinTournamentPage() {
     queryFn: async () => (await platformApi.universities()).data,
     enabled: !isConfirmRoute,
   })
+  const { data: publicConfig } = useQuery({
+    queryKey: ['public-config'],
+    queryFn: async () => (await platformApi.publicConfig()).data,
+    enabled: !isConfirmRoute,
+    staleTime: 60_000,
+  })
 
   const {
     data: stripeConfirm,
@@ -135,8 +141,7 @@ export default function JoinTournamentPage() {
         <main className="page empty-state">
           <h1 className="page-title">Missing payment details</h1>
           <p className="page-sub">
-            This confirmation link is incomplete. Open the tournament page and try again, or check your email for the
-            correct link.
+            This confirmation link is incomplete. Open the tournament page and try again.
           </p>
           <Link to={slug ? `/t/${slug}` : '/tournaments'} className="btn btn-primary">
             {slug ? 'Back to tournament' : 'Browse tournaments'}
@@ -170,6 +175,33 @@ export default function JoinTournamentPage() {
           <Link to={slug ? `/t/${slug}` : '/tournaments'} className="btn btn-primary">
             Back to tournament
           </Link>
+        </main>
+      </div>
+    )
+  }
+
+  if (isConfirmRoute && hasConfirmParams) {
+    if (!user) {
+      const next = encodeURIComponent(window.location.pathname + window.location.search)
+      return (
+        <div className="app-shell">
+          <NavBar />
+          <main className="page empty-state">
+            <h1 className="page-title">Confirm registration</h1>
+            <p className="page-sub">Log in with the account used at checkout to see your confirmation.</p>
+            <Link to={`/login?next=${next}`} className="btn btn-primary">
+              Log in
+            </Link>
+          </main>
+        </div>
+      )
+    }
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page">
+          <div className="skeleton" style={{ height: 28, width: '50%', marginBottom: 12 }} />
+          <div className="skeleton" style={{ height: 160 }} />
         </main>
       </div>
     )
@@ -231,6 +263,23 @@ export default function JoinTournamentPage() {
     )
   }
 
+  const deadlineGone = isPastCalendarDate(tournament.registration_deadline)
+
+  if (deadlineGone) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page empty-state">
+          <h1 className="page-title">{tournament.name}</h1>
+          <p className="page-sub">The registration deadline has passed.</p>
+          <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+            View tournament
+          </Link>
+        </main>
+      </div>
+    )
+  }
+
   const isFull = tournament.registered_teams >= tournament.max_teams
 
   if (isFull) {
@@ -239,7 +288,9 @@ export default function JoinTournamentPage() {
         <NavBar />
         <main className="page empty-state">
           <h1 className="page-title">{tournament.name}</h1>
-          <p className="page-sub">This tournament is full ({tournament.max_teams} doubles teams).</p>
+          <p className="page-sub">
+            This tournament is full ({tournament.max_teams} doubles teams). Check the event page in case a spot opens.
+          </p>
           <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
             View tournament
           </Link>
@@ -325,6 +376,7 @@ export default function JoinTournamentPage() {
               onChange={(e) => setForm({ ...form, partner_email: e.target.value })}
               required
             />
+            <p className="muted-note">Use the email they signed up with if they already have an account.</p>
           </div>
           <div className="form-group">
             <label className="form-label">Phone</label>
@@ -359,8 +411,15 @@ export default function JoinTournamentPage() {
             />
           </div>
           {error && <p className="auth-error">{error}</p>}
+          {publicConfig?.demo_payments && (
+            <p className="muted-note">Demo checkout — no card will be charged.</p>
+          )}
           <button className="btn btn-primary btn-block" disabled={loading || tLoading}>
-            {loading ? 'Processing…' : `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)}`}
+            {loading
+              ? 'Processing…'
+              : publicConfig?.demo_payments
+                ? `Confirm ${formatMoney(tournament.entry_fee_cents, tournament.currency)} (demo)`
+                : `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)}`}
           </button>
           <button
             type="button"

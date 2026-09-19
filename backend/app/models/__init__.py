@@ -116,6 +116,7 @@ class User(Base, TimestampMixin):
     student_number: Mapped[Optional[str]] = mapped_column(String(80))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_suspended: Mapped[bool] = mapped_column(Boolean, default=False)
+    must_set_password: Mapped[bool] = mapped_column(Boolean, default=False)
     bio: Mapped[Optional[str]] = mapped_column(String(500))
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500))
 

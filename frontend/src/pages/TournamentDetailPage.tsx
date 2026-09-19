@@ -2,12 +2,24 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import NavBar from '../components/NavBar'
+import { useAuth } from '../context/AuthContext'
 import { tournamentApi } from '../services/api'
-import { currentSetScores, formatDate, formatMoney, formatTime, statusBadgeClass, statusLabel } from '../utils/format'
+import {
+  currentSetScores,
+  formatDate,
+  formatMoney,
+  formatTime,
+  isPastCalendarDate,
+  spotsLeftLabel,
+  statusBadgeClass,
+  statusLabel,
+} from '../utils/format'
 import './Tournament.css'
 
 export default function TournamentDetailPage() {
   const { slug = '' } = useParams()
+  const { user } = useAuth()
+  const isOps = user?.role === 'ORGANISER' || user?.role === 'ADMIN'
   const { data: tournament, isLoading, isError } = useQuery({
     queryKey: ['tournament', slug],
     queryFn: async () => (await tournamentApi.get(slug)).data,
@@ -59,7 +71,9 @@ export default function TournamentDetailPage() {
   }
 
   const live = matches.filter((m) => m.status === 'LIVE')
+  const upcoming = matches.filter((m) => m.status === 'SCHEDULED' || m.status === 'CALLED').slice(0, 8)
   const qrUrl = `${window.location.origin}/t/${tournament.slug}`
+  const spots = spotsLeftLabel(tournament.registered_teams, tournament.max_teams)
 
   return (
     <div className="app-shell">
@@ -75,16 +89,20 @@ export default function TournamentDetailPage() {
         <div className="tour-actions">
           {tournament.status === 'REGISTRATION_OPEN' &&
             !playerView?.my_team &&
-            tournament.registered_teams < tournament.max_teams && (
+            tournament.registered_teams < tournament.max_teams &&
+            !isPastCalendarDate(tournament.registration_deadline) && (
               <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
                 Join Tournament
               </Link>
             )}
           {tournament.status === 'REGISTRATION_OPEN' &&
             !playerView?.my_team &&
-            tournament.registered_teams >= tournament.max_teams && (
+            (tournament.registered_teams >= tournament.max_teams ||
+              isPastCalendarDate(tournament.registration_deadline)) && (
               <span className="btn btn-ghost" style={{ cursor: 'default', opacity: 0.85 }}>
-                Tournament full
+                {isPastCalendarDate(tournament.registration_deadline)
+                  ? 'Registration closed'
+                  : 'Tournament full — watch this page for withdrawals'}
               </span>
             )}
           {playerView?.my_team && (
@@ -97,9 +115,11 @@ export default function TournamentDetailPage() {
               Live scores
             </Link>
           )}
-          <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost">
-            TV Display
-          </Link>
+          {isOps && (
+            <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost">
+              TV display
+            </Link>
+          )}
         </div>
 
         <div className="tour-stats">
@@ -116,13 +136,18 @@ export default function TournamentDetailPage() {
             <span>Per doubles team</span>
           </div>
           <div>
-            <strong>{tournament.max_teams}</strong>
-            <span>Max doubles</span>
+            <strong>{spots === 'Full' ? 'Full' : tournament.max_teams - tournament.registered_teams}</strong>
+            <span>{spots === 'Full' ? 'No spots left' : 'Spots left'}</span>
           </div>
         </div>
 
-        <div style={{ marginBottom: '1.25rem' }}>
+        <div style={{ marginBottom: '1.25rem', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
           <span className={`badge ${statusBadgeClass(tournament.status)}`}>{statusLabel(tournament.status)}</span>
+          {tournament.registration_deadline && tournament.status === 'REGISTRATION_OPEN' && (
+            <span className="tour-deadline">
+              Register by {formatDate(tournament.registration_deadline, { day: 'numeric', month: 'short' })}
+            </span>
+          )}
         </div>
 
         {live.length > 0 && (
@@ -149,6 +174,28 @@ export default function TournamentDetailPage() {
                 )
               })}
             </div>
+          </section>
+        )}
+
+        {upcoming.length > 0 && (
+          <section className="block">
+            <h2>Coming up</h2>
+            <ul className="match-preview-list">
+              {upcoming.map((m) => (
+                <li key={m.id}>
+                  <span className="match-preview-court">
+                    {m.status === 'CALLED' ? 'Called' : `Court ${m.court_number ?? 'TBC'}`}
+                  </span>
+                  <span>
+                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                  </span>
+                  <span className="match-preview-time">{formatTime(m.scheduled_start)}</span>
+                </li>
+              ))}
+            </ul>
+            <Link to={`/t/${tournament.slug}/live`} className="tour-inline-link">
+              Full live view
+            </Link>
           </section>
         )}
 
@@ -179,8 +226,8 @@ export default function TournamentDetailPage() {
         )}
 
         <section className="block qr-block">
-          <h2>QR code</h2>
-          <p>Put this on posters, court signs, and the tournament desk.</p>
+          <h2>Share this event</h2>
+          <p>Send the link to your partner, or put the QR on a poster at the venue.</p>
           <div className="qr-wrap">
             <QRCodeSVG value={qrUrl} size={160} bgColor="#ffffff" fgColor="#0b3d2e" />
             <code>{qrUrl.replace(/^https?:\/\//, '')}</code>

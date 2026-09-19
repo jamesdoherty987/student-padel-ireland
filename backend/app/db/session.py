@@ -100,6 +100,7 @@ def init_db() -> None:
     _sqlite_add_column_if_missing("community_competitions", "number_of_courts", "INTEGER DEFAULT 2")
     _sqlite_add_column_if_missing("users", "bio", "VARCHAR(500)")
     _sqlite_add_column_if_missing("users", "avatar_url", "VARCHAR(500)")
+    _sqlite_add_column_if_missing("users", "must_set_password", "BOOLEAN DEFAULT 0")
     _sqlite_ensure_ranking_history_nullable_tournament()
     # Migrate legacy zero/low “Ireland points” onto Elo baseline (Elo starts ~1500)
     with engine.begin() as conn:

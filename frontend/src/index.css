@@ -222,6 +222,37 @@ img {
   resize: vertical;
 }
 
+.muted-note {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.filter-chip {
+  min-height: 40px;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--white);
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.filter-chip.on,
+.filter-chip[aria-selected='true'] {
+  background: var(--court-deep);
+  border-color: var(--court-deep);
+  color: var(--white);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -548,6 +579,12 @@ img {
 @media (display-mode: standalone), (display-mode: fullscreen) {
   .app-nav {
     padding-top: max(0.85rem, env(safe-area-inset-top));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
   }
 }
 
