@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
@@ -31,7 +31,7 @@ const FORMATS = [
 ] as const
 
 export default function CommunityPage() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const qc = useQueryClient()
@@ -45,6 +45,7 @@ export default function CommunityPage() {
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
   const [friendsOpen, setFriendsOpen] = useState(false)
+  const [friendsAutoOpened, setFriendsAutoOpened] = useState(false)
 
   const homeQ = useQuery({
     queryKey: ['community-home'],
@@ -83,6 +84,12 @@ export default function CommunityPage() {
     [homeQ.data?.needs_confirm],
   )
   const nextGame = nextMatches.find((m) => !confirmIds.has(m.id)) || nextMatches[0]
+
+  useEffect(() => {
+    if (friendsAutoOpened || incoming.length === 0) return
+    setFriendsOpen(true)
+    setFriendsAutoOpened(true)
+  }, [incoming.length, friendsAutoOpened])
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['community-home'] })
@@ -161,6 +168,53 @@ export default function CommunityPage() {
     } catch {
       setError('Could not copy')
     }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page">
+          <div className="skeleton" style={{ height: 28, width: '40%', marginBottom: 12 }} />
+          <div className="skeleton" style={{ height: 120 }} />
+        </main>
+      </div>
+    )
+  }
+
+  if (!user) {
+    const next = encodeURIComponent('/community')
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page">
+          <h1 className="page-title">Community</h1>
+          <p className="page-sub">Private ladders for your college crew — log matches, confirm scores, climb the rankings.</p>
+          <ol className="community-guest-steps">
+            <li>
+              <strong>Add friends</strong>
+              <span>Search by name and send a request.</span>
+            </li>
+            <li>
+              <strong>Start or join a group</strong>
+              <span>Create a competition or enter an invite code from a friend.</span>
+            </li>
+            <li>
+              <strong>Play and confirm</strong>
+              <span>Both sides confirm the score before ratings update.</span>
+            </li>
+          </ol>
+          <div className="community-guest-actions">
+            <Link to={`/signup?next=${next}`} className="btn btn-primary">
+              Sign up
+            </Link>
+            <Link to={`/login?next=${next}`} className="btn btn-ghost">
+              Log in
+            </Link>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   return (
@@ -281,9 +335,12 @@ export default function CommunityPage() {
               A private group for you and your friends. Share the code so others can join.
             </p>
             <div className="form-group">
-              <label htmlFor="comp-name">Name</label>
+              <label className="form-label" htmlFor="comp-name">
+                Name
+              </label>
               <input
                 id="comp-name"
+                className="form-input"
                 value={compName}
                 onChange={(e) => setCompName(e.target.value)}
                 placeholder="Friday padel"
@@ -308,8 +365,15 @@ export default function CommunityPage() {
               </div>
             </div>
             <div className="form-group">
-              <label htmlFor="comp-courts">Courts available</label>
-              <select id="comp-courts" value={courts} onChange={(e) => setCourts(Number(e.target.value))}>
+              <label className="form-label" htmlFor="comp-courts">
+                Courts available
+              </label>
+              <select
+                id="comp-courts"
+                className="form-select"
+                value={courts}
+                onChange={(e) => setCourts(Number(e.target.value))}
+              >
                 {[1, 2, 3, 4, 5, 6].map((n) => (
                   <option key={n} value={n}>
                     {n} court{n === 1 ? '' : 's'}
@@ -356,6 +420,7 @@ export default function CommunityPage() {
             }}
           >
             <input
+              className="form-input"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
               placeholder="e.g. EHWDZA78"
@@ -366,7 +431,7 @@ export default function CommunityPage() {
               Join
             </button>
           </form>
-          <p className="muted-note">Or scan a friend’s QR code — it opens this page with the code filled in.</p>
+          <p className="muted-note">Ask a friend for their invite code, or open the link they shared.</p>
         </section>
 
         <section className="community-section">
@@ -446,9 +511,12 @@ export default function CommunityPage() {
           {friendsOpen && (
             <div className="community-panel">
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label htmlFor="player-search">Search by name</label>
+                <label className="form-label" htmlFor="player-search">
+                  Search by name
+                </label>
                 <input
                   id="player-search"
+                  className="form-input"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Type a name…"

@@ -45,7 +45,7 @@ Open http://localhost:5173
 | Organiser | organiser@studentpadelireland.ie | organiser123 |
 | Admin | admin@studentpadelireland.ie | admin12345 |
 
-Seeded tournament: **Limerick Student Padel 2026** (`/t/limerick-2026`)
+Seeded tournament: **Limerick Open** (`/t/limerick-open`)
 
 ## Tests
 

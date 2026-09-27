@@ -17,10 +17,8 @@ export const HERO_ROTATION = [
   '/images/heroes/hero-05.webp',
 ] as const
 
-/** How-it-works feature video (stock padel clip) */
+/** How-it-works feature video */
 export const LANDING_VIDEO = {
   poster: '/images/gallery-1.jpg',
-  /** Prefer MP4 first for Safari */
   mp4: '/videos/feature.mp4',
-  webm: '/videos/feature.webm',
 }

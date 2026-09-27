@@ -72,7 +72,7 @@ export default function NavBar() {
             )}
             {(user.role === 'ORGANISER' || user.role === 'ADMIN') && (
               <NavLink to="/organiser" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-                {user.role === 'ADMIN' ? 'Day-of ops' : 'Dashboard'}
+                Dashboard
               </NavLink>
             )}
             <NavLink to={`/players/${user.id}`} className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>

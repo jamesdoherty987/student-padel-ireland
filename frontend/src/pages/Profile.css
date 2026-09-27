@@ -5,6 +5,10 @@
   margin-bottom: 1.25rem;
 }
 
+.profile-friend-action {
+  margin-top: 0.65rem;
+}
+
 .profile-avatar-wrap {
   flex-shrink: 0;
 }
