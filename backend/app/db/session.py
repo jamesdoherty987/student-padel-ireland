@@ -9,7 +9,14 @@ from app.models import Base
 settings = get_settings()
 
 connect_args = {"check_same_thread": False} if settings.is_sqlite_db() else {}
-engine = create_engine(settings.database_url, connect_args=connect_args)
+engine_kwargs: dict = {"connect_args": connect_args}
+if not settings.is_sqlite_db():
+    # Survives brief network blips / Supabase pooler idle disconnects
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_size"] = 5
+    engine_kwargs["max_overflow"] = 10
+
+engine = create_engine(settings.database_url, **engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

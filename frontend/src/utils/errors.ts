@@ -20,3 +20,9 @@ export function apiErrorMessage(err: unknown, fallback = 'Something went wrong')
   if (message === 'Network Error') return 'Cannot reach the server. Is the API running?'
   return fallback
 }
+
+/** HTTP status from an Axios-style error, if present. */
+export function apiErrorStatus(err: unknown): number | undefined {
+  const status = (err as { response?: { status?: number } })?.response?.status
+  return typeof status === 'number' ? status : undefined
+}

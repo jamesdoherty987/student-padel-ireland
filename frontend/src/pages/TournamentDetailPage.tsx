@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
 import NavBar from '../components/NavBar'
 import { tournamentApi } from '../services/api'
+import { publicWebOrigin } from '../native/platform'
 import { currentSetScores, formatDate, formatMoney, formatTime, statusBadgeClass, statusLabel } from '../utils/format'
 import './Tournament.css'
 
@@ -59,7 +60,7 @@ export default function TournamentDetailPage() {
   }
 
   const live = matches.filter((m) => m.status === 'LIVE')
-  const qrUrl = `${window.location.origin}/t/${tournament.slug}`
+  const qrUrl = `${publicWebOrigin()}/t/${tournament.slug}`
 
   return (
     <div className="app-shell">

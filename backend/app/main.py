@@ -17,9 +17,11 @@ app = FastAPI(
     description="Tournament platform for Irish student padel",
 )
 
+_cors_origins = settings.cors_origins()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,8 +38,22 @@ app.include_router(profiles.router, prefix="/api")
 app.include_router(tournaments.router, prefix="/api")
 
 
+def _warn_production_config() -> None:
+    if not settings.is_production():
+        return
+    if settings.secret_key in {"", "dev-secret-change-me", "change-me-to-a-long-random-string"}:
+        print("WARNING: SECRET_KEY is still a default value — set a long random secret in production.")
+    if settings.is_sqlite_db():
+        print("WARNING: DATABASE_URL is SQLite — use Supabase Postgres for production.")
+    if not settings.stripe_secret_key:
+        print("INFO: Stripe not configured — tournament registration will use demo (free) payments.")
+    if settings.should_seed_demo():
+        print("WARNING: SEED_DEMO_DATA is enabled in production — demo passwords will be created.")
+
+
 @app.on_event("startup")
 def on_startup():
+    _warn_production_config()
     init_db()
     seed_if_empty()
 
@@ -53,4 +69,5 @@ def public_config():
         "stripe_publishable_key": settings.stripe_publishable_key or None,
         "frontend_url": settings.frontend_url,
         "demo_payments": not bool(settings.stripe_secret_key),
+        "environment": settings.environment,
     }

@@ -1,8 +1,8 @@
 import axios from 'axios'
-import { apiErrorMessage } from '../utils/errors'
+import { apiBaseUrl } from '../native/platform'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '',
+  baseURL: apiBaseUrl(),
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -334,5 +334,5 @@ export const communityApi = {
     api.patch<CommunityMatch>(`/api/community-matches/${matchId}/court`, { court_number }),
 }
 
-export { apiErrorMessage }
+export { apiErrorMessage, apiErrorStatus } from '../utils/errors'
 export default api

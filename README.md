@@ -59,18 +59,51 @@ Tournament generator tests cover 8–64 team fields, no self-matches, full group
 
 ## Production checklist
 
-Fill `backend/.env` from `.env.example`:
+### Cost (MVP / early)
 
-- `SECRET_KEY` — long random string
-- `DATABASE_URL` — Supabase Postgres URL
-- `FRONTEND_URL` / `BACKEND_URL` — live domains
-- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PUBLISHABLE_KEY`
-- `RESEND_API_KEY`, `EMAIL_FROM`
-- Frontend `VITE_API_URL` — your Render API URL
+| Service | Typical early cost |
+|--------|---------------------|
+| **Supabase** Postgres | **Free** (500 MB, pauses after ~1 week idle) · **~$25/mo** Pro if you need always-on |
+| **Render** API | **Free** (spins down after ~15 min idle — first request is slow) · ~$7/mo starter for always-on |
+| **Vercel** frontend | **Free** hobby for most early traffic |
+| **Stripe** | Free to set up; ~1.5% + €0.25 per EU card payment when you turn it on |
 
-Run `supabase/migrations/001_initial.sql` on Supabase before first deploy.
+You can launch for **€0/month** on free tiers. Expect cold starts on Render free + possible Supabase pause if the site sits idle.
 
-## Phases shipped in this MVP
+### Backend (Render)
+
+1. Create a Supabase project → SQL editor → run `supabase/migrations/001_initial.sql` then `002_community_ratings.sql`
+2. Copy the Postgres connection string into Render `DATABASE_URL` (plain `postgresql://…` is fine — the app normalizes it)
+3. Deploy with `render.yaml` (or connect the `backend/` folder). Set:
+   - `ENVIRONMENT=production`
+   - `SECRET_KEY` — long random (Render can generate)
+   - `DATABASE_URL` — Supabase URI
+   - `FRONTEND_URL` — your Vercel URL (no trailing slash)
+   - `BACKEND_URL` — your Render API URL
+   - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — first admin (demo accounts are **not** created in production)
+4. Stripe keys optional until you charge fees (demo payments until then)
+
+### Frontend (Vercel)
+
+- Root directory: `frontend`
+- Build: `npm run build` · Output: `dist`
+- Env: `VITE_API_URL=https://your-api.onrender.com` (must rebuild after changing)
+- Optional: `VITE_WEB_ORIGIN=https://your-domain` for QR / invite links
+
+### Native apps (Capacitor → App Store / Play)
+
+See [frontend/MOBILE.md](frontend/MOBILE.md). Short version:
+
+```bash
+cd frontend
+export VITE_API_URL=https://your-api.onrender.com
+export VITE_WEB_ORIGIN=https://studentpadelireland.ie
+npm run cap:ios    # Xcode → Archive → TestFlight
+```
+
+Bundle ID: `ie.studentpadelireland.app`
+
+### Phases shipped in this MVP
 
 1. **Foundation** — auth, roles (PLAYER / ORGANISER / ADMIN), schema, seed data  
 2. **Tournament** — create, register + pay (Stripe or demo), teams, configurable generator  

@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { NativeDeepLinkRouter } from './native/NativeDeepLinkRouter'
 import Landing from './pages/Landing'
 import { LoginPage, SignupPage } from './pages/Auth'
 import TournamentsPage from './pages/TournamentsPage'
@@ -29,6 +30,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BrowserRouter>
+          <NativeDeepLinkRouter />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<LoginPage />} />

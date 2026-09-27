@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { QRCodeSVG } from 'qrcode.react'
+import { Share } from '@capacitor/share'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
+import { isNativeApp, publicWebOrigin } from '../native/platform'
 import {
   apiErrorMessage,
   communityApi,
@@ -196,13 +198,30 @@ export default function CompetitionDetailPage() {
 
   const copyLink = async () => {
     if (!c?.invite_code) return
-    const url = `${window.location.origin}/community/join/${c.invite_code}`
+    const url = `${publicWebOrigin()}/community/join/${c.invite_code}`
     try {
+      if (isNativeApp()) {
+        const can = await Share.canShare()
+        if (can.value) {
+          await Share.share({
+            title: c.name,
+            text: `Join my padel competition on Student Padel Ireland`,
+            url,
+            dialogTitle: 'Invite friends',
+          })
+          setCopied('link')
+          setTimeout(() => setCopied(''), 1500)
+          return
+        }
+      }
       await navigator.clipboard.writeText(url)
       setCopied('link')
       setTimeout(() => setCopied(''), 1500)
-    } catch {
-      setError('Could not copy link')
+    } catch (err: unknown) {
+      // User dismissed the share sheet — not an error
+      const msg = err instanceof Error ? err.message : String(err)
+      if (/cancel|dismiss/i.test(msg)) return
+      setError('Could not share / copy link')
     }
   }
 
@@ -257,7 +276,7 @@ export default function CompetitionDetailPage() {
   const canLog = c.status !== 'CANCELLED' && c.status !== 'COMPLETED'
   const courtCount = c.number_of_courts || 2
   const joinUrl = c.invite_code
-    ? `${window.location.origin}/community/join/${c.invite_code}`
+    ? `${publicWebOrigin()}/community/join/${c.invite_code}`
     : ''
   const memberList = members || []
 

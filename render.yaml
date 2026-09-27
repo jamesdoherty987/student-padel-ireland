@@ -1,14 +1,42 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# After first deploy, set secrets in the Render dashboard (marked sync: false).
 services:
   - type: web
     name: student-padel-ireland-api
     runtime: python
     rootDir: backend
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
     envVars:
-      - key: DATABASE_URL
-        sync: false
+      - key: ENVIRONMENT
+        value: production
       - key: SECRET_KEY
         generateValue: true
+      - key: DATABASE_URL
+        sync: false
       - key: FRONTEND_URL
         sync: false
+      - key: BACKEND_URL
+        sync: false
+      # First admin (required on empty prod DB — use a strong password, then remove these if you want)
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: Platform Admin
+      - key: SEED_DEMO_DATA
+        value: "false"
+      # Stripe — leave empty until you set up payments (demo mode)
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: Student Padel Ireland <noreply@studentpadelireland.ie>

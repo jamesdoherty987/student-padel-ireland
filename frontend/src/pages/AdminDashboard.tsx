@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
+import { publicWebOrigin } from '../native/platform'
 import { apiErrorMessage, platformApi, tournamentApi, type Tournament } from '../services/api'
 import { formatDate, formatDoublesEntry, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
 import './Organiser.css'
@@ -333,7 +334,7 @@ function AdminTournamentCard({
   onCopied: (msg: string) => void
 }) {
   const t = row.tournament
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const origin = publicWebOrigin()
   const publicUrl = `${origin}/t/${t.slug}`
   const joinUrl = `${origin}/t/${t.slug}/join`
 

@@ -12,10 +12,19 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null)
 
+function readStoredToken(): string | null {
+  try {
+    return localStorage.getItem('isp_token')
+  } catch {
+    return null
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('isp_token'))
-  const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState<string | null>(() => readStoredToken())
+  // Only show a loading gate when we actually have a token to validate
+  const [loading, setLoading] = useState(() => !!readStoredToken())
 
   useEffect(() => {
     const onSoftLogout = () => {
@@ -28,10 +37,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    if (!token) {
-      setLoading(false)
-      return
-    }
+    if (!token) return
+
     let cancelled = false
     setLoading(true)
     authApi

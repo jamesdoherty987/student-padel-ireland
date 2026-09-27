@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
-import { apiErrorMessage, platformApi, tournamentApi, type RegistrationConfirm } from '../services/api'
+import { isNativeApp } from '../native/platform'
+import { openExternalUrl, whenExternalBrowserCloses } from '../native/shell'
+import { apiErrorMessage, apiErrorStatus, platformApi, tournamentApi, type RegistrationConfirm } from '../services/api'
 import { formatMoney } from '../utils/format'
 import './Tournament.css'
 
@@ -104,16 +105,25 @@ export default function JoinTournamentPage() {
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const checkoutDisposeRef = useRef<(() => void) | null>(null)
+  const profileDefaultsApplied = useRef(false)
 
   useEffect(() => {
-    if (user) {
-      setForm((f) => ({
-        ...f,
-        phone: f.phone || user.phone || '',
-        university_id: f.university_id || user.university_id || '',
-        student_number: f.student_number || user.student_number || '',
-      }))
+    return () => {
+      checkoutDisposeRef.current?.()
+      checkoutDisposeRef.current = null
     }
+  }, [])
+
+  useEffect(() => {
+    if (!user || profileDefaultsApplied.current) return
+    profileDefaultsApplied.current = true
+    setForm((f) => ({
+      ...f,
+      phone: f.phone || user.phone || '',
+      university_id: f.university_id || user.university_id || '',
+      student_number: f.student_number || user.student_number || '',
+    }))
   }, [user])
 
   if (authLoading || (isConfirmRoute && hasConfirmParams && confirming)) {
@@ -151,7 +161,7 @@ export default function JoinTournamentPage() {
   }
 
   if (isConfirmRoute && confirmError) {
-    const status = axios.isAxiosError(confirmErr) ? confirmErr.response?.status : undefined
+    const status = apiErrorStatus(confirmErr)
     const title =
       status === 403 ? 'Wrong account' : status === 404 ? 'Registration not found' : 'Couldn’t confirm payment'
     const copy =
@@ -266,6 +276,24 @@ export default function JoinTournamentPage() {
         university_id: form.university_id || null,
       })
       if (data.checkout_url) {
+        if (isNativeApp()) {
+          // Stripe must leave the WebView; confirm when the in-app browser closes
+          const confirmPath = `/t/${slug}/confirmed?registration_id=${data.registration_id}`
+          checkoutDisposeRef.current?.()
+          const dispose = await whenExternalBrowserCloses(() => {
+            checkoutDisposeRef.current = null
+            navigate(confirmPath, { replace: true })
+          })
+          checkoutDisposeRef.current = dispose
+          try {
+            await openExternalUrl(data.checkout_url)
+          } catch {
+            dispose()
+            checkoutDisposeRef.current = null
+            setError('Could not open payment page')
+          }
+          return
+        }
         window.location.href = data.checkout_url
         return
       }

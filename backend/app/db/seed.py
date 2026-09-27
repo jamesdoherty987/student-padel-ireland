@@ -1,4 +1,8 @@
-"""Seed Irish universities + demo accounts for local development."""
+"""Seed Irish universities + demo accounts for local development.
+
+In production (ENVIRONMENT=production), demo users are NOT created unless
+SEED_DEMO_DATA=true. Set ADMIN_EMAIL + ADMIN_PASSWORD to bootstrap the first admin.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,7 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.models import (
@@ -38,6 +43,15 @@ DEMO_MATES = (
     ("tom@ucd.ie", "Tom Ryan", 1480, "ucd"),
     ("nia@trinity.ie", "Nia Walsh", 1510, "trinity"),
 )
+
+
+def _ensure_universities(db: Session) -> None:
+    if db.query(University).count() > 0:
+        return
+    for name, short, slug in IRISH_UNIVERSITIES:
+        db.add(University(name=name, short_name=short, slug=slug))
+    db.commit()
+    print("Seeded Irish universities.")
 
 
 def _ensure_demo_friends(db: Session) -> None:
@@ -153,80 +167,118 @@ def _ensure_limerick_open(db: Session) -> None:
     print("Seeded Limerick Open tournament.")
 
 
-def seed_if_empty() -> None:
-    db = SessionLocal()
-    try:
-        if db.query(University).count() == 0:
-            for name, short, slug in IRISH_UNIVERSITIES:
-                db.add(University(name=name, short_name=short, slug=slug))
-            db.commit()
+def _bootstrap_admin_from_env(db: Session) -> None:
+    """Create a single admin from ADMIN_EMAIL / ADMIN_PASSWORD when no users exist."""
+    settings = get_settings()
+    email = (settings.admin_email or "").strip().lower()
+    password = settings.admin_password or ""
+    if not email or not password:
+        print(
+            "No users yet. Set ADMIN_EMAIL and ADMIN_PASSWORD to create the first admin, "
+            "or SEED_DEMO_DATA=true for local-style demo accounts."
+        )
+        return
+    if db.query(User).filter(User.email == email).first():
+        return
+    if len(password) < 10:
+        print("ADMIN_PASSWORD must be at least 10 characters — skipping admin bootstrap.")
+        return
 
-        if (
-            db.query(User)
-            .filter(
-                User.email.in_(
-                    [
-                        "admin@studentpadelireland.ie",
-                        "admin@irishstudentpadel.ie",
-                    ]
-                )
+    admin = User(
+        email=email,
+        password_hash=hash_password(password),
+        full_name=(settings.admin_name or "Platform Admin").strip(),
+        role=UserRole.ADMIN.value,
+    )
+    db.add(admin)
+    db.flush()
+    db.add(Ranking(user_id=admin.id, points=INITIAL_RATING))
+    db.commit()
+    print(f"Bootstrapped admin account: {email}")
+
+
+def _seed_demo_accounts(db: Session) -> None:
+    if (
+        db.query(User)
+        .filter(
+            User.email.in_(
+                [
+                    "admin@studentpadelireland.ie",
+                    "admin@irishstudentpadel.ie",
+                ]
             )
-            .first()
+        )
+        .first()
+    ):
+        # Migrate old demo emails if present
+        for old, new in (
+            ("admin@irishstudentpadel.ie", "admin@studentpadelireland.ie"),
+            ("organiser@irishstudentpadel.ie", "organiser@studentpadelireland.ie"),
         ):
-            # Migrate old demo emails if present
-            for old, new in (
-                ("admin@irishstudentpadel.ie", "admin@studentpadelireland.ie"),
-                ("organiser@irishstudentpadel.ie", "organiser@studentpadelireland.ie"),
-            ):
-                u = db.query(User).filter(User.email == old).first()
-                if u and not db.query(User).filter(User.email == new).first():
-                    u.email = new
-            db.commit()
-            _ensure_demo_friends(db)
-            _ensure_limerick_open(db)
-            return
-
-        ul = db.query(University).filter(University.slug == "ul").first()
-        admin = User(
-            email="admin@studentpadelireland.ie",
-            password_hash=hash_password("admin12345"),
-            full_name="Platform Admin",
-            role=UserRole.ADMIN.value,
-        )
-        organiser = User(
-            email="organiser@studentpadelireland.ie",
-            password_hash=hash_password("organiser123"),
-            full_name="Aoife Organiser",
-            role=UserRole.ORGANISER.value,
-            university_id=ul.id if ul else None,
-        )
-        player = User(
-            email="james@ul.ie",
-            password_hash=hash_password("player12345"),
-            full_name="James Doherty",
-            role=UserRole.PLAYER.value,
-            university_id=ul.id if ul else None,
-            phone="+353870000001",
-            student_number="20123456",
-        )
-        db.add_all([admin, organiser, player])
-        db.flush()
-        for u in (admin, organiser, player):
-            pts = 1620 if u.email.startswith("james") else INITIAL_RATING
-            db.add(
-                Ranking(
-                    user_id=u.id,
-                    points=pts,
-                    rank_ireland=1 if u.email.startswith("james") else None,
-                    matches_played=8 if u.email.startswith("james") else 0,
-                    wins=5 if u.email.startswith("james") else 0,
-                    losses=3 if u.email.startswith("james") else 0,
-                )
-            )
-
+            u = db.query(User).filter(User.email == old).first()
+            if u and not db.query(User).filter(User.email == new).first():
+                u.email = new
         db.commit()
         _ensure_demo_friends(db)
         _ensure_limerick_open(db)
-        print("Seeded universities, demo users, friends, and Limerick Open.")
+        return
+
+    ul = db.query(University).filter(University.slug == "ul").first()
+    admin = User(
+        email="admin@studentpadelireland.ie",
+        password_hash=hash_password("admin12345"),
+        full_name="Platform Admin",
+        role=UserRole.ADMIN.value,
+    )
+    organiser = User(
+        email="organiser@studentpadelireland.ie",
+        password_hash=hash_password("organiser123"),
+        full_name="Aoife Organiser",
+        role=UserRole.ORGANISER.value,
+        university_id=ul.id if ul else None,
+    )
+    player = User(
+        email="james@ul.ie",
+        password_hash=hash_password("player12345"),
+        full_name="James Doherty",
+        role=UserRole.PLAYER.value,
+        university_id=ul.id if ul else None,
+        phone="+353870000001",
+        student_number="20123456",
+    )
+    db.add_all([admin, organiser, player])
+    db.flush()
+    for u in (admin, organiser, player):
+        pts = 1620 if u.email.startswith("james") else INITIAL_RATING
+        db.add(
+            Ranking(
+                user_id=u.id,
+                points=pts,
+                rank_ireland=1 if u.email.startswith("james") else None,
+                matches_played=8 if u.email.startswith("james") else 0,
+                wins=5 if u.email.startswith("james") else 0,
+                losses=3 if u.email.startswith("james") else 0,
+            )
+        )
+
+    db.commit()
+    _ensure_demo_friends(db)
+    _ensure_limerick_open(db)
+    print("Seeded universities, demo users, friends, and Limerick Open.")
+
+
+def seed_if_empty() -> None:
+    settings = get_settings()
+    db = SessionLocal()
+    try:
+        _ensure_universities(db)
+
+        if settings.should_seed_demo():
+            _seed_demo_accounts(db)
+            return
+
+        # Production-safe path: universities only + optional admin bootstrap
+        if db.query(User).count() == 0:
+            _bootstrap_admin_from_env(db)
     finally:
         db.close()

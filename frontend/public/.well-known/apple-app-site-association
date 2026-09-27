@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.ie.studentpadelireland.app",
+        "paths": ["*", "/t/*", "/community/*", "/tournaments", "/rankings", "/players/*"]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["TEAMID.ie.studentpadelireland.app"]
+  }
+}

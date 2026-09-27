@@ -58,6 +58,21 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Capacitor shell — avoid overscroll rubber-banding fighting the WebView */
+html.native-app,
+html.native-app body {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html.native-app input,
+html.native-app textarea,
+html.native-app [contenteditable] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body {
   font-family: var(--font-body);
   background: var(--bg-primary);

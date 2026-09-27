@@ -1,16 +1,31 @@
 {
   "name": "student-padel-ireland",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:native": "node scripts/check-native-env.mjs && tsc -b && vite build && npx cap sync",
     "lint": "oxlint",
     "preview": "vite preview",
-    "icons": "node scripts/generate-icons.mjs"
+    "test:deeplinks": "node scripts/check-deeplinks.mjs",
+    "icons": "node scripts/generate-icons.mjs",
+    "assets:native": "npx capacitor-assets generate --ios --android --iconBackgroundColor '#0b3d2e' --iconBackgroundColorDark '#0b3d2e' --splashBackgroundColor '#0b3d2e' --splashBackgroundColorDark '#0b3d2e'",
+    "cap:sync": "npx cap sync",
+    "cap:ios": "npm run build:native && npx cap open ios",
+    "cap:android": "npm run build:native && npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.1",
+    "@capacitor/browser": "^8.0.4",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2",
+    "@capacitor/keyboard": "^8.0.5",
+    "@capacitor/share": "^8.0.2",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.3",
     "@fortawesome/fontawesome-free": "^7.3.1",
     "@tanstack/react-query": "^5.103.1",
     "axios": "^1.20.0",
@@ -23,6 +38,8 @@
     "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.2",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
