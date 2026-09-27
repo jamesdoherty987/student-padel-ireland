@@ -18,7 +18,7 @@ export default function TournamentsPage() {
   const { user } = useAuth()
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['id']>('all')
   const [query, setQuery] = useState('')
-  const { data: tournaments = [], isLoading, isError } = useQuery({
+  const { data: tournaments = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['tournaments'],
     queryFn: async () => (await tournamentApi.list()).data,
   })
@@ -41,9 +41,11 @@ export default function TournamentsPage() {
         <div className="page-header-row">
           <h1 className="page-title">Tournaments</h1>
           {(user?.role === 'ORGANISER' || user?.role === 'ADMIN') && (
-            <Link to="/organiser" className="btn btn-ghost" style={{ minHeight: 40, padding: '0.4rem 0.9rem' }}>
-              Dashboard
-            </Link>
+            <div className="header-actions">
+              <Link to="/organiser" className="btn btn-ghost btn-sm">
+                Dashboard
+              </Link>
+            </div>
           )}
         </div>
         <p className="page-sub">Find an event near you and join with your partner.</p>
@@ -82,7 +84,10 @@ export default function TournamentsPage() {
         )}
         {isError && (
           <div className="empty-state">
-            <p>Could not load tournaments. Is the API running?</p>
+            <p>Could not load tournaments. Please try again.</p>
+            <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => refetch()}>
+              Retry
+            </button>
           </div>
         )}
         {!isLoading && !isError && (

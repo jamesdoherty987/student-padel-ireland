@@ -100,11 +100,11 @@ export default function TournamentDetailPage() {
             !playerView?.my_team &&
             (tournament.registered_teams >= tournament.max_teams ||
               isPastCalendarDate(tournament.registration_deadline)) && (
-              <span className="btn btn-ghost" style={{ cursor: 'default', opacity: 0.85 }}>
+              <p className="muted-note tour-closed-note">
                 {isPastCalendarDate(tournament.registration_deadline)
                   ? 'Registration closed'
                   : 'Tournament full — watch this page for withdrawals'}
-              </span>
+              </p>
             )}
           {playerView?.my_team && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
@@ -142,7 +142,7 @@ export default function TournamentDetailPage() {
           </div>
         </div>
 
-        <div style={{ marginBottom: '1.25rem', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        <div className="tour-status-row">
           <span className={`badge ${statusBadgeClass(tournament.status)}`}>{statusLabel(tournament.status)}</span>
           {tournament.registration_deadline && tournament.status === 'REGISTRATION_OPEN' && (
             <span className="tour-deadline">

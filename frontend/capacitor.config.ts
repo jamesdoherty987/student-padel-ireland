@@ -19,8 +19,8 @@ const config: CapacitorConfig = {
       splashImmersive: true,
     },
     StatusBar: {
-      style: 'DARK',
-      backgroundColor: '#0b3d2e',
+      style: 'LIGHT',
+      backgroundColor: '#ffffff',
     },
     Keyboard: {
       resize: 'body',
@@ -28,7 +28,7 @@ const config: CapacitorConfig = {
     },
   },
   ios: {
-    contentInset: 'automatic',
+    contentInset: 'never',
     preferredContentMode: 'mobile',
     backgroundColor: '#0b3d2e',
     scheme: 'Student Padel Ireland',

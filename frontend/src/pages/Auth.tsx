@@ -1,12 +1,23 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
+import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { apiErrorMessage, platformApi } from '../services/api'
 import { safeNextPath } from '../utils/navigation'
 import './Auth.css'
 
+function useDarkStatusBar() {
+  useEffect(() => {
+    void setStatusBarForDarkScreen()
+    return () => {
+      void setStatusBarForLightScreen()
+    }
+  }, [])
+}
+
 export function LoginPage() {
+  useDarkStatusBar()
   const { login, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -102,6 +113,7 @@ export function LoginPage() {
 }
 
 export function SignupPage() {
+  useDarkStatusBar()
   const { register, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()

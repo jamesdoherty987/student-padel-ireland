@@ -17,7 +17,7 @@ export function apiErrorMessage(err: unknown, fallback = 'Something went wrong')
   }
   const message = (err as { message?: string })?.message
   if (message && message !== 'Network Error') return message
-  if (message === 'Network Error') return 'Cannot reach the server. Is the API running?'
+  if (message === 'Network Error') return 'Cannot reach the server. Please try again.'
   return fallback
 }
 

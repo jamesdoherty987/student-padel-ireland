@@ -5,6 +5,19 @@
   margin-bottom: 1.25rem;
 }
 
+.profile-header > div:last-child {
+  min-width: 0;
+}
+
+.profile-header .page-title {
+  overflow-wrap: anywhere;
+  margin-bottom: 0.15rem;
+}
+
+.profile-header .page-sub {
+  margin: 0;
+}
+
 .profile-friend-action {
   margin-top: 0.65rem;
 }
@@ -61,14 +74,7 @@
   white-space: pre-wrap;
 }
 
-.profile-bio-edit textarea {
-  width: 100%;
-  min-height: 96px;
-  padding: 0.7rem 0.85rem;
-  border: 1.5px solid var(--line);
-  border-radius: var(--radius-sm);
-  font: inherit;
-  resize: vertical;
+.profile-bio-edit textarea.form-textarea {
   margin-bottom: 0.6rem;
 }
 
@@ -176,8 +182,8 @@
 .lightbox {
   position: fixed;
   inset: 0;
-  z-index: 50;
-  background: rgba(10, 22, 40, 0.72);
+  z-index: 100;
+  background: rgba(10, 22, 40, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -219,23 +225,6 @@
 .lightbox-actions .btn {
   flex: 1 1 auto;
   min-width: min(100%, 120px);
-}
-
-.form-error {
-  color: var(--danger);
-  font-size: 0.92rem;
-  margin-bottom: 12px;
-}
-
-.muted-note {
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.btn-sm {
-  min-height: 44px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.88rem;
 }
 
 @media (max-width: 640px) {

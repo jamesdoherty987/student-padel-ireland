@@ -24,7 +24,7 @@ export default function NavBar() {
 
   useEffect(() => {
     const onResize = () => {
-      if (window.innerWidth > 768) setOpen(false)
+      if (window.innerWidth > 1024) setOpen(false)
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -50,7 +50,7 @@ export default function NavBar() {
   return (
     <header className={`app-nav ${open ? 'is-menu-open' : ''}`}>
       <Link to="/" className="app-nav-brand" onClick={close}>
-        Student Padel Ireland
+        <span className="app-nav-brand-text">Student Padel Ireland</span>
       </Link>
       <nav className={`app-nav-links ${open ? 'is-open' : ''}`}>
         <NavLink to="/tournaments" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>

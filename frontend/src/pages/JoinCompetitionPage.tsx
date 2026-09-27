@@ -49,7 +49,7 @@ export default function JoinCompetitionPage() {
           <p className="muted-note" style={{ marginBottom: 16 }}>
             Log in or sign up to join this private competition.
           </p>
-          <div className="header-actions" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div className="header-actions">
             <Link to={`/login?next=${next}`} className="btn btn-primary">
               Log in
             </Link>
