@@ -189,6 +189,12 @@ def _match_players(m: CommunityMatch) -> list[UUID]:
     return players
 
 
+def _same_side(m: CommunityMatch, a: UUID, b: UUID) -> bool:
+    side_a = {uid for uid in (m.player_a1_id, m.player_a2_id) if uid}
+    side_b = {uid for uid in (m.player_b1_id, m.player_b2_id) if uid}
+    return (a in side_a and b in side_a) or (a in side_b and b in side_b)
+
+
 def _match_out(
     db: Session,
     m: CommunityMatch,
@@ -208,7 +214,12 @@ def _match_out(
     can_score = False
     if viewer and on_match:
         if m.status == "AWAITING_CONFIRM" and not m.ratings_applied:
-            needs_confirm = m.recorded_by_id != viewer.id and m.confirmed_by_id is None
+            needs_confirm = (
+                m.recorded_by_id is not None
+                and m.recorded_by_id != viewer.id
+                and m.confirmed_by_id is None
+                and not _same_side(m, viewer.id, m.recorded_by_id)
+            )
         if m.status in (MatchStatus.SCHEDULED.value, MatchStatus.LIVE.value) and not m.ratings_applied:
             can_score = True
 
@@ -905,6 +916,8 @@ def confirm_community_match(
         raise HTTPException(403, "Only players in this match can confirm")
     if m.recorded_by_id == user.id:
         raise HTTPException(400, "Someone else on court needs to confirm your score")
+    if m.recorded_by_id and _same_side(m, user.id, m.recorded_by_id):
+        raise HTTPException(400, "The other pair needs to confirm this score")
 
     m.confirmed_by_id = user.id
     rating_changes = _apply_elo(db, m, c)

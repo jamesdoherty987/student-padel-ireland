@@ -7,7 +7,7 @@ import './PlayerLive.css'
 
 export default function PlayerLivePage() {
   const { slug = '' } = useParams()
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, dataUpdatedAt } = useQuery({
     queryKey: ['player-view', slug],
     queryFn: async () => (await tournamentApi.playerView(slug)).data,
     enabled: !!slug,
@@ -60,7 +60,29 @@ export default function PlayerLivePage() {
               <span className="live-dot" /> LIVE
             </span>
           )}
+          {dataUpdatedAt > 0 && (
+            <p className="pl-updated">
+              Updated {new Date(dataUpdatedAt).toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          )}
         </header>
+
+        {(data.live_matches || []).length > 0 && (
+          <section className="pl-block">
+            <h2>Live now</h2>
+            <ul className="pl-live-list">
+              {(data.live_matches as Match[]).map((m) => (
+                <li key={m.id}>
+                  <strong>Court {m.court_number ?? '—'}</strong>
+                  <span>
+                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                  </span>
+                  <span>{formatMatchScore(m.score)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="pl-next">
           <h2>Your next match</h2>

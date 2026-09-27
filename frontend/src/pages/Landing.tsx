@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import { tournamentApi, type Tournament } from '../services/api'
-import { formatDoublesEntry, statusBadgeClass, statusLabel } from '../utils/format'
+import { formatDoublesEntry, parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
 import { FlipWords } from '../components/ui/FlipWords'
 import { InfiniteMovingCards } from '../components/ui/InfiniteMovingCards'
 import { Globe } from '../components/ui/Globe'
@@ -13,12 +13,12 @@ import './Landing.css'
 const CITY_WORDS = ['Dublin', 'Cork', 'Galway', 'Limerick', 'Belfast', 'Waterford']
 
 const CITY_CARDS = [
-  { title: 'Dublin', subtitle: 'Coming soon' },
-  { title: 'Cork', subtitle: 'Coming soon' },
-  { title: 'Galway', subtitle: 'Coming soon' },
-  { title: 'Limerick', subtitle: 'Coming soon' },
-  { title: 'Belfast', subtitle: 'Coming soon' },
-  { title: 'Waterford', subtitle: 'Coming soon' },
+  { title: 'Dublin', subtitle: 'Student padel' },
+  { title: 'Cork', subtitle: 'Student padel' },
+  { title: 'Galway', subtitle: 'Student padel' },
+  { title: 'Limerick', subtitle: 'Student padel' },
+  { title: 'Belfast', subtitle: 'Student padel' },
+  { title: 'Waterford', subtitle: 'Student padel' },
 ]
 
 const STEPS = [
@@ -28,7 +28,7 @@ const STEPS = [
 ]
 
 function eventDay(iso: string) {
-  const d = new Date(iso)
+  const d = parseCalendarDate(iso)
   return {
     day: d.toLocaleDateString('en-IE', { day: 'numeric' }),
     month: d.toLocaleDateString('en-IE', { month: 'short' }),
@@ -61,6 +61,15 @@ export default function Landing() {
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   useEffect(() => {
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -118,9 +127,9 @@ export default function Landing() {
             Student Padel Ireland
           </a>
           <nav className={`lp-nav ${menuOpen ? 'is-open' : ''}`}>
-            <a href="#upcoming" onClick={close}>
-              Upcoming
-            </a>
+            <Link to="/tournaments" onClick={close}>
+              Tournaments
+            </Link>
             <a href="#how" onClick={close}>
               How it works
             </a>
@@ -174,7 +183,7 @@ export default function Landing() {
           <div className="lp-hero-content">
             <h1>Student Padel Ireland</h1>
             <p className="lp-lead">
-              Coming soon to <FlipWords words={CITY_WORDS} duration={900} className="lp-flip" />
+              Find a game in <FlipWords words={CITY_WORDS} duration={900} className="lp-flip" />
             </p>
             <div className="lp-actions">
               <a href="#upcoming" className="lp-btn lp-btn-primary">
@@ -189,7 +198,7 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="lp-marquee" aria-label="Coming soon cities">
+        <section className="lp-marquee" aria-label="Cities across Ireland">
           <InfiniteMovingCards items={CITY_CARDS} speed="normal" />
         </section>
 
@@ -278,9 +287,7 @@ export default function Landing() {
                 preload="auto"
                 aria-label="Padel match footage"
               >
-                <source src={LANDING_VIDEO.mp4} type='video/mp4; codecs="mp4v"' />
-                <source src={LANDING_VIDEO.mp4} type="video/quicktime" />
-                <source src={LANDING_VIDEO.webm} type="video/webm" />
+                <source src={LANDING_VIDEO.mp4} type="video/mp4" />
               </video>
             </figure>
           </div>
@@ -291,7 +298,10 @@ export default function Landing() {
             <div>
               <p className="lp-kicker lp-kicker-light">Worldwide</p>
               <h2>Join the fastest-growing sport on earth</h2>
-              <p>Coming soon across Ireland — Dublin, Cork, Galway, Limerick, Belfast &amp; Waterford and more.</p>
+              <p>
+                Tournaments, private ladders, and Ireland rankings — starting with Dublin, Cork, Galway, Limerick,
+                Belfast and Waterford.
+              </p>
               <a href="#upcoming" className="lp-btn lp-btn-primary">
                 See upcoming events
               </a>

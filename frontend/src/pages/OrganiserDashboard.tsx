@@ -415,6 +415,7 @@ export default function OrganiserDashboard() {
             <h2>Generate tournament?</h2>
             <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
               This builds groups, fixtures, and the knockout bracket from <strong>paid</strong> teams.
+              Registration will close.
               {matches.length > 0 && (
                 <>
                   {' '}
