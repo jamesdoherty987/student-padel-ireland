@@ -159,6 +159,12 @@ export default function AdminDashboard() {
     }
   }, [])
 
+  useEffect(() => {
+    const open = showCreate || !!editing
+    document.body.classList.toggle('modal-open', open)
+    return () => document.body.classList.remove('modal-open')
+  }, [showCreate, editing])
+
   const showToast = (msg: string) => {
     setToast(msg)
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
@@ -207,9 +213,11 @@ export default function AdminDashboard() {
               Set up events, open registration, and manage status. Day-of scoring lives in Day-of ops.
             </p>
           </div>
-          <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            New tournament
-          </button>
+          <div className="header-actions">
+            <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              New tournament
+            </button>
+          </div>
         </div>
 
         {rows.length > 0 && (
@@ -478,9 +486,15 @@ function TournamentModal({
 
   return (
     <div className="modal-backdrop" onClick={() => !saving && onClose()}>
-      <div className="modal admin-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <div
+        className="modal admin-modal"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="admin-modal-title"
+      >
         <div className="admin-modal-head">
-          <h2>{title}</h2>
+          <h2 id="admin-modal-title">{title}</h2>
           {showTemplate && (
             <button
               type="button"

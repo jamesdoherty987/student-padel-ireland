@@ -61,7 +61,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  opacity: 0.75;
+  color: rgba(255, 255, 255, 0.85);
   margin-bottom: 0.35rem;
 }
 
@@ -80,11 +80,17 @@
   gap: 0.45rem 0.65rem;
   font-size: 1.02rem;
   font-weight: 600;
+  min-width: 0;
+}
+
+.next-game-vs > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .next-game-vs em {
   font-style: normal;
-  opacity: 0.55;
+  color: rgba(255, 255, 255, 0.85);
   font-weight: 500;
   font-size: 0.85rem;
 }
@@ -92,7 +98,7 @@
 .next-game-meta {
   margin-top: 0.55rem;
   font-size: 0.88rem;
-  opacity: 0.8;
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .next-game-actions {
@@ -103,13 +109,26 @@
 }
 
 .next-game-actions .btn-ghost {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
   color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
 .next-game-actions .btn-dark {
   background: var(--ball);
   color: var(--ink);
+}
+
+@media (hover: hover) {
+  .next-game-actions .btn-ghost:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+  }
+
+  .next-game-actions .btn-dark:hover {
+    background: var(--ball-dark);
+    color: var(--ink);
+  }
 }
 
 .format-grid {
@@ -183,6 +202,17 @@
   min-width: 0;
 }
 
+.friend-row-main > div {
+  min-width: 0;
+}
+
+.friend-row-main strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .avatar,
 .avatar-sm {
   flex-shrink: 0;
@@ -236,12 +266,15 @@
 .share-code-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
-  align-items: center;
+  gap: 0.5rem;
+  align-items: stretch;
   margin-top: 0.75rem;
 }
 
 .share-code {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
   font-size: 1.15rem;
   font-weight: 750;
   letter-spacing: 0.08em;
@@ -250,6 +283,11 @@
   background: var(--white);
   border-radius: var(--radius-sm);
   border: 1px solid var(--line);
+}
+
+.share-code-row .btn {
+  flex: 1 1 auto;
+  min-width: min(100%, 8rem);
 }
 
 .share-qr {
@@ -271,11 +309,22 @@
 
 .action-card {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
   padding: 0.75rem 0;
   border-top: 1px solid var(--line);
+}
+
+.action-card > div:first-child {
+  min-width: 0;
+  flex: 1 1 12rem;
+  overflow-wrap: anywhere;
+}
+
+.action-card .btn {
+  flex: 0 0 auto;
 }
 
 .action-card:first-of-type {
@@ -292,10 +341,13 @@
   margin-bottom: 0.15rem;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .format-grid {
     grid-template-columns: 1fr;
   }
+}
+
+@media (max-width: 640px) {
   .share-panel {
     flex-direction: column;
     align-items: flex-start;
@@ -339,6 +391,11 @@
   margin-bottom: 0.75rem;
 }
 
+.community-section .community-card {
+  border-left-width: 1px;
+  border-left-color: var(--line);
+}
+
 .community-panel {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -368,6 +425,11 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--white);
+  min-width: 0;
+}
+
+.friend-row .friend-row-main {
+  flex: 1 1 auto;
 }
 
 .friend-chip-row {
@@ -381,10 +443,10 @@
   background: var(--white);
   color: var(--ink);
   border-radius: var(--radius-sm);
-  padding: 0.35rem 0.7rem;
+  padding: 0.45rem 0.85rem;
   font-size: 0.88rem;
   cursor: pointer;
-  min-height: 36px;
+  min-height: 44px;
 }
 
 .friend-chip.on {
@@ -400,21 +462,22 @@
 }
 
 .join-code-row input {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  min-height: 48px;
+  padding: 0.6rem 0.85rem;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  font-size: 16px;
 }
 
 .muted-note {
   color: var(--muted);
   font-size: 0.92rem;
-}
-
-.form-error {
-  color: var(--danger);
-  font-size: 0.92rem;
-  font-weight: 500;
-  margin-bottom: 12px;
 }
 
 .form-success {
@@ -424,16 +487,11 @@
   margin-bottom: 12px;
 }
 
-.btn-sm {
-  min-height: 36px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.88rem;
-}
-
 .friend-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 .code-inline {
@@ -445,7 +503,10 @@
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.35rem 0.5rem;
 }
 
 .invite-bar {
@@ -485,6 +546,7 @@
   font-size: 0.88rem;
   color: var(--muted);
   margin-bottom: 0.5rem;
+  overflow-wrap: anywhere;
 }
 
 .breadcrumb a {
@@ -500,13 +562,26 @@
 
 .comp-standings li {
   display: grid;
-  grid-template-columns: 48px 1fr auto;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   gap: 0.75rem;
   align-items: center;
   padding: 0.7rem 0.85rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--white);
+}
+
+.comp-standings li > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.comp-standings li > span:nth-child(2) strong {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .match-sides {
@@ -547,6 +622,12 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.5rem 0.75rem;
+  min-width: 0;
+}
+
+.match-feed-teams > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .match-feed-teams .vs {
@@ -568,9 +649,9 @@
 }
 
 .standings-remove {
-  min-height: 32px;
-  padding: 0.2rem 0.55rem;
-  font-size: 0.78rem;
+  min-height: 44px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
 }
 
 .rating-flash ul {
@@ -581,13 +662,12 @@
 .score-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(10, 22, 40, 0.45);
+  background: rgba(10, 22, 40, 0.55);
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 40;
+  z-index: 100;
   padding: 0;
-  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .score-modal {
@@ -619,7 +699,6 @@
 
 .community-panel .form-group input,
 .community-panel .form-group select,
-.join-code-row input,
 .community-section .form-group input,
 .side-pick .form-group select,
 .score-modal input {
@@ -630,6 +709,12 @@
   border-radius: var(--radius-sm);
   background: var(--white);
   font-size: 16px;
+}
+
+.score-modal input:focus {
+  outline: none;
+  border-color: var(--court-mid);
+  box-shadow: 0 0 0 3px rgba(20, 102, 68, 0.15);
 }
 
 .score-pair input {
@@ -645,7 +730,7 @@
   }
   .score-modal {
     border-radius: var(--radius-lg);
-    padding-bottom: 1.25rem;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
   }
 }
 

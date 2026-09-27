@@ -174,10 +174,8 @@ export default function PlayerProfilePage() {
                 })()}
               </div>
               <div>
-                <h1 className="page-title" style={{ marginBottom: 4 }}>
-                  {player.full_name}
-                </h1>
-                <p className="page-sub" style={{ marginBottom: 0 }}>
+                <h1 className="page-title">{player.full_name}</h1>
+                <p className="page-sub">
                   {player.university_short || player.university_name || '—'}
                 </p>
                 {user && !isOwn && (
@@ -246,6 +244,7 @@ export default function PlayerProfilePage() {
               {isOwn && bioDraft !== null ? (
                 <div className="profile-bio-edit">
                   <textarea
+                    className="form-textarea"
                     value={bioDraft}
                     onChange={(e) => setBioDraft(e.target.value.slice(0, 500))}
                     rows={3}
@@ -371,6 +370,10 @@ export default function PlayerProfilePage() {
                       type="button"
                       className="profile-grid-item"
                       onClick={() => setLightbox(m)}
+                      aria-label={
+                        m.caption ||
+                        (m.media_type === 'video' ? 'Open video' : 'Open photo')
+                      }
                     >
                       {m.media_type === 'video' ? (
                         <video src={mediaUrl(m.url)} muted playsInline preload="metadata" />
@@ -394,7 +397,13 @@ export default function PlayerProfilePage() {
         )}
 
         {lightbox && (
-          <div className="lightbox" onClick={() => setLightbox(null)}>
+          <div
+            className="lightbox"
+            role="dialog"
+            aria-modal="true"
+            aria-label={lightbox.caption || 'Media'}
+            onClick={() => setLightbox(null)}
+          >
             <div className="lightbox-inner" onClick={(e) => e.stopPropagation()}>
               {lightbox.media_type === 'video' ? (
                 <video src={mediaUrl(lightbox.url)} controls autoPlay playsInline />

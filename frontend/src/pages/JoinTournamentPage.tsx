@@ -452,7 +452,6 @@ export default function JoinTournamentPage() {
           <button
             type="button"
             className="btn btn-ghost btn-block"
-            style={{ marginTop: 8 }}
             onClick={() => navigate(`/t/${slug}`)}
           >
             Cancel

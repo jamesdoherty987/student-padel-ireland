@@ -88,7 +88,12 @@ body {
 body.mobile-menu-open,
 body.modal-open {
   overflow: hidden;
-  touch-action: none;
+}
+
+.modal,
+.score-modal,
+.lightbox-inner {
+  touch-action: pan-y;
 }
 
 #root {
@@ -141,8 +146,35 @@ img {
   box-shadow: 0 4px 14px rgba(200, 230, 0, 0.3);
 }
 
-.btn-primary:hover {
-  background: var(--ball-dark);
+.btn:focus-visible,
+.filter-chip:focus-visible,
+.app-nav-links a:focus-visible,
+.app-nav-menu-btn:focus-visible,
+.lp-nav a:focus-visible,
+.lp-menu-btn:focus-visible,
+.org-nav-item:focus-visible {
+  outline: 2px solid var(--court-mid);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .btn-primary:hover {
+    background: var(--ball-dark);
+  }
+
+  .btn-dark:hover {
+    background: #093228;
+  }
+
+  .btn-ghost:hover {
+    background: rgba(11, 61, 46, 0.14);
+  }
+
+  .btn-secondary:hover,
+  .btn-outline:hover {
+    border-color: var(--court-deep);
+    background: rgba(11, 61, 46, 0.04);
+  }
 }
 
 .btn-dark {
@@ -150,17 +182,9 @@ img {
   color: var(--white);
 }
 
-.btn-dark:hover {
-  background: #093228;
-}
-
 .btn-ghost {
   background: var(--brand-soft);
   color: var(--court-deep);
-}
-
-.btn-ghost:hover {
-  background: rgba(11, 61, 46, 0.14);
 }
 
 .btn-secondary,
@@ -168,12 +192,6 @@ img {
   background: transparent;
   color: var(--court-deep);
   border: 2px solid rgba(11, 61, 46, 0.22);
-}
-
-.btn-secondary:hover,
-.btn-outline:hover {
-  border-color: var(--court-deep);
-  background: rgba(11, 61, 46, 0.04);
 }
 
 .btn-block {
@@ -189,6 +207,13 @@ img {
 .btn-lg {
   min-height: 52px;
   padding: 0.85rem 1.5rem;
+}
+
+/* Shared compact button — single source of truth (page CSS must not redefine) */
+.btn-sm {
+  min-height: 44px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.88rem;
 }
 
 /* Forms */
@@ -250,8 +275,8 @@ img {
 }
 
 .filter-chip {
-  min-height: 40px;
-  padding: 0.35rem 0.85rem;
+  min-height: 44px;
+  padding: 0.4rem 0.9rem;
   border-radius: 999px;
   border: 1.5px solid var(--line);
   background: var(--white);
@@ -297,15 +322,21 @@ img {
 }
 
 .container {
-  width: min(1120px, calc(100% - 2rem));
+  width: min(1120px, 100%);
   margin-inline: auto;
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  box-sizing: border-box;
 }
 
 .page {
-  width: min(800px, calc(100% - 2rem));
+  width: min(800px, 100%);
   margin: 0 auto;
-  padding: 1.5rem 0 3.5rem;
+  padding-top: 1.5rem;
+  padding-right: max(1rem, env(safe-area-inset-right));
   padding-bottom: max(3.5rem, calc(2rem + env(safe-area-inset-bottom)));
+  padding-left: max(1rem, env(safe-area-inset-left));
+  box-sizing: border-box;
 }
 
 .page-title {
@@ -316,6 +347,33 @@ img {
   text-transform: none;
   line-height: 1.15;
   color: var(--court-deep);
+  overflow-wrap: anywhere;
+}
+
+.page-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.page-header-row > .page-title,
+.page-header-row > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.page-header-row > .btn,
+.page-header-row .header-actions {
+  flex-shrink: 0;
+}
+
+.header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
 }
 
 .page-sub {
@@ -363,8 +421,22 @@ img {
   background: linear-gradient(90deg, var(--surface) 25%, #e8eeeb 50%, var(--surface) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.2s ease infinite;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   height: 1.2em;
+}
+
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.skeleton-card {
+  height: 88px;
+}
+
+.skeleton-row {
+  height: 56px;
 }
 
 @keyframes shimmer {
@@ -373,7 +445,7 @@ img {
   }
 }
 
-/* App nav */
+/* App nav — blur on ::before so fixed mobile menu isn't trapped by backdrop-filter */
 .app-nav {
   position: sticky;
   top: 0;
@@ -386,10 +458,20 @@ img {
   padding-top: max(0.85rem, env(safe-area-inset-top));
   padding-left: max(1.25rem, env(safe-area-inset-left));
   padding-right: max(1.25rem, env(safe-area-inset-right));
+  background: transparent;
+  border-bottom: 1px solid transparent;
+}
+
+.app-nav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--line);
+  pointer-events: none;
 }
 
 .app-nav-brand {
@@ -403,6 +485,7 @@ img {
   align-items: center;
   gap: 0.55rem;
   z-index: 55;
+  min-width: 0;
 }
 
 .app-nav-brand::before {
@@ -413,6 +496,13 @@ img {
   background: var(--ball);
   box-shadow: 0 0 0 3px rgba(200, 230, 0, 0.25);
   flex-shrink: 0;
+}
+
+.app-nav-brand-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-nav-links {
@@ -431,12 +521,43 @@ img {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  min-height: 44px;
 }
 
-.app-nav-links a:hover,
 .app-nav-links a.active {
   color: var(--court-deep);
   background: var(--brand-soft);
+}
+
+.app-nav-links a.btn {
+  color: inherit;
+}
+
+.app-nav-links a.btn-primary {
+  color: var(--ink);
+  background: var(--ball);
+}
+
+.app-nav-links a.btn-ghost {
+  color: var(--court-deep);
+  background: var(--brand-soft);
+}
+
+@media (hover: hover) {
+  .app-nav-links a:hover {
+    color: var(--court-deep);
+    background: var(--brand-soft);
+  }
+
+  .app-nav-links a.btn-primary:hover {
+    color: var(--ink);
+    background: var(--ball-dark);
+  }
+
+  .app-nav-links a.btn-ghost:hover {
+    color: var(--court-deep);
+    background: rgba(11, 61, 46, 0.14);
+  }
 }
 
 .nav-badge {
@@ -461,12 +582,12 @@ img {
 }
 
 .app-nav-logout {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0.4rem 0.85rem;
 }
 
 .app-nav-join {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0.4rem 1rem;
 }
 
@@ -492,7 +613,7 @@ img {
     var(--bg-primary);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .hide-mobile {
     display: none !important;
   }
@@ -506,10 +627,14 @@ img {
 
   .app-nav-brand {
     font-size: 0.88rem;
-    max-width: calc(100vw - 5.5rem);
-    white-space: nowrap;
+    max-width: calc(100% - 3.5rem);
+  }
+
+  .app-nav-brand-text {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .app-nav-menu-btn {
@@ -560,10 +685,10 @@ img {
   }
 
   .page {
-    width: min(800px, calc(100% - 1.5rem));
+    width: 100%;
     padding-top: 1.15rem;
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
   }
 
   .page-header-row {

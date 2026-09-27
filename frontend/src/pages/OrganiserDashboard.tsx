@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
@@ -35,6 +35,23 @@ export default function OrganiserDashboard() {
     status: 'LIVE',
     winner_id: '',
   })
+
+  useEffect(() => {
+    const open = showCreate || confirmGenerate || !!scoreMatch
+    document.body.classList.toggle('modal-open', open)
+    return () => document.body.classList.remove('modal-open')
+  }, [showCreate, confirmGenerate, scoreMatch])
+
+  useEffect(() => {
+    if (!confirmGenerate && !scoreMatch) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      setConfirmGenerate(false)
+      setScoreMatch(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [confirmGenerate, scoreMatch])
 
   const tournaments = (data?.tournaments || []) as Array<{
     tournament: {
@@ -311,7 +328,7 @@ export default function OrganiserDashboard() {
                           {team.checked_in ? (
                             <span className="checked">✓ Checked in</span>
                           ) : (
-                            <button className="btn btn-ghost" style={{ minHeight: 36 }} onClick={() => checkInMut.mutate(team.id)}>
+                            <button className="btn btn-ghost btn-sm" onClick={() => checkInMut.mutate(team.id)}>
                               Check in
                             </button>
                           )}
@@ -340,8 +357,7 @@ export default function OrganiserDashboard() {
                       <div className="org-row-right">
                         <span className="badge badge-draft">{m.status}</span>
                         <button
-                          className="btn btn-dark"
-                          style={{ minHeight: 36 }}
+                          className="btn btn-dark btn-sm"
                           onClick={() => {
                             setScoreMatch(m)
                             setScoreForm({
@@ -411,8 +427,14 @@ export default function OrganiserDashboard() {
 
       {confirmGenerate && (
         <div className="modal-backdrop" onClick={() => setConfirmGenerate(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Generate tournament?</h2>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="generate-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="generate-modal-title">Generate tournament?</h2>
             <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
               This builds groups, fixtures, and the knockout bracket from <strong>paid</strong> teams.
               Registration will close.
@@ -446,8 +468,14 @@ export default function OrganiserDashboard() {
 
       {scoreMatch && (
         <div className="modal-backdrop" onClick={() => setScoreMatch(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Enter score</h2>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="score-entry-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="score-entry-title">Enter score</h2>
             <p>
               {scoreMatch.team_a_name || 'Team A'} vs {scoreMatch.team_b_name || 'Team B'}
             </p>
@@ -456,7 +484,10 @@ export default function OrganiserDashboard() {
                 <label>{set.replace('set', 'Set ')}</label>
                 <input
                   type="number"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min={0}
+                  aria-label={`${set.replace('set', 'Set ')} team A`}
                   value={scoreForm[`${set}_a` as 'set1_a']}
                   onChange={(e) =>
                     setScoreForm({ ...scoreForm, [`${set}_a`]: Number(e.target.value) })
@@ -465,7 +496,10 @@ export default function OrganiserDashboard() {
                 <span>–</span>
                 <input
                   type="number"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   min={0}
+                  aria-label={`${set.replace('set', 'Set ')} team B`}
                   value={scoreForm[`${set}_b` as 'set1_b']}
                   onChange={(e) =>
                     setScoreForm({ ...scoreForm, [`${set}_b`]: Number(e.target.value) })
@@ -538,6 +572,14 @@ function CreateTournamentModal({
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !saving) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, saving])
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
@@ -566,8 +608,14 @@ function CreateTournamentModal({
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h2>Create tournament</h2>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-tournament-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="create-tournament-title">Create tournament</h2>
         <form onSubmit={onSubmit}>
           {(
             [

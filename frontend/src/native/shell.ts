@@ -131,9 +131,9 @@ export async function initNativeShell(): Promise<void> {
   document.documentElement.classList.add(`native-${nativePlatform()}`)
 
   try {
-    await StatusBar.setStyle({ style: Style.Dark })
+    await StatusBar.setStyle({ style: Style.Light })
     if (nativePlatform() === 'android') {
-      await StatusBar.setBackgroundColor({ color: '#0b3d2e' })
+      await StatusBar.setBackgroundColor({ color: '#ffffff' })
     }
   } catch {
     /* StatusBar unavailable on some simulators */

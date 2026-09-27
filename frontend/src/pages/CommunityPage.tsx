@@ -223,17 +223,18 @@ export default function CommunityPage() {
       <main className="page">
         <div className="page-header-row">
           <h1 className="page-title">Community</h1>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ minHeight: 40, padding: '0.4rem 0.9rem' }}
-            onClick={() => {
-              setCreateOpen((v) => !v)
-              setError('')
-            }}
-          >
-            {createOpen ? 'Close' : 'New competition'}
-          </button>
+          <div className="header-actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                setCreateOpen((v) => !v)
+                setError('')
+              }}
+            >
+              {createOpen ? 'Close' : 'New competition'}
+            </button>
+          </div>
         </div>
         <p className="page-sub">Play with friends — share a code, pick a court, confirm the score.</p>
 
@@ -349,7 +350,7 @@ export default function CommunityPage() {
               />
             </div>
             <div className="form-group">
-              <label>Format</label>
+              <label className="form-label">Format</label>
               <div className="format-grid">
                 {FORMATS.map((f) => (
                   <button
@@ -383,7 +384,7 @@ export default function CommunityPage() {
             </div>
             {accepted.length > 0 && (
               <div className="form-group">
-                <label>Invite friends now</label>
+                <label className="form-label">Invite friends now</label>
                 <div className="friend-chip-row">
                   {accepted.map((f) => (
                     <button
@@ -442,7 +443,7 @@ export default function CommunityPage() {
           <div className="tour-list">
             {comps.map((c) => (
               <Link key={c.id} to={`/community/${c.slug}`} className="tour-card-link">
-                <article className="tour-card">
+                <article className="tour-card community-card">
                   <div className="tour-card-top">
                     <h2>{c.name}</h2>
                     <span className="badge badge-draft">{labelFormat(c.format)}</span>

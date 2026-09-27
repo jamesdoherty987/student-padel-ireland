@@ -8,6 +8,7 @@ import { FlipWords } from '../components/ui/FlipWords'
 import { InfiniteMovingCards } from '../components/ui/InfiniteMovingCards'
 import { Globe } from '../components/ui/Globe'
 import { HERO_ROTATION, LANDING_VIDEO } from '../data/landingImages'
+import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import './Landing.css'
 
 const CITY_WORDS = ['Dublin', 'Cork', 'Galway', 'Limerick', 'Belfast', 'Waterford']
@@ -43,6 +44,17 @@ export default function Landing() {
   const featureVideoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
+    if (menuOpen || scrolled) {
+      void setStatusBarForLightScreen()
+    } else {
+      void setStatusBarForDarkScreen()
+    }
+    return () => {
+      void setStatusBarForLightScreen()
+    }
+  }, [scrolled, menuOpen])
+
+  useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 16)
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
@@ -56,7 +68,7 @@ export default function Landing() {
 
   useEffect(() => {
     const onResize = () => {
-      if (window.innerWidth > 768) setMenuOpen(false)
+      if (window.innerWidth > 1024) setMenuOpen(false)
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -124,7 +136,7 @@ export default function Landing() {
       <header className={`lp-header ${scrolled ? 'is-scrolled' : ''} ${menuOpen ? 'is-menu-open' : ''}`}>
         <div className="lp-header-inner">
           <a href="#top" className="lp-logo" onClick={close}>
-            Student Padel Ireland
+            <span className="lp-logo-text">Student Padel Ireland</span>
           </a>
           <nav className={`lp-nav ${menuOpen ? 'is-open' : ''}`}>
             <Link to="/tournaments" onClick={close}>

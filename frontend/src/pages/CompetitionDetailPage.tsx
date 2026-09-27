@@ -185,6 +185,18 @@ export default function CompetitionDetailPage() {
     return () => document.body.classList.remove('modal-open')
   }, [scoringMatch])
 
+  useEffect(() => {
+    if (!scoringMatch) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setScoringMatch(null)
+        setScoreError('')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [scoringMatch])
+
   const copyCode = async () => {
     if (!c?.invite_code) return
     try {
@@ -293,8 +305,7 @@ export default function CompetitionDetailPage() {
             {c.invite_code && (
               <button
                 type="button"
-                className="btn btn-ghost"
-                style={{ minHeight: 40, padding: '0.4rem 0.9rem' }}
+                className="btn btn-ghost btn-sm"
                 onClick={() => setShowShare((v) => !v)}
               >
                 Share
@@ -303,8 +314,7 @@ export default function CompetitionDetailPage() {
             {canLog && (
               <button
                 type="button"
-                className="btn btn-primary"
-                style={{ minHeight: 40, padding: '0.4rem 0.9rem' }}
+                className="btn btn-primary btn-sm"
                 onClick={() => {
                   setFormat(defaultFormat)
                   setShowMatch((v) => !v)
@@ -428,7 +438,12 @@ export default function CompetitionDetailPage() {
             {c.format === 'MIXED' && (
               <div className="form-group">
                 <label htmlFor="match-format">Format</label>
-                <select id="match-format" value={format} onChange={(e) => setFormat(e.target.value)}>
+                <select
+                  id="match-format"
+                  className="form-select"
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value)}
+                >
                   <option value="DOUBLES">Doubles (2 vs 2)</option>
                   <option value="SINGLES">Singles (1 vs 1)</option>
                 </select>
@@ -436,7 +451,12 @@ export default function CompetitionDetailPage() {
             )}
             <div className="form-group">
               <label htmlFor="match-court">Court</label>
-              <select id="match-court" value={court} onChange={(e) => setCourt(Number(e.target.value))}>
+              <select
+                id="match-court"
+                className="form-select"
+                value={court}
+                onChange={(e) => setCourt(Number(e.target.value))}
+              >
                 {Array.from({ length: courtCount }, (_, i) => i + 1).map((n) => (
                   <option key={n} value={n}>
                     Court {n}
@@ -680,6 +700,9 @@ export default function CompetitionDetailPage() {
           >
             <form
               className="score-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="score-modal-title"
               onClick={(e) => e.stopPropagation()}
               onSubmit={(e) => {
                 e.preventDefault()
@@ -703,7 +726,7 @@ export default function CompetitionDetailPage() {
                 scoreMut.mutate()
               }}
             >
-              <h2>Enter score</h2>
+              <h2 id="score-modal-title">Enter score</h2>
               <div className="score-sides-label">
                 <div>
                   <span className="muted-note">Side A</span>
@@ -807,7 +830,7 @@ function SidePick({
       <legend>{label}</legend>
       <div className="form-group">
         <label>Player</label>
-        <select value={p1} onChange={(e) => setP1(e.target.value)} required>
+        <select className="form-select" value={p1} onChange={(e) => setP1(e.target.value)} required>
           <option value="">Select…</option>
           {options(p1).map((m) => (
             <option key={m.user_id} value={m.user_id}>
@@ -819,7 +842,7 @@ function SidePick({
       {doubles && (
         <div className="form-group">
           <label>Partner</label>
-          <select value={p2} onChange={(e) => setP2(e.target.value)} required>
+          <select className="form-select" value={p2} onChange={(e) => setP2(e.target.value)} required>
             <option value="">Select…</option>
             {options(p2).map((m) => (
               <option key={m.user_id} value={m.user_id}>

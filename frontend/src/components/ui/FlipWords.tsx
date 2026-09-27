@@ -33,9 +33,9 @@ export function FlipWords({ words, duration = 2800, className = '' }: FlipWordsP
         <motion.span
           key={currentWord}
           className="flip-words-inner"
-          initial={{ opacity: 0, y: 12, filter: 'blur(6px)' }}
-          animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-          exit={{ opacity: 0, y: -18, filter: 'blur(6px)', position: 'absolute' }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8, position: 'absolute' }}
           transition={{ type: 'spring', stiffness: 120, damping: 14 }}
         >
           {currentWord}

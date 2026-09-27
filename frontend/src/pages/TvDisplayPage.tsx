@@ -1,6 +1,8 @@
 import type { CSSProperties } from 'react'
+import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { tournamentApi, type Match } from '../services/api'
 import { currentSetScores } from '../utils/format'
 import './TvDisplay.css'
@@ -40,6 +42,14 @@ function CourtPanel({ court, matches }: { court: number; matches: Match[] }) {
 
 export default function TvDisplayPage() {
   const { id = '' } = useParams()
+
+  useEffect(() => {
+    void setStatusBarForDarkScreen()
+    return () => {
+      void setStatusBarForLightScreen()
+    }
+  }, [])
+
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['display', id],
     queryFn: async () => (await tournamentApi.display(id)).data,

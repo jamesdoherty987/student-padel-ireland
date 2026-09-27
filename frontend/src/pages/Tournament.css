@@ -18,10 +18,15 @@
   transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s;
 }
 
-.tour-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-  border-color: rgba(11, 61, 46, 0.2);
+@media (hover: hover) {
+  .tour-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    border-top-color: rgba(11, 61, 46, 0.2);
+    border-right-color: rgba(11, 61, 46, 0.2);
+    border-bottom-color: rgba(11, 61, 46, 0.2);
+    border-left-color: var(--court-deep);
+  }
 }
 
 .tour-card-top {
@@ -84,13 +89,18 @@
 
 .match-preview-list li {
   display: grid;
-  grid-template-columns: 5.5rem 1fr auto;
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
   gap: 0.65rem;
   align-items: center;
   padding: 0.7rem 0.85rem;
   background: var(--surface);
   border-radius: var(--radius-sm);
   font-size: 0.92rem;
+}
+
+.match-preview-list li > span:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .match-preview-court {
@@ -111,6 +121,21 @@
   flex-wrap: wrap;
   gap: 0.6rem;
   margin-bottom: 1.5rem;
+}
+
+.tour-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.tour-closed-note {
+  display: block;
+  max-width: 36ch;
+  margin: 0;
+  align-self: center;
 }
 
 .tour-stats {
@@ -183,21 +208,31 @@
 .live-score-row {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   margin-bottom: 0.35rem;
   font-weight: 600;
   gap: 0.5rem;
+  min-width: 0;
+}
+
+.live-score-row > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .live-score-row strong {
   font-family: var(--font-display);
   font-size: 1.5rem;
   color: var(--ball);
+  flex-shrink: 0;
 }
 
 .live-set {
   margin-top: 0.5rem;
   font-size: 0.8rem;
-  opacity: 0.7;
+  color: rgba(255, 255, 255, 0.78);
 }
 
 .announce {
@@ -241,6 +276,10 @@
   max-width: 420px;
 }
 
+.join-form .btn + .btn {
+  margin-top: 0.5rem;
+}
+
 .confirm-page .confirm-tour {
   font-family: var(--font-display);
   font-size: 1.4rem;
@@ -282,13 +321,35 @@
 
 .rank-page-row {
   display: grid;
-  grid-template-columns: 3.2rem 2.5rem 1fr auto;
+  grid-template-columns: 3.2rem 2.5rem minmax(0, 1fr) auto;
   gap: 0.75rem;
   align-items: center;
   padding: 1rem 1.15rem;
   border-bottom: 1px solid var(--line);
   transition: background 0.15s;
   min-height: 64px;
+}
+
+.rank-page-row > span:nth-child(3),
+.rank-page-row .rank-name {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rank-page-row > span:nth-child(3) > strong,
+.rank-page-row .rank-name > strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-page-row .rank-pts {
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: var(--court-mid);
+  font-family: var(--font-display);
+  font-weight: 700;
 }
 
 .rank-avatar {
@@ -315,8 +376,10 @@
   border-bottom: none;
 }
 
-.rank-page-row:hover {
-  background: var(--surface);
+@media (hover: hover) {
+  .rank-page-row:hover {
+    background: var(--surface);
+  }
 }
 
 .rank-page-row.is-me {
@@ -335,29 +398,17 @@
   font-size: 0.9rem;
 }
 
-.rank-page-row .rank-pts {
-  color: var(--court-mid);
-  font-family: var(--font-display);
-  font-weight: 700;
-}
-
-.page-header-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.25rem;
-}
-
 .page-header-row .page-title {
   margin: 0;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .tour-stats {
     grid-template-columns: repeat(2, 1fr);
   }
+}
 
+@media (max-width: 640px) {
   .tour-actions {
     flex-direction: column;
   }
@@ -387,7 +438,7 @@
   }
 
   .rank-page-row {
-    grid-template-columns: 2.5rem 2.25rem 1fr auto;
+    grid-template-columns: 2.5rem 2.25rem minmax(0, 1fr) auto;
     gap: 0.55rem;
     padding: 0.85rem 0.9rem;
   }
