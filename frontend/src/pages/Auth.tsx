@@ -94,7 +94,7 @@ export function LoginPage() {
           </div>
           {error && <p className="auth-error">{error}</p>}
           <button className="btn btn-primary btn-block" disabled={loading}>
-            {loading ? 'Signing in…' : 'Log in'}
+            {loading ? 'Signing in...' : 'Log in'}
           </button>
         </form>
         <p className="auth-foot">
@@ -181,7 +181,7 @@ export function SignupPage() {
           Student Padel Ireland
         </Link>
         <h1>Create account</h1>
-        <p className="auth-lead">Player or organiser — start in under a minute.</p>
+        <p className="auth-lead">Create a player or organiser account.</p>
         <form onSubmit={onSubmit}>
           <div className="form-group">
             <label className="form-label">I am a</label>
@@ -234,7 +234,7 @@ export function SignupPage() {
               value={form.university_id}
               onChange={(e) => setForm({ ...form, university_id: e.target.value })}
             >
-              <option value="">Select…</option>
+              <option value="">Select university</option>
               {universities.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -260,7 +260,7 @@ export function SignupPage() {
           </div>
           {error && <p className="auth-error">{error}</p>}
           <button className="btn btn-primary btn-block" disabled={loading}>
-            {loading ? 'Creating…' : 'Sign up'}
+            {loading ? 'Creating...' : 'Sign up'}
           </button>
         </form>
         <p className="auth-foot">

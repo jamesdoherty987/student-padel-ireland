@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
+import { JoinCodeBox } from '../components/JoinCodeBox'
 import { useAuth } from '../context/AuthContext'
 import { tournamentApi } from '../services/api'
 import { formatDate, formatDoublesEntry, spotsLeftLabel, statusBadgeClass, statusLabel } from '../utils/format'
 import './Tournament.css'
+import './Community.css'
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -40,15 +42,27 @@ export default function TournamentsPage() {
       <main className="page">
         <div className="page-header-row">
           <h1 className="page-title">Tournaments</h1>
-          {(user?.role === 'ORGANISER' || user?.role === 'ADMIN') && (
-            <div className="header-actions">
+          <div className="header-actions">
+            <Link to="/join" className="btn btn-dark btn-sm">
+              Have a code?
+            </Link>
+            {(user?.role === 'ORGANISER' || user?.role === 'ADMIN') && (
               <Link to="/organiser" className="btn btn-ghost btn-sm">
                 Dashboard
               </Link>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-        <p className="page-sub">Find an event near you and join with your partner.</p>
+        <p className="page-sub">
+          Organised events with brackets and rankings. Friend groups live under{' '}
+          <Link to="/community">Community</Link> — but any invite code works in the box below.
+        </p>
+
+        <JoinCodeBox
+          title="Join with a code"
+          hint="Paste a tournament or friend-group code. We’ll open the right page."
+          placeholder="Paste invite code"
+        />
 
         <div className="tour-toolbar">
           <div className="filter-chips" role="tablist" aria-label="Filter tournaments">

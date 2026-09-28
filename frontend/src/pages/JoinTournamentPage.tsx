@@ -1,13 +1,21 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { isNativeApp } from '../native/platform'
 import { openExternalUrl, whenExternalBrowserCloses } from '../native/shell'
-import { apiErrorMessage, apiErrorStatus, platformApi, tournamentApi, type RegistrationConfirm } from '../services/api'
+import {
+  apiErrorMessage,
+  apiErrorStatus,
+  communityApi,
+  platformApi,
+  tournamentApi,
+  type RegistrationConfirm,
+} from '../services/api'
 import { formatMoney, isPastCalendarDate } from '../utils/format'
 import './Tournament.css'
+import './Community.css'
 
 function ConfirmView({ data }: { data: RegistrationConfirm }) {
   const slug = data.tournament?.slug
@@ -84,6 +92,15 @@ export default function JoinTournamentPage() {
     enabled: !isConfirmRoute,
     staleTime: 60_000,
   })
+  const { data: friends = [] } = useQuery({
+    queryKey: ['friends'],
+    queryFn: async () => (await communityApi.friends()).data,
+    enabled: !!user && !isConfirmRoute,
+  })
+  const friendPartners = useMemo(
+    () => friends.filter((f) => f.direction === 'friend'),
+    [friends],
+  )
 
   const {
     data: stripeConfirm,
@@ -105,10 +122,12 @@ export default function JoinTournamentPage() {
     team_name: '',
     partner_name: '',
     partner_email: '',
+    partner_user_id: '',
     phone: '',
     university_id: '',
     student_number: '',
   })
+  const [partnerMode, setPartnerMode] = useState<'friend' | 'email'>('friend')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const checkoutDisposeRef = useRef<(() => void) | null>(null)
@@ -131,6 +150,12 @@ export default function JoinTournamentPage() {
       student_number: f.student_number || user.student_number || '',
     }))
   }, [user])
+
+  useEffect(() => {
+    if (friendPartners.length === 0 && partnerMode === 'friend') {
+      setPartnerMode('email')
+    }
+  }, [friendPartners.length, partnerMode])
 
   if (authLoading || (isConfirmRoute && hasConfirmParams && confirming)) {
     return (
@@ -314,18 +339,46 @@ export default function JoinTournamentPage() {
     setLoading(true)
     setError('')
 
-    if (form.partner_email.trim().toLowerCase() === user.email.toLowerCase()) {
-      setError('Partner email must be different from yours')
+    const partnerFromFriend =
+      partnerMode === 'friend' ? friendPartners.find((f) => f.user_id === form.partner_user_id) : null
+
+    if (partnerMode === 'friend' && !partnerFromFriend) {
+      setError('Pick a partner from your friends, or switch to email')
       setLoading(false)
       return
     }
 
+    if (partnerMode === 'email') {
+      if (!form.partner_email.trim() || form.partner_name.trim().length < 2) {
+        setError('Enter your partner name and email')
+        setLoading(false)
+        return
+      }
+      if (form.partner_email.trim().toLowerCase() === user.email.toLowerCase()) {
+        setError('Partner email must be different from yours')
+        setLoading(false)
+        return
+      }
+    }
+
     try {
-      const { data } = await tournamentApi.register(tournament.id, {
+      const payload: Record<string, unknown> = {
         tournament_id: tournament.id,
-        ...form,
+        team_name: form.team_name,
+        phone: form.phone || null,
         university_id: form.university_id || null,
-      })
+        student_number: form.student_number || null,
+      }
+      if (partnerFromFriend) {
+        payload.partner_user_id = partnerFromFriend.user_id
+        payload.partner_name = partnerFromFriend.full_name
+        payload.partner_email = null
+      } else {
+        payload.partner_name = form.partner_name
+        payload.partner_email = form.partner_email
+      }
+
+      const { data } = await tournamentApi.register(tournament.id, payload)
       if (data.checkout_url) {
         if (isNativeApp()) {
           // Stripe must leave the WebView; confirm when the in-app browser closes
@@ -386,25 +439,68 @@ export default function JoinTournamentPage() {
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Partner name</label>
-            <input
-              className="form-input"
-              value={form.partner_name}
-              onChange={(e) => setForm({ ...form, partner_name: e.target.value })}
-              required
-              minLength={2}
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Partner email</label>
-            <input
-              className="form-input"
-              type="email"
-              value={form.partner_email}
-              onChange={(e) => setForm({ ...form, partner_email: e.target.value })}
-              required
-            />
-            <p className="muted-note">Use the email they signed up with if they already have an account.</p>
+            <label className="form-label">Partner</label>
+            <div className="partner-mode-row">
+              <button
+                type="button"
+                className={`filter-chip ${partnerMode === 'friend' ? 'on' : ''}`}
+                onClick={() => setPartnerMode('friend')}
+                disabled={friendPartners.length === 0}
+              >
+                Friend
+              </button>
+              <button
+                type="button"
+                className={`filter-chip ${partnerMode === 'email' ? 'on' : ''}`}
+                onClick={() => setPartnerMode('email')}
+              >
+                Email
+              </button>
+            </div>
+            {partnerMode === 'friend' ? (
+              <>
+                <select
+                  className="form-select"
+                  value={form.partner_user_id}
+                  onChange={(e) => setForm({ ...form, partner_user_id: e.target.value })}
+                  required
+                >
+                  <option value="">Select a friend</option>
+                  {friendPartners.map((f) => (
+                    <option key={f.user_id} value={f.user_id}>
+                      {f.full_name}
+                      {f.university_short ? ` (${f.university_short})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {friendPartners.length === 0 && (
+                  <p className="muted-note">
+                    No friends yet. Add friends in Community, or use email.
+                  </p>
+                )}
+              </>
+            ) : (
+              <>
+                <input
+                  className="form-input"
+                  value={form.partner_name}
+                  onChange={(e) => setForm({ ...form, partner_name: e.target.value })}
+                  placeholder="Partner name"
+                  required
+                  minLength={2}
+                  style={{ marginBottom: 8 }}
+                />
+                <input
+                  className="form-input"
+                  type="email"
+                  value={form.partner_email}
+                  onChange={(e) => setForm({ ...form, partner_email: e.target.value })}
+                  placeholder="Partner email"
+                  required
+                />
+                <p className="muted-note">Use the email they signed up with if they already have an account.</p>
+              </>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">Phone</label>
@@ -422,7 +518,7 @@ export default function JoinTournamentPage() {
               onChange={(e) => setForm({ ...form, university_id: e.target.value })}
               required
             >
-              <option value="">Select university…</option>
+              <option value="">Select university</option>
               {universities.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -440,11 +536,11 @@ export default function JoinTournamentPage() {
           </div>
           {error && <p className="auth-error">{error}</p>}
           {publicConfig?.demo_payments && (
-            <p className="muted-note">Demo checkout — no card will be charged.</p>
+            <p className="muted-note">Demo checkout. No card will be charged.</p>
           )}
           <button className="btn btn-primary btn-block" disabled={loading || tLoading}>
             {loading
-              ? 'Processing…'
+              ? 'Processing...'
               : publicConfig?.demo_payments
                 ? `Confirm ${formatMoney(tournament.entry_fee_cents, tournament.currency)} (demo)`
                 : `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)}`}

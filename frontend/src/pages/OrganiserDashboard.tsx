@@ -1,9 +1,18 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
+import { ShareQr } from '../components/ShareQr'
 import { useAuth } from '../context/AuthContext'
-import { apiErrorMessage, platformApi, tournamentApi, type Match } from '../services/api'
+import { publicPathUrl } from '../native/platform'
+import {
+  apiErrorMessage,
+  communityApi,
+  platformApi,
+  tournamentApi,
+  type Match,
+  type PlayerSearch,
+} from '../services/api'
 import { formatMoney } from '../utils/format'
 import './Organiser.css'
 
@@ -21,7 +30,9 @@ export default function OrganiserDashboard() {
   const [toast, setToast] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(params.get('t'))
   const [showCreate, setShowCreate] = useState(false)
+  const [showAddTeam, setShowAddTeam] = useState(false)
   const [confirmGenerate, setConfirmGenerate] = useState(false)
+  const [codeCopied, setCodeCopied] = useState(false)
   const [announce, setAnnounce] = useState({ title: '', body: '' })
   const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
   const [scoreForm, setScoreForm] = useState({
@@ -37,21 +48,22 @@ export default function OrganiserDashboard() {
   })
 
   useEffect(() => {
-    const open = showCreate || confirmGenerate || !!scoreMatch
+    const open = showCreate || confirmGenerate || !!scoreMatch || showAddTeam
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [showCreate, confirmGenerate, scoreMatch])
+  }, [showCreate, confirmGenerate, scoreMatch, showAddTeam])
 
   useEffect(() => {
-    if (!confirmGenerate && !scoreMatch) return
+    if (!confirmGenerate && !scoreMatch && !showAddTeam) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setConfirmGenerate(false)
       setScoreMatch(null)
+      setShowAddTeam(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [confirmGenerate, scoreMatch])
+  }, [confirmGenerate, scoreMatch, showAddTeam])
 
   const tournaments = (data?.tournaments || []) as Array<{
     tournament: {
@@ -87,6 +99,26 @@ export default function OrganiserDashboard() {
     refetchInterval: 10000,
   })
 
+  const { data: tournamentDetail } = useQuery({
+    queryKey: ['tournament', slug],
+    queryFn: async () => (await tournamentApi.get(slug!)).data,
+    enabled: !!slug && canOrganise,
+  })
+
+  const { data: friends = [] } = useQuery({
+    queryKey: ['friends'],
+    queryFn: async () => (await communityApi.friends()).data,
+    enabled: canOrganise,
+  })
+
+  const friendOptions = useMemo(
+    () => friends.filter((f) => f.direction === 'friend'),
+    [friends],
+  )
+
+  const inviteCode = tournamentDetail?.invite_code || ''
+  const joinUrl = inviteCode ? publicPathUrl(`/join/${inviteCode}`) : ''
+
   const showToast = (msg: string) => {
     setToast(msg)
     window.setTimeout(() => setToast(null), 3200)
@@ -102,7 +134,7 @@ export default function OrganiserDashboard() {
       showToast(`Generated ${d.groups ?? '?'} groups · ${d.matches ?? '?'} matches`)
     },
     onError: (e: unknown) => {
-      showToast(apiErrorMessage(e, 'Generate failed — need 2+ paid teams'))
+      showToast(apiErrorMessage(e, 'Generate failed. You need at least 2 paid teams.'))
     },
   })
 
@@ -151,6 +183,8 @@ export default function OrganiserDashboard() {
     onSuccess: () => {
       setScoreMatch(null)
       qc.invalidateQueries({ queryKey: ['org-matches'] })
+      qc.invalidateQueries({ queryKey: ['rankings'] })
+      qc.invalidateQueries({ queryKey: ['player-view'] })
       showToast('Score saved')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not save score')),
@@ -166,6 +200,22 @@ export default function OrganiserDashboard() {
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Check-in failed')),
   })
+
+  const copyInviteCode = async () => {
+    if (!inviteCode) return
+    try {
+      await navigator.clipboard.writeText(inviteCode)
+      setCodeCopied(true)
+      window.setTimeout(() => setCodeCopied(false), 1600)
+    } catch {
+      window.prompt('Copy this code', inviteCode)
+    }
+  }
+
+  const canAddTeams =
+    !!active &&
+    active.tournament.status !== 'COMPLETED' &&
+    active.tournament.status !== 'CANCELLED'
 
   if (authLoading) {
     return (
@@ -214,17 +264,17 @@ export default function OrganiserDashboard() {
           </button>
           <div className="org-aside-note">
             <strong>Running an event?</strong>
-            <p>Registration, payments, and live scoring — all in one place.</p>
+            <p>Registration, payments, and live scoring in one place.</p>
           </div>
         </aside>
 
         <main className="org-main">
-          {isLoading && <p>Loading…</p>}
+          {isLoading && <p>Loading...</p>}
           {!active && !isLoading && (
             <div className="org-empty">
               <h1>Running an event?</h1>
               <p>
-                Set up registration, payments, and live scoring for your university — create your first tournament to get
+                Set up registration, payments, and live scoring for your university. Create your first tournament to get
                 started.
               </p>
               <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
@@ -312,7 +362,36 @@ export default function OrganiserDashboard() {
               </div>
 
               <section className="org-section">
-                <h2>Teams & check-in</h2>
+                <h2>Invite players</h2>
+                <p className="muted org-section-lead">
+                  Share this code or QR. Friends can paste it on <strong>Join code</strong>, Tournaments, or Community —
+                  all three work. Or add a team yourself below.
+                </p>
+                {inviteCode ? (
+                  <div className="org-invite">
+                    <div className="org-invite-code">
+                      <span className="org-invite-label">Join code</span>
+                      <code className="share-code">{inviteCode}</code>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copyInviteCode()}>
+                        {codeCopied ? 'Copied' : 'Copy code'}
+                      </button>
+                    </div>
+                    {joinUrl && <ShareQr url={joinUrl} openLabel="Open join page" />}
+                  </div>
+                ) : (
+                  <p className="muted">Invite code will appear once the tournament is saved.</p>
+                )}
+              </section>
+
+              <section className="org-section">
+                <div className="org-section-head">
+                  <h2>Teams & check-in</h2>
+                  {canAddTeams && (
+                    <button type="button" className="btn btn-dark btn-sm" onClick={() => setShowAddTeam(true)}>
+                      Add team
+                    </button>
+                  )}
+                </div>
                 <div className="org-table">
                   {(teams as Array<{ id: string; name: string; player_names: string[]; checked_in: boolean; payment_status: string }>).map(
                     (team) => (
@@ -323,7 +402,7 @@ export default function OrganiserDashboard() {
                         </div>
                         <div className="org-row-right">
                           <span className={`badge ${team.payment_status === 'PAID' ? 'badge-open' : 'badge-draft'}`}>
-                            {team.payment_status || '—'}
+                            {team.payment_status || '-'}
                           </span>
                           {team.checked_in ? (
                             <span className="checked">✓ Checked in</span>
@@ -336,7 +415,7 @@ export default function OrganiserDashboard() {
                       </div>
                     ),
                   )}
-                  {teams.length === 0 && <p className="muted">No teams registered yet.</p>}
+                  {teams.length === 0 && <p className="muted">No teams registered yet. Share the invite or add a team.</p>}
                 </div>
               </section>
 
@@ -347,7 +426,7 @@ export default function OrganiserDashboard() {
                     <div key={m.id} className="org-row">
                       <div>
                         <strong>
-                          {m.round.replace(/_/g, ' ')} · Court {m.court_number ?? '—'}
+                          {m.round.replace(/_/g, ' ')} · Court {m.court_number ?? '-'}
                         </strong>
                         <span>
                           {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
@@ -397,7 +476,7 @@ export default function OrganiserDashboard() {
                 <div className="form-group">
                   <textarea
                     className="form-textarea"
-                    placeholder="Court 4 matches delayed by 10 minutes…"
+                    placeholder="Court 4 matches delayed by 10 minutes"
                     value={announce.body}
                     onChange={(e) => setAnnounce({ ...announce, body: e.target.value })}
                   />
@@ -421,6 +500,20 @@ export default function OrganiserDashboard() {
           onCreated={(msg, id) => {
             showToast(msg)
             if (id) setSelectedId(id)
+          }}
+        />
+      )}
+
+      {showAddTeam && tid && (
+        <AddTeamModal
+          tournamentId={tid}
+          friends={friendOptions}
+          onClose={() => setShowAddTeam(false)}
+          onAdded={(msg) => {
+            showToast(msg)
+            qc.invalidateQueries({ queryKey: ['org-teams'] })
+            qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+            qc.invalidateQueries({ queryKey: ['tournament', slug] })
           }}
         />
       )}
@@ -459,7 +552,7 @@ export default function OrganiserDashboard() {
                 disabled={generateMut.isPending || (active?.paid_registrations ?? 0) < 2}
                 onClick={() => generateMut.mutate()}
               >
-                {generateMut.isPending ? 'Generating…' : 'Generate'}
+                {generateMut.isPending ? 'Generating...' : 'Generate'}
               </button>
             </div>
           </div>
@@ -493,7 +586,7 @@ export default function OrganiserDashboard() {
                     setScoreForm({ ...scoreForm, [`${set}_a`]: Number(e.target.value) })
                   }
                 />
-                <span>–</span>
+                <span>-</span>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -527,7 +620,7 @@ export default function OrganiserDashboard() {
                 value={scoreForm.winner_id}
                 onChange={(e) => setScoreForm({ ...scoreForm, winner_id: e.target.value })}
               >
-                <option value="">—</option>
+                <option value="">Auto from scores</option>
                 {scoreMatch.team_a_id && (
                   <option value={scoreMatch.team_a_id}>{scoreMatch.team_a_name}</option>
                 )}
@@ -541,12 +634,203 @@ export default function OrganiserDashboard() {
                 Cancel
               </button>
               <button className="btn btn-primary" onClick={() => scoreMut.mutate()} disabled={scoreMut.isPending}>
-                {scoreMut.isPending ? 'Saving…' : 'Save score'}
+                {scoreMut.isPending ? 'Saving...' : 'Save score'}
               </button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function AddTeamModal({
+  tournamentId,
+  friends,
+  onClose,
+  onAdded,
+}: {
+  tournamentId: string
+  friends: Array<{ user_id: string; full_name: string; university_short?: string | null }>
+  onClose: () => void
+  onAdded: (msg: string) => void
+}) {
+  const [teamName, setTeamName] = useState('')
+  const [player1Id, setPlayer1Id] = useState('')
+  const [player2Id, setPlayer2Id] = useState('')
+  const [search, setSearch] = useState('')
+  const [picked, setPicked] = useState<PlayerSearch[]>([])
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const { data: searchResults = [] } = useQuery({
+    queryKey: ['player-search-org', search],
+    queryFn: async () => (await communityApi.searchPlayers(search.trim())).data,
+    enabled: search.trim().length >= 2,
+  })
+
+  const options = useMemo(() => {
+    const byId = new Map<string, { user_id: string; full_name: string; university_short?: string | null }>()
+    for (const f of friends) {
+      byId.set(f.user_id, f)
+    }
+    for (const p of picked) {
+      byId.set(p.id, {
+        user_id: p.id,
+        full_name: p.full_name,
+        university_short: p.university_short,
+      })
+    }
+    return Array.from(byId.values())
+  }, [friends, picked])
+
+  const addFromSearch = (p: PlayerSearch) => {
+    setPicked((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, p]))
+    if (!player1Id) setPlayer1Id(p.id)
+    else if (!player2Id && p.id !== player1Id) setPlayer2Id(p.id)
+    setSearch('')
+  }
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (teamName.trim().length < 2) {
+      setError('Enter a team name')
+      return
+    }
+    if (!player1Id || !player2Id || player1Id === player2Id) {
+      setError('Pick two different players')
+      return
+    }
+    setSaving(true)
+    try {
+      await tournamentApi.organiserAddTeam(tournamentId, {
+        team_name: teamName.trim(),
+        player1_id: player1Id,
+        player2_id: player2Id,
+      })
+      onAdded('Team added (entry fee waived)')
+      onClose()
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, 'Could not add team'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-team-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="add-team-title">Add team</h2>
+        <p className="muted" style={{ marginBottom: '1rem' }}>
+          Adds a doubles pair and marks them paid (fee waived). Use friends or search by name.
+        </p>
+        <form onSubmit={onSubmit}>
+          <div className="form-group">
+            <label className="form-label" htmlFor="add-team-name">
+              Team name
+            </label>
+            <input
+              id="add-team-name"
+              className="form-input"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              required
+              minLength={2}
+              placeholder="e.g. UL Smash"
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="add-p1">
+              Player 1
+            </label>
+            <select
+              id="add-p1"
+              className="form-select"
+              value={player1Id}
+              onChange={(e) => setPlayer1Id(e.target.value)}
+              required
+            >
+              <option value="">Select player</option>
+              {options.map((p) => (
+                <option key={p.user_id} value={p.user_id} disabled={p.user_id === player2Id}>
+                  {p.full_name}
+                  {p.university_short ? ` (${p.university_short})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="add-p2">
+              Player 2
+            </label>
+            <select
+              id="add-p2"
+              className="form-select"
+              value={player2Id}
+              onChange={(e) => setPlayer2Id(e.target.value)}
+              required
+            >
+              <option value="">Select player</option>
+              {options.map((p) => (
+                <option key={p.user_id} value={p.user_id} disabled={p.user_id === player1Id}>
+                  {p.full_name}
+                  {p.university_short ? ` (${p.university_short})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="add-search">
+              Search players
+            </label>
+            <input
+              id="add-search"
+              className="form-input"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Type a name"
+              autoComplete="off"
+            />
+            {search.trim().length >= 2 && (
+              <div className="org-search-results">
+                {searchResults.length === 0 && <p className="muted-note">No matches</p>}
+                {searchResults.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="org-search-hit"
+                    onClick={() => addFromSearch(p)}
+                  >
+                    <strong>{p.full_name}</strong>
+                    <span>
+                      {p.university_short || 'Player'} · {p.points} pts
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {friends.length === 0 && options.length === 0 && (
+              <p className="muted-note">Add friends in Community, or search for players above.</p>
+            )}
+          </div>
+          {error && <p className="form-error">{error}</p>}
+          <div className="modal-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Adding...' : 'Add team'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
@@ -676,7 +960,7 @@ function CreateTournamentModal({
               Cancel
             </button>
             <button className="btn btn-primary" disabled={saving}>
-              {saving ? 'Creating…' : 'Create'}
+              {saving ? 'Creating...' : 'Create'}
             </button>
           </div>
         </form>

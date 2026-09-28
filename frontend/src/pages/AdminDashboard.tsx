@@ -60,7 +60,7 @@ const LIMERICK_TEMPLATE: TournamentFormState = {
   name: 'Limerick Open',
   location: 'Limerick',
   venue: 'UL Padel Centre',
-  description: "Ireland's student padel open — doubles teams, groups then knockout.",
+  description: 'Ireland student padel open. Doubles teams, groups then knockout.',
   open_now: true,
 }
 
@@ -299,7 +299,7 @@ export default function AdminDashboard() {
               } catch {
                 await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
                 await qc.invalidateQueries({ queryKey: ['tournaments'] })
-                showToast('Created, but could not open registration — open it from the list')
+                showToast('Created, but could not open registration. Open it from the list.')
                 return
               }
             }
@@ -360,7 +360,7 @@ function AdminTournamentCard({
       await copyText(url)
       onCopied(msg)
     } catch {
-      onCopied('Could not copy — copy from the address bar')
+      onCopied('Could not copy. Copy the link from the address bar.')
     }
   }
 
@@ -390,7 +390,7 @@ function AdminTournamentCard({
             disabled={busy}
             onClick={() => onStatus(quickAction.status)}
           >
-            {busy ? 'Updating…' : quickAction.label}
+            {busy ? 'Updating...' : quickAction.label}
           </button>
         )}
         {t.status === 'REGISTRATION_CLOSED' && (
@@ -650,7 +650,7 @@ function TournamentModal({
               Cancel
             </button>
             <button className="btn btn-primary" disabled={saving}>
-              {saving ? 'Saving…' : submitLabel}
+              {saving ? 'Saving...' : submitLabel}
             </button>
           </div>
         </form>

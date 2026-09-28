@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
+import { JoinCodeBox } from '../components/JoinCodeBox'
 import { useAuth } from '../context/AuthContext'
 import {
   apiErrorMessage,
@@ -16,7 +17,7 @@ const FORMATS = [
   {
     id: 'DOUBLES',
     title: 'Doubles',
-    blurb: '2 vs 2 — usual padel format',
+    blurb: '2 vs 2, the usual padel format',
   },
   {
     id: 'SINGLES',
@@ -36,7 +37,6 @@ export default function CommunityPage() {
   const [params] = useSearchParams()
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
-  const [inviteCode, setInviteCode] = useState(() => params.get('code')?.toUpperCase() || '')
   const [createOpen, setCreateOpen] = useState(false)
   const [compName, setCompName] = useState('')
   const [compFormat, setCompFormat] = useState('DOUBLES')
@@ -140,16 +140,6 @@ export default function CommunityPage() {
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
-  const joinMut = useMutation({
-    mutationFn: () => communityApi.joinByCode(inviteCode.trim()),
-    onSuccess: (res) => {
-      setError('')
-      setInviteCode('')
-      refresh()
-      navigate(`/community/${res.data.slug}`)
-    },
-    onError: (e) => setError(apiErrorMessage(e)),
-  })
   const confirmMut = useMutation({
     mutationFn: (id: string) => communityApi.confirmMatch(id),
     onSuccess: () => {
@@ -159,6 +149,13 @@ export default function CommunityPage() {
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
+
+  useEffect(() => {
+    const code = params.get('code')
+    if (code && code.trim().length >= 6) {
+      navigate(`/join/${encodeURIComponent(code.trim().toUpperCase())}`, { replace: true })
+    }
+  }, [params, navigate])
 
   const copyCode = async (code: string) => {
     try {
@@ -189,7 +186,15 @@ export default function CommunityPage() {
         <NavBar />
         <main className="page">
           <h1 className="page-title">Community</h1>
-          <p className="page-sub">Private ladders for your college crew — log matches, confirm scores, climb the rankings.</p>
+          <p className="page-sub">
+            Friend groups and ladders. Organised paid events are under{' '}
+            <Link to="/tournaments">Tournaments</Link> — any invite code still works in one place.
+          </p>
+          <JoinCodeBox
+            title="Have an invite code?"
+            hint="Paste it here even if you’re not logged in yet — we’ll ask you to sign in if needed."
+            placeholder="Paste invite code"
+          />
           <ol className="community-guest-steps">
             <li>
               <strong>Add friends</strong>
@@ -224,6 +229,9 @@ export default function CommunityPage() {
         <div className="page-header-row">
           <h1 className="page-title">Community</h1>
           <div className="header-actions">
+            <Link to="/join" className="btn btn-ghost btn-sm">
+              Have a code?
+            </Link>
             <button
               type="button"
               className="btn btn-primary btn-sm"
@@ -232,11 +240,13 @@ export default function CommunityPage() {
                 setError('')
               }}
             >
-              {createOpen ? 'Close' : 'New competition'}
+              {createOpen ? 'Close' : 'New group'}
             </button>
           </div>
         </div>
-        <p className="page-sub">Play with friends — share a code, pick a court, confirm the score.</p>
+        <p className="page-sub">
+          Friend groups and ladders (not paid tournaments). Paste any invite code below — tournament codes work here too.
+        </p>
 
         {error && <p className="form-error">{error}</p>}
         {copied && <p className="form-success">Copied</p>}
@@ -405,40 +415,21 @@ export default function CommunityPage() {
               </div>
             )}
             <button type="submit" className="btn btn-dark" disabled={createMut.isPending}>
-              Create competition
+              Create group
             </button>
           </form>
         )}
 
-        <section className="community-section">
-          <h2>Join with a code</h2>
-          <form
-            className="join-code-row"
-            onSubmit={(e) => {
-              e.preventDefault()
-              setError('')
-              joinMut.mutate()
-            }}
-          >
-            <input
-              className="form-input"
-              value={inviteCode}
-              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-              placeholder="e.g. EHWDZA78"
-              aria-label="Invite code"
-              autoComplete="off"
-            />
-            <button type="submit" className="btn btn-dark" disabled={!inviteCode.trim() || joinMut.isPending}>
-              Join
-            </button>
-          </form>
-          <p className="muted-note">Ask a friend for their invite code, or open the link they shared.</p>
-        </section>
+        <JoinCodeBox
+          title="Join with a code"
+          hint="Paste a friend-group or tournament code. We’ll open the right place."
+          placeholder="Paste invite code"
+        />
 
         <section className="community-section">
-          <h2>Your competitions</h2>
+          <h2>Your groups</h2>
           {comps.length === 0 && !homeQ.isLoading && (
-            <p className="muted-note">None yet — create one or join with a code.</p>
+            <p className="muted-note">None yet. Create a group or paste an invite code above.</p>
           )}
           <div className="tour-list">
             {comps.map((c) => (
@@ -520,7 +511,7 @@ export default function CommunityPage() {
                   className="form-input"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Type a name…"
+                  placeholder="Type a name"
                   autoFocus
                 />
               </div>
@@ -535,7 +526,7 @@ export default function CommunityPage() {
                             <Link to={`/players/${p.id}`}>{p.full_name}</Link>
                           </strong>
                           <div className="rank-meta">
-                            {p.university_short || '—'} · rating {p.points}
+                            {p.university_short || '-'} · rating {p.points}
                             {p.friendship_status ? ` · ${friendStatusLabel(p.friendship_status)}` : ''}
                           </div>
                         </div>
@@ -649,7 +640,7 @@ function FriendRow({
             <Link to={`/players/${f.user_id}`}>{f.full_name}</Link>
           </strong>
           <div className="rank-meta">
-            {f.university_short || '—'} · {f.points}
+            {f.university_short || '-'} · {f.points}
             {f.direction === 'incoming' ? ' · wants to connect' : ''}
             {f.direction === 'outgoing' ? ' · request sent' : ''}
           </div>

@@ -98,9 +98,9 @@ export function formatMatchScore(score: {
   set3_a: number
   set3_b: number
 } | null | undefined) {
-  if (!score) return '—'
-  const parts = [`${score.set1_a}–${score.set1_b}`]
-  if (score.set2_a || score.set2_b) parts.push(`${score.set2_a}–${score.set2_b}`)
-  if (score.set3_a || score.set3_b) parts.push(`${score.set3_a}–${score.set3_b}`)
+  if (!score) return '-'
+  const parts = [`${score.set1_a}-${score.set1_b}`]
+  if (score.set2_a || score.set2_b) parts.push(`${score.set2_a}-${score.set2_b}`)
+  if (score.set3_a || score.set3_b) parts.push(`${score.set3_a}-${score.set3_b}`)
   return parts.join('  ')
 }

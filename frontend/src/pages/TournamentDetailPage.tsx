@@ -1,10 +1,10 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { QRCodeSVG } from 'qrcode.react'
 import NavBar from '../components/NavBar'
+import { ShareQr } from '../components/ShareQr'
 import { useAuth } from '../context/AuthContext'
 import { tournamentApi } from '../services/api'
-import { publicWebOrigin } from '../native/platform'
+import { publicPathUrl } from '../native/platform'
 import {
   currentSetScores,
   formatDate,
@@ -21,10 +21,11 @@ export default function TournamentDetailPage() {
   const { slug = '' } = useParams()
   const { user } = useAuth()
   const isOps = user?.role === 'ORGANISER' || user?.role === 'ADMIN'
-  const { data: tournament, isLoading, isError } = useQuery({
+  const { data: tournament, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['tournament', slug],
     queryFn: async () => (await tournamentApi.get(slug)).data,
     enabled: !!slug,
+    retry: 4,
   })
   const { data: announcements = [] } = useQuery({
     queryKey: ['announcements', slug],
@@ -61,11 +62,16 @@ export default function TournamentDetailPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Tournament not found</h1>
-          <p className="page-sub">Check the link or browse upcoming events.</p>
-          <Link to="/tournaments" className="btn btn-primary">
-            Browse tournaments
-          </Link>
+          <h1 className="page-title">Could not load this tournament</h1>
+          <p className="page-sub">The server may be waking up. Try again in a few seconds.</p>
+          <div className="header-actions" style={{ justifyContent: 'center' }}>
+            <button type="button" className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
+              {isFetching ? 'Retrying...' : 'Retry'}
+            </button>
+            <Link to="/tournaments" className="btn btn-ghost">
+              Browse tournaments
+            </Link>
+          </div>
         </main>
       </div>
     )
@@ -73,8 +79,16 @@ export default function TournamentDetailPage() {
 
   const live = matches.filter((m) => m.status === 'LIVE')
   const upcoming = matches.filter((m) => m.status === 'SCHEDULED' || m.status === 'CALLED').slice(0, 8)
-  const qrUrl = `${publicWebOrigin()}/t/${tournament.slug}`
+  const liveUrl = publicPathUrl(`/t/${tournament.slug}/live`)
+  const joinUrl = tournament.invite_code
+    ? publicPathUrl(`/join/${tournament.invite_code}`)
+    : publicPathUrl(`/t/${tournament.slug}/join`)
   const spots = spotsLeftLabel(tournament.registered_teams, tournament.max_teams)
+  const canJoin =
+    tournament.status === 'REGISTRATION_OPEN' &&
+    tournament.registered_teams < tournament.max_teams &&
+    !isPastCalendarDate(tournament.registration_deadline)
+  const showInvite = !!tournament.invite_code && (canJoin || isOps)
 
   return (
     <div className="app-shell">
@@ -88,12 +102,9 @@ export default function TournamentDetailPage() {
         </p>
 
         <div className="tour-actions">
-          {tournament.status === 'REGISTRATION_OPEN' &&
-            !playerView?.my_team &&
-            tournament.registered_teams < tournament.max_teams &&
-            !isPastCalendarDate(tournament.registration_deadline) && (
+          {canJoin && !playerView?.my_team && (
               <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
-                Join Tournament
+                Join tournament
               </Link>
             )}
           {tournament.status === 'REGISTRATION_OPEN' &&
@@ -103,7 +114,7 @@ export default function TournamentDetailPage() {
               <p className="muted-note tour-closed-note">
                 {isPastCalendarDate(tournament.registration_deadline)
                   ? 'Registration closed'
-                  : 'Tournament full — watch this page for withdrawals'}
+                  : 'Tournament is full. Check back if a team withdraws.'}
               </p>
             )}
           {playerView?.my_team && (
@@ -226,13 +237,26 @@ export default function TournamentDetailPage() {
           </section>
         )}
 
+        {showInvite && (
+          <section className="block qr-block">
+            <h2>Invite players</h2>
+            <p>
+              Share the code or QR. Friends paste it under <strong>Join code</strong> (or on Tournaments / Community) —
+              either place works. Partners can also pick each other when registering.
+            </p>
+            {tournament.invite_code && (
+              <p className="invite-code-line">
+                Code <code className="share-code">{tournament.invite_code}</code>
+              </p>
+            )}
+            <ShareQr url={joinUrl} openLabel="Open join page" />
+          </section>
+        )}
+
         <section className="block qr-block">
-          <h2>Share this event</h2>
-          <p>Send the link to your partner, or put the QR on a poster at the venue.</p>
-          <div className="qr-wrap">
-            <QRCodeSVG value={qrUrl} size={160} bgColor="#ffffff" fgColor="#0b3d2e" />
-            <code>{qrUrl.replace(/^https?:\/\//, '')}</code>
-          </div>
+          <h2>Share live scores</h2>
+          <p>Scan this QR on your phone to open the live board. No login needed.</p>
+          <ShareQr url={liveUrl} openLabel="Open live board" />
         </section>
       </main>
     </div>

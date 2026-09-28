@@ -1,5 +1,5 @@
 /* Student Padel Ireland — lightweight PWA service worker */
-const CACHE = 'spi-shell-v2'
+const CACHE = 'spi-shell-v3'
 const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/apple-touch-icon.png']
 
 self.addEventListener('install', (event) => {

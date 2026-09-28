@@ -55,10 +55,11 @@ export default function TvDisplayPage() {
     queryFn: async () => (await tournamentApi.display(id)).data,
     enabled: !!id,
     refetchInterval: 5000,
+    retry: 4,
   })
 
   if (isLoading) {
-    return <div className="tv-root loading">Loading display…</div>
+    return <div className="tv-root loading">Loading display...</div>
   }
 
   if (isError || !data) {
@@ -67,7 +68,7 @@ export default function TvDisplayPage() {
         <div style={{ textAlign: 'center' }}>
           <p style={{ marginBottom: 16 }}>Could not load the display.</p>
           <button className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
-            {isFetching ? 'Retrying…' : 'Retry'}
+            {isFetching ? 'Retrying...' : 'Retry'}
           </button>
         </div>
       </div>

@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
-from app.models import Base
+from app.models import Base, Tournament
 
 settings = get_settings()
 
@@ -98,9 +98,20 @@ def _sqlite_ensure_ranking_history_nullable_tournament() -> None:
         conn.execute(text("DROP TABLE ranking_history_old"))
 
 
+def _pg_add_column_if_missing(table: str, column: str, col_type: str) -> None:
+    """Keep production Postgres in sync when a migration was skipped."""
+    if settings.is_sqlite_db():
+        return
+    with engine.begin() as conn:
+        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"))
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _sqlite_add_column_if_missing("matches", "ratings_applied", "BOOLEAN DEFAULT 0")
+    _pg_add_column_if_missing("matches", "ratings_applied", "BOOLEAN DEFAULT FALSE")
+    _sqlite_add_column_if_missing("tournaments", "invite_code", "VARCHAR(12)")
+    _pg_add_column_if_missing("tournaments", "invite_code", "VARCHAR(12)")
     _sqlite_add_column_if_missing("ranking_history", "community_match_id", "CHAR(36)")
     _sqlite_add_column_if_missing("community_matches", "confirmed_by_id", "CHAR(36)")
     _sqlite_add_column_if_missing("community_matches", "court_number", "INTEGER")
@@ -109,6 +120,7 @@ def init_db() -> None:
     _sqlite_add_column_if_missing("users", "avatar_url", "VARCHAR(500)")
     _sqlite_add_column_if_missing("users", "must_set_password", "BOOLEAN DEFAULT 0")
     _sqlite_ensure_ranking_history_nullable_tournament()
+    _backfill_tournament_invite_codes()
     # Migrate legacy zero/low “Ireland points” onto Elo baseline (Elo starts ~1500)
     with engine.begin() as conn:
         try:
@@ -120,6 +132,37 @@ def init_db() -> None:
             )
         except Exception:
             pass
+
+
+def _backfill_tournament_invite_codes() -> None:
+    """Give every tournament a unique 8-char invite code if missing."""
+    import secrets
+
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    db = SessionLocal()
+    try:
+        rows = db.query(Tournament).filter(
+            (Tournament.invite_code.is_(None)) | (Tournament.invite_code == "")
+        ).all()
+        if not rows:
+            return
+        existing = {
+            c
+            for (c,) in db.query(Tournament.invite_code).filter(Tournament.invite_code.isnot(None)).all()
+            if c
+        }
+        for t in rows:
+            for _ in range(40):
+                code = "".join(secrets.choice(alphabet) for _ in range(8))
+                if code not in existing:
+                    t.invite_code = code
+                    existing.add(code)
+                    break
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
 def get_db() -> Generator[Session, None, None]:

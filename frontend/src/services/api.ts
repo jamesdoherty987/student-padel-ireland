@@ -82,6 +82,7 @@ export type Tournament = {
   group_size: number
   teams_advance_per_group: number
   registered_teams: number
+  invite_code?: string | null
 }
 
 export type Match = {
@@ -262,11 +263,14 @@ export const tournamentApi = {
   list: (params?: { status?: string; upcoming?: boolean }) =>
     api.get<Tournament[]>('/api/tournaments', { params }),
   get: (slugOrId: string) => api.get<Tournament>(`/api/tournaments/${slugOrId}`),
+  getByCode: (code: string) => api.get<Tournament>(`/api/tournaments/code/${code}`),
   create: (data: Record<string, unknown>) => api.post<Tournament>('/api/tournaments', data),
   update: (id: string, data: Record<string, unknown>) =>
     api.patch<Tournament>(`/api/tournaments/${id}`, data),
   register: (tournamentId: string, data: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/register`, data),
+  organiserAddTeam: (tournamentId: string, data: Record<string, unknown>) =>
+    api.post(`/api/tournaments/${tournamentId}/organiser-add-team`, data),
   teams: (tournamentId: string) => api.get(`/api/tournaments/${tournamentId}/teams`),
   generate: (tournamentId: string, data?: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/generate`, data || {}),
@@ -293,10 +297,19 @@ export const platformApi = {
     api.get<{ demo_payments: boolean; stripe_publishable_key: string | null }>('/api/config/public'),
   universities: () => api.get<University[]>('/api/universities'),
   rankings: (limit = 50) => api.get<RankingRow[]>('/api/rankings', { params: { limit } }),
+  resolveInvite: (code: string) =>
+    api.get<{
+      kind: 'tournament' | 'competition'
+      slug: string
+      name: string
+      invite_code: string
+      join_path: string
+      hint: string
+    }>(`/api/invite/${encodeURIComponent(code)}`),
   player: (id: string) => api.get<RankingRow>(`/api/players/${id}`),
   updateProfile: (data: { bio?: string; full_name?: string }) =>
     api.patch<RankingRow>('/api/me/profile', data),
-    uploadMedia: (file: File, opts?: { caption?: string; set_as_avatar?: boolean }) => {
+  uploadMedia: (file: File, opts?: { caption?: string; set_as_avatar?: boolean }) => {
     const form = new FormData()
     form.append('file', file)
     if (opts?.caption) form.append('caption', opts.caption)

@@ -35,7 +35,7 @@ export default function RankingsPage() {
       <main className="page">
         <h1 className="page-title">Ireland rankings</h1>
         <p className="page-sub">
-          Elo starts at 1500. Tournament results and confirmed community matches both count.
+          Elo starts at 1500. Tournament events and community matches both count.
         </p>
 
         {universities.length > 1 && (
@@ -78,7 +78,7 @@ export default function RankingsPage() {
 
         {!isLoading && !isError && rankings.length === 0 && (
           <div className="empty-state">
-            <p>No ranked players yet — play a community match or finish a tournament.</p>
+            <p>No ranked players yet. Play a community match or finish a tournament match.</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
               <Link to="/community" className="btn btn-primary">
                 Community
@@ -104,7 +104,7 @@ export default function RankingsPage() {
               return (
                 <li key={r.id}>
                   <Link to={`/players/${r.id}`} className={`rank-page-row ${isMe ? 'is-me' : ''}`}>
-                    <span className="rank-num">#{r.rank_ireland ?? '—'}</span>
+                    <span className="rank-num">#{r.rank_ireland ?? '-'}</span>
                     {avatar ? (
                       <img src={avatar} alt="" className="rank-avatar" />
                     ) : (
@@ -119,7 +119,7 @@ export default function RankingsPage() {
                       </strong>
                       <br />
                       <span className="rank-meta">
-                        {r.university_short || r.university_name || '—'} · {r.wins}W–{r.losses}L
+                        {r.university_short || r.university_name || '-'} · {r.wins}W-{r.losses}L
                       </span>
                     </span>
                     <strong className="rank-pts">{r.points}</strong>

@@ -159,6 +159,7 @@ class TournamentOut(BaseModel):
     group_size: int
     teams_advance_per_group: int
     registered_teams: int = 0
+    invite_code: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -180,11 +181,21 @@ class TeamOut(BaseModel):
 class RegisterTeamRequest(BaseModel):
     tournament_id: UUID
     team_name: str = Field(min_length=2, max_length=120)
-    partner_name: str = Field(min_length=2, max_length=200)
-    partner_email: EmailStr
+    partner_name: str = Field(default="", max_length=200)
+    partner_email: Optional[EmailStr] = None
+    partner_user_id: Optional[UUID] = None
     phone: Optional[str] = None
     university_id: Optional[UUID] = None
     student_number: Optional[str] = None
+
+
+class OrganiserAddTeamRequest(BaseModel):
+    """Organiser adds a doubles team (waives payment / marks paid)."""
+
+    team_name: str = Field(min_length=2, max_length=120)
+    player1_id: UUID
+    player2_id: UUID
+    university_id: Optional[UUID] = None
 
 
 class CheckoutResponse(BaseModel):
@@ -432,3 +443,14 @@ class CommunityHomeOut(BaseModel):
 
 
 TokenResponse.model_rebuild()
+
+
+class InviteResolveOut(BaseModel):
+    """Lookup for any invite code (tournament or community competition)."""
+
+    kind: str  # tournament | competition
+    slug: str
+    name: str
+    invite_code: str
+    join_path: str
+    hint: str = ""

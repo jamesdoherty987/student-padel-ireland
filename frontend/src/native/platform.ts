@@ -13,18 +13,25 @@ export function nativePlatform(): 'ios' | 'android' | 'web' {
 
 /**
  * Public https origin used for QR codes, invite links, and App Store marketing.
- * Never use capacitor://localhost for shareable URLs.
+ * On the website, always use the current host so a Vercel preview QR does not
+ * point at a custom domain that is not live yet. Native builds use VITE_WEB_ORIGIN.
  */
 export function publicWebOrigin(): string {
-  const fromEnv = (import.meta.env.VITE_WEB_ORIGIN as string | undefined)?.replace(/\/$/, '')
-  if (fromEnv) return fromEnv
   if (typeof window !== 'undefined' && !isNativeApp()) {
     const { protocol, host } = window.location
     if (protocol === 'http:' || protocol === 'https:') {
       return `${protocol}//${host}`
     }
   }
+  const fromEnv = (import.meta.env.VITE_WEB_ORIGIN as string | undefined)?.replace(/\/$/, '')
+  if (fromEnv) return fromEnv
   return 'https://studentpadelireland.ie'
+}
+
+export function publicPathUrl(path: string): string {
+  const origin = publicWebOrigin()
+  const p = path.startsWith('/') ? path : `/${path}`
+  return `${origin}${p}`
 }
 
 /** Absolute API base — required in native builds (relative URLs hit the WebView host). */

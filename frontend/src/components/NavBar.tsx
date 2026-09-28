@@ -60,6 +60,9 @@ export default function NavBar() {
           Community
           {incomingCount > 0 && <span className="nav-badge">{incomingCount}</span>}
         </NavLink>
+        <NavLink to="/join" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
+          Join code
+        </NavLink>
         <NavLink to="/rankings" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
           Rankings
         </NavLink>

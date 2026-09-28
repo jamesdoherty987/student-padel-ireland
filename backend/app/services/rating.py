@@ -161,6 +161,17 @@ def apply_rating_updates(
             ranking.wins = (ranking.wins or 0) + 1
         else:
             ranking.losses = (ranking.losses or 0) + 1
+        if tournament_id:
+            already_in_event = (
+                db.query(RankingHistory.id)
+                .filter(
+                    RankingHistory.user_id == u.user_id,
+                    RankingHistory.tournament_id == tournament_id,
+                )
+                .first()
+            )
+            if not already_in_event:
+                ranking.tournaments_played = (ranking.tournaments_played or 0) + 1
         db.add(
             RankingHistory(
                 user_id=u.user_id,

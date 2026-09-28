@@ -155,6 +155,7 @@ class Tournament(Base, TimestampMixin):
         default="points,head_to_head,set_difference,game_difference,games_won",
     )
     description: Mapped[Optional[str]] = mapped_column(Text)
+    invite_code: Mapped[Optional[str]] = mapped_column(String(12), unique=True, index=True)
 
     organiser: Mapped[User] = relationship()
     teams: Mapped[list["Team"]] = relationship(back_populates="tournament")

@@ -23,9 +23,9 @@ const CITY_CARDS = [
 ]
 
 const STEPS = [
-  { n: '1', title: 'Find an event', body: 'Browse open tournaments near you.' },
-  { n: '2', title: 'Register your team', body: 'Sign up with your partner and pay online.' },
-  { n: '3', title: 'Play with friends', body: 'Start a private competition, share a code, confirm scores.' },
+  { n: '1', title: 'Find an event or paste a code', body: 'Browse tournaments, or join with any invite code from a friend.' },
+  { n: '2', title: 'Register with your partner', body: 'Sign up as a doubles team and pay online if there is a fee.' },
+  { n: '3', title: 'Play and climb rankings', body: 'Match results from tournaments and community games update Ireland rankings.' },
 ]
 
 function eventDay(iso: string) {
@@ -142,12 +142,15 @@ export default function Landing() {
             <Link to="/tournaments" onClick={close}>
               Tournaments
             </Link>
-            <a href="#how" onClick={close}>
-              How it works
-            </a>
             <Link to="/community" onClick={close}>
               Community
             </Link>
+            <Link to="/join" onClick={close}>
+              Join code
+            </Link>
+            <a href="#how" onClick={close}>
+              How it works
+            </a>
             <Link to="/rankings" onClick={close}>
               Rankings
             </Link>
@@ -308,11 +311,11 @@ export default function Landing() {
         <section className="lp-globe-section">
           <div className="lp-wrap lp-split lp-split-globe">
             <div>
-              <p className="lp-kicker lp-kicker-light">Worldwide</p>
-              <h2>Join the fastest-growing sport on earth</h2>
+              <p className="lp-kicker lp-kicker-light">Ireland</p>
+              <h2>Student padel, across the country</h2>
               <p>
-                Tournaments, private ladders, and Ireland rankings — starting with Dublin, Cork, Galway, Limerick,
-                Belfast and Waterford.
+                Tournaments, private ladders, and one Ireland ranking. Dublin, Cork, Galway, Limerick, Belfast and
+                Waterford.
               </p>
               <a href="#upcoming" className="lp-btn lp-btn-primary">
                 See upcoming events

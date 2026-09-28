@@ -35,9 +35,9 @@
 .auth-panel {
   position: relative;
   z-index: 1;
-  width: min(440px, 100%);
+  width: min(480px, 100%);
   background: var(--white);
-  padding: 2rem 1.5rem;
+  padding: 2.25rem 1.75rem;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   border: 1px solid rgba(255, 255, 255, 0.2);

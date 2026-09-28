@@ -7,11 +7,13 @@ import './PlayerLive.css'
 
 export default function PlayerLivePage() {
   const { slug = '' } = useParams()
-  const { data, isLoading, isError, dataUpdatedAt } = useQuery({
+  const { data, isLoading, isError, dataUpdatedAt, refetch, isFetching } = useQuery({
     queryKey: ['player-view', slug],
     queryFn: async () => (await tournamentApi.playerView(slug)).data,
     enabled: !!slug,
-    refetchInterval: 8000,
+    retry: 4,
+    retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 10000),
+    refetchInterval: (query) => (query.state.status === 'error' ? 5000 : 8000),
   })
 
   if (isLoading) {
@@ -31,10 +33,18 @@ export default function PlayerLivePage() {
       <div className="app-shell">
         <NavBar />
         <main className="pl-page empty-state">
-          <p>Could not load this tournament.</p>
-          <Link to="/tournaments" className="btn btn-ghost" style={{ marginTop: 12 }}>
-            Back
-          </Link>
+          <p>Could not load the live board.</p>
+          <p className="muted-note" style={{ marginTop: 8 }}>
+            The server may be waking up. Wait a few seconds and try again.
+          </p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 16 }}>
+            <button type="button" className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
+              {isFetching ? 'Retrying...' : 'Retry'}
+            </button>
+            <Link to="/tournaments" className="btn btn-ghost">
+              Tournaments
+            </Link>
+          </div>
         </main>
       </div>
     )
@@ -73,7 +83,7 @@ export default function PlayerLivePage() {
             <ul className="pl-live-list">
               {(data.live_matches as Match[]).map((m) => (
                 <li key={m.id}>
-                  <strong>Court {m.court_number ?? '—'}</strong>
+                  <strong>Court {m.court_number ?? '-'}</strong>
                   <span>
                     {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}
                   </span>
@@ -88,7 +98,7 @@ export default function PlayerLivePage() {
           <h2>Your next match</h2>
           {next ? (
             <div className="pl-next-card">
-              <div className="pl-court">Court {next.court_number ?? '—'}</div>
+              <div className="pl-court">Court {next.court_number ?? '-'}</div>
               <div className="pl-time">{formatTime(next.scheduled_start)}</div>
               <div className="pl-vs">
                 <div>{next.team_a_name || next.team_a_placeholder || 'TBD'}</div>
@@ -108,7 +118,7 @@ export default function PlayerLivePage() {
           )}
           {!data.my_team && t.status === 'REGISTRATION_OPEN' && (
             <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block" style={{ marginTop: 12 }}>
-              Join Tournament
+              Join tournament
             </Link>
           )}
         </section>

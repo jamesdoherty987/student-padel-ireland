@@ -129,6 +129,11 @@ def _ensure_limerick_open(db: Session) -> None:
             if not clash:
                 existing.slug = "limerick-open"
                 changed = True
+        if existing.description and (
+            "—" in existing.description or "Ireland's student padel open" in existing.description
+        ):
+            existing.description = "Ireland student padel open. Doubles teams, groups then knockout."
+            changed = True
         if changed:
             db.commit()
             print("Updated seeded tournament to Limerick Open")
@@ -150,7 +155,7 @@ def _ensure_limerick_open(db: Session) -> None:
         ),
         format="GROUP_KNOCKOUT",
         rules="Best of 3 sets. Golden point on deuce. Student ID required on the day. Entry is per doubles team.",
-        description="Ireland's student padel open — doubles teams, groups then knockout.",
+        description="Ireland student padel open. Doubles teams, groups then knockout.",
         status=TournamentStatus.REGISTRATION_OPEN.value,
         organiser_id=owner.id,
         match_duration_minutes=20,

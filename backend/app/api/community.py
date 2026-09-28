@@ -698,7 +698,7 @@ def remove_member(
     if c.created_by_id != user.id:
         raise HTTPException(403, "Only the host can remove players")
     if member_user_id == user.id:
-        raise HTTPException(400, "Host cannot remove themselves — leave or cancel instead")
+        raise HTTPException(400, "Host cannot remove themselves. Leave or cancel instead.")
     member = _is_member(db, c.id, member_user_id)
     if not member:
         raise HTTPException(404, "Player is not in this competition")
@@ -911,7 +911,7 @@ def confirm_community_match(
     if m.ratings_applied:
         return _match_out(db, m, viewer=user, competition=c)
     if m.status != "AWAITING_CONFIRM":
-        raise HTTPException(400, "Nothing to confirm yet — enter the score first")
+        raise HTTPException(400, "Nothing to confirm yet. Enter the score first.")
     if user.id not in _match_players(m):
         raise HTTPException(403, "Only players in this match can confirm")
     if m.recorded_by_id == user.id:

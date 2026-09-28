@@ -8,6 +8,8 @@ import { LoginPage, SignupPage } from './pages/Auth'
 import TournamentsPage from './pages/TournamentsPage'
 import TournamentDetailPage from './pages/TournamentDetailPage'
 import JoinTournamentPage from './pages/JoinTournamentPage'
+import JoinTournamentByCodePage from './pages/JoinTournamentByCodePage'
+import JoinByCodePage from './pages/JoinByCodePage'
 import PlayerLivePage from './pages/PlayerLivePage'
 import TvDisplayPage from './pages/TvDisplayPage'
 import AdminDashboard from './pages/AdminDashboard'
@@ -21,7 +23,12 @@ import NotFoundPage from './pages/NotFoundPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 10_000, retry: 1, refetchOnWindowFocus: false },
+    queries: {
+      staleTime: 10_000,
+      retry: 2,
+      retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+      refetchOnWindowFocus: false,
+    },
   },
 })
 
@@ -36,6 +43,9 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/tournaments" element={<TournamentsPage />} />
+            <Route path="/join" element={<JoinByCodePage />} />
+            <Route path="/join/:code" element={<JoinByCodePage />} />
+            <Route path="/t/join/:code" element={<JoinTournamentByCodePage />} />
             <Route path="/t/:slug" element={<TournamentDetailPage />} />
             <Route
               path="/t/:slug/join"
