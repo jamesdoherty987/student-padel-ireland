@@ -64,7 +64,7 @@ Tournament generator tests cover 8–64 team fields, no self-matches, full group
 | Service | Typical early cost |
 |--------|---------------------|
 | **Supabase** Postgres | **Free** (500 MB, pauses after ~1 week idle) · **~$25/mo** Pro if you need always-on |
-| **Render** API | **Free** (spins down after ~15 min idle — first request is slow) · ~$7/mo starter for always-on |
+| **Render** API | **Free** (spins down after ~15 min idle - first request is slow) · ~$7/mo starter for always-on |
 | **Vercel** frontend | **Free** hobby for most early traffic |
 | **Stripe** | Free to set up; ~1.5% + €0.25 per EU card payment when you turn it on |
 
@@ -73,14 +73,14 @@ You can launch for **€0/month** on free tiers. Expect cold starts on Render fr
 ### Backend (Render)
 
 1. Create a Supabase project → SQL editor → run `supabase/migrations/001_initial.sql` then `002_community_ratings.sql`
-2. Copy the Postgres connection string into Render `DATABASE_URL` (plain `postgresql://…` is fine — the app normalizes it)
+2. Copy the Postgres connection string into Render `DATABASE_URL` (plain `postgresql://…` is fine - the app normalizes it)
 3. Deploy with `render.yaml` (or connect the `backend/` folder). Set:
    - `ENVIRONMENT=production`
-   - `SECRET_KEY` — long random (Render can generate)
-   - `DATABASE_URL` — Supabase URI
-   - `FRONTEND_URL` — your Vercel URL (no trailing slash)
-   - `BACKEND_URL` — your Render API URL
-   - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — first admin (demo accounts are **not** created in production)
+   - `SECRET_KEY` - long random (Render can generate)
+   - `DATABASE_URL` - Supabase URI
+   - `FRONTEND_URL` - your Vercel URL (no trailing slash)
+   - `BACKEND_URL` - your Render API URL
+   - `ADMIN_EMAIL` / `ADMIN_PASSWORD` - first admin (demo accounts are **not** created in production)
 4. Stripe keys optional until you charge fees (demo payments until then)
 
 ### Frontend (Vercel)
@@ -105,13 +105,13 @@ Bundle ID: `ie.studentpadelireland.app`
 
 ### Phases shipped in this MVP
 
-1. **Foundation** — auth, roles (PLAYER / ORGANISER / ADMIN), schema, seed data  
-2. **Tournament** — create, register + pay (Stripe or demo), teams, configurable generator  
-3. **Live event** — fixtures, scoring (organiser only), standings, player mobile view, QR, TV `/tournament/:id/display`  
-4. **Community** — friends, private competitions/ladders, log singles & doubles matches  
-5. **Ratings** — doubles-aware Elo (team average of partners vs both opponents); updates on tournament + community matches  
-6. **Platform** — public profiles, Ireland rankings board  
-7. **Business (stubs)** — sponsors table, announcements, organiser revenue stats  
+1. **Foundation** - auth, roles (PLAYER / ORGANISER / ADMIN), schema, seed data  
+2. **Tournament** - create, register + pay (Stripe or demo), teams, configurable generator  
+3. **Live event** - fixtures, scoring (organiser only), standings, player mobile view, QR, TV `/tournament/:id/display`  
+4. **Community** - friends, private competitions/ladders, log singles & doubles matches  
+5. **Ratings** - doubles-aware Elo (team average of partners vs both opponents); updates on tournament + community matches  
+6. **Platform** - public profiles, Ireland rankings board  
+7. **Business (stubs)** - sponsors table, announcements, organiser revenue stats  
 
 ## Environment
 
@@ -125,4 +125,4 @@ See `backend/.env.example`. For Supabase, set `DATABASE_URL` to the Postgres con
 
 ## V1 explicitly deferred
 
-Native apps, chat, AI, push/SMS, subscriptions, multi-country, advanced stats — see the product spec.
+Native apps, chat, AI, push/SMS, subscriptions, multi-country, advanced stats - see the product spec.

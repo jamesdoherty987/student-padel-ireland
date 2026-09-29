@@ -147,7 +147,7 @@ def _seed_into_groups(teams: Sequence[TeamRef], group_count: int, group_size: in
 
 
 def _round_robin_pairs(team_ids: list[str]) -> list[tuple[str, str]]:
-    """Circle method — each team plays every other once. No self-matches."""
+    """Circle method - each team plays every other once. No self-matches."""
     ids = list(team_ids)
     if len(ids) < 2:
         return []
@@ -272,7 +272,7 @@ class GroupKnockoutGenerator:
         # Knockout bracket size
         advancing = group_count * config.teams_advance_per_group
         if advancing < 2:
-            # No knockout — group stage only
+            # No knockout - group stage only
             return result
 
         bracket_size = _next_power_of_two(advancing)
@@ -425,7 +425,7 @@ def generate_tournament(config: GeneratorConfig) -> GeneratedTournament:
 
 
 def validate_generated(result: GeneratedTournament, expected_team_ids: set[str]) -> None:
-    """Hard invariants — fail loudly rather than produce broken brackets."""
+    """Hard invariants - fail loudly rather than produce broken brackets."""
     assigned = set()
     for g in result.groups:
         for tid in g.team_ids:
@@ -446,7 +446,7 @@ def validate_generated(result: GeneratedTournament, expected_team_ids: set[str])
             if m.team_a_id not in expected_team_ids or m.team_b_id not in expected_team_ids:
                 raise ValueError("Group match references unknown team")
 
-    # Count team appearances in group stage — each pair once
+    # Count team appearances in group stage - each pair once
     from collections import Counter
 
     appearances: Counter[str] = Counter()

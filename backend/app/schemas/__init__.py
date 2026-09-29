@@ -389,7 +389,7 @@ class CommunityMatchScore(BaseModel):
     set2_b: int = Field(default=0, ge=0, le=7)
     set3_a: int = Field(default=0, ge=0, le=7)
     set3_b: int = Field(default=0, ge=0, le=7)
-    winner_side: Optional[str] = None  # A | B — inferred from sets if omitted
+    winner_side: Optional[str] = None  # A | B - inferred from sets if omitted
     status: str = "AWAITING_CONFIRM"  # AWAITING_CONFIRM | CANCELLED
 
 

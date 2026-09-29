@@ -3,7 +3,7 @@ type SpotlightProps = {
   fill?: string
 }
 
-/** Aceternity-inspired spotlight SVG — CSS animation in Landing.css / index.css */
+/** Aceternity-inspired spotlight SVG - CSS animation in Landing.css / index.css */
 export function Spotlight({ className = '', fill = 'white' }: SpotlightProps) {
   return (
     <svg

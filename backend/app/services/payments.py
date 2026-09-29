@@ -1,4 +1,4 @@
-"""Payment helpers — Stripe Checkout confirm + webhook marking."""
+"""Payment helpers - Stripe Checkout confirm + webhook marking."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def confirm_stripe_session(db: Session, session_id: str) -> Registration | None:
     """Verify a Checkout Session with Stripe and mark the registration paid."""
     settings = get_settings()
     if not settings.stripe_secret_key:
-        # Demo / no Stripe — look up by session id if stored
+        # Demo / no Stripe - look up by session id if stored
         return db.query(Registration).filter(Registration.stripe_session_id == session_id).first()
 
     import stripe

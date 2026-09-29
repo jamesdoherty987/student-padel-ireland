@@ -27,5 +27,5 @@ console.log(`[native] VITE_API_URL=${api.replace(/\/$/, '')}`)
 if (process.env.VITE_WEB_ORIGIN) {
   console.log(`[native] VITE_WEB_ORIGIN=${process.env.VITE_WEB_ORIGIN.replace(/\/$/, '')}`)
 } else {
-  console.warn('[native] VITE_WEB_ORIGIN unset — QR/invite links default to https://studentpadelireland.ie')
+  console.warn('[native] VITE_WEB_ORIGIN unset - QR/invite links default to https://studentpadelireland.ie')
 }

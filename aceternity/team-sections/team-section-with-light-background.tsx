@@ -23,7 +23,7 @@ export function TeamSectionWithLightBackground() {
       designation: "Software Engineer",
       src: "https://assets.aceternity.com/avatars/2.webp",
       excerpt:
-        "Specializes in frontend frameworks and UI systems—Glennfiddich crafts seamless and accessible user interfaces.",
+        "Specializes in frontend frameworks and UI systems-Glennfiddich crafts seamless and accessible user interfaces.",
     },
     {
       title: "Jameson Beam",

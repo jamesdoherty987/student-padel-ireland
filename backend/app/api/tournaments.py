@@ -402,7 +402,7 @@ def resolve_invite_code(invite_code: str, db: Session = Depends(get_db)):
             name=t.name,
             invite_code=cleaned,
             join_path=f"/t/{t.slug}/join",
-            hint="Tournament event — register with a doubles partner",
+            hint="Tournament event: register with a doubles partner",
         )
 
     c = db.query(CommunityCompetition).filter(CommunityCompetition.invite_code == cleaned).first()

@@ -231,7 +231,7 @@ export default function CompetitionDetailPage() {
       setCopied('link')
       setTimeout(() => setCopied(''), 1500)
     } catch (err: unknown) {
-      // User dismissed the share sheet — not an error
+      // User dismissed the share sheet - not an error
       const msg = err instanceof Error ? err.message : String(err)
       if (/cancel|dismiss/i.test(msg)) return
       setError('Could not share / copy link')
@@ -335,7 +335,7 @@ export default function CompetitionDetailPage() {
             <div>
               <h2>Invite friends</h2>
               <p className="muted-note">
-                Send the code or link. They can paste it under Join code, Community, or Tournaments.
+                Send the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments or Community.
               </p>
               <div className="share-code-row">
                 <code className="share-code">{c.invite_code}</code>

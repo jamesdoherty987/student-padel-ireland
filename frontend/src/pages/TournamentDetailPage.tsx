@@ -123,7 +123,7 @@ export default function TournamentDetailPage() {
             </Link>
           )}
           {!playerView?.my_team && (
-            <Link to={`/t/${tournament.slug}/live`} className="btn btn-dark">
+            <Link to={`/t/${tournament.slug}/live`} className="btn btn-ghost">
               Live scores
             </Link>
           )}
@@ -241,8 +241,7 @@ export default function TournamentDetailPage() {
           <section className="block qr-block">
             <h2>Invite players</h2>
             <p>
-              Share the code or QR. Friends paste it under <strong>Join code</strong> (or on Tournaments / Community) —
-              either place works. Partners can also pick each other when registering.
+              Share the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments or Community.
             </p>
             {tournament.invite_code && (
               <p className="invite-code-line">

@@ -7,7 +7,7 @@ type GlobeProps = {
 
 const RAD_PER_MS = 0.0035 / 16.67
 
-/** Aceternity-style spinning globe (cobe v2) — court green theme */
+/** Aceternity-style spinning globe (cobe v2) - court green theme */
 export function Globe({ className = '' }: GlobeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -40,7 +40,7 @@ export function Globe({ className = '' }: GlobeProps) {
       glowColor: [0.08, 0.28, 0.2],
       markerElevation: 0,
       markers: [
-        // Anchor only — slim DOM pin is the visible marker
+        // Anchor only - slim DOM pin is the visible marker
         { location: [53.3498, -6.2603], size: 0, id: 'ie' },
       ],
     })

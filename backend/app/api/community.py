@@ -332,7 +332,7 @@ def search_players(
 ):
     rate_limit(request, key="player-search", limit=30, window_seconds=60)
     term = f"%{q.strip()}%"
-    # Name search only — never return emails to strangers
+    # Name search only - never return emails to strangers
     rows = (
         db.query(User)
         .filter(

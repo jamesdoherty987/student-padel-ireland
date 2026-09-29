@@ -1,4 +1,4 @@
-# Native apps (Capacitor) — App Store & Play Store
+# Native apps (Capacitor) - App Store & Play Store
 
 The web app is wrapped with **Capacitor 8** so the same React UI ships as:
 
@@ -13,14 +13,14 @@ The web app is wrapped with **Capacitor 8** so the same React UI ships as:
 - Node 20+
 - Xcode 16+ (iOS) + Apple Developer Program ($99/yr) for TestFlight / App Store
 - Android Studio (optional, for Play Store)
-- A **live HTTPS API** (`VITE_API_URL`) — the native shell cannot use Vite’s local proxy
+- A **live HTTPS API** (`VITE_API_URL`) - the native shell cannot use Vite’s local proxy
 
 ## Build & open
 
 ```bash
 cd frontend
 
-# Required for any native build — point at your Render (or other) API
+# Required for any native build - point at your Render (or other) API
 export VITE_API_URL=https://your-api.onrender.com
 export VITE_WEB_ORIGIN=https://studentpadelireland.ie   # QR / invite links
 

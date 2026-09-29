@@ -270,7 +270,7 @@ export default function PlayerProfilePage() {
 
             <div className="profile-stats" role="list">
               <div role="listitem">
-                <strong>#{player.rank_ireland ?? '—'}</strong>
+                <strong>#{player.rank_ireland ?? '-'}</strong>
                 <span>Ireland</span>
               </div>
               <div role="listitem">
@@ -511,7 +511,19 @@ export default function PlayerProfilePage() {
             <div className="lightbox-inner" onClick={(e) => e.stopPropagation()}>
               <div className="lightbox-stage">
                 {lightbox.media_type === 'video' ? (
-                  <video key={lightbox.id} src={mediaUrl(lightbox.url)} controls autoPlay playsInline />
+                  <video
+                    key={lightbox.id}
+                    src={mediaUrl(lightbox.url)}
+                    controls
+                    autoPlay
+                    muted
+                    playsInline
+                    preload="auto"
+                    onCanPlay={(e) => {
+                      const el = e.currentTarget
+                      void el.play().catch(() => {})
+                    }}
+                  />
                 ) : (
                   <img src={mediaUrl(lightbox.url)} alt={lightbox.caption || ''} />
                 )}
@@ -521,7 +533,7 @@ export default function PlayerProfilePage() {
                   <p className="lightbox-caption">{lightbox.caption}</p>
                 ) : (
                   <p className="lightbox-caption is-muted">
-                    {lightbox.media_type === 'video' ? 'Video' : 'Photo'}
+                    {lightbox.media_type === 'video' ? 'Video (unmute in controls if needed)' : 'Photo'}
                     {media.length > 1 ? ` · ${lightboxIndex + 1} of ${media.length}` : ''}
                   </p>
                 )}

@@ -353,7 +353,7 @@ class Friendship(Base, TimestampMixin):
 
 
 class CommunityCompetition(Base, TimestampMixin):
-    """Private friend competition / ladder — no entry fee, invite-only."""
+    """Private friend competition / ladder - no entry fee, invite-only."""
 
     __tablename__ = "community_competitions"
 

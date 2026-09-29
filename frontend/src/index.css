@@ -1,4 +1,4 @@
-/* Student Padel Ireland — design system */
+/* Student Padel Ireland - design system */
 
 *,
 *::before,
@@ -58,7 +58,7 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Capacitor shell — avoid overscroll rubber-banding fighting the WebView */
+/* Capacitor shell - avoid overscroll rubber-banding fighting the WebView */
 html.native-app,
 html.native-app body {
   overscroll-behavior: none;
@@ -92,6 +92,7 @@ body.modal-open {
 
 .modal,
 .score-modal,
+.join-modal,
 .lightbox-inner {
   touch-action: pan-y;
 }
@@ -209,7 +210,7 @@ img {
   padding: 0.85rem 1.5rem;
 }
 
-/* Shared compact button — single source of truth (page CSS must not redefine) */
+/* Shared compact button - single source of truth (page CSS must not redefine) */
 .btn-sm {
   min-height: 44px;
   padding: 0.45rem 0.85rem;
@@ -445,7 +446,7 @@ img {
   }
 }
 
-/* App nav — blur on ::before so fixed mobile menu isn't trapped by backdrop-filter */
+/* App nav - blur on ::before so fixed mobile menu isn't trapped by backdrop-filter */
 .app-nav {
   position: sticky;
   top: 0;

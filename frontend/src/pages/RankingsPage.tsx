@@ -34,9 +34,7 @@ export default function RankingsPage() {
       <NavBar />
       <main className="page">
         <h1 className="page-title">Ireland rankings</h1>
-        <p className="page-sub">
-          Elo starts at 1500. Tournament events and community matches both count.
-        </p>
+        <p className="page-sub">From tournaments and community matches. Everyone starts at 1500.</p>
 
         {universities.length > 1 && (
           <div className="tour-toolbar">
@@ -81,10 +79,10 @@ export default function RankingsPage() {
             <p>No ranked players yet. Play a community match or finish a tournament match.</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
               <Link to="/community" className="btn btn-primary">
-                Community
+                Find a group
               </Link>
               <Link to="/tournaments" className="btn btn-ghost">
-                Tournaments
+                Browse tournaments
               </Link>
             </div>
           </div>

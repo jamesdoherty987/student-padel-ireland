@@ -21,7 +21,7 @@ export function HeroSectionWithTabs() {
               )}
             >
               Ship software so fast, your keyboard will file for overtime. Our
-              AI writes code while you pretend to look busy—finally, a coworker
+              AI writes code while you pretend to look busy-finally, a coworker
               who never asks about your weekend.
             </h2>
 

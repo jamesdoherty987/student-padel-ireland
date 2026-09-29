@@ -34,13 +34,13 @@ export function publicPathUrl(path: string): string {
   return `${origin}${p}`
 }
 
-/** Absolute API base — required in native builds (relative URLs hit the WebView host). */
+/** Absolute API base - required in native builds (relative URLs hit the WebView host). */
 export function apiBaseUrl(): string {
   const raw = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || ''
   if (raw) return raw
   if (isNativeApp()) {
     console.warn(
-      '[SPI] VITE_API_URL is empty in a native build — API calls will fail. Set it before `npm run build`.',
+      '[SPI] VITE_API_URL is empty in a native build - API calls will fail. Set it before `npm run build`.',
     )
   }
   return ''

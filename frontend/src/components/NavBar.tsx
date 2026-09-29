@@ -56,12 +56,14 @@ export default function NavBar() {
         <NavLink to="/tournaments" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
           Tournaments
         </NavLink>
-        <NavLink to="/community" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
+        <NavLink
+          to="/community"
+          className={({ isActive }) => (isActive ? 'active' : '')}
+          onClick={close}
+          aria-label={incomingCount > 0 ? `Community, ${incomingCount} friend requests` : 'Community'}
+        >
           Community
-          {incomingCount > 0 && <span className="nav-badge">{incomingCount}</span>}
-        </NavLink>
-        <NavLink to="/join" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-          Join code
+          {incomingCount > 0 && <span className="nav-badge" aria-hidden>{incomingCount}</span>}
         </NavLink>
         <NavLink to="/rankings" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
           Rankings

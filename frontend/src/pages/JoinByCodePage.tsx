@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import NavBar from '../components/NavBar'
-import { JoinCodeBox, cleanInviteCode, resolveInviteCode } from '../components/JoinCodeBox'
+import { HaveCodeButton } from '../components/JoinCodeModal'
+import { cleanInviteCode, resolveInviteCode } from '../utils/inviteCode'
 import { useAuth } from '../context/AuthContext'
 import { apiErrorMessage } from '../services/api'
 import './Tournament.css'
 import './Community.css'
 
-/** Dedicated “paste any invite code” page — tournament or friend group. */
+/**
+ * Deep link / QR target for invite codes.
+ * Bare /join redirects to tournaments with the join popup open - there is no Join code tab.
+ */
 export default function JoinByCodePage() {
   const { code = '' } = useParams()
   const { user, loading } = useAuth()
@@ -15,9 +19,10 @@ export default function JoinByCodePage() {
   const [autoError, setAutoError] = useState('')
   const [autoStatus, setAutoStatus] = useState('')
   const clean = cleanInviteCode(code)
+  const hasCodeParam = Boolean(code)
 
   useEffect(() => {
-    if (loading || !clean || clean.length < 6) return
+    if (!hasCodeParam || loading || !clean || clean.length < 6) return
     let cancelled = false
     setAutoError('')
     setAutoStatus('Looking up invite…')
@@ -42,56 +47,44 @@ export default function JoinByCodePage() {
     return () => {
       cancelled = true
     }
-  }, [loading, clean, user, navigate])
+  }, [hasCodeParam, loading, clean, user, navigate])
+
+  if (!hasCodeParam) {
+    return <Navigate to="/tournaments?join=1" replace />
+  }
 
   return (
     <div className="app-shell">
       <NavBar />
       <main className="page join-any-page">
-        <h1 className="page-title">Join with a code</h1>
-        <p className="page-sub">
-          Paste the code your friend shared. It can be for a <strong>tournament</strong> or a{' '}
-          <strong>community</strong> group — we’ll send you to the right place.
-        </p>
+        <h1 className="page-title">Joining…</h1>
+        <p className="page-sub">Code {clean || '-'}</p>
 
-        {clean.length >= 6 && !autoError && autoStatus && (
-          <p className="muted-note" style={{ marginBottom: '1rem' }}>
-            {autoStatus}
-          </p>
-        )}
+        {clean.length >= 6 && !autoError && autoStatus && <p className="muted-note">{autoStatus}</p>}
         {autoError && (
           <div className="empty-state" style={{ padding: '1.25rem 0' }}>
             <p>{autoError}</p>
+            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+              <HaveCodeButton className="btn btn-primary" initialCode={clean}>
+                Try another code
+              </HaveCodeButton>
+              <Link to="/tournaments" className="btn btn-ghost">
+                Browse tournaments
+              </Link>
+            </div>
           </div>
         )}
-
-        <JoinCodeBox
-          initialCode={autoError ? clean : ''}
-          title=""
-          hint="Same box works on the Tournaments and Community tabs too."
-          placeholder="e.g. EHWDZA78"
-        />
-
-        <div className="join-any-help">
-          <h2>Quick guide</h2>
-          <ul>
-            <li>
-              <strong>Tournaments</strong> — organised events with brackets (often a fee)
-            </li>
-            <li>
-              <strong>Community</strong> — private friend groups and ladders
-            </li>
-          </ul>
-          <p className="muted-note">Only have a code? Paste it above. You don’t need to guess the tab.</p>
-        </div>
-        <div className="header-actions" style={{ marginTop: '1.25rem' }}>
-          <Link to="/tournaments" className="btn btn-ghost">
-            Browse tournaments
-          </Link>
-          <Link to="/community" className="btn btn-ghost">
-            Open community
-          </Link>
-        </div>
+        {clean.length < 6 && (
+          <div className="empty-state" style={{ padding: '1.25rem 0' }}>
+            <p>That invite code looks incomplete.</p>
+            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+              <HaveCodeButton className="btn btn-primary">Enter a code</HaveCodeButton>
+              <Link to="/tournaments" className="btn btn-ghost">
+                Browse tournaments
+              </Link>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

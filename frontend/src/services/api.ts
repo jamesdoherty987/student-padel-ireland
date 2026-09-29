@@ -29,7 +29,7 @@ api.interceptors.response.use(
         localStorage.removeItem('isp_user')
         window.dispatchEvent(new Event('isp:logout'))
 
-        // Only bounce to login on routes that require auth — public pages stay put
+        // Only bounce to login on routes that require auth - public pages stay put
         const path = window.location.pathname
         const isTournamentJoin = /\/t\/[^/]+\/(join|confirmed)/.test(path)
         const isCommunityPrivate =

@@ -1,4 +1,4 @@
-"""Automated tests for the tournament generator — the critical correctness surface."""
+"""Automated tests for the tournament generator - the critical correctness surface."""
 
 from __future__ import annotations
 

@@ -12,7 +12,7 @@ export function pathFromAppUrl(url: string): string | null {
       return path === '/' ? null : path
     }
 
-    // custom scheme — hostname may be the first path segment (studentpadel://t/slug)
+    // custom scheme - hostname may be the first path segment (studentpadel://t/slug)
     const host = parsed.hostname
     const path = parsed.pathname || ''
     if (host && host !== 'localhost' && !host.includes('.')) {

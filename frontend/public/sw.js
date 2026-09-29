@@ -1,4 +1,4 @@
-/* Student Padel Ireland — lightweight PWA service worker */
+/* Student Padel Ireland - lightweight PWA service worker */
 const CACHE = 'spi-shell-v3'
 const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/apple-touch-icon.png']
 
@@ -27,7 +27,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
 
-  // Never cache API or uploads — uploads live on the API host in production
+  // Never cache API or uploads - uploads live on the API host in production
   if (
     url.pathname.startsWith('/api') ||
     url.pathname.startsWith('/health') ||

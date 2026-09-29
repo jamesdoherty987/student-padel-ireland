@@ -42,13 +42,13 @@ def _warn_production_config() -> None:
     if not settings.is_production():
         return
     if settings.secret_key in {"", "dev-secret-change-me", "change-me-to-a-long-random-string"}:
-        print("WARNING: SECRET_KEY is still a default value — set a long random secret in production.")
+        print("WARNING: SECRET_KEY is still a default value - set a long random secret in production.")
     if settings.is_sqlite_db():
-        print("WARNING: DATABASE_URL is SQLite — use Supabase Postgres for production.")
+        print("WARNING: DATABASE_URL is SQLite - use Supabase Postgres for production.")
     if not settings.stripe_secret_key:
-        print("INFO: Stripe not configured — tournament registration will use demo (free) payments.")
+        print("INFO: Stripe not configured - tournament registration will use demo (free) payments.")
     if settings.should_seed_demo():
-        print("WARNING: SEED_DEMO_DATA is enabled in production — demo passwords will be created.")
+        print("WARNING: SEED_DEMO_DATA is enabled in production - demo passwords will be created.")
 
 
 @app.on_event("startup")

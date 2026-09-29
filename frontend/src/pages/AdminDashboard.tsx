@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
-import { publicWebOrigin } from '../native/platform'
+import { publicPathUrl, publicWebOrigin } from '../native/platform'
 import { apiErrorMessage, platformApi, tournamentApi, type Tournament } from '../services/api'
 import { formatDate, formatDoublesEntry, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
 import './Organiser.css'
@@ -344,7 +344,9 @@ function AdminTournamentCard({
   const t = row.tournament
   const origin = publicWebOrigin()
   const publicUrl = `${origin}/t/${t.slug}`
-  const joinUrl = `${origin}/t/${t.slug}/join`
+  const joinUrl = t.invite_code
+    ? publicPathUrl(`/join/${t.invite_code}`)
+    : `${origin}/t/${t.slug}/join`
 
   const quickAction =
     t.status === 'DRAFT' || t.status === 'REGISTRATION_CLOSED'

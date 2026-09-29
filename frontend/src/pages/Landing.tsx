@@ -23,7 +23,7 @@ const CITY_CARDS = [
 ]
 
 const STEPS = [
-  { n: '1', title: 'Find an event or paste a code', body: 'Browse tournaments, or join with any invite code from a friend.' },
+  { n: '1', title: 'Find an event or use a code', body: 'Browse tournaments and tap to join, or use Have a code? / scan a QR if a friend invited you.' },
   { n: '2', title: 'Register with your partner', body: 'Sign up as a doubles team and pay online if there is a fee.' },
   { n: '3', title: 'Play and climb rankings', body: 'Match results from tournaments and community games update Ireland rankings.' },
 ]
@@ -37,11 +37,13 @@ function eventDay(iso: string) {
 }
 
 export default function Landing() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [heroIndex, setHeroIndex] = useState(0)
   const featureVideoRef = useRef<HTMLVideoElement>(null)
+  const [videoPlaying, setVideoPlaying] = useState(false)
+  const [videoFailed, setVideoFailed] = useState(false)
 
   useEffect(() => {
     if (menuOpen || scrolled) {
@@ -97,30 +99,79 @@ export default function Landing() {
     if (!el) return
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (reduced) {
-      el.removeAttribute('autoplay')
       el.pause()
+      setVideoPlaying(false)
       return
     }
 
+    let visible = false
+
     const tryPlay = () => {
-      void el.play().catch(() => {})
+      if (!visible || reduced) return
+      const p = el.play()
+      if (p !== undefined) {
+        void p
+          .then(() => {
+            setVideoPlaying(true)
+            setVideoFailed(false)
+          })
+          .catch(() => {
+            setVideoPlaying(false)
+          })
+      }
     }
 
-    tryPlay()
+    const onPlaying = () => setVideoPlaying(true)
+    const onPause = () => setVideoPlaying(!el.paused)
+    const onError = () => {
+      setVideoFailed(true)
+      setVideoPlaying(false)
+    }
+
+    el.addEventListener('playing', onPlaying)
+    el.addEventListener('pause', onPause)
+    el.addEventListener('error', onError)
+    el.addEventListener('loadeddata', tryPlay)
+    el.addEventListener('canplay', tryPlay)
 
     const io = new IntersectionObserver(
       ([entry]) => {
         if (!entry) return
-        if (entry.isIntersecting) tryPlay()
+        visible = entry.isIntersecting
+        if (visible) tryPlay()
         else el.pause()
       },
-      { threshold: 0.2 },
+      { threshold: 0.25 },
     )
     io.observe(el)
-    return () => io.disconnect()
+
+    // Kick load in case the browser deferred it
+    el.load()
+
+    return () => {
+      io.disconnect()
+      el.removeEventListener('playing', onPlaying)
+      el.removeEventListener('pause', onPause)
+      el.removeEventListener('error', onError)
+      el.removeEventListener('loadeddata', tryPlay)
+      el.removeEventListener('canplay', tryPlay)
+    }
   }, [])
 
-  const { data: tournaments = [], isLoading, isError } = useQuery({
+  const toggleFeatureVideo = () => {
+    const el = featureVideoRef.current
+    if (!el || videoFailed) return
+    if (el.paused) {
+      void el.play()
+        .then(() => setVideoPlaying(true))
+        .catch(() => setVideoPlaying(false))
+    } else {
+      el.pause()
+      setVideoPlaying(false)
+    }
+  }
+
+  const { data: tournaments = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['tournaments', 'upcoming'],
     queryFn: async () => (await tournamentApi.list({ upcoming: true })).data,
   })
@@ -145,9 +196,6 @@ export default function Landing() {
             <Link to="/community" onClick={close}>
               Community
             </Link>
-            <Link to="/join" onClick={close}>
-              Join code
-            </Link>
             <a href="#how" onClick={close}>
               How it works
             </a>
@@ -155,9 +203,24 @@ export default function Landing() {
               Rankings
             </Link>
             {user ? (
-              <Link to={primaryHref} className="lp-btn lp-btn-solid" onClick={close}>
-                {primaryLabel}
-              </Link>
+              <>
+                <Link to={`/players/${user.id}`} onClick={close}>
+                  Profile
+                </Link>
+                <Link to={primaryHref} className="lp-btn lp-btn-solid" onClick={close}>
+                  {primaryLabel}
+                </Link>
+                <button
+                  type="button"
+                  className="lp-nav-logout"
+                  onClick={() => {
+                    close()
+                    logout()
+                  }}
+                >
+                  Log out
+                </button>
+              </>
             ) : (
               <>
                 <Link to="/login" onClick={close}>
@@ -204,11 +267,9 @@ export default function Landing() {
               <a href="#upcoming" className="lp-btn lp-btn-primary">
                 Upcoming events
               </a>
-              {!user && (
-                <Link to="/signup" className="lp-btn lp-btn-ghost">
-                  Sign up
-                </Link>
-              )}
+              <Link to="/tournaments?join=1" className="lp-btn lp-btn-ghost">
+                Have a code?
+              </Link>
             </div>
           </div>
         </section>
@@ -236,7 +297,14 @@ export default function Landing() {
                 ))}
               </div>
             )}
-            {isError && <p className="lp-muted">Could not load events.</p>}
+            {isError && (
+              <div className="lp-empty-card">
+                <p>Could not load events.</p>
+                <button type="button" className="lp-link" onClick={() => void refetch()}>
+                  Retry
+                </button>
+              </div>
+            )}
             {!isLoading && !isError && upcoming.length === 0 && (
               <div className="lp-empty-card">
                 <p>No upcoming events yet.</p>
@@ -294,16 +362,33 @@ export default function Landing() {
               <video
                 ref={featureVideoRef}
                 className="lp-feature-video"
+                src={LANDING_VIDEO.mp4}
                 poster={LANDING_VIDEO.poster}
-                autoPlay
                 muted
                 loop
                 playsInline
                 preload="auto"
                 aria-label="Padel match footage"
-              >
-                <source src={LANDING_VIDEO.mp4} type="video/mp4" />
-              </video>
+                onClick={toggleFeatureVideo}
+              />
+              {!videoFailed && (
+                <button
+                  type="button"
+                  className={`lp-video-play ${videoPlaying ? 'is-playing' : ''}`}
+                  onClick={toggleFeatureVideo}
+                  aria-label={videoPlaying ? 'Pause video' : 'Play video'}
+                >
+                  {videoPlaying ? (
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden>
+                      <path d="M6 5h4v14H6V5zm8 0h4v14h-4V5z" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor" aria-hidden>
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  )}
+                </button>
+              )}
             </figure>
           </div>
         </section>

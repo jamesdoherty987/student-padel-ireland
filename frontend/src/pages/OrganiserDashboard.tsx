@@ -364,8 +364,7 @@ export default function OrganiserDashboard() {
               <section className="org-section">
                 <h2>Invite players</h2>
                 <p className="muted org-section-lead">
-                  Share this code or QR. Friends can paste it on <strong>Join code</strong>, Tournaments, or Community —
-                  all three work. Or add a team yourself below.
+                  Share this code or QR. Friends tap <strong>Have a code?</strong> on Tournaments or Community.
                 </p>
                 {inviteCode ? (
                   <div className="org-invite">

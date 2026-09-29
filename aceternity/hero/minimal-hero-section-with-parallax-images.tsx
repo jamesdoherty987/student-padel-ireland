@@ -13,7 +13,7 @@ export function Hero() {
 
         <h2 className="font-inter max-w-xl py-8 text-center text-base text-neutral-500 md:text-left md:text-lg dark:text-neutral-400">
           Deploy AI agents that plan, act through your tools, and report
-          outcomes—without changing how your teams work.
+          outcomes-without changing how your teams work.
         </h2>
         <div className="flex flex-col items-center gap-6 sm:flex-row">
           <button className="rounded-sm bg-black px-4 py-2 text-white shadow-2xl dark:bg-white dark:text-black">

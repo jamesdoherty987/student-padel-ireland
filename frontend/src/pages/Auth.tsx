@@ -71,8 +71,11 @@ export function LoginPage() {
         <p className="auth-lead">Log in to join tournaments and see your next match.</p>
         <form onSubmit={onSubmit}>
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label" htmlFor="login-email">
+              Email
+            </label>
             <input
+              id="login-email"
               className="form-input"
               type="email"
               value={email}
@@ -82,8 +85,11 @@ export function LoginPage() {
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Password</label>
+            <label className="form-label" htmlFor="login-password">
+              Password
+            </label>
             <input
+              id="login-password"
               className="form-input"
               type="password"
               value={password}
@@ -184,8 +190,11 @@ export function SignupPage() {
         <p className="auth-lead">Create a player or organiser account.</p>
         <form onSubmit={onSubmit}>
           <div className="form-group">
-            <label className="form-label">I am a</label>
+            <label className="form-label" htmlFor="signup-role">
+              I am a
+            </label>
             <select
+              id="signup-role"
               className="form-select"
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value })}
@@ -195,18 +204,25 @@ export function SignupPage() {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">Full name</label>
+            <label className="form-label" htmlFor="signup-name">
+              Full name
+            </label>
             <input
+              id="signup-name"
               className="form-input"
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
               required
               minLength={2}
+              autoComplete="name"
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label" htmlFor="signup-email">
+              Email
+            </label>
             <input
+              id="signup-email"
               className="form-input"
               type="email"
               value={form.email}
@@ -216,8 +232,11 @@ export function SignupPage() {
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Password (min 8 characters)</label>
+            <label className="form-label" htmlFor="signup-password">
+              Password (min 8 characters)
+            </label>
             <input
+              id="signup-password"
               className="form-input"
               type="password"
               minLength={8}
@@ -228,8 +247,11 @@ export function SignupPage() {
             />
           </div>
           <div className="form-group">
-            <label className="form-label">University</label>
+            <label className="form-label" htmlFor="signup-uni">
+              University
+            </label>
             <select
+              id="signup-uni"
               className="form-select"
               value={form.university_id}
               onChange={(e) => setForm({ ...form, university_id: e.target.value })}
@@ -243,16 +265,23 @@ export function SignupPage() {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">Phone (optional)</label>
+            <label className="form-label" htmlFor="signup-phone">
+              Phone (optional)
+            </label>
             <input
+              id="signup-phone"
               className="form-input"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              autoComplete="tel"
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Student number (optional)</label>
+            <label className="form-label" htmlFor="signup-student">
+              Student number (optional)
+            </label>
             <input
+              id="signup-student"
               className="form-input"
               value={form.student_number}
               onChange={(e) => setForm({ ...form, student_number: e.target.value })}

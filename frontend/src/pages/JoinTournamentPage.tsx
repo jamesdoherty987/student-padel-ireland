@@ -249,10 +249,15 @@ export default function JoinTournamentPage() {
         <NavBar />
         <main className="page empty-state">
           <h1 className="page-title">Join tournament</h1>
-          <p className="page-sub">Log in to register your team and pay the entry fee.</p>
-          <Link to={`/login?next=${next}`} className="btn btn-primary">
-            Log in to join
-          </Link>
+          <p className="page-sub">Create an account or log in to register your team.</p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <Link to={`/signup?next=${next}`} className="btn btn-primary">
+              Sign up
+            </Link>
+            <Link to={`/login?next=${next}`} className="btn btn-ghost">
+              Log in
+            </Link>
+          </div>
         </main>
       </div>
     )
@@ -420,16 +425,23 @@ export default function JoinTournamentPage() {
         </p>
         <form className="join-form" onSubmit={onSubmit}>
           <div className="form-group">
-            <label className="form-label">Your name</label>
-            <input className="form-input" value={user.full_name} disabled />
+            <label className="form-label" htmlFor="join-name">
+              Your name
+            </label>
+            <input id="join-name" className="form-input" value={user.full_name} disabled />
           </div>
           <div className="form-group">
-            <label className="form-label">Email</label>
-            <input className="form-input" value={user.email} disabled />
+            <label className="form-label" htmlFor="join-email">
+              Email
+            </label>
+            <input id="join-email" className="form-input" value={user.email} disabled />
           </div>
           <div className="form-group">
-            <label className="form-label">Team name</label>
+            <label className="form-label" htmlFor="join-team">
+              Team name
+            </label>
             <input
+              id="join-team"
               className="form-input"
               value={form.team_name}
               onChange={(e) => setForm({ ...form, team_name: e.target.value })}
@@ -439,7 +451,9 @@ export default function JoinTournamentPage() {
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Partner</label>
+            <label className="form-label" id="join-partner-label">
+              Partner
+            </label>
             <div className="partner-mode-row">
               <button
                 type="button"
@@ -460,7 +474,9 @@ export default function JoinTournamentPage() {
             {partnerMode === 'friend' ? (
               <>
                 <select
+                  id="join-partner-friend"
                   className="form-select"
+                  aria-labelledby="join-partner-label"
                   value={form.partner_user_id}
                   onChange={(e) => setForm({ ...form, partner_user_id: e.target.value })}
                   required
@@ -482,7 +498,9 @@ export default function JoinTournamentPage() {
             ) : (
               <>
                 <input
+                  id="join-partner-name"
                   className="form-input"
+                  aria-label="Partner name"
                   value={form.partner_name}
                   onChange={(e) => setForm({ ...form, partner_name: e.target.value })}
                   placeholder="Partner name"
@@ -491,8 +509,10 @@ export default function JoinTournamentPage() {
                   style={{ marginBottom: 8 }}
                 />
                 <input
+                  id="join-partner-email"
                   className="form-input"
                   type="email"
+                  aria-label="Partner email"
                   value={form.partner_email}
                   onChange={(e) => setForm({ ...form, partner_email: e.target.value })}
                   placeholder="Partner email"
@@ -503,16 +523,23 @@ export default function JoinTournamentPage() {
             )}
           </div>
           <div className="form-group">
-            <label className="form-label">Phone</label>
+            <label className="form-label" htmlFor="join-phone">
+              Phone
+            </label>
             <input
+              id="join-phone"
               className="form-input"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              autoComplete="tel"
             />
           </div>
           <div className="form-group">
-            <label className="form-label">University</label>
+            <label className="form-label" htmlFor="join-uni">
+              University
+            </label>
             <select
+              id="join-uni"
               className="form-select"
               value={form.university_id}
               onChange={(e) => setForm({ ...form, university_id: e.target.value })}
@@ -527,8 +554,11 @@ export default function JoinTournamentPage() {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">Student number (optional)</label>
+            <label className="form-label" htmlFor="join-student">
+              Student number (optional)
+            </label>
             <input
+              id="join-student"
               className="form-input"
               value={form.student_number}
               onChange={(e) => setForm({ ...form, student_number: e.target.value })}

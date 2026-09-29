@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
-import { JoinCodeBox } from '../components/JoinCodeBox'
+import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
 import {
   apiErrorMessage,
@@ -188,35 +188,31 @@ export default function CommunityPage() {
           <h1 className="page-title">Community</h1>
           <p className="page-sub">
             Friend groups and ladders. Organised paid events are under{' '}
-            <Link to="/tournaments">Tournaments</Link> — any invite code still works in one place.
+            <Link to="/tournaments">Tournaments</Link>.
           </p>
-          <JoinCodeBox
-            title="Have an invite code?"
-            hint="Paste it here even if you’re not logged in yet — we’ll ask you to sign in if needed."
-            placeholder="Paste invite code"
-          />
-          <ol className="community-guest-steps">
-            <li>
-              <strong>Add friends</strong>
-              <span>Search by name and send a request.</span>
-            </li>
-            <li>
-              <strong>Start or join a group</strong>
-              <span>Create a competition or enter an invite code from a friend.</span>
-            </li>
-            <li>
-              <strong>Play and confirm</strong>
-              <span>Both sides confirm the score before ratings update.</span>
-            </li>
-          </ol>
-          <div className="community-guest-actions">
-            <Link to={`/signup?next=${next}`} className="btn btn-primary">
+          <div className="community-guest-actions" style={{ marginBottom: '1.25rem' }}>
+            <HaveCodeButton className="btn btn-primary">Have a code?</HaveCodeButton>
+            <Link to={`/signup?next=${next}`} className="btn btn-ghost">
               Sign up
             </Link>
             <Link to={`/login?next=${next}`} className="btn btn-ghost">
               Log in
             </Link>
           </div>
+          <ol className="community-guest-steps">
+            <li>
+              <strong>Join a group</strong>
+              <span>Tap Have a code? if a friend invited you, or sign up to create your own.</span>
+            </li>
+            <li>
+              <strong>Add friends</strong>
+              <span>Search by name and send a request.</span>
+            </li>
+            <li>
+              <strong>Play and confirm</strong>
+              <span>Both sides confirm the score before ratings update.</span>
+            </li>
+          </ol>
         </main>
       </div>
     )
@@ -229,23 +225,21 @@ export default function CommunityPage() {
         <div className="page-header-row">
           <h1 className="page-title">Community</h1>
           <div className="header-actions">
-            <Link to="/join" className="btn btn-ghost btn-sm">
-              Have a code?
-            </Link>
+            <HaveCodeButton />
             <button
               type="button"
               className="btn btn-primary btn-sm"
               onClick={() => {
-                setCreateOpen((v) => !v)
+                setCreateOpen(true)
                 setError('')
               }}
             >
-              {createOpen ? 'Close' : 'New group'}
+              New group
             </button>
           </div>
         </div>
         <p className="page-sub">
-          Friend groups and ladders (not paid tournaments). Paste any invite code below — tournament codes work here too.
+          Friend groups and ladders. Organised events are under <Link to="/tournaments">Tournaments</Link>.
         </p>
 
         {error && <p className="form-error">{error}</p>}
@@ -297,7 +291,7 @@ export default function CommunityPage() {
                 </button>
               )}
               <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-ghost btn-sm">
-                Open competition
+                Open group
               </Link>
             </div>
           </section>
@@ -341,7 +335,7 @@ export default function CommunityPage() {
               createMut.mutate()
             }}
           >
-            <h2>Create a competition</h2>
+            <h2>Create a group</h2>
             <p className="muted-note" style={{ marginBottom: 12 }}>
               A private group for you and your friends. Share the code so others can join.
             </p>
@@ -414,22 +408,42 @@ export default function CommunityPage() {
                 </div>
               </div>
             )}
-            <button type="submit" className="btn btn-dark" disabled={createMut.isPending}>
+            <button type="submit" className="btn btn-primary" disabled={createMut.isPending}>
               Create group
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ marginLeft: 8 }}
+              onClick={() => {
+                setCreateOpen(false)
+                setError('')
+              }}
+            >
+              Cancel
             </button>
           </form>
         )}
 
-        <JoinCodeBox
-          title="Join with a code"
-          hint="Paste a friend-group or tournament code. We’ll open the right place."
-          placeholder="Paste invite code"
-        />
-
         <section className="community-section">
           <h2>Your groups</h2>
           {comps.length === 0 && !homeQ.isLoading && (
-            <p className="muted-note">None yet. Create a group or paste an invite code above.</p>
+            <div className="empty-state" style={{ padding: '1rem 0' }}>
+              <p>No groups yet.</p>
+              <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setCreateOpen(true)
+                    setError('')
+                  }}
+                >
+                  New group
+                </button>
+                <HaveCodeButton className="btn btn-ghost btn-sm" />
+              </div>
+            </div>
           )}
           <div className="tour-list">
             {comps.map((c) => (
@@ -578,7 +592,7 @@ export default function CommunityPage() {
               />
             ))}
             {accepted.length === 0 && outgoing.length === 0 && incoming.length === 0 && (
-              <p className="muted-note">Add friends so you can invite them into competitions.</p>
+              <p className="muted-note">Add friends so you can invite them into groups.</p>
             )}
           </div>
         </section>

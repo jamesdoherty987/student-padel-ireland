@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useMemo, useState, useCallback } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
-import { JoinCodeBox } from '../components/JoinCodeBox'
+import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
 import { tournamentApi } from '../services/api'
+import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
 import { formatDate, formatDoublesEntry, spotsLeftLabel, statusBadgeClass, statusLabel } from '../utils/format'
 import './Tournament.css'
 import './Community.css'
@@ -14,12 +15,24 @@ const FILTERS = [
   { id: 'open', label: 'Open to join' },
   { id: 'live', label: 'Live' },
   { id: 'upcoming', label: 'Upcoming' },
+  { id: 'past', label: 'Past' },
 ] as const
 
 export default function TournamentsPage() {
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [filter, setFilter] = useState<(typeof FILTERS)[number]['id']>('all')
   const [query, setQuery] = useState('')
+  const openJoin = searchParams.get('join') === '1'
+  const codeFromSearch = looksLikeInviteCode(query) ? cleanInviteCode(query) : ''
+
+  const clearJoinParam = useCallback(() => {
+    if (!openJoin) return
+    const next = new URLSearchParams(searchParams)
+    next.delete('join')
+    setSearchParams(next, { replace: true })
+  }, [openJoin, searchParams, setSearchParams])
+
   const { data: tournaments = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['tournaments'],
     queryFn: async () => (await tournamentApi.list()).data,
@@ -27,14 +40,30 @@ export default function TournamentsPage() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
+    // Don't treat invite codes as name search
+    if (looksLikeInviteCode(query)) return []
     return tournaments.filter((t) => {
       if (filter === 'open' && t.status !== 'REGISTRATION_OPEN') return false
       if (filter === 'live' && t.status !== 'LIVE') return false
-      if (filter === 'upcoming' && (t.status === 'COMPLETED' || t.status === 'CANCELLED')) return false
+      if (filter === 'upcoming' && t.status !== 'REGISTRATION_OPEN' && t.status !== 'REGISTRATION_CLOSED') {
+        return false
+      }
+      if (filter === 'past' && t.status !== 'COMPLETED' && t.status !== 'CANCELLED') return false
       if (!q) return true
       return `${t.name} ${t.location} ${t.venue}`.toLowerCase().includes(q)
     })
   }, [tournaments, filter, query])
+
+  const emptyMessage = (() => {
+    if (tournaments.length === 0) return 'No tournaments yet. Check back soon.'
+    if (codeFromSearch) return 'That looks like an invite code, not a search.'
+    if (query.trim()) return 'No events match that search.'
+    if (filter === 'open') return 'No tournaments open to join right now.'
+    if (filter === 'live') return 'No live tournaments right now.'
+    if (filter === 'upcoming') return 'No upcoming tournaments right now.'
+    if (filter === 'past') return 'No past tournaments yet.'
+    return 'No events to show.'
+  })()
 
   return (
     <div className="app-shell">
@@ -43,9 +72,7 @@ export default function TournamentsPage() {
         <div className="page-header-row">
           <h1 className="page-title">Tournaments</h1>
           <div className="header-actions">
-            <Link to="/join" className="btn btn-dark btn-sm">
-              Have a code?
-            </Link>
+            <HaveCodeButton autoOpen={openJoin} onAutoOpened={clearJoinParam} initialCode={codeFromSearch} />
             {(user?.role === 'ORGANISER' || user?.role === 'ADMIN') && (
               <Link to="/organiser" className="btn btn-ghost btn-sm">
                 Dashboard
@@ -54,15 +81,8 @@ export default function TournamentsPage() {
           </div>
         </div>
         <p className="page-sub">
-          Organised events with brackets and rankings. Friend groups live under{' '}
-          <Link to="/community">Community</Link> — but any invite code works in the box below.
+          Organised events. Friend groups live under <Link to="/community">Community</Link>.
         </p>
-
-        <JoinCodeBox
-          title="Join with a code"
-          hint="Paste a tournament or friend-group code. We’ll open the right page."
-          placeholder="Paste invite code"
-        />
 
         <div className="tour-toolbar">
           <div className="filter-chips" role="tablist" aria-label="Filter tournaments">
@@ -131,9 +151,24 @@ export default function TournamentsPage() {
         )}
         {!isLoading && !isError && filtered.length === 0 && (
           <div className="empty-state">
-            <p>{tournaments.length === 0 ? 'No tournaments yet. Check back soon.' : 'No events match that search.'}</p>
-            {tournaments.length > 0 && (
-              <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => { setFilter('all'); setQuery('') }}>
+            <p>{emptyMessage}</p>
+            {codeFromSearch && (
+              <div style={{ marginTop: 12 }}>
+                <HaveCodeButton className="btn btn-primary" initialCode={codeFromSearch}>
+                  Join with this code
+                </HaveCodeButton>
+              </div>
+            )}
+            {tournaments.length > 0 && !codeFromSearch && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{ marginTop: 12 }}
+                onClick={() => {
+                  setFilter('all')
+                  setQuery('')
+                }}
+              >
                 Clear filters
               </button>
             )}

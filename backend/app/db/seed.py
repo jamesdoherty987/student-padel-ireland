@@ -130,7 +130,7 @@ def _ensure_limerick_open(db: Session) -> None:
                 existing.slug = "limerick-open"
                 changed = True
         if existing.description and (
-            "—" in existing.description or "Ireland's student padel open" in existing.description
+            "-" in existing.description or "Ireland's student padel open" in existing.description
         ):
             existing.description = "Ireland student padel open. Doubles teams, groups then knockout."
             changed = True
@@ -186,7 +186,7 @@ def _bootstrap_admin_from_env(db: Session) -> None:
     if db.query(User).filter(User.email == email).first():
         return
     if len(password) < 10:
-        print("ADMIN_PASSWORD must be at least 10 characters — skipping admin bootstrap.")
+        print("ADMIN_PASSWORD must be at least 10 characters - skipping admin bootstrap.")
         return
 
     admin = User(

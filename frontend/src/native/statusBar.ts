@@ -14,7 +14,7 @@ export async function setStatusBarForDarkScreen() {
   }
 }
 
-/** Dark status-bar icons (for light chrome — default app surfaces). */
+/** Dark status-bar icons (for light chrome - default app surfaces). */
 export async function setStatusBarForLightScreen() {
   if (!isNativeApp()) return
   try {

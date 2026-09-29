@@ -1,4 +1,4 @@
-# Render Blueprint — https://render.com/docs/blueprint-spec
+# Render Blueprint - https://render.com/docs/blueprint-spec
 # After first deploy, set secrets in the Render dashboard (marked sync: false).
 services:
   - type: web
@@ -20,7 +20,7 @@ services:
         sync: false
       - key: BACKEND_URL
         sync: false
-      # First admin (required on empty prod DB — use a strong password, then remove these if you want)
+      # First admin (required on empty prod DB - use a strong password, then remove these if you want)
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
@@ -29,7 +29,7 @@ services:
         value: Platform Admin
       - key: SEED_DEMO_DATA
         value: "false"
-      # Stripe — leave empty until you set up payments (demo mode)
+      # Stripe - leave empty until you set up payments (demo mode)
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET

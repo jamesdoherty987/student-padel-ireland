@@ -120,7 +120,7 @@ export async function hideNativeSplash(): Promise<void> {
 }
 
 /**
- * Native shell bootstrap — status bar, keyboard, deep links.
+ * Native shell bootstrap - status bar, keyboard, deep links.
  * Call once from main.tsx before React render; splash hides after router mount.
  */
 export async function initNativeShell(): Promise<void> {
