@@ -1,13 +1,15 @@
 import axios from 'axios'
 import { apiBaseUrl } from '../native/platform'
+import { clearAuthStorage, getAuthToken } from '../utils/authStorage'
 
 const api = axios.create({
   baseURL: apiBaseUrl(),
   headers: { 'Content-Type': 'application/json' },
+  timeout: 20_000,
 })
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('isp_token')
+  const token = getAuthToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -23,10 +25,9 @@ api.interceptors.response.use(
   (error) => {
     if (error?.response?.status === 401) {
       const url = String(error.config?.url || '')
-      const hadToken = !!localStorage.getItem('isp_token')
+      const hadToken = !!getAuthToken()
       if (hadToken && !url.includes('/auth/login')) {
-        localStorage.removeItem('isp_token')
-        localStorage.removeItem('isp_user')
+        clearAuthStorage()
         window.dispatchEvent(new Event('isp:logout'))
 
         // Only bounce to login on routes that require auth - public pages stay put

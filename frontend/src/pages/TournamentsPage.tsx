@@ -186,6 +186,12 @@ export default function TournamentsPage() {
 
   const isLoading = toursLoading || (!!user && compsQ.isLoading)
   const isError = toursError
+  const compsFailed = !!user && compsQ.isError && !compsQ.isLoading
+
+  const retryLoad = () => {
+    void refetchTours()
+    if (user) void compsQ.refetch()
+  }
 
   const emptyMessage = (() => {
     if (events.length === 0) {
@@ -217,7 +223,7 @@ export default function TournamentsPage() {
         <div className="page-header-row">
           <h1 className="page-title">Tournaments</h1>
           <div className="header-actions">
-            <HaveCodeButton className="btn btn-ghost btn-xs" autoOpen={openJoin} onAutoOpened={clearJoinParam} initialCode={codeFromSearch} />
+            <HaveCodeButton className="btn btn-ghost btn-sm" autoOpen={openJoin} onAutoOpened={clearJoinParam} initialCode={codeFromSearch} />
             {user && (
               <button
                 type="button"
@@ -231,7 +237,7 @@ export default function TournamentsPage() {
               </button>
             )}
             {canOrganiseOfficial && (
-              <Link to="/organiser" className="btn btn-ghost btn-xs">
+              <Link to="/organiser" className="btn btn-ghost btn-sm">
                 Dashboard
               </Link>
             )}
@@ -254,8 +260,8 @@ export default function TournamentsPage() {
           >
             <h2>Create a community tournament</h2>
             <p className="muted-note" style={{ marginBottom: 12 }}>
-              A private event for you and your friends. Share the code or QR so others can join.
-              {canOrganiseOfficial ? ' Official paid events are created from Dashboard.' : ''}
+              Private open play for you and friends. Share the code or QR to join.
+              {canOrganiseOfficial ? ' Official bracket events are created from Dashboard.' : ''}
             </p>
             <div className="form-group">
               <label className="form-label" htmlFor="comp-name">
@@ -272,7 +278,7 @@ export default function TournamentsPage() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Format</label>
+              <label className="form-label">Play style</label>
               <div className="format-grid">
                 {FORMATS.map((f) => (
                   <button
@@ -343,33 +349,33 @@ export default function TournamentsPage() {
         )}
 
         <div className="tour-toolbar">
-          <div className="filter-chips filter-chips-subtle" role="tablist" aria-label="Event type">
-            {KIND_FILTERS.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                role="tab"
-                aria-selected={kind === f.id}
-                className={`filter-chip filter-chip-subtle ${kind === f.id ? 'on' : ''}`}
-                onClick={() => setKind(f.id)}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-          <div className="filter-chips" role="tablist" aria-label="Filter tournaments">
-            {STATUS_FILTERS.map((f) => (
-              <button
-                key={f.id}
-                type="button"
-                role="tab"
-                aria-selected={filter === f.id}
-                className={`filter-chip ${filter === f.id ? 'on' : ''}`}
-                onClick={() => setFilter(f.id)}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div className="tour-toolbar-row">
+            <div className="filter-chips filter-chips-subtle" role="tablist" aria-label="Event type">
+              {KIND_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={kind === f.id}
+                  className={`filter-chip filter-chip-subtle ${kind === f.id ? 'on' : ''}`}
+                  onClick={() => setKind(f.id)}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <select
+              className="form-select tour-status-select"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as (typeof STATUS_FILTERS)[number]['id'])}
+              aria-label="Filter by status"
+            >
+              {STATUS_FILTERS.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
           </div>
           <input
             className="form-input tour-search"
@@ -381,6 +387,14 @@ export default function TournamentsPage() {
           />
         </div>
 
+        {compsFailed && !isError && (
+          <p className="form-error" style={{ marginBottom: 12 }}>
+            Could not load your community events.{' '}
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void compsQ.refetch()}>
+              Retry
+            </button>
+          </p>
+        )}
         {isLoading && (
           <div className="tour-list">
             {[1, 2, 3].map((i) => (
@@ -391,7 +405,7 @@ export default function TournamentsPage() {
         {isError && (
           <div className="empty-state">
             <p>Could not load tournaments. Please try again.</p>
-            <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => refetchTours()}>
+            <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={retryLoad}>
               Retry
             </button>
           </div>
@@ -456,7 +470,7 @@ export default function TournamentsPage() {
                 Create a tournament
               </button>
             )}
-            {!user && (
+            {!user && events.length === 0 && !codeFromSearch && (
               <Link to="/login?next=%2Ftournaments" className="btn btn-primary" style={{ marginTop: 12 }}>
                 Log in to create
               </Link>

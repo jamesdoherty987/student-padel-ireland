@@ -851,6 +851,7 @@ function CreateTournamentModal({
     number_of_courts: 6,
     entry_fee_euros: 50,
     max_teams: 48,
+    format: 'GROUP_KNOCKOUT',
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -877,7 +878,7 @@ function CreateTournamentModal({
         number_of_courts: form.number_of_courts,
         entry_fee_cents: Math.round(form.entry_fee_euros * 100),
         max_teams: form.max_teams,
-        format: 'GROUP_KNOCKOUT',
+        format: form.format,
       })
       await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
       onCreated('Tournament created', data.id)
@@ -920,6 +921,17 @@ function CreateTournamentModal({
               />
             </div>
           ))}
+          <div className="form-group">
+            <label className="form-label">Format</label>
+            <select
+              className="form-select"
+              value={form.format}
+              onChange={(e) => setForm({ ...form, format: e.target.value })}
+            >
+              <option value="GROUP_KNOCKOUT">Groups then knockout</option>
+              <option value="ROUND_ROBIN">Round robin</option>
+            </select>
+          </div>
           <div className="form-group">
             <label className="form-label">Courts</label>
             <input

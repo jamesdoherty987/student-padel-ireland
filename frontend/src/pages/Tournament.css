@@ -78,6 +78,21 @@
   margin: 1rem 0 1.15rem;
 }
 
+.tour-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 0.85rem;
+}
+
+.tour-status-select {
+  width: auto;
+  min-width: 10.5rem;
+  min-height: 40px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.88rem;
+}
+
 .tour-join-code,
 .join-code-row {
   display: flex;

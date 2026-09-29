@@ -132,7 +132,7 @@ type HaveCodeButtonProps = {
 
 /** Header/action button that opens the join-code popup. */
 export function HaveCodeButton({
-  className = 'btn btn-ghost btn-xs',
+  className = 'btn btn-ghost btn-sm',
   children = 'Have a code?',
   initialCode = '',
   autoOpen = false,

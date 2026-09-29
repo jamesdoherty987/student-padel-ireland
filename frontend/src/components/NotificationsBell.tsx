@@ -61,8 +61,8 @@ export default function NotificationsBell() {
   const feedQ = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => (await communityApi.notifications()).data,
-    staleTime: 20_000,
-    refetchInterval: open ? 30_000 : 60_000,
+    staleTime: 45_000,
+    refetchInterval: open ? 60_000 : false,
   })
 
   const items = feedQ.data?.items || []
@@ -224,23 +224,18 @@ export default function NotificationsBell() {
             </div>
           )}
 
-          {feedQ.isError && (
+          {!feedQ.isLoading && items.length === 0 && (
             <div className="notif-empty">
-              <p>Could not load notifications.</p>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => feedQ.refetch()}>
-                Retry
-              </button>
+              <p>No new notifications</p>
+              {feedQ.isError && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => feedQ.refetch()}>
+                  Refresh
+                </button>
+              )}
             </div>
           )}
 
-          {!feedQ.isLoading && !feedQ.isError && items.length === 0 && (
-            <div className="notif-empty">
-              <p>You are all caught up.</p>
-              <p className="muted-note">Friend requests, scores to confirm, and recent games show up here.</p>
-            </div>
-          )}
-
-          {!feedQ.isLoading && !feedQ.isError && grouped.length > 0 && (
+          {!feedQ.isLoading && grouped.length > 0 && (
             <div className="notif-list">
               {grouped.map((section) => (
                 <section key={section.label} className="notif-section">

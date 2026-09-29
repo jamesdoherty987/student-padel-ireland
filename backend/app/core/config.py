@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     # Comma-separated extra CORS origins (Capacitor, preview deploys, custom domains)
     cors_extra_origins: str = ""
 
-    access_token_expire_minutes: int = 60 * 24 * 7
+    access_token_expire_minutes: int = 60 * 24 * 30  # 30 days - stay signed in on this browser
 
     @field_validator("database_url", mode="before")
     @classmethod

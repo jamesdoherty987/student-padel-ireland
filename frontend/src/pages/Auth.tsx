@@ -24,6 +24,7 @@ export function LoginPage() {
   const next = safeNextPath(params.get('next'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -50,7 +51,7 @@ export function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const u = await login(email, password)
+      const u = await login(email, password, remember)
       if (next) navigate(next)
       else if (u.role === 'ORGANISER' || u.role === 'ADMIN') navigate('/organiser')
       else navigate('/tournaments')
@@ -98,6 +99,14 @@ export function LoginPage() {
               autoComplete="current-password"
             />
           </div>
+          <label className="auth-remember">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            <span>Keep me signed in on this browser</span>
+          </label>
           {error && <p className="auth-error">{error}</p>}
           <button className="btn btn-primary btn-block" disabled={loading}>
             {loading ? 'Signing in...' : 'Log in'}

@@ -1016,18 +1016,6 @@ def community_home(
     )
 
 
-def _side_names(db: Session, m: CommunityMatch, side: str) -> str:
-    if side == "A":
-        n1 = db.get(User, m.player_a1_id)
-        n2 = db.get(User, m.player_a2_id) if m.player_a2_id else None
-        a = n1.full_name if n1 else "Player"
-        return f"{a} / {n2.full_name}" if n2 else a
-    n1 = db.get(User, m.player_b1_id)
-    n2 = db.get(User, m.player_b2_id) if m.player_b2_id else None
-    b = n1.full_name if n1 else "Player"
-    return f"{b} / {n2.full_name}" if n2 else b
-
-
 def _score_line(m: CommunityMatch) -> str:
     parts = [f"{m.set1_a}-{m.set1_b}"]
     if m.set2_a or m.set2_b:
@@ -1049,6 +1037,25 @@ def _user_won(m: CommunityMatch, user_id: UUID) -> bool | None:
     return None
 
 
+def _users_map(db: Session, ids: set[UUID]) -> dict[UUID, User]:
+    if not ids:
+        return {}
+    rows = db.query(User).filter(User.id.in_(list(ids))).all()
+    return {u.id: u for u in rows}
+
+
+def _side_names_from_map(users: dict[UUID, User], m: CommunityMatch, side: str) -> str:
+    if side == "A":
+        n1 = users.get(m.player_a1_id)
+        n2 = users.get(m.player_a2_id) if m.player_a2_id else None
+        a = n1.full_name if n1 else "Player"
+        return f"{a} / {n2.full_name}" if n2 else a
+    n1 = users.get(m.player_b1_id)
+    n2 = users.get(m.player_b2_id) if m.player_b2_id else None
+    b = n1.full_name if n1 else "Player"
+    return f"{b} / {n2.full_name}" if n2 else b
+
+
 @router.get("/notifications", response_model=NotificationsFeedOut)
 def list_notifications(
     user: User = Depends(get_current_user),
@@ -1056,8 +1063,8 @@ def list_notifications(
 ):
     """Personal feed: friend requests, match actions, and recent results."""
     items: list[NotificationOut] = []
+    now = datetime.now(timezone.utc)
 
-    # Incoming friend requests
     incoming = (
         db.query(Friendship)
         .filter(
@@ -1068,28 +1075,6 @@ def list_notifications(
         .limit(20)
         .all()
     )
-    for f in incoming:
-        other = db.get(User, f.requester_id)
-        if not other:
-            continue
-        uni = _uni_short(db, other)
-        items.append(
-            NotificationOut(
-                id=f"friend_request:{f.id}",
-                kind="friend_request",
-                title="Friend request",
-                body=f"{other.full_name} wants to connect"
-                + (f" ({uni})" if uni else ""),
-                href="/community",
-                created_at=f.created_at or datetime.now(timezone.utc),
-                actionable=True,
-                friendship_id=f.id,
-                actor_user_id=other.id,
-                actor_name=other.full_name,
-            )
-        )
-
-    # Someone accepted your friend request recently
     accepted = (
         db.query(Friendship)
         .filter(
@@ -1100,12 +1085,42 @@ def list_notifications(
         .limit(20)
         .all()
     )
-    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
-    for f in accepted:
-        other = db.get(User, f.addressee_id)
+
+    friend_user_ids = {f.requester_id for f in incoming} | {f.addressee_id for f in accepted}
+    friend_users = _users_map(db, friend_user_ids)
+    # Prefetch uni short names in one pass via university_id
+    uni_ids = {u.university_id for u in friend_users.values() if u.university_id}
+    uni_short: dict[UUID, str] = {}
+    if uni_ids:
+        for uni in db.query(University).filter(University.id.in_(list(uni_ids))).all():
+            uni_short[uni.id] = uni.short_name or uni.name
+
+    for f in incoming:
+        other = friend_users.get(f.requester_id)
         if not other:
             continue
-        when = f.updated_at or f.created_at or datetime.now(timezone.utc)
+        label = uni_short.get(other.university_id) if other.university_id else None
+        items.append(
+            NotificationOut(
+                id=f"friend_request:{f.id}",
+                kind="friend_request",
+                title="Friend request",
+                body=f"{other.full_name} wants to connect" + (f" ({label})" if label else ""),
+                href="/community",
+                created_at=f.created_at or now,
+                actionable=True,
+                friendship_id=f.id,
+                actor_user_id=other.id,
+                actor_name=other.full_name,
+            )
+        )
+
+    cutoff = now - timedelta(days=14)
+    for f in accepted:
+        other = friend_users.get(f.addressee_id)
+        if not other:
+            continue
+        when = f.updated_at or f.created_at or now
         when_aware = when if when.tzinfo else when.replace(tzinfo=timezone.utc)
         if when_aware < cutoff:
             continue
@@ -1128,6 +1143,12 @@ def list_notifications(
     comp_ids = [m.competition_id for m in member_rows]
 
     if comp_ids:
+        comps = {
+            c.id: c
+            for c in db.query(CommunityCompetition)
+            .filter(CommunityCompetition.id.in_(comp_ids))
+            .all()
+        }
         active = (
             db.query(CommunityMatch)
             .filter(
@@ -1137,25 +1158,41 @@ def list_notifications(
                 ),
             )
             .order_by(CommunityMatch.updated_at.desc())
-            .limit(40)
+            .limit(25)
             .all()
         )
+        done = (
+            db.query(CommunityMatch)
+            .filter(
+                CommunityMatch.competition_id.in_(comp_ids),
+                CommunityMatch.status == MatchStatus.COMPLETED.value,
+                CommunityMatch.ratings_applied.is_(True),
+            )
+            .order_by(CommunityMatch.updated_at.desc())
+            .limit(15)
+            .all()
+        )
+        match_users: set[UUID] = set()
+        for m in active + done:
+            match_users.update(_match_players(m))
+        users = _users_map(db, match_users)
+
         for m in active:
             if user.id not in _match_players(m):
                 continue
-            out = _match_out(db, m, viewer=user)
-            comp = db.get(CommunityCompetition, m.competition_id)
+            out = _match_out(db, m, viewer=user, competition=comps.get(m.competition_id))
+            comp = comps.get(m.competition_id)
             slug = comp.slug if comp else str(m.competition_id)
             href = f"/community/{slug}"
-            vs = f"{_side_names(db, m, 'A')} vs {_side_names(db, m, 'B')}"
-            when = m.updated_at or m.created_at or datetime.now(timezone.utc)
+            vs = f"{_side_names_from_map(users, m, 'A')} vs {_side_names_from_map(users, m, 'B')}"
+            when = m.updated_at or m.created_at or now
             if out.needs_my_confirm:
                 items.append(
                     NotificationOut(
                         id=f"match_confirm:{m.id}",
                         kind="match_confirm",
                         title="Confirm score",
-                        body=f"{vs} · {out.competition_name or 'Match'}",
+                        body=f"{vs} · {comp.name if comp else 'Match'}",
                         href=href,
                         created_at=when,
                         actionable=True,
@@ -1168,7 +1205,7 @@ def list_notifications(
                         id=f"match_score:{m.id}",
                         kind="match_score",
                         title="Enter score",
-                        body=f"{vs} · {out.competition_name or 'Match'}",
+                        body=f"{vs} · {comp.name if comp else 'Match'}",
                         href=href,
                         created_at=when,
                         actionable=True,
@@ -1189,26 +1226,16 @@ def list_notifications(
                         match_id=m.id,
                     )
                 )
-        done = (
-            db.query(CommunityMatch)
-            .filter(
-                CommunityMatch.competition_id.in_(comp_ids),
-                CommunityMatch.status == MatchStatus.COMPLETED.value,
-                CommunityMatch.ratings_applied.is_(True),
-            )
-            .order_by(CommunityMatch.updated_at.desc())
-            .limit(30)
-            .all()
-        )
+
         for m in done:
             if user.id not in _match_players(m):
                 continue
-            comp = db.get(CommunityCompetition, m.competition_id)
+            comp = comps.get(m.competition_id)
             slug = comp.slug if comp else str(m.competition_id)
             won = _user_won(m, user.id)
             result = "You won" if won is True else "You lost" if won is False else "Result in"
-            vs = f"{_side_names(db, m, 'A')} vs {_side_names(db, m, 'B')}"
-            when = m.played_at or m.updated_at or m.created_at or datetime.now(timezone.utc)
+            vs = f"{_side_names_from_map(users, m, 'A')} vs {_side_names_from_map(users, m, 'B')}"
+            when = m.played_at or m.updated_at or m.created_at or now
             items.append(
                 NotificationOut(
                     id=f"match_result:{m.id}",
@@ -1222,7 +1249,6 @@ def list_notifications(
                 )
             )
 
-    # Newest first; actionable kinds stay near the top by bumping sort key
     kind_priority = {
         "friend_request": 0,
         "match_confirm": 1,
@@ -1239,7 +1265,6 @@ def list_notifications(
         return (kind_priority.get(n.kind, 9), -ts.timestamp())
 
     items.sort(key=sort_key)
-    # Cap feed: keep all actionable, few upcoming, then other info
     actionable = [n for n in items if n.actionable]
     upcoming = [n for n in items if n.kind == "upcoming"][:3]
     other_info = [n for n in items if not n.actionable and n.kind != "upcoming"][:20]

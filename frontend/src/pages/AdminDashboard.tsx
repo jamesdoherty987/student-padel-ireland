@@ -34,6 +34,7 @@ type TournamentFormState = {
   number_of_courts: number
   entry_fee_euros: number
   max_teams: number
+  format: string
   description: string
   rules: string
   registration_deadline: string
@@ -49,6 +50,7 @@ const EMPTY_FORM: TournamentFormState = {
   number_of_courts: 6,
   entry_fee_euros: 50,
   max_teams: 48,
+  format: 'GROUP_KNOCKOUT',
   description: '',
   rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day. Entry is per doubles team.',
   registration_deadline: '',
@@ -83,6 +85,7 @@ function formFromTournament(t: Tournament): TournamentFormState {
     number_of_courts: t.number_of_courts,
     entry_fee_euros: Math.round(t.entry_fee_cents) / 100,
     max_teams: t.max_teams,
+    format: t.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : 'GROUP_KNOCKOUT',
     description: t.description || '',
     rules: t.rules || '',
     registration_deadline: t.registration_deadline ? t.registration_deadline.slice(0, 10) : '',
@@ -99,7 +102,7 @@ function payloadFromForm(form: TournamentFormState, previous?: Tournament) {
     start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
     entry_fee_cents: Math.round(Number(form.entry_fee_euros) * 100),
     max_teams: Number(form.max_teams),
-    format: 'GROUP_KNOCKOUT',
+    format: form.format || 'GROUP_KNOCKOUT',
     description: form.description.trim() || null,
     rules: form.rules.trim() || null,
     registration_deadline: form.registration_deadline
@@ -576,6 +579,18 @@ function TournamentModal({
               onChange={(e) => set('registration_deadline', e.target.value)}
               disabled={saving}
             />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Format</label>
+            <select
+              className="form-select"
+              value={form.format}
+              onChange={(e) => set('format', e.target.value)}
+              disabled={saving}
+            >
+              <option value="GROUP_KNOCKOUT">Groups then knockout</option>
+              <option value="ROUND_ROBIN">Round robin</option>
+            </select>
           </div>
           <div className="admin-form-row">
             <div className="form-group">

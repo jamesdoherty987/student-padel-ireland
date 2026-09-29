@@ -357,7 +357,7 @@ export default function PlayerProfilePage() {
 
             <section className="profile-section">
               <div className="profile-section-head">
-                <h2>Photos & clips</h2>
+                <h2>Photos</h2>
                 {isOwn && (
                   <button
                     type="button"
@@ -445,12 +445,12 @@ export default function PlayerProfilePage() {
                   )}
                 </div>
               ) : (
-                <div className={`profile-grid ${media.length === 1 ? 'is-single' : media.length === 2 ? 'is-duo' : ''}`}>
-                  {media.map((m, i) => (
+                <div className={`profile-grid ${media.length === 1 ? 'is-single' : ''}`}>
+                  {media.map((m) => (
                     <button
                       key={m.id}
                       type="button"
-                      className={`profile-grid-item ${i === 0 && media.length >= 3 ? 'is-featured' : ''}`}
+                      className="profile-grid-item"
                       onClick={() => setLightbox(m)}
                       aria-label={
                         m.caption ||
@@ -459,7 +459,7 @@ export default function PlayerProfilePage() {
                     >
                       {m.media_type === 'video' ? (
                         brokenMedia.has(m.id) ? (
-                          <span className="media-missing">Video unavailable</span>
+                          <span className="media-missing">Unavailable</span>
                         ) : (
                           <video
                             src={mediaUrl(m.url)}
@@ -470,7 +470,7 @@ export default function PlayerProfilePage() {
                           />
                         )
                       ) : brokenMedia.has(m.id) ? (
-                        <span className="media-missing">Photo unavailable</span>
+                        <span className="media-missing">Unavailable</span>
                       ) : (
                         <img
                           src={mediaUrl(m.url)}
@@ -479,10 +479,9 @@ export default function PlayerProfilePage() {
                           onError={() => markBroken(m.id)}
                         />
                       )}
-                      <span className="profile-grid-scrim" aria-hidden />
                       {m.media_type === 'video' && (
                         <span className="media-play" aria-hidden>
-                          <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+                          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                             <path d="M8 5v14l11-7z" />
                           </svg>
                         </span>
