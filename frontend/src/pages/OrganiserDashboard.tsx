@@ -364,7 +364,7 @@ export default function OrganiserDashboard() {
               <section className="org-section">
                 <h2>Invite players</h2>
                 <p className="muted org-section-lead">
-                  Share this code or QR. Friends tap <strong>Have a code?</strong> on Tournaments or Community.
+                  Share this code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
                 </p>
                 {inviteCode ? (
                   <div className="org-invite">

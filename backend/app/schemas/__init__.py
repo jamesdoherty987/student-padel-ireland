@@ -442,6 +442,25 @@ class CommunityHomeOut(BaseModel):
     friend_request_count: int = 0
 
 
+class NotificationOut(BaseModel):
+    id: str
+    kind: str
+    title: str
+    body: str
+    href: str
+    created_at: datetime
+    actionable: bool = False
+    friendship_id: Optional[UUID] = None
+    match_id: Optional[UUID] = None
+    actor_user_id: Optional[UUID] = None
+    actor_name: Optional[str] = None
+
+
+class NotificationsFeedOut(BaseModel):
+    items: list[NotificationOut]
+    actionable_count: int = 0
+
+
 TokenResponse.model_rebuild()
 
 

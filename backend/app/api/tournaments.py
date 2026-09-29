@@ -1185,35 +1185,47 @@ def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
 
 @router.get("/rankings")
 def rankings(limit: int = 50, db: Session = Depends(get_db)):
-    from app.models import Ranking
-    from app.api.profiles import _public_url
+    from app.models import ProfileMedia, Ranking
+    from app.api.profiles import _api_media_path, _public_url
+    from sqlalchemy.orm import aliased
 
+    AvatarMedia = aliased(ProfileMedia)
     rows = (
-        db.query(Ranking, User, University)
+        db.query(Ranking, User, University, AvatarMedia)
         .join(User, Ranking.user_id == User.id)
         .outerjoin(University, User.university_id == University.id)
+        .outerjoin(
+            AvatarMedia,
+            (AvatarMedia.user_id == User.id) & (AvatarMedia.is_avatar.is_(True)),
+        )
         .filter(or_(Ranking.matches_played > 0, Ranking.tournaments_played > 0))
         .order_by(Ranking.points.desc(), Ranking.wins.desc())
         .limit(limit)
         .all()
     )
-    return [
-        UserProfilePublic(
-            id=u.id,
-            full_name=u.full_name,
-            university_name=uni.name if uni else None,
-            university_short=uni.short_name if uni else None,
-            points=r.points,
-            rank_ireland=r.rank_ireland or (i + 1),
-            tournaments_played=r.tournaments_played,
-            matches_played=r.matches_played,
-            wins=r.wins,
-            losses=r.losses,
-            bio=u.bio,
-            avatar_url=_public_url(u.avatar_url),
+    out = []
+    for i, (r, u, uni, avatar_m) in enumerate(rows):
+        if avatar_m is not None:
+            avatar = _public_url(_api_media_path(avatar_m.id))
+        else:
+            avatar = _public_url(u.avatar_url)
+        out.append(
+            UserProfilePublic(
+                id=u.id,
+                full_name=u.full_name,
+                university_name=uni.name if uni else None,
+                university_short=uni.short_name if uni else None,
+                points=r.points,
+                rank_ireland=r.rank_ireland or (i + 1),
+                tournaments_played=r.tournaments_played,
+                matches_played=r.matches_played,
+                wins=r.wins,
+                losses=r.losses,
+                bio=u.bio,
+                avatar_url=avatar,
+            )
         )
-        for i, (r, u, uni) in enumerate(rows)
-    ]
+    return out
 
 
 @router.get("/players/{user_id}", response_model=UserProfilePublic)

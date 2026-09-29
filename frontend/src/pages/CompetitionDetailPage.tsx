@@ -80,6 +80,7 @@ export default function CompetitionDetailPage() {
     qc.invalidateQueries({ queryKey: ['community-home'] })
     qc.invalidateQueries({ queryKey: ['rankings'] })
     qc.invalidateQueries({ queryKey: ['friends'] })
+    qc.invalidateQueries({ queryKey: ['notifications'] })
   }
 
   const createMatchMut = useMutation({
@@ -335,7 +336,7 @@ export default function CompetitionDetailPage() {
             <div>
               <h2>Invite friends</h2>
               <p className="muted-note">
-                Send the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments or Community.
+                Send the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
               </p>
               <div className="share-code-row">
                 <code className="share-code">{c.invite_code}</code>
@@ -532,7 +533,7 @@ export default function CompetitionDetailPage() {
           </ol>
 
           {invitable.length > 0 && canLog && c.is_owner && (
-            <div className="community-panel" style={{ marginTop: 16 }}>
+            <div className="community-panel" style={{ marginTop: '1.5rem' }}>
               <h2>Add friends</h2>
               <div className="friend-chip-row">
                 {invitable.map((f) => (

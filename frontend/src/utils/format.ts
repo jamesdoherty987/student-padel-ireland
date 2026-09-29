@@ -64,12 +64,28 @@ export function formatTime(iso: string | null | undefined) {
 }
 
 export function statusLabel(status: string) {
-  return status.replace(/_/g, ' ')
+  const labels: Record<string, string> = {
+    DRAFT: 'Draft',
+    REGISTRATION_OPEN: 'Open',
+    REGISTRATION_CLOSED: 'Closed',
+    LIVE: 'Live',
+    COMPLETED: 'Past',
+    CANCELLED: 'Cancelled',
+    OPEN: 'Open',
+  }
+  return labels[status] || status.replace(/_/g, ' ')
 }
 
 export function statusBadgeClass(status: string) {
   if (status === 'LIVE') return 'badge-live'
-  if (status === 'REGISTRATION_OPEN' || status === 'PAID' || status === 'COMPLETED') return 'badge-open'
+  if (
+    status === 'REGISTRATION_OPEN' ||
+    status === 'OPEN' ||
+    status === 'PAID' ||
+    status === 'COMPLETED'
+  ) {
+    return 'badge-open'
+  }
   if (status === 'CANCELLED') return 'badge-draft'
   return 'badge-draft'
 }

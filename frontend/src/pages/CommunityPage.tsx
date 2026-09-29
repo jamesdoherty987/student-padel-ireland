@@ -1,35 +1,17 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
-import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
 import {
   apiErrorMessage,
   communityApi,
+  platformApi,
   type CommunityMatch,
   type Friendship,
 } from '../services/api'
 import './Tournament.css'
 import './Community.css'
-
-const FORMATS = [
-  {
-    id: 'DOUBLES',
-    title: 'Doubles',
-    blurb: '2 vs 2, the usual padel format',
-  },
-  {
-    id: 'SINGLES',
-    title: 'Singles',
-    blurb: '1 vs 1',
-  },
-  {
-    id: 'MIXED',
-    title: 'Both',
-    blurb: 'Singles and doubles in one group',
-  },
-] as const
 
 export default function CommunityPage() {
   const { user, loading: authLoading } = useAuth()
@@ -37,13 +19,7 @@ export default function CommunityPage() {
   const [params] = useSearchParams()
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
-  const [createOpen, setCreateOpen] = useState(false)
-  const [compName, setCompName] = useState('')
-  const [compFormat, setCompFormat] = useState('DOUBLES')
-  const [courts, setCourts] = useState(2)
-  const [selectedFriends, setSelectedFriends] = useState<string[]>([])
   const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
   const [friendsOpen, setFriendsOpen] = useState(false)
   const [friendsAutoOpened, setFriendsAutoOpened] = useState(false)
 
@@ -62,6 +38,11 @@ export default function CommunityPage() {
     queryFn: async () => (await communityApi.searchPlayers(search)).data,
     enabled: !!user && search.trim().length >= 2,
   })
+  const meQ = useQuery({
+    queryKey: ['player', user?.id],
+    queryFn: async () => (await platformApi.player(user!.id)).data,
+    enabled: !!user,
+  })
 
   const accepted = useMemo(
     () => (friendsQ.data || []).filter((f) => f.direction === 'friend'),
@@ -75,7 +56,6 @@ export default function CommunityPage() {
     () => (friendsQ.data || []).filter((f) => f.direction === 'outgoing'),
     [friendsQ.data],
   )
-  const comps = homeQ.data?.competitions || []
   const needsConfirm = homeQ.data?.needs_confirm || []
   const needsScore = homeQ.data?.needs_score || []
   const nextMatches = homeQ.data?.my_next_matches || []
@@ -84,6 +64,17 @@ export default function CommunityPage() {
     [homeQ.data?.needs_confirm],
   )
   const nextGame = nextMatches.find((m) => !confirmIds.has(m.id)) || nextMatches[0]
+
+  const myUniversity = meQ.data?.university_short || meQ.data?.university_name || ''
+  const collegeMates = useMemo(() => {
+    if (!myUniversity) return []
+    const short = meQ.data?.university_short || ''
+    const full = meQ.data?.university_name || ''
+    return accepted.filter((f) => {
+      const label = f.university_short || ''
+      return Boolean(label && (label === short || label === full || label === myUniversity))
+    })
+  }, [accepted, myUniversity, meQ.data?.university_short, meQ.data?.university_name])
 
   useEffect(() => {
     if (friendsAutoOpened || incoming.length === 0) return
@@ -95,7 +86,7 @@ export default function CommunityPage() {
     qc.invalidateQueries({ queryKey: ['community-home'] })
     qc.invalidateQueries({ queryKey: ['friends'] })
     qc.invalidateQueries({ queryKey: ['player-search'] })
-    qc.invalidateQueries({ queryKey: ['competitions'] })
+    qc.invalidateQueries({ queryKey: ['notifications'] })
   }
 
   const requestMut = useMutation({
@@ -122,24 +113,6 @@ export default function CommunityPage() {
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
-  const createMut = useMutation({
-    mutationFn: () =>
-      communityApi.createCompetition({
-        name: compName,
-        format: compFormat,
-        number_of_courts: courts,
-        friend_ids: selectedFriends,
-      }),
-    onSuccess: (res) => {
-      setError('')
-      setCreateOpen(false)
-      setCompName('')
-      setSelectedFriends([])
-      refresh()
-      navigate(`/community/${res.data.slug}`)
-    },
-    onError: (e) => setError(apiErrorMessage(e)),
-  })
   const confirmMut = useMutation({
     mutationFn: (id: string) => communityApi.confirmMatch(id),
     onSuccess: () => {
@@ -156,16 +129,6 @@ export default function CommunityPage() {
       navigate(`/join/${encodeURIComponent(code.trim().toUpperCase())}`, { replace: true })
     }
   }, [params, navigate])
-
-  const copyCode = async (code: string) => {
-    try {
-      await navigator.clipboard.writeText(code)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      setError('Could not copy')
-    }
-  }
 
   if (authLoading) {
     return (
@@ -187,12 +150,11 @@ export default function CommunityPage() {
         <main className="page">
           <h1 className="page-title">Community</h1>
           <p className="page-sub">
-            Friend groups and ladders. Organised paid events are under{' '}
+            Friends, college mates, and match confirmations. Events live under{' '}
             <Link to="/tournaments">Tournaments</Link>.
           </p>
           <div className="community-guest-actions" style={{ marginBottom: '1.25rem' }}>
-            <HaveCodeButton className="btn btn-primary">Have a code?</HaveCodeButton>
-            <Link to={`/signup?next=${next}`} className="btn btn-ghost">
+            <Link to={`/signup?next=${next}`} className="btn btn-primary">
               Sign up
             </Link>
             <Link to={`/login?next=${next}`} className="btn btn-ghost">
@@ -201,12 +163,12 @@ export default function CommunityPage() {
           </div>
           <ol className="community-guest-steps">
             <li>
-              <strong>Join a group</strong>
-              <span>Tap Have a code? if a friend invited you, or sign up to create your own.</span>
-            </li>
-            <li>
               <strong>Add friends</strong>
               <span>Search by name and send a request.</span>
+            </li>
+            <li>
+              <strong>Find college mates</strong>
+              <span>See who else plays from your university on Rankings.</span>
             </li>
             <li>
               <strong>Play and confirm</strong>
@@ -224,26 +186,13 @@ export default function CommunityPage() {
       <main className="page">
         <div className="page-header-row">
           <h1 className="page-title">Community</h1>
-          <div className="header-actions">
-            <HaveCodeButton />
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={() => {
-                setCreateOpen(true)
-                setError('')
-              }}
-            >
-              New group
-            </button>
-          </div>
         </div>
         <p className="page-sub">
-          Friend groups and ladders. Organised events are under <Link to="/tournaments">Tournaments</Link>.
+          Friends and college mates. Create or join events under{' '}
+          <Link to="/tournaments">Tournaments</Link>.
         </p>
 
         {error && <p className="form-error">{error}</p>}
-        {copied && <p className="form-success">Copied</p>}
 
         {homeQ.isLoading && (
           <>
@@ -254,7 +203,7 @@ export default function CommunityPage() {
 
         {homeQ.isError && (
           <div className="empty-state">
-            <p>Couldn’t load community right now.</p>
+            <p>Could not load community right now.</p>
             <button type="button" className="btn btn-ghost" onClick={() => homeQ.refetch()}>
               Retry
             </button>
@@ -268,13 +217,9 @@ export default function CommunityPage() {
               {nextGame.court_number ? `Court ${nextGame.court_number}` : 'Court TBC'}
             </div>
             <div className="next-game-vs">
-              <span>
-                {sideLabel(nextGame, 'A')}
-              </span>
+              <span>{sideLabel(nextGame, 'A')}</span>
               <em>vs</em>
-              <span>
-                {sideLabel(nextGame, 'B')}
-              </span>
+              <span>{sideLabel(nextGame, 'B')}</span>
             </div>
             <div className="next-game-meta">
               {nextGame.competition_name}
@@ -291,7 +236,7 @@ export default function CommunityPage() {
                 </button>
               )}
               <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-ghost btn-sm">
-                Open group
+                Open event
               </Link>
             </div>
           </section>
@@ -326,163 +271,7 @@ export default function CommunityPage() {
           )
         })()}
 
-        {createOpen && (
-          <form
-            className="community-panel"
-            onSubmit={(e: FormEvent) => {
-              e.preventDefault()
-              setError('')
-              createMut.mutate()
-            }}
-          >
-            <h2>Create a group</h2>
-            <p className="muted-note" style={{ marginBottom: 12 }}>
-              A private group for you and your friends. Share the code so others can join.
-            </p>
-            <div className="form-group">
-              <label className="form-label" htmlFor="comp-name">
-                Name
-              </label>
-              <input
-                id="comp-name"
-                className="form-input"
-                value={compName}
-                onChange={(e) => setCompName(e.target.value)}
-                placeholder="Friday padel"
-                required
-                minLength={3}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Format</label>
-              <div className="format-grid">
-                {FORMATS.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    className={`format-card ${compFormat === f.id ? 'on' : ''}`}
-                    onClick={() => setCompFormat(f.id)}
-                  >
-                    <strong>{f.title}</strong>
-                    <span>{f.blurb}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="comp-courts">
-                Courts available
-              </label>
-              <select
-                id="comp-courts"
-                className="form-select"
-                value={courts}
-                onChange={(e) => setCourts(Number(e.target.value))}
-              >
-                {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <option key={n} value={n}>
-                    {n} court{n === 1 ? '' : 's'}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {accepted.length > 0 && (
-              <div className="form-group">
-                <label className="form-label">Invite friends now</label>
-                <div className="friend-chip-row">
-                  {accepted.map((f) => (
-                    <button
-                      key={f.user_id}
-                      type="button"
-                      className={`friend-chip ${selectedFriends.includes(f.user_id) ? 'on' : ''}`}
-                      onClick={() =>
-                        setSelectedFriends((prev) =>
-                          prev.includes(f.user_id) ? prev.filter((x) => x !== f.user_id) : [...prev, f.user_id],
-                        )
-                      }
-                    >
-                      <span className="avatar-sm">{initials(f.full_name)}</span>
-                      {f.full_name.split(' ')[0]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <button type="submit" className="btn btn-primary" disabled={createMut.isPending}>
-              Create group
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ marginLeft: 8 }}
-              onClick={() => {
-                setCreateOpen(false)
-                setError('')
-              }}
-            >
-              Cancel
-            </button>
-          </form>
-        )}
-
-        <section className="community-section">
-          <h2>Your groups</h2>
-          {comps.length === 0 && !homeQ.isLoading && (
-            <div className="empty-state" style={{ padding: '1rem 0' }}>
-              <p>No groups yet.</p>
-              <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    setCreateOpen(true)
-                    setError('')
-                  }}
-                >
-                  New group
-                </button>
-                <HaveCodeButton className="btn btn-ghost btn-sm" />
-              </div>
-            </div>
-          )}
-          <div className="tour-list">
-            {comps.map((c) => (
-              <Link key={c.id} to={`/community/${c.slug}`} className="tour-card-link">
-                <article className="tour-card community-card">
-                  <div className="tour-card-top">
-                    <h2>{c.name}</h2>
-                    <span className="badge badge-draft">{labelFormat(c.format)}</span>
-                  </div>
-                  <p>
-                    {c.member_count} players · {c.number_of_courts || 2} courts · {labelStatus(c.status)}
-                  </p>
-                  <p className="tour-card-meta">
-                    Host {c.created_by_name}
-                    {c.invite_code ? (
-                      <>
-                        {' '}
-                        · code{' '}
-                        <button
-                          type="button"
-                          className="code-inline"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            copyCode(c.invite_code)
-                          }}
-                        >
-                          {c.invite_code}
-                        </button>
-                      </>
-                    ) : null}
-                  </p>
-                </article>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        <section className="community-section">
+        <section className="community-section community-section-friends">
           <div className="section-head">
             <h2>
               Friends
@@ -592,10 +381,34 @@ export default function CommunityPage() {
               />
             ))}
             {accepted.length === 0 && outgoing.length === 0 && incoming.length === 0 && (
-              <p className="muted-note">Add friends so you can invite them into groups.</p>
+              <p className="muted-note">Add friends to invite them into events and filter rankings.</p>
             )}
           </div>
         </section>
+
+        {myUniversity && (
+          <section className="community-section">
+            <div className="section-head">
+              <h2>Your college</h2>
+              <Link to="/rankings?scope=university" className="btn btn-ghost btn-sm">
+                Rankings
+              </Link>
+            </div>
+            <p className="muted-note" style={{ marginBottom: collegeMates.length ? 12 : 0 }}>
+              {myUniversity}
+              {collegeMates.length > 0
+                ? ` · ${collegeMates.length} friend${collegeMates.length === 1 ? '' : 's'} from your uni`
+                : ' · find players from your university on Rankings'}
+            </p>
+            {collegeMates.length > 0 && (
+              <div className="friend-list">
+                {collegeMates.slice(0, 8).map((f) => (
+                  <FriendRow key={f.id} f={f} />
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </main>
     </div>
   )
@@ -683,16 +496,6 @@ function initials(name: string) {
   if (parts.length === 0) return '?'
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
-}
-
-function labelFormat(f: string) {
-  if (f === 'SINGLES') return 'Singles'
-  if (f === 'MIXED') return 'Mixed'
-  return 'Doubles'
-}
-
-function labelStatus(s: string) {
-  return s.charAt(0) + s.slice(1).toLowerCase()
 }
 
 function friendStatusLabel(s: string) {

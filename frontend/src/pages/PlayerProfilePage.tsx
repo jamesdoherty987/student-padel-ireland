@@ -45,6 +45,8 @@ export default function PlayerProfilePage() {
   const [showUpload, setShowUpload] = useState(false)
   const [error, setError] = useState('')
   const [asAvatar, setAsAvatar] = useState(false)
+  const [brokenMedia, setBrokenMedia] = useState<Set<string>>(() => new Set())
+  const [lightboxError, setLightboxError] = useState(false)
 
   const { data: player, isLoading, isError, refetch } = useQuery({
     queryKey: ['player', id],
@@ -73,6 +75,10 @@ export default function PlayerProfilePage() {
   }, [lightbox])
 
   useEffect(() => {
+    setLightboxError(false)
+  }, [lightbox?.id])
+
+  useEffect(() => {
     if (!lightbox) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLightbox(null)
@@ -86,6 +92,15 @@ export default function PlayerProfilePage() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [lightbox, lightboxIndex, media])
+
+  const markBroken = (id: string) => {
+    setBrokenMedia((prev) => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }
 
   const startUpload = (file: File) => {
     const problem = validateMediaFile(file)
@@ -443,9 +458,26 @@ export default function PlayerProfilePage() {
                       }
                     >
                       {m.media_type === 'video' ? (
-                        <video src={mediaUrl(m.url)} muted playsInline preload="metadata" />
+                        brokenMedia.has(m.id) ? (
+                          <span className="media-missing">Video unavailable</span>
+                        ) : (
+                          <video
+                            src={mediaUrl(m.url)}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            onError={() => markBroken(m.id)}
+                          />
+                        )
+                      ) : brokenMedia.has(m.id) ? (
+                        <span className="media-missing">Photo unavailable</span>
                       ) : (
-                        <img src={mediaUrl(m.url)} alt={m.caption || ''} loading="lazy" />
+                        <img
+                          src={mediaUrl(m.url)}
+                          alt={m.caption || ''}
+                          loading="lazy"
+                          onError={() => markBroken(m.id)}
+                        />
                       )}
                       <span className="profile-grid-scrim" aria-hidden />
                       {m.media_type === 'video' && (
@@ -511,21 +543,42 @@ export default function PlayerProfilePage() {
             <div className="lightbox-inner" onClick={(e) => e.stopPropagation()}>
               <div className="lightbox-stage">
                 {lightbox.media_type === 'video' ? (
-                  <video
-                    key={lightbox.id}
+                  lightboxError || brokenMedia.has(lightbox.id) ? (
+                    <p className="lightbox-caption is-muted">
+                      This video is missing from the server. {isOwn ? 'Delete it and upload again.' : ''}
+                    </p>
+                  ) : (
+                    <video
+                      key={lightbox.id}
+                      src={mediaUrl(lightbox.url)}
+                      controls
+                      autoPlay
+                      muted
+                      playsInline
+                      preload="auto"
+                      onError={() => {
+                        setLightboxError(true)
+                        markBroken(lightbox.id)
+                      }}
+                      onCanPlay={(e) => {
+                        const el = e.currentTarget
+                        void el.play().catch(() => {})
+                      }}
+                    />
+                  )
+                ) : lightboxError || brokenMedia.has(lightbox.id) ? (
+                  <p className="lightbox-caption is-muted">
+                    This photo is missing from the server. {isOwn ? 'Delete it and upload again.' : ''}
+                  </p>
+                ) : (
+                  <img
                     src={mediaUrl(lightbox.url)}
-                    controls
-                    autoPlay
-                    muted
-                    playsInline
-                    preload="auto"
-                    onCanPlay={(e) => {
-                      const el = e.currentTarget
-                      void el.play().catch(() => {})
+                    alt={lightbox.caption || ''}
+                    onError={() => {
+                      setLightboxError(true)
+                      markBroken(lightbox.id)
                     }}
                   />
-                ) : (
-                  <img src={mediaUrl(lightbox.url)} alt={lightbox.caption || ''} />
                 )}
               </div>
               <div className="lightbox-meta">

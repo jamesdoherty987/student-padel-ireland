@@ -241,7 +241,7 @@ export default function TournamentDetailPage() {
           <section className="block qr-block">
             <h2>Invite players</h2>
             <p>
-              Share the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments or Community.
+              Share the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
             </p>
             {tournament.invite_code && (
               <p className="invite-code-line">

@@ -49,6 +49,14 @@
   overflow-wrap: anywhere;
 }
 
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
 .tour-card h2 {
   font-family: var(--font-display);
   font-size: 1.12rem;

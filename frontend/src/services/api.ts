@@ -234,6 +234,25 @@ export type CommunityMatch = {
   rating_changes: RatingDelta[]
 }
 
+export type NotificationItem = {
+  id: string
+  kind: string
+  title: string
+  body: string
+  href: string
+  created_at: string
+  actionable: boolean
+  friendship_id?: string | null
+  match_id?: string | null
+  actor_user_id?: string | null
+  actor_name?: string | null
+}
+
+export type NotificationsFeed = {
+  items: NotificationItem[]
+  actionable_count: number
+}
+
 export type CommunityHome = {
   competitions: Competition[]
   needs_confirm: CommunityMatch[]
@@ -323,6 +342,7 @@ export const platformApi = {
 
 export const communityApi = {
   home: () => api.get<CommunityHome>('/api/community/home'),
+  notifications: () => api.get<NotificationsFeed>('/api/notifications'),
   searchPlayers: (q: string) => api.get<PlayerSearch[]>('/api/players/search', { params: { q } }),
   friends: () => api.get<Friendship[]>('/api/friends'),
   requestFriend: (user_id: string) => api.post<Friendship>('/api/friends/request', { user_id }),

@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -19,7 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, deferred, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
 
@@ -469,6 +470,10 @@ class ProfileMedia(Base, TimestampMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     media_type: Mapped[str] = mapped_column(String(20), nullable=False)  # image | video
     url: Mapped[str] = mapped_column(String(500), nullable=False)
+    # Persist bytes in DB so media survives ephemeral host disks (e.g. Render free).
+    # Deferred so profile/list queries do not load multi-MB blobs into memory.
+    content_type: Mapped[Optional[str]] = mapped_column(String(100))
+    file_data: Mapped[Optional[bytes]] = deferred(mapped_column(LargeBinary))
     caption: Mapped[Optional[str]] = mapped_column(String(200))
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_avatar: Mapped[bool] = mapped_column(Boolean, default=False)

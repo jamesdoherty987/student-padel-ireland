@@ -59,7 +59,7 @@ export function JoinCodeModal({ open, onClose, initialCode = '' }: JoinCodeModal
     setBusy(true)
     try {
       const invite = await resolveInviteCode(cleaned)
-      setStatus(`Opening ${invite.name}…`)
+      setStatus(`Opening ${invite.name}...`)
       if (invite.kind === 'tournament') {
         if (user) navigate(invite.join_path)
         else navigate(`/login?next=${encodeURIComponent(invite.join_path)}`)
@@ -94,7 +94,9 @@ export function JoinCodeModal({ open, onClose, initialCode = '' }: JoinCodeModal
             ×
           </button>
         </div>
-        <p className="join-modal-lead">Paste an invite code for a tournament or friend group.</p>
+        <p className="join-modal-lead">
+          Paste an invite code. You can also scan a QR code with your camera - it opens the same join link.
+        </p>
         <form className="join-code-row" onSubmit={(e) => void onSubmit(e)}>
           <input
             ref={inputRef}
@@ -109,7 +111,7 @@ export function JoinCodeModal({ open, onClose, initialCode = '' }: JoinCodeModal
             spellCheck={false}
           />
           <button type="submit" className="btn btn-primary" disabled={busy || !code.trim()}>
-            {busy ? 'Looking up…' : 'Join'}
+            {busy ? 'Looking up...' : 'Join'}
           </button>
         </form>
         {error && <p className="form-error">{error}</p>}
@@ -130,7 +132,7 @@ type HaveCodeButtonProps = {
 
 /** Header/action button that opens the join-code popup. */
 export function HaveCodeButton({
-  className = 'btn btn-ghost btn-sm',
+  className = 'btn btn-ghost btn-xs',
   children = 'Have a code?',
   initialCode = '',
   autoOpen = false,

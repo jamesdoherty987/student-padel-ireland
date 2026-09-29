@@ -1,21 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
-import { communityApi } from '../services/api'
+import NotificationsBell from './NotificationsBell'
 
 export default function NavBar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-
-  const friendReqQ = useQuery({
-    queryKey: ['friends'],
-    queryFn: async () => (await communityApi.friends()).data,
-    enabled: !!user,
-    staleTime: 30_000,
-  })
-  const incomingCount = (friendReqQ.data || []).filter((f) => f.direction === 'incoming').length
 
   useEffect(() => {
     document.body.classList.toggle('mobile-menu-open', open)
@@ -52,62 +43,63 @@ export default function NavBar() {
       <Link to="/" className="app-nav-brand" onClick={close}>
         <span className="app-nav-brand-text">Student Padel Ireland</span>
       </Link>
-      <nav className={`app-nav-links ${open ? 'is-open' : ''}`}>
-        <NavLink to="/tournaments" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-          Tournaments
-        </NavLink>
-        <NavLink
-          to="/community"
-          className={({ isActive }) => (isActive ? 'active' : '')}
-          onClick={close}
-          aria-label={incomingCount > 0 ? `Community, ${incomingCount} friend requests` : 'Community'}
-        >
-          Community
-          {incomingCount > 0 && <span className="nav-badge" aria-hidden>{incomingCount}</span>}
-        </NavLink>
-        <NavLink to="/rankings" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-          Rankings
-        </NavLink>
-        {user ? (
-          <>
-            {user.role === 'ADMIN' && (
-              <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-                Admin
+      <div className="app-nav-end">
+        <nav className={`app-nav-links ${open ? 'is-open' : ''}`}>
+          <NavLink to="/tournaments" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
+            Tournaments
+          </NavLink>
+          <NavLink to="/community" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
+            Community
+          </NavLink>
+          <NavLink to="/rankings" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
+            Rankings
+          </NavLink>
+          {user ? (
+            <>
+              {user.role === 'ADMIN' && (
+                <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
+                  Admin
+                </NavLink>
+              )}
+              {(user.role === 'ORGANISER' || user.role === 'ADMIN') && (
+                <NavLink to="/organiser" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
+                  Dashboard
+                </NavLink>
+              )}
+              <NavLink to={`/players/${user.id}`} className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
+                Profile
               </NavLink>
-            )}
-            {(user.role === 'ORGANISER' || user.role === 'ADMIN') && (
-              <NavLink to="/organiser" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-                Dashboard
+              <span className="app-nav-user">{user.full_name.split(' ')[0]}</span>
+              <button type="button" className="btn btn-ghost app-nav-logout" onClick={onLogout}>
+                Log out
+              </button>
+            </>
+          ) : (
+            <>
+              <NavLink to="/login" onClick={close}>
+                Log in
               </NavLink>
-            )}
-            <NavLink to={`/players/${user.id}`} className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-              Profile
-            </NavLink>
-            <span className="app-nav-user">{user.full_name.split(' ')[0]}</span>
-            <button type="button" className="btn btn-ghost app-nav-logout" onClick={onLogout}>
-              Log out
-            </button>
-          </>
-        ) : (
-          <>
-            <NavLink to="/login" onClick={close}>
-              Log in
-            </NavLink>
-            <Link to="/signup" className="btn btn-primary app-nav-join" onClick={close}>
-              Sign up
-            </Link>
-          </>
+              <Link to="/signup" className="btn btn-primary app-nav-join" onClick={close}>
+                Sign up
+              </Link>
+            </>
+          )}
+        </nav>
+        {user && (
+          <div className="app-nav-bell-slot">
+            <NotificationsBell />
+          </div>
         )}
-      </nav>
-      <button
-        type="button"
-        className="app-nav-menu-btn"
-        aria-label={open ? 'Close menu' : 'Open menu'}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <i className={`fas ${open ? 'fa-times' : 'fa-bars'}`} />
-      </button>
+        <button
+          type="button"
+          className="app-nav-menu-btn"
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <i className={`fas ${open ? 'fa-times' : 'fa-bars'}`} />
+        </button>
+      </div>
     </header>
   )
 }

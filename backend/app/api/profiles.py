@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_optional_user
@@ -42,9 +42,9 @@ ALLOWED_VIDEO = {
 }
 
 
-def _media_url(user_id: UUID, filename: str) -> str:
-    # Store relative paths; absolutize on read so the frontend host can load them
-    return f"/uploads/profiles/{user_id}/{filename}"
+def _api_media_path(media_id: UUID) -> str:
+    """Stable API path so media is served from DB (survives ephemeral disks)."""
+    return f"/api/media/{media_id}"
 
 
 def _public_url(url: str | None) -> str | None:
@@ -56,6 +56,80 @@ def _public_url(url: str | None) -> str | None:
     if url.startswith("/"):
         return f"{get_settings().backend_url.rstrip('/')}{url}"
     return url
+
+
+def _media_out(m: ProfileMedia) -> ProfileMediaOut:
+    # Always serve via API so DB-backed and legacy-disk media share one URL.
+    path = _api_media_path(m.id)
+    return ProfileMediaOut(
+        id=m.id,
+        media_type=m.media_type,
+        url=_public_url(path) or path,
+        caption=m.caption,
+        sort_order=m.sort_order,
+        is_avatar=m.is_avatar,
+        created_at=m.created_at,
+    )
+
+
+def _avatar_public(user: User, media_rows: list[ProfileMedia]) -> str | None:
+    avatar = next((m for m in media_rows if m.is_avatar), None)
+    if avatar:
+        return _media_out(avatar).url
+    if user.avatar_url:
+        return _public_url(user.avatar_url)
+    return None
+
+
+def _disk_cache_path(user_id: UUID, media_id: UUID, content_type: str | None) -> Path:
+    ext = ".bin"
+    ctype = (content_type or "").lower()
+    for mapping in (ALLOWED_IMAGE, ALLOWED_VIDEO):
+        if ctype in mapping:
+            ext = mapping[ctype]
+            break
+    return UPLOAD_ROOT / str(user_id) / f"{media_id}{ext}"
+
+
+def _load_media_bytes(item: ProfileMedia) -> tuple[bytes, str] | None:
+    """Return (bytes, content_type) from DB or legacy/local disk cache."""
+    ctype = (item.content_type or "").strip()
+    if item.file_data is not None:
+        if not ctype:
+            ctype = "video/mp4" if item.media_type == "video" else "image/jpeg"
+        return bytes(item.file_data), ctype
+
+    # Prefer id-keyed cache written by newer uploads
+    for mapping in (ALLOWED_IMAGE, ALLOWED_VIDEO):
+        for candidate_ctype, ext in mapping.items():
+            path = UPLOAD_ROOT / str(item.user_id) / f"{item.id}{ext}"
+            if path.is_file():
+                return path.read_bytes(), candidate_ctype
+
+    # Legacy /uploads/profiles/{uid}/{filename} URLs
+    try:
+        raw = item.url or ""
+        if "/uploads/profiles/" in raw:
+            filename = raw.rstrip("/").split("/")[-1]
+            path = UPLOAD_ROOT / str(item.user_id) / filename
+            if path.is_file():
+                data = path.read_bytes()
+                if not ctype:
+                    suffix = path.suffix.lower()
+                    ctype = {
+                        ".jpg": "image/jpeg",
+                        ".jpeg": "image/jpeg",
+                        ".png": "image/png",
+                        ".webp": "image/webp",
+                        ".gif": "image/gif",
+                        ".mp4": "video/mp4",
+                        ".webm": "video/webm",
+                        ".mov": "video/quicktime",
+                    }.get(suffix, "application/octet-stream")
+                return data, ctype
+    except OSError:
+        pass
+    return None
 
 
 def _profile_out(
@@ -81,21 +155,58 @@ def _profile_out(
         wins=ranking.wins if ranking else 0,
         losses=ranking.losses if ranking else 0,
         bio=user.bio,
-        avatar_url=_public_url(user.avatar_url),
-        media=[
-            ProfileMediaOut(
-                id=m.id,
-                media_type=m.media_type,
-                url=_public_url(m.url) or m.url,
-                caption=m.caption,
-                sort_order=m.sort_order,
-                is_avatar=m.is_avatar,
-                created_at=m.created_at,
-            )
-            for m in media_rows
-        ],
+        avatar_url=_avatar_public(user, media_rows),
+        media=[_media_out(m) for m in media_rows],
         is_own_profile=bool(viewer and viewer.id == user.id),
     )
+
+
+def _range_response(data: bytes, content_type: str, request: Request) -> Response:
+    """Serve bytes with Accept-Ranges so HTML5 video can seek / buffer."""
+    size = len(data)
+    range_header = request.headers.get("range")
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "public, max-age=86400",
+        "Content-Type": content_type,
+    }
+    if not range_header or not range_header.startswith("bytes="):
+        return Response(content=data, media_type=content_type, headers={**headers, "Content-Length": str(size)})
+
+    try:
+        spec = range_header.replace("bytes=", "").strip().split(",")[0]
+        start_s, end_s = (spec.split("-", 1) + [""])[:2]
+        start = int(start_s) if start_s else 0
+        end = int(end_s) if end_s else size - 1
+    except ValueError:
+        return Response(content=data, media_type=content_type, headers={**headers, "Content-Length": str(size)})
+
+    if start < 0 or start >= size:
+        return Response(
+            status_code=416,
+            headers={"Content-Range": f"bytes */{size}", **headers},
+        )
+    end = min(end, size - 1)
+    chunk = data[start : end + 1]
+    headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+    headers["Content-Length"] = str(len(chunk))
+    return Response(content=chunk, status_code=206, media_type=content_type, headers=headers)
+
+
+@router.get("/media/{media_id}")
+def serve_profile_media(
+    media_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    item = db.get(ProfileMedia, media_id)
+    if not item:
+        raise HTTPException(404, "Media not found")
+    loaded = _load_media_bytes(item)
+    if not loaded:
+        raise HTTPException(404, "Media file missing - please re-upload")
+    data, content_type = loaded
+    return _range_response(data, content_type, request)
 
 
 @router.get("/players/{user_id}/profile", response_model=UserProfilePublic)
@@ -147,11 +258,9 @@ async def upload_profile_media(
     content_type = (file.content_type or "").lower()
     if content_type in ALLOWED_IMAGE:
         media_type = "image"
-        ext = ALLOWED_IMAGE[content_type]
         max_bytes = MAX_IMAGE_BYTES
     elif content_type in ALLOWED_VIDEO:
         media_type = "video"
-        ext = ALLOWED_VIDEO[content_type]
         max_bytes = MAX_VIDEO_BYTES
     else:
         raise HTTPException(400, "Only JPEG, PNG, WebP, GIF, MP4, WebM or MOV allowed")
@@ -165,43 +274,40 @@ async def upload_profile_media(
     if not data:
         raise HTTPException(400, "Empty file")
 
+    # Optional local cache (dev); source of truth is DB file_data.
     folder = UPLOAD_ROOT / str(user.id)
     folder.mkdir(parents=True, exist_ok=True)
-    filename = f"{uuid.uuid4().hex}{ext}"
-    path = folder / filename
-    path.write_bytes(data)
 
-    url = _media_url(user.id, filename)
+    item = ProfileMedia(
+        user_id=user.id,
+        media_type=media_type,
+        url="",  # set after flush so we have an id
+        content_type=content_type,
+        file_data=data,
+        caption=(caption or "").strip()[:200] or None,
+        sort_order=count,
+        is_avatar=False,
+    )
+    db.add(item)
+    db.flush()
+    item.url = _api_media_path(item.id)
+
+    try:
+        _disk_cache_path(user.id, item.id, content_type).write_bytes(data)
+    except OSError:
+        pass
+
     want_avatar = set_as_avatar or (media_type == "image" and count == 0)
     if want_avatar:
         db.query(ProfileMedia).filter(
             ProfileMedia.user_id == user.id, ProfileMedia.is_avatar.is_(True)
         ).update({"is_avatar": False})
-        user.avatar_url = url
-        is_avatar = True
-    else:
-        is_avatar = False
+        user.avatar_url = item.url
+        item.is_avatar = True
 
-    item = ProfileMedia(
-        user_id=user.id,
-        media_type=media_type,
-        url=url,
-        caption=(caption or "").strip()[:200] or None,
-        sort_order=count,
-        is_avatar=is_avatar,
-    )
-    db.add(item)
     db.commit()
     db.refresh(item)
-    return ProfileMediaOut(
-        id=item.id,
-        media_type=item.media_type,
-        url=_public_url(item.url) or item.url,
-        caption=item.caption,
-        sort_order=item.sort_order,
-        is_avatar=item.is_avatar,
-        created_at=item.created_at,
-    )
+    return _media_out(item)
 
 
 @router.patch("/me/profile/media/{media_id}", response_model=ProfileMediaOut)
@@ -218,7 +324,7 @@ def update_media_caption(
         item.caption = body.caption.strip()[:200] or None
     db.commit()
     db.refresh(item)
-    return ProfileMediaOut.model_validate(item)
+    return _media_out(item)
 
 
 @router.post("/me/profile/media/{media_id}/avatar", response_model=UserProfilePublic)
@@ -236,7 +342,7 @@ def set_media_as_avatar(
         ProfileMedia.user_id == user.id, ProfileMedia.is_avatar.is_(True)
     ).update({"is_avatar": False})
     item.is_avatar = True
-    user.avatar_url = item.url
+    user.avatar_url = _api_media_path(item.id)
     db.commit()
     db.refresh(user)
     return _profile_out(db, user, user)
@@ -252,13 +358,17 @@ def delete_profile_media(
     if not item or item.user_id != user.id:
         raise HTTPException(404, "Media not found")
 
-    # Best-effort delete local file
+    # Best-effort delete local cache file
     try:
-        # url .../uploads/profiles/{uid}/{file}
-        filename = item.url.rstrip("/").split("/")[-1]
-        path = UPLOAD_ROOT / str(user.id) / filename
-        if path.is_file():
-            path.unlink()
+        cache = _disk_cache_path(user.id, item.id, item.content_type)
+        if cache.is_file():
+            cache.unlink()
+        raw = item.url or ""
+        if "/uploads/profiles/" in raw:
+            filename = raw.rstrip("/").split("/")[-1]
+            legacy = UPLOAD_ROOT / str(user.id) / filename
+            if legacy.is_file():
+                legacy.unlink()
     except OSError:
         pass
 
@@ -273,7 +383,7 @@ def delete_profile_media(
         )
         if next_img:
             next_img.is_avatar = True
-            user.avatar_url = next_img.url
+            user.avatar_url = _api_media_path(next_img.id)
         else:
             user.avatar_url = None
     db.commit()

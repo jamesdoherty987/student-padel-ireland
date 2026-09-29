@@ -391,6 +391,17 @@
   margin-bottom: 0.75rem;
 }
 
+.community-section {
+  margin-top: 1.75rem;
+  padding-top: 0.25rem;
+}
+
+.community-section-friends {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
 .community-section .community-card {
   border-left-width: 1px;
   border-left-color: var(--line);
