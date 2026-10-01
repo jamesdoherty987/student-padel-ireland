@@ -24,6 +24,7 @@ from app.models import (
     MatchScore,
     MatchStatus,
     PaymentStatus,
+    PlayFormat,
     Ranking,
     Registration,
     Sponsor,
@@ -224,10 +225,25 @@ def _tournament_out(db: Session, t: Tournament) -> TournamentOut:
     data = TournamentOut.model_validate(t)
     data.registered_teams = _team_count(db, t.id)
     data.invite_code = t.invite_code
+    data.play_format = getattr(t, "play_format", None) or PlayFormat.DOUBLES.value
+    courts = (
+        db.query(Court)
+        .filter(Court.tournament_id == t.id)
+        .order_by(Court.court_number)
+        .all()
+    )
+    data.courts = [{"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts]
     return data
 
 
-def _match_out(db: Session, m: Match) -> MatchOut:
+def _court_label_map(db: Session, tournament_id: UUID) -> dict[int, str]:
+    return {
+        c.court_number: c.name
+        for c in db.query(Court).filter(Court.tournament_id == tournament_id).all()
+    }
+
+
+def _match_out(db: Session, m: Match, court_names: dict[int, str] | None = None) -> MatchOut:
     team_a = db.get(Team, m.team_a_id) if m.team_a_id else None
     team_b = db.get(Team, m.team_b_id) if m.team_b_id else None
     score = None
@@ -241,12 +257,17 @@ def _match_out(db: Session, m: Match) -> MatchOut:
             "set3_b": m.score.set3_b,
             "current_set": m.score.current_set,
         }
+    names = court_names if court_names is not None else _court_label_map(db, m.tournament_id)
+    court_name = None
+    if m.court_number is not None:
+        court_name = names.get(m.court_number) or f"Court {m.court_number}"
     return MatchOut(
         id=m.id,
         tournament_id=m.tournament_id,
         round=m.round,
         stage=m.stage,
         court_number=m.court_number,
+        court_name=court_name,
         scheduled_start=m.scheduled_start,
         team_a_id=m.team_a_id,
         team_b_id=m.team_b_id,
@@ -258,6 +279,219 @@ def _match_out(db: Session, m: Match) -> MatchOut:
         winner_id=m.winner_id,
         score=score,
     )
+
+
+def _default_court_name(i: int) -> str:
+    return f"Court {i}"
+
+
+def _sync_courts(
+    db: Session,
+    tournament_id: UUID,
+    number_of_courts: int,
+    court_names: list[str] | None = None,
+) -> None:
+    """Add/remove/rename courts without wiping custom names unnecessarily."""
+    existing = (
+        db.query(Court)
+        .filter(Court.tournament_id == tournament_id)
+        .order_by(Court.court_number)
+        .all()
+    )
+    by_num = {c.court_number: c for c in existing}
+
+    for i in range(1, number_of_courts + 1):
+        desired = (
+            court_names[i - 1].strip()
+            if court_names and i - 1 < len(court_names) and court_names[i - 1].strip()
+            else _default_court_name(i)
+        )
+        if i in by_num:
+            if court_names is not None:
+                by_num[i].name = desired
+            by_num[i].is_active = True
+        else:
+            db.add(Court(tournament_id=tournament_id, name=desired, court_number=i))
+
+    for num, court in by_num.items():
+        if num > number_of_courts:
+            db.delete(court)
+
+
+def _is_singles(t: Tournament) -> bool:
+    return (getattr(t, "play_format", None) or PlayFormat.DOUBLES.value) == PlayFormat.SINGLES.value
+
+
+def _parse_group_placeholder(label: str | None) -> tuple[str, int] | None:
+    """Parse '1st Group A' → ('A', 1). Returns None for BYE / Winner match…"""
+    if not label:
+        return None
+    text = label.strip()
+    if text.upper() == "BYE" or text.upper() == "TBD":
+        return None
+    import re
+
+    m = re.match(r"^(1st|2nd|3rd|4th|\d+th)\s+Group\s+([A-Z]+)$", text, re.I)
+    if not m:
+        return None
+    ordinal = m.group(1).lower()
+    group = m.group(2).upper()
+    rank_map = {"1st": 1, "2nd": 2, "3rd": 3, "4th": 4}
+    if ordinal in rank_map:
+        rank = rank_map[ordinal]
+    else:
+        rank = int(ordinal.replace("th", ""))
+    return group, rank
+
+
+def _group_standings_ranked(
+    db: Session, t: Tournament, group: Group
+) -> list[UUID]:
+    """Return team IDs in ranked order for a group."""
+    tie_order = [x.strip() for x in (t.tie_break_order or "").split(",") if x.strip()]
+    gts = db.query(GroupTeam).filter(GroupTeam.group_id == group.id).all()
+    team_ids = [str(gt.team_id) for gt in gts]
+    matches = (
+        db.query(Match)
+        .options(joinedload(Match.score))
+        .filter(
+            Match.group_id == group.id,
+            Match.status.in_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
+        )
+        .all()
+    )
+    results = []
+    for m in matches:
+        if not m.team_a_id or not m.team_b_id:
+            continue
+        sets = []
+        if m.score:
+            sets = [
+                (m.score.set1_a, m.score.set1_b),
+                (m.score.set2_a, m.score.set2_b),
+                (m.score.set3_a, m.score.set3_b),
+            ]
+            sets = [(a, b) for a, b in sets if a or b]
+        results.append(
+            MatchResult(
+                str(m.team_a_id),
+                str(m.team_b_id),
+                sets,
+                walkover_winner_id=str(m.winner_id)
+                if m.status == MatchStatus.WALKOVER.value and m.winner_id
+                else None,
+                status=m.status,
+            )
+        )
+    rows = accumulate_standings(team_ids, results)
+    ranked = rank_standings(rows, tie_order or None)
+    return [UUID(r.team_id) for r in ranked]
+
+
+def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
+    """
+    Fill first-round KO slots from finished group standings.
+    Also auto-advances BYE sides. Returns number of slots filled.
+    """
+    groups = db.query(Group).filter(Group.tournament_id == t.id).order_by(Group.sort_order).all()
+    if not groups:
+        return 0
+
+    # All group matches must be finished
+    unfinished = (
+        db.query(Match)
+        .filter(
+            Match.tournament_id == t.id,
+            Match.stage == "GROUP",
+            Match.status.notin_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value, MatchStatus.CANCELLED.value]),
+        )
+        .count()
+    )
+    if unfinished > 0:
+        return 0
+
+    ranked_by_group: dict[str, list[UUID]] = {}
+    for g in groups:
+        ranked_by_group[g.name.upper()] = _group_standings_ranked(db, t, g)
+
+    advance = t.teams_advance_per_group or 2
+    first_round = (
+        db.query(Match)
+        .filter(Match.tournament_id == t.id, Match.stage == "KNOCKOUT")
+        .order_by(Match.sort_order)
+        .all()
+    )
+    if not first_round:
+        return 0
+
+    # First KO round = matches that are fed INTO by nothing from other KO, or lowest sort
+    # Identify first round by round name of earliest KO matches
+    first_round_name = first_round[0].round
+    first_matches = [m for m in first_round if m.round == first_round_name]
+
+    filled = 0
+
+    def resolve_slot(label: str | None) -> UUID | None:
+        if not label or label.upper() in ("BYE", "TBD"):
+            return None
+        parsed = _parse_group_placeholder(label)
+        if not parsed:
+            return None
+        gname, rank = parsed
+        teams = ranked_by_group.get(gname, [])
+        if 1 <= rank <= len(teams) and rank <= advance:
+            return teams[rank - 1]
+        return None
+
+    for m in first_matches:
+        # Skip if already has both teams
+        changed = False
+        if not m.team_a_id:
+            tid = resolve_slot(m.team_a_placeholder)
+            if tid:
+                m.team_a_id = tid
+                m.team_a_placeholder = None
+                changed = True
+                filled += 1
+            elif m.team_a_placeholder and m.team_a_placeholder.upper() == "BYE":
+                m.team_a_placeholder = "BYE"
+        if not m.team_b_id:
+            tid = resolve_slot(m.team_b_placeholder)
+            if tid:
+                m.team_b_id = tid
+                m.team_b_placeholder = None
+                changed = True
+                filled += 1
+            elif m.team_b_placeholder and m.team_b_placeholder.upper() == "BYE":
+                m.team_b_placeholder = "BYE"
+
+        # Auto-advance bye: one team present, other is BYE
+        a_bye = (m.team_a_placeholder or "").upper() == "BYE" and not m.team_a_id
+        b_bye = (m.team_b_placeholder or "").upper() == "BYE" and not m.team_b_id
+        winner = None
+        if m.team_a_id and b_bye and not m.team_b_id:
+            winner = m.team_a_id
+            m.team_b_placeholder = "BYE"
+        elif m.team_b_id and a_bye and not m.team_a_id:
+            winner = m.team_b_id
+            m.team_a_placeholder = "BYE"
+        if winner and m.status not in (MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value):
+            m.winner_id = winner
+            m.status = MatchStatus.WALKOVER.value
+            if m.next_match_id and m.next_match_slot:
+                nxt = db.get(Match, m.next_match_id)
+                if nxt:
+                    if m.next_match_slot == "A":
+                        nxt.team_a_id = winner
+                        nxt.team_a_placeholder = None
+                    else:
+                        nxt.team_b_id = winner
+                        nxt.team_b_placeholder = None
+            changed = True
+        if changed:
+            db.add(m)
+
+    return filled
 
 
 def _assert_organiser(user: User, tournament: Tournament) -> None:
@@ -334,6 +568,7 @@ def create_tournament(
         max_teams=body.max_teams,
         registration_deadline=body.registration_deadline,
         format=body.format.value,
+        play_format=body.play_format.value,
         rules=body.rules,
         description=body.description,
         status=TournamentStatus.DRAFT.value,
@@ -347,8 +582,7 @@ def create_tournament(
     )
     db.add(t)
     db.flush()
-    for i in range(1, body.number_of_courts + 1):
-        db.add(Court(tournament_id=t.id, name=f"Court {i}", court_number=i))
+    _sync_courts(db, t.id, body.number_of_courts, body.court_names)
     db.commit()
     db.refresh(t)
     return _tournament_out(db, t)
@@ -365,18 +599,19 @@ def update_tournament(
     if not t:
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    court_names = data.pop("court_names", None)
+    for field, value in data.items():
         if hasattr(value, "value"):
             value = value.value
         setattr(t, field, value)
-    # Sync courts only when the count actually changes (avoid wiping mid-event)
-    if body.number_of_courts is not None:
-        existing = db.query(Court).filter(Court.tournament_id == t.id).order_by(Court.court_number).all()
-        if len(existing) != body.number_of_courts:
-            for c in existing:
-                db.delete(c)
-            for i in range(1, body.number_of_courts + 1):
-                db.add(Court(tournament_id=t.id, name=f"Court {i}", court_number=i))
+    if body.number_of_courts is not None or court_names is not None:
+        _sync_courts(
+            db,
+            t.id,
+            t.number_of_courts,
+            court_names if court_names is not None else None,
+        )
     db.commit()
     db.refresh(t)
     return _tournament_out(db, t)
@@ -402,7 +637,7 @@ def resolve_invite_code(invite_code: str, db: Session = Depends(get_db)):
             name=t.name,
             invite_code=cleaned,
             join_path=f"/t/{t.slug}/join",
-            hint="Tournament event: register with a doubles partner",
+            hint="Tournament event: register to play",
         )
 
     c = db.query(CommunityCompetition).filter(CommunityCompetition.invite_code == cleaned).first()
@@ -442,36 +677,48 @@ def register_team(
     if _paid_team_count(db, t.id) >= t.max_teams:
         raise HTTPException(400, "Tournament is full")
 
+    singles = _is_singles(t)
     partner: User | None = None
-    if body.partner_user_id:
-        partner = db.get(User, body.partner_user_id)
-        if not partner or not partner.is_active:
-            raise HTTPException(400, "Partner not found")
-    elif body.partner_email:
-        partner = db.query(User).filter(User.email == body.partner_email.lower()).first()
-        if not partner:
-            name = (body.partner_name or "").strip()
-            if len(name) < 2:
-                raise HTTPException(400, "Partner name is required for a new email")
-            partner = User(
-                email=body.partner_email.lower(),
-                password_hash=hash_password(str(uuid4())),
-                full_name=name,
-                role="PLAYER",
-                university_id=body.university_id,
-                must_set_password=True,
-            )
-            db.add(partner)
-            db.flush()
-            _ensure_ranking(db, partner.id)
+
+    if singles:
+        if body.partner_user_id or body.partner_email:
+            raise HTTPException(400, "This is a singles tournament — no partner needed")
     else:
-        raise HTTPException(400, "Pick a partner from your friends or enter their email")
+        if body.partner_user_id:
+            partner = db.get(User, body.partner_user_id)
+            if not partner or not partner.is_active:
+                raise HTTPException(400, "Partner not found")
+        elif body.partner_email:
+            partner = db.query(User).filter(User.email == body.partner_email.lower()).first()
+            if not partner:
+                name = (body.partner_name or "").strip()
+                if len(name) < 2:
+                    raise HTTPException(400, "Partner name is required for a new email")
+                partner = User(
+                    email=body.partner_email.lower(),
+                    password_hash=hash_password(str(uuid4())),
+                    full_name=name,
+                    role="PLAYER",
+                    university_id=body.university_id,
+                    must_set_password=True,
+                )
+                db.add(partner)
+                db.flush()
+                _ensure_ranking(db, partner.id)
+        else:
+            raise HTTPException(400, "Pick a partner from your friends or enter their email")
 
-    if partner.id == user.id:
-        raise HTTPException(400, "Partner must be a different player")
+        if partner.id == user.id:
+            raise HTTPException(400, "Partner must be a different player")
 
-    if _players_already_registered(db, t.id, [user.id, partner.id]):
-        raise HTTPException(400, "You or your partner are already registered for this tournament")
+    player_ids = [user.id] if singles else [user.id, partner.id]  # type: ignore[union-attr]
+    if _players_already_registered(db, t.id, player_ids):
+        raise HTTPException(
+            400,
+            "You are already registered for this tournament"
+            if singles
+            else "You or your partner are already registered for this tournament",
+        )
 
     pending_mine = (
         db.query(Registration)
@@ -489,6 +736,28 @@ def register_team(
         team = db.get(Team, pending_mine.team_id)
         if team:
             team.name = body.team_name.strip()
+            if not singles and partner:
+                # Refresh partner on slot 2
+                slot2 = (
+                    db.query(TeamPlayer)
+                    .filter(TeamPlayer.team_id == team.id, TeamPlayer.slot == 2)
+                    .first()
+                )
+                if slot2:
+                    if slot2.user_id != partner.id:
+                        if _players_already_registered(db, t.id, [partner.id]):
+                            raise HTTPException(400, "That partner is already registered")
+                        slot2.user_id = partner.id
+                        slot2.invitation_accepted = bool(body.partner_user_id)
+                else:
+                    db.add(
+                        TeamPlayer(
+                            team_id=team.id,
+                            user_id=partner.id,
+                            slot=2,
+                            invitation_accepted=bool(body.partner_user_id),
+                        )
+                    )
         return _issue_checkout(db, t, team, pending_mine)
 
     team = Team(
@@ -499,14 +768,20 @@ def register_team(
     db.add(team)
     db.flush()
     db.add(TeamPlayer(team_id=team.id, user_id=user.id, slot=1, invitation_accepted=True))
-    db.add(
-        TeamPlayer(
-            team_id=team.id,
-            user_id=partner.id,
-            slot=2,
-            invitation_accepted=bool(body.partner_user_id),
+    if partner:
+        db.add(
+            TeamPlayer(
+                team_id=team.id,
+                user_id=partner.id,
+                slot=2,
+                invitation_accepted=bool(body.partner_user_id),
+            )
         )
-    )
+
+    if body.phone and not user.phone:
+        user.phone = body.phone
+    if body.student_number and not user.student_number:
+        user.student_number = body.student_number
 
     reg = Registration(
         tournament_id=t.id,
@@ -528,7 +803,7 @@ def organiser_add_team(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Organiser adds a doubles team from known players (marks entry as paid)."""
+    """Organiser adds a team from known players (marks entry as paid)."""
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
@@ -537,39 +812,50 @@ def organiser_add_team(
         raise HTTPException(400, "Cannot add teams to a finished tournament")
     if _paid_team_count(db, t.id) >= t.max_teams:
         raise HTTPException(400, "Tournament is full")
-    if body.player1_id == body.player2_id:
-        raise HTTPException(400, "Pick two different players")
 
+    singles = _is_singles(t)
     p1 = db.get(User, body.player1_id)
-    p2 = db.get(User, body.player2_id)
-    if not p1 or not p1.is_active or not p2 or not p2.is_active:
-        raise HTTPException(400, "One or both players were not found")
+    if not p1 or not p1.is_active:
+        raise HTTPException(400, "Player 1 was not found")
 
-    if _players_already_registered(db, t.id, [p1.id, p2.id]):
+    p2: User | None = None
+    if singles:
+        if body.player2_id:
+            raise HTTPException(400, "Singles tournaments only need one player")
+    else:
+        if not body.player2_id:
+            raise HTTPException(400, "Pick two players for doubles")
+        if body.player1_id == body.player2_id:
+            raise HTTPException(400, "Pick two different players")
+        p2 = db.get(User, body.player2_id)
+        if not p2 or not p2.is_active:
+            raise HTTPException(400, "Player 2 was not found")
+
+    ids = [p1.id] if singles else [p1.id, p2.id]  # type: ignore[union-attr]
+    if _players_already_registered(db, t.id, ids):
         raise HTTPException(400, "One of these players is already in this tournament")
 
     team = Team(
         tournament_id=t.id,
         name=body.team_name.strip(),
-        university_id=body.university_id or p1.university_id or p2.university_id,
+        university_id=body.university_id or p1.university_id or (p2.university_id if p2 else None),
     )
     db.add(team)
     db.flush()
     db.add(TeamPlayer(team_id=team.id, user_id=p1.id, slot=1, invitation_accepted=True))
-    db.add(TeamPlayer(team_id=team.id, user_id=p2.id, slot=2, invitation_accepted=True))
     _ensure_ranking(db, p1.id)
-    _ensure_ranking(db, p2.id)
+    if p2:
+        db.add(TeamPlayer(team_id=team.id, user_id=p2.id, slot=2, invitation_accepted=True))
+        _ensure_ranking(db, p2.id)
 
     reg = Registration(
         tournament_id=t.id,
         team_id=team.id,
         status=PaymentStatus.PAID.value,
-        amount_cents=0 if t.entry_fee_cents else t.entry_fee_cents,
+        amount_cents=0,
         currency=t.currency,
         paid_at=datetime.now(timezone.utc),
     )
-    # Organiser-added teams are complimentary (fee waived) for on-site / invite adds
-    reg.amount_cents = 0
     db.add(reg)
     db.commit()
     db.refresh(team)
@@ -585,6 +871,20 @@ def organiser_add_team(
 def _issue_checkout(db: Session, t: Tournament, team: Team | None, reg: Registration) -> CheckoutResponse:
     if not team:
         raise HTTPException(404, "Team not found")
+
+    # Free entry — mark paid immediately (Stripe rejects €0 line items)
+    if t.entry_fee_cents <= 0:
+        from app.services.payments import mark_registration_paid
+
+        mark_registration_paid(db, reg, stripe_payment_id="free_entry")
+        db.commit()
+        return CheckoutResponse(
+            checkout_url=None,
+            registration_id=reg.id,
+            demo_mode=True,
+            message="Registration confirmed — free entry.",
+        )
+
     settings = get_settings()
     if settings.stripe_secret_key:
         import stripe
@@ -603,7 +903,7 @@ def _issue_checkout(db: Session, t: Tournament, team: Team | None, reg: Registra
                 }
             ],
             success_url=f"{settings.frontend_url}/t/{t.slug}/confirmed?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{settings.frontend_url}/t/{t.slug}/join",
+            cancel_url=f"{settings.frontend_url}/t/{t.slug}/join?cancelled=1",
             metadata={"registration_id": str(reg.id), "tournament_id": str(t.id)},
         )
         reg.stripe_session_id = session.id
@@ -758,8 +1058,12 @@ def check_in_team(
     if not team or team.tournament_id != tournament_id:
         raise HTTPException(404, "Team not found")
     team.player1_present = body.player1_present
-    team.player2_present = body.player2_present
-    team.checked_in = body.player1_present and body.player2_present
+    if _is_singles(t):
+        team.player2_present = True
+        team.checked_in = body.player1_present
+    else:
+        team.player2_present = body.player2_present
+        team.checked_in = body.player1_present and body.player2_present
     db.commit()
     return TeamOut(
         id=team.id,
@@ -787,6 +1091,24 @@ def generate(
     if not t:
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t)
+
+    if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        raise HTTPException(400, "Cannot regenerate a finished tournament")
+
+    completed_count = (
+        db.query(Match)
+        .filter(
+            Match.tournament_id == tournament_id,
+            Match.status.in_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
+        )
+        .count()
+    )
+    if completed_count > 0 and t.status == TournamentStatus.LIVE.value:
+        raise HTTPException(
+            400,
+            "Cannot regenerate while the event is live with completed matches. "
+            "Mark the tournament back to registration closed first if you really need to rebuild.",
+        )
 
     paid_teams = (
         db.query(Team)
@@ -821,6 +1143,13 @@ def generate(
     group_size = body.group_size or t.group_size
     advance = body.teams_advance_per_group or t.teams_advance_per_group
 
+    # Persist overrides so regenerate stays consistent
+    t.number_of_courts = courts
+    t.match_duration_minutes = duration
+    t.group_size = group_size
+    t.teams_advance_per_group = advance
+    _sync_courts(db, t.id, courts)
+
     # Seed teams
     for i, team in enumerate(sorted(paid_teams, key=lambda x: x.name), start=1):
         team.seed = i
@@ -837,6 +1166,11 @@ def generate(
     )
     generated = generate_tournament(config)
 
+    court_by_num = {
+        c.court_number: c
+        for c in db.query(Court).filter(Court.tournament_id == t.id).all()
+    }
+
     group_map: dict[str, Group] = {}
     for g in generated.groups:
         grp = Group(tournament_id=t.id, name=g.name, sort_order=g.sort_order)
@@ -848,11 +1182,13 @@ def generate(
 
     created_matches: list[Match] = []
     for gm in generated.matches:
+        court = court_by_num.get(gm.court_number) if gm.court_number else None
         m = Match(
             tournament_id=t.id,
             round=gm.round,
             stage=gm.stage,
             group_id=group_map[gm.group_name].id if gm.group_name else None,
+            court_id=court.id if court else None,
             court_number=gm.court_number,
             scheduled_start=gm.scheduled_start,
             team_a_id=UUID(gm.team_a_id) if gm.team_a_id else None,
@@ -916,6 +1252,10 @@ def update_score(
     if getattr(m, "ratings_applied", False):
         raise HTTPException(400, "This match already updated ratings and cannot be re-scored")
 
+    if body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER, MatchStatus.LIVE):
+        if not m.team_a_id or not m.team_b_id:
+            raise HTTPException(400, "Both teams must be set before scoring this match")
+
     if not m.score:
         m.score = MatchScore(match_id=m.id)
         db.add(m.score)
@@ -961,6 +1301,12 @@ def update_score(
         raise HTTPException(400, "Completed matches need a winner (or set scores that determine one)")
 
     _apply_tournament_match_ratings(db, m, t)
+
+    # When group stage finishes, seed knockout placeholders → real teams
+    if t and m.stage == "GROUP" and body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
+        _seed_knockout_from_standings(db, t)
+        if t.status != TournamentStatus.LIVE.value:
+            t.status = TournamentStatus.LIVE.value
 
     db.commit()
     db.refresh(m)
@@ -1104,43 +1450,61 @@ def player_view(
 ):
     t = _resolve_tournament(db, slug_or_id)
     my_team = None
+    my_payment_status = None
     next_match = None
     my_results = []
     if user:
-        membership = (
+        memberships = (
             db.query(TeamPlayer)
             .join(Team)
             .filter(Team.tournament_id == t.id, TeamPlayer.user_id == user.id, Team.withdrawn.is_(False))
-            .first()
+            .all()
         )
+        membership = None
+        for mp in memberships:
+            team = db.get(Team, mp.team_id)
+            if team and team.registration and team.registration.status == PaymentStatus.PAID.value:
+                membership = mp
+                break
+        if membership is None and memberships:
+            membership = memberships[0]
         if membership:
-            my_team = db.get(Team, membership.team_id)
-            upcoming = (
-                db.query(Match)
-                .options(joinedload(Match.score))
-                .filter(
-                    Match.tournament_id == t.id,
-                    Match.status.in_([MatchStatus.SCHEDULED.value, MatchStatus.CALLED.value, MatchStatus.LIVE.value]),
-                    ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
-                )
-                .order_by(Match.scheduled_start)
+            my_team = (
+                db.query(Team)
+                .options(joinedload(Team.registration))
+                .filter(Team.id == membership.team_id)
                 .first()
             )
-            if upcoming:
-                next_match = _match_out(db, upcoming)
-            done = (
-                db.query(Match)
-                .options(joinedload(Match.score))
-                .filter(
-                    Match.tournament_id == t.id,
-                    Match.status.in_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
-                    ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
+            if my_team and my_team.registration:
+                my_payment_status = my_team.registration.status
+            # Only expose fixtures for paid entries
+            if my_team and my_payment_status == PaymentStatus.PAID.value:
+                upcoming = (
+                    db.query(Match)
+                    .options(joinedload(Match.score))
+                    .filter(
+                        Match.tournament_id == t.id,
+                        Match.status.in_([MatchStatus.SCHEDULED.value, MatchStatus.CALLED.value, MatchStatus.LIVE.value]),
+                        ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
+                    )
+                    .order_by(Match.scheduled_start)
+                    .first()
                 )
-                .order_by(Match.scheduled_start)
-                .all()
-            )
-            for m in done:
-                my_results.append(_match_out(db, m))
+                if upcoming:
+                    next_match = _match_out(db, upcoming)
+                done = (
+                    db.query(Match)
+                    .options(joinedload(Match.score))
+                    .filter(
+                        Match.tournament_id == t.id,
+                        Match.status.in_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
+                        ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
+                    )
+                    .order_by(Match.scheduled_start)
+                    .all()
+                )
+                for m in done:
+                    my_results.append(_match_out(db, m))
 
     live = (
         db.query(Match)
@@ -1148,12 +1512,17 @@ def player_view(
         .filter(Match.tournament_id == t.id, Match.status == MatchStatus.LIVE.value)
         .all()
     )
+    court_names = _court_label_map(db, t.id)
     return {
         "tournament": _tournament_out(db, t),
-        "my_team": {"id": my_team.id, "name": my_team.name} if my_team else None,
+        "my_team": (
+            {"id": my_team.id, "name": my_team.name, "payment_status": my_payment_status}
+            if my_team
+            else None
+        ),
         "next_match": next_match,
         "my_results": my_results,
-        "live_matches": [_match_out(db, m) for m in live],
+        "live_matches": [_match_out(db, m, court_names) for m in live],
         "standings": get_standings(slug_or_id, db),
     }
 
@@ -1161,6 +1530,7 @@ def player_view(
 @router.get("/tournaments/{slug_or_id}/display")
 def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
     t = _resolve_tournament(db, slug_or_id)
+    court_names = _court_label_map(db, t.id)
     matches = (
         db.query(Match)
         .options(joinedload(Match.score))
@@ -1175,12 +1545,44 @@ def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
     for m in matches:
         if m.court_number is None:
             continue
-        by_court.setdefault(m.court_number, []).append(_match_out(db, m))
+        by_court.setdefault(m.court_number, []).append(_match_out(db, m, court_names))
     return {
         "tournament": _tournament_out(db, t),
         "courts": by_court,
+        "court_names": {str(k): v for k, v in court_names.items()},
         "live_count": sum(1 for m in matches if m.status == MatchStatus.LIVE.value),
     }
+
+
+@router.post("/tournaments/{tournament_id}/seed-knockout")
+def seed_knockout(
+    tournament_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Manually seed knockout from group standings (also runs automatically when groups finish)."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t)
+    filled = _seed_knockout_from_standings(db, t)
+    if filled == 0:
+        unfinished = (
+            db.query(Match)
+            .filter(
+                Match.tournament_id == t.id,
+                Match.stage == "GROUP",
+                Match.status.notin_(
+                    [MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value, MatchStatus.CANCELLED.value]
+                ),
+            )
+            .count()
+        )
+        if unfinished:
+            raise HTTPException(400, f"Finish all group matches first ({unfinished} remaining)")
+        raise HTTPException(400, "No knockout slots to fill (already seeded or no knockout)")
+    db.commit()
+    return {"filled": filled}
 
 
 @router.get("/rankings")
@@ -1271,12 +1673,23 @@ def organiser_dashboard(user: User = Depends(require_role(Role.ORGANISER)), db: 
             .filter(Match.tournament_id == t.id, Match.status == MatchStatus.COMPLETED.value)
             .count()
         )
-        checked = db.query(Team).filter(Team.tournament_id == t.id, Team.checked_in.is_(True)).count()
+        checked = (
+            db.query(Team)
+            .join(Registration, Registration.team_id == Team.id)
+            .filter(
+                Team.tournament_id == t.id,
+                Team.checked_in.is_(True),
+                Team.withdrawn.is_(False),
+                Registration.status == PaymentStatus.PAID.value,
+            )
+            .count()
+        )
+        per_team = 1 if _is_singles(t) else 2
         stats.append(
             {
                 "tournament": _tournament_out(db, t),
                 "teams": teams,
-                "players": teams * 2,
+                "players": teams * per_team,
                 "paid_registrations": paid,
                 "revenue_cents": sum(r.amount_cents for r in revenue),
                 "live_matches": live,

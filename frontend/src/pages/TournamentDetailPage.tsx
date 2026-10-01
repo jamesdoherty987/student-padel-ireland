@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { tournamentApi } from '../services/api'
 import { publicPathUrl } from '../native/platform'
 import {
+  courtLabel,
   currentSetScores,
   formatDate,
   formatMoney,
@@ -83,11 +84,17 @@ export default function TournamentDetailPage() {
   const joinUrl = tournament.invite_code
     ? publicPathUrl(`/join/${tournament.invite_code}`)
     : publicPathUrl(`/t/${tournament.slug}/join`)
-  const spots = spotsLeftLabel(tournament.registered_teams, tournament.max_teams)
+  const myPayment = (playerView?.my_team as { payment_status?: string } | null)?.payment_status
+  const hasPaidEntry = !!playerView?.my_team && myPayment === 'PAID'
+  const hasPendingEntry = !!playerView?.my_team && myPayment === 'PENDING'
+
+  const singles = tournament.play_format === 'SINGLES'
+  const spots = spotsLeftLabel(tournament.registered_teams, tournament.max_teams, tournament.play_format)
   const canJoin =
     tournament.status === 'REGISTRATION_OPEN' &&
     tournament.registered_teams < tournament.max_teams &&
-    !isPastCalendarDate(tournament.registration_deadline)
+    !isPastCalendarDate(tournament.registration_deadline) &&
+    !hasPaidEntry
   const showInvite = !!tournament.invite_code && (canJoin || isOps)
 
   return (
@@ -102,27 +109,27 @@ export default function TournamentDetailPage() {
         </p>
 
         <div className="tour-actions">
-          {canJoin && !playerView?.my_team && (
+          {canJoin && (
               <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
-                Join tournament
+                {hasPendingEntry ? 'Complete payment' : 'Join tournament'}
               </Link>
             )}
           {tournament.status === 'REGISTRATION_OPEN' &&
-            !playerView?.my_team &&
+            !hasPaidEntry &&
             (tournament.registered_teams >= tournament.max_teams ||
               isPastCalendarDate(tournament.registration_deadline)) && (
               <p className="muted-note tour-closed-note">
                 {isPastCalendarDate(tournament.registration_deadline)
                   ? 'Registration closed'
-                  : 'Tournament is full. Check back if a team withdraws.'}
+                  : `Tournament is full. Check back if a ${singles ? 'player' : 'team'} withdraws.`}
               </p>
             )}
-          {playerView?.my_team && (
+          {hasPaidEntry && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
-              My matches · {playerView.my_team.name}
+              My matches · {playerView?.my_team?.name}
             </Link>
           )}
-          {!playerView?.my_team && (
+          {!hasPaidEntry && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-ghost">
               Live scores
             </Link>
@@ -137,7 +144,7 @@ export default function TournamentDetailPage() {
         <div className="tour-stats">
           <div>
             <strong>{tournament.registered_teams}</strong>
-            <span>Doubles teams</span>
+            <span>{singles ? 'Players' : 'Doubles teams'}</span>
           </div>
           <div>
             <strong>{tournament.number_of_courts}</strong>
@@ -145,7 +152,7 @@ export default function TournamentDetailPage() {
           </div>
           <div>
             <strong>{formatMoney(tournament.entry_fee_cents, tournament.currency)}</strong>
-            <span>Per doubles team</span>
+            <span>{singles ? 'Per player' : 'Per doubles team'}</span>
           </div>
           <div>
             <strong>{spots === 'Full' ? 'Full' : tournament.max_teams - tournament.registered_teams}</strong>
@@ -172,7 +179,7 @@ export default function TournamentDetailPage() {
                 const s = currentSetScores(m.score)
                 return (
                   <div key={m.id} className="live-tile">
-                    <div className="live-court">Court {m.court_number}</div>
+                    <div className="live-court">{courtLabel(m.court_name, m.court_number)}</div>
                     <div className="live-score-row">
                       <span>{m.team_a_name || m.team_a_placeholder || 'TBD'}</span>
                       <strong>{s.a}</strong>
@@ -196,7 +203,7 @@ export default function TournamentDetailPage() {
               {upcoming.map((m) => (
                 <li key={m.id}>
                   <span className="match-preview-court">
-                    {m.status === 'CALLED' ? 'Called' : `Court ${m.court_number ?? 'TBC'}`}
+                    {m.status === 'CALLED' ? 'Called' : courtLabel(m.court_name, m.court_number)}
                   </span>
                   <span>
                     {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}

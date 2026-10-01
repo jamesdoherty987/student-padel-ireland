@@ -5,7 +5,7 @@ import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl, publicWebOrigin } from '../native/platform'
 import { apiErrorMessage, platformApi, tournamentApi, type Tournament } from '../services/api'
-import { formatDate, formatDoublesEntry, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
+import { formatDate, formatEntrySummary, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
 import './Organiser.css'
 import './Admin.css'
 
@@ -35,6 +35,8 @@ type TournamentFormState = {
   entry_fee_euros: number
   max_teams: number
   format: string
+  play_format: string
+  match_duration_minutes: number
   description: string
   rules: string
   registration_deadline: string
@@ -51,8 +53,10 @@ const EMPTY_FORM: TournamentFormState = {
   entry_fee_euros: 50,
   max_teams: 48,
   format: 'GROUP_KNOCKOUT',
+  play_format: 'DOUBLES',
+  match_duration_minutes: 20,
   description: '',
-  rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day. Entry is per doubles team.',
+  rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day.',
   registration_deadline: '',
   open_now: true,
 }
@@ -86,6 +90,8 @@ function formFromTournament(t: Tournament): TournamentFormState {
     entry_fee_euros: Math.round(t.entry_fee_cents) / 100,
     max_teams: t.max_teams,
     format: t.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : 'GROUP_KNOCKOUT',
+    play_format: t.play_format === 'SINGLES' ? 'SINGLES' : 'DOUBLES',
+    match_duration_minutes: t.match_duration_minutes || 20,
     description: t.description || '',
     rules: t.rules || '',
     registration_deadline: t.registration_deadline ? t.registration_deadline.slice(0, 10) : '',
@@ -103,6 +109,8 @@ function payloadFromForm(form: TournamentFormState, previous?: Tournament) {
     entry_fee_cents: Math.round(Number(form.entry_fee_euros) * 100),
     max_teams: Number(form.max_teams),
     format: form.format || 'GROUP_KNOCKOUT',
+    play_format: form.play_format || 'DOUBLES',
+    match_duration_minutes: Number(form.match_duration_minutes) || 20,
     description: form.description.trim() || null,
     rules: form.rules.trim() || null,
     registration_deadline: form.registration_deadline
@@ -380,7 +388,7 @@ function AdminTournamentCard({
             {t.start_time ? ` · ${t.start_time.slice(0, 5)}` : ''}
           </p>
           <p className="admin-meta">
-            {formatDoublesEntry(row.paid_registrations, t.max_teams, t.entry_fee_cents, t.currency)} · Revenue{' '}
+            {formatEntrySummary(row.paid_registrations, t.max_teams, t.entry_fee_cents, t.currency, t.play_format)} · Revenue{' '}
             {formatMoney(row.revenue_cents)}
           </p>
         </div>
@@ -511,7 +519,9 @@ function TournamentModal({
             </button>
           )}
         </div>
-        <p className="admin-modal-lead">Entry fee is per doubles team (2 players).</p>
+        <p className="admin-modal-lead">
+          Entry fee is per {form.play_format === 'SINGLES' ? 'player' : 'doubles team'}.
+        </p>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label">Name</label>
@@ -581,6 +591,18 @@ function TournamentModal({
             />
           </div>
           <div className="form-group">
+            <label className="form-label">Singles or doubles</label>
+            <select
+              className="form-select"
+              value={form.play_format}
+              onChange={(e) => set('play_format', e.target.value)}
+              disabled={saving}
+            >
+              <option value="DOUBLES">Doubles</option>
+              <option value="SINGLES">Singles</option>
+            </select>
+          </div>
+          <div className="form-group">
             <label className="form-label">Format</label>
             <select
               className="form-select"
@@ -606,7 +628,21 @@ function TournamentModal({
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Max doubles teams</label>
+              <label className="form-label">Match mins</label>
+              <input
+                className="form-input"
+                type="number"
+                min={5}
+                max={120}
+                value={form.match_duration_minutes}
+                onChange={(e) => set('match_duration_minutes', Number(e.target.value))}
+                disabled={saving}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">
+                Max {form.play_format === 'SINGLES' ? 'players' : 'doubles teams'}
+              </label>
               <input
                 className="form-input"
                 type="number"
@@ -618,7 +654,9 @@ function TournamentModal({
               />
             </div>
             <div className="form-group">
-              <label className="form-label">€ / doubles team</label>
+              <label className="form-label">
+                € / {form.play_format === 'SINGLES' ? 'player' : 'doubles team'}
+              </label>
               <input
                 className="form-input"
                 type="number"

@@ -112,6 +112,7 @@ Bundle ID: `ie.studentpadelireland.app`
 5. **Ratings** - doubles-aware Elo (team average of partners vs both opponents); updates on tournament + community matches  
 6. **Platform** - public profiles, Ireland rankings board  
 7. **Business (stubs)** - sponsors table, announcements, organiser revenue stats  
+8. **Native shell** - Capacitor iOS/Android (`frontend/MOBILE.md`) - App Store / Play packaging ready; chat, push, IAP still deferred  
 
 ## Environment
 
@@ -122,7 +123,8 @@ See `backend/.env.example`. For Supabase, set `DATABASE_URL` to the Postgres con
 - Frontend → Vercel (`frontend/`, build `npm run build`, output `dist`)  
 - Backend → Render (`uvicorn app.main:app`)  
 - DB → Supabase  
+- Native → Capacitor (`npm run cap:ios` / `cap:android` after setting `VITE_API_URL`)  
 
 ## V1 explicitly deferred
 
-Native apps, chat, AI, push/SMS, subscriptions, multi-country, advanced stats - see the product spec.
+Chat, AI, push/SMS, subscriptions, multi-country, advanced stats, App Store IAP - see the product spec.

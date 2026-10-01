@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
+import { hapticSuccess } from '../native/haptics'
 import { isNativeApp } from '../native/platform'
 import { openExternalUrl, whenExternalBrowserCloses } from '../native/shell'
 import {
@@ -20,6 +21,12 @@ import './Community.css'
 function ConfirmView({ data }: { data: RegistrationConfirm }) {
   const slug = data.tournament?.slug
   const paid = data.status === 'PAID'
+  const singles = data.tournament?.play_format === 'SINGLES'
+
+  useEffect(() => {
+    if (paid) void hapticSuccess()
+  }, [paid])
+
   return (
     <div className="app-shell">
       <NavBar />
@@ -29,11 +36,11 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
         <p className="confirm-tour">{data.tournament?.name}</p>
         <div className="confirm-box">
           <div>
-            <span>Team</span>
+            <span>{singles ? 'Entry' : 'Team'}</span>
             <strong>{data.team_name}</strong>
           </div>
           <div>
-            <span>Players</span>
+            <span>{singles ? 'Player' : 'Players'}</span>
             <strong>
               {data.players.map((p) => (
                 <span key={p} style={{ display: 'block' }}>
@@ -69,11 +76,15 @@ export default function JoinTournamentPage() {
   const [params] = useSearchParams()
   const sessionId = params.get('session_id')
   const registrationId = params.get('registration_id')
+  const paymentCancelled = params.get('cancelled') === '1'
   const isConfirmRoute = window.location.pathname.includes('/confirmed') || !!sessionId
   const hasConfirmParams = !!sessionId || !!registrationId
 
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const [paymentNote, setPaymentNote] = useState(
+    paymentCancelled ? 'Payment was cancelled. You can try again when ready.' : '',
+  )
 
   const { data: tournament, isLoading: tLoading, isError: tError } = useQuery({
     queryKey: ['tournament', slug],
@@ -322,6 +333,9 @@ export default function JoinTournamentPage() {
 
   const isFull = tournament.registered_teams >= tournament.max_teams
 
+  const singles = tournament.play_format === 'SINGLES'
+  const entryNoun = singles ? 'players' : 'doubles teams'
+
   if (isFull) {
     return (
       <div className="app-shell">
@@ -329,7 +343,7 @@ export default function JoinTournamentPage() {
         <main className="page empty-state">
           <h1 className="page-title">{tournament.name}</h1>
           <p className="page-sub">
-            This tournament is full ({tournament.max_teams} doubles teams). Check the event page in case a spot opens.
+            This tournament is full ({tournament.max_teams} {entryNoun}). Check the event page in case a spot opens.
           </p>
           <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
             View tournament
@@ -343,55 +357,78 @@ export default function JoinTournamentPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setPaymentNote('')
+    let holdLoadingForCheckout = false
 
-    const partnerFromFriend =
-      partnerMode === 'friend' ? friendPartners.find((f) => f.user_id === form.partner_user_id) : null
+    if (!singles) {
+      const partnerFromFriend =
+        partnerMode === 'friend' ? friendPartners.find((f) => f.user_id === form.partner_user_id) : null
 
-    if (partnerMode === 'friend' && !partnerFromFriend) {
-      setError('Pick a partner from your friends, or switch to email')
-      setLoading(false)
-      return
-    }
-
-    if (partnerMode === 'email') {
-      if (!form.partner_email.trim() || form.partner_name.trim().length < 2) {
-        setError('Enter your partner name and email')
+      if (partnerMode === 'friend' && !partnerFromFriend) {
+        setError('Pick a partner from your friends, or switch to email')
         setLoading(false)
         return
       }
-      if (form.partner_email.trim().toLowerCase() === user.email.toLowerCase()) {
-        setError('Partner email must be different from yours')
-        setLoading(false)
-        return
+
+      if (partnerMode === 'email') {
+        if (!form.partner_email.trim() || form.partner_name.trim().length < 2) {
+          setError('Enter your partner name and email')
+          setLoading(false)
+          return
+        }
+        if (form.partner_email.trim().toLowerCase() === user.email.toLowerCase()) {
+          setError('Partner email must be different from yours')
+          setLoading(false)
+          return
+        }
       }
     }
 
     try {
       const payload: Record<string, unknown> = {
         tournament_id: tournament.id,
-        team_name: form.team_name,
+        team_name: form.team_name.trim() || user.full_name,
         phone: form.phone || null,
         university_id: form.university_id || null,
         student_number: form.student_number || null,
       }
-      if (partnerFromFriend) {
-        payload.partner_user_id = partnerFromFriend.user_id
-        payload.partner_name = partnerFromFriend.full_name
-        payload.partner_email = null
-      } else {
-        payload.partner_name = form.partner_name
-        payload.partner_email = form.partner_email
+      if (!singles) {
+        const partnerFromFriend =
+          partnerMode === 'friend' ? friendPartners.find((f) => f.user_id === form.partner_user_id) : null
+        if (partnerFromFriend) {
+          payload.partner_user_id = partnerFromFriend.user_id
+          payload.partner_name = partnerFromFriend.full_name
+          payload.partner_email = null
+        } else {
+          payload.partner_name = form.partner_name
+          payload.partner_email = form.partner_email
+        }
       }
 
       const { data } = await tournamentApi.register(tournament.id, payload)
       if (data.checkout_url) {
         if (isNativeApp()) {
-          // Stripe must leave the WebView; confirm when the in-app browser closes
-          const confirmPath = `/t/${slug}/confirmed?registration_id=${data.registration_id}`
+          // Stripe leaves the WebView. On browser close, verify payment — do not assume success.
+          const regId = data.registration_id
+          holdLoadingForCheckout = true
           checkoutDisposeRef.current?.()
           const dispose = await whenExternalBrowserCloses(() => {
             checkoutDisposeRef.current = null
-            navigate(confirmPath, { replace: true })
+            void (async () => {
+              try {
+                const { data: reg } = await tournamentApi.getRegistration(regId)
+                if (reg.status === 'PAID') {
+                  navigate(`/t/${slug}/confirmed?registration_id=${regId}`, { replace: true })
+                  return
+                }
+              } catch {
+                /* fall through */
+              }
+              setPaymentNote(
+                'Payment was not completed. If you paid, open My matches or try confirming again shortly.',
+              )
+              setLoading(false)
+            })()
           })
           checkoutDisposeRef.current = dispose
           try {
@@ -399,6 +436,7 @@ export default function JoinTournamentPage() {
           } catch {
             dispose()
             checkoutDisposeRef.current = null
+            holdLoadingForCheckout = false
             setError('Could not open payment page')
           }
           return
@@ -410,7 +448,7 @@ export default function JoinTournamentPage() {
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Registration failed'))
     } finally {
-      setLoading(false)
+      if (!holdLoadingForCheckout) setLoading(false)
     }
   }
 
@@ -420,9 +458,12 @@ export default function JoinTournamentPage() {
       <main className="page">
         <h1 className="page-title">Join {tournament.name}</h1>
         <p className="page-sub">
-          Entry {formatMoney(tournament.entry_fee_cents, tournament.currency)} per doubles team ·{' '}
-          {tournament.registered_teams}/{tournament.max_teams} doubles registered
+          {singles ? 'Singles' : 'Doubles'} · Entry{' '}
+          {formatMoney(tournament.entry_fee_cents, tournament.currency)} per{' '}
+          {singles ? 'player' : 'doubles team'} · {tournament.registered_teams}/{tournament.max_teams}{' '}
+          {singles ? 'players' : 'doubles'} registered
         </p>
+        {paymentNote && <p className="auth-error" style={{ marginBottom: '1rem' }}>{paymentNote}</p>}
         <form className="join-form" onSubmit={onSubmit}>
           <div className="form-group">
             <label className="form-label" htmlFor="join-name">
@@ -438,18 +479,19 @@ export default function JoinTournamentPage() {
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="join-team">
-              Team name
+              {singles ? 'Entry name' : 'Team name'}
             </label>
             <input
               id="join-team"
               className="form-input"
               value={form.team_name}
               onChange={(e) => setForm({ ...form, team_name: e.target.value })}
-              placeholder="UL Padel 1"
+              placeholder={singles ? user.full_name : 'UL Padel 1'}
               required
               minLength={2}
             />
           </div>
+          {!singles && (
           <div className="form-group">
             <label className="form-label" id="join-partner-label">
               Partner
@@ -522,6 +564,7 @@ export default function JoinTournamentPage() {
               </>
             )}
           </div>
+          )}
           <div className="form-group">
             <label className="form-label" htmlFor="join-phone">
               Phone

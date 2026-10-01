@@ -2,7 +2,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { tournamentApi, type Match } from '../services/api'
-import { formatMatchScore, formatTime } from '../utils/format'
+import { formatMatchScore, formatTime, courtLabel } from '../utils/format'
 import './PlayerLive.css'
 
 export default function PlayerLivePage() {
@@ -52,7 +52,11 @@ export default function PlayerLivePage() {
 
   const t = data.tournament
   const next = data.next_match as Match | null
-  const myTeamId = data.my_team?.id as string | undefined
+  const myTeam = data.my_team as { id: string; name: string; payment_status?: string } | null
+  const myPayment = myTeam?.payment_status
+  const hasPaidEntry = !!myTeam && myPayment === 'PAID'
+  const hasPendingEntry = !!myTeam && myPayment === 'PENDING'
+  const myTeamId = hasPaidEntry ? myTeam?.id : undefined
   const standings = (data.standings || []) as Array<{
     group: string
     standings: Array<{ team_id: string; team_name: string; points: number }>
@@ -83,7 +87,7 @@ export default function PlayerLivePage() {
             <ul className="pl-live-list">
               {(data.live_matches as Match[]).map((m) => (
                 <li key={m.id}>
-                  <strong>Court {m.court_number ?? '-'}</strong>
+                  <strong>{courtLabel(m.court_name, m.court_number)}</strong>
                   <span>
                     {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}
                   </span>
@@ -96,9 +100,18 @@ export default function PlayerLivePage() {
 
         <section className="pl-next">
           <h2>Your next match</h2>
-          {next ? (
+          {hasPendingEntry ? (
             <div className="pl-next-card">
-              <div className="pl-court">Court {next.court_number ?? '-'}</div>
+              <p className="pl-empty" style={{ marginBottom: 12 }}>
+                Your registration is waiting for payment.
+              </p>
+              <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block">
+                Complete payment
+              </Link>
+            </div>
+          ) : next && hasPaidEntry ? (
+            <div className="pl-next-card">
+              <div className="pl-court">{courtLabel(next.court_name, next.court_number)}</div>
               <div className="pl-time">{formatTime(next.scheduled_start)}</div>
               <div className="pl-vs">
                 <div>{next.team_a_name || next.team_a_placeholder || 'TBD'}</div>
@@ -111,12 +124,12 @@ export default function PlayerLivePage() {
             </div>
           ) : (
             <p className="pl-empty">
-              {data.my_team
+              {hasPaidEntry
                 ? 'No upcoming matches scheduled yet.'
                 : 'Register for this tournament to see your next match here.'}
             </p>
           )}
-          {!data.my_team && t.status === 'REGISTRATION_OPEN' && (
+          {!hasPaidEntry && !hasPendingEntry && t.status === 'REGISTRATION_OPEN' && (
             <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block" style={{ marginTop: 12 }}>
               Join tournament
             </Link>
@@ -125,26 +138,30 @@ export default function PlayerLivePage() {
 
         <section className="pl-block">
           <h2>Your results</h2>
-          {(data.my_results || []).length === 0 && <p className="pl-empty">No results yet.</p>}
-          <ul className="pl-results">
-            {(data.my_results || []).map((m: Match) => {
-              const won = m.winner_id ? m.winner_id === myTeamId : null
-              const mark = won === true ? '✓' : won === false ? '✗' : '·'
-              return (
-                <li key={m.id} className={won === true ? 'win' : won === false ? 'loss' : ''}>
-                  <span>
-                    {mark} {formatMatchScore(m.score)}
-                  </span>
-                  <span>
-                    vs{' '}
-                    {m.team_a_id === myTeamId
-                      ? m.team_b_name || 'Opponent'
-                      : m.team_a_name || 'Opponent'}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
+          {(!hasPaidEntry || (data.my_results || []).length === 0) && (
+            <p className="pl-empty">{hasPaidEntry ? 'No results yet.' : 'Results appear after you register and play.'}</p>
+          )}
+          {hasPaidEntry && (
+            <ul className="pl-results">
+              {(data.my_results || []).map((m: Match) => {
+                const won = m.winner_id ? m.winner_id === myTeamId : null
+                const mark = won === true ? '✓' : won === false ? '✗' : '·'
+                return (
+                  <li key={m.id} className={won === true ? 'win' : won === false ? 'loss' : ''}>
+                    <span>
+                      {mark} {formatMatchScore(m.score)}
+                    </span>
+                    <span>
+                      vs{' '}
+                      {m.team_a_id === myTeamId
+                        ? m.team_b_name || 'Opponent'
+                        : m.team_a_name || 'Opponent'}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </section>
 
         {standings.map((g) => (

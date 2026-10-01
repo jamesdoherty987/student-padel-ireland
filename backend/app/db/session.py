@@ -112,6 +112,8 @@ def init_db() -> None:
     _pg_add_column_if_missing("matches", "ratings_applied", "BOOLEAN DEFAULT FALSE")
     _sqlite_add_column_if_missing("tournaments", "invite_code", "VARCHAR(12)")
     _pg_add_column_if_missing("tournaments", "invite_code", "VARCHAR(12)")
+    _sqlite_add_column_if_missing("tournaments", "play_format", "VARCHAR(20) DEFAULT 'DOUBLES'")
+    _pg_add_column_if_missing("tournaments", "play_format", "VARCHAR(20) DEFAULT 'DOUBLES'")
     _sqlite_add_column_if_missing("ranking_history", "community_match_id", "CHAR(36)")
     _sqlite_add_column_if_missing("community_matches", "confirmed_by_id", "CHAR(36)")
     _sqlite_add_column_if_missing("community_matches", "court_number", "INTEGER")

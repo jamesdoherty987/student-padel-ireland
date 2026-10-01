@@ -13,7 +13,7 @@ import {
   type Match,
   type PlayerSearch,
 } from '../services/api'
-import { formatMoney } from '../utils/format'
+import { formatMoney, courtLabel, formatTime } from '../utils/format'
 import './Organiser.css'
 
 export default function OrganiserDashboard() {
@@ -72,6 +72,7 @@ export default function OrganiserDashboard() {
       slug: string
       status: string
       max_teams: number
+      play_format?: string
     }
     teams: number
     players: number
@@ -105,6 +106,8 @@ export default function OrganiserDashboard() {
     enabled: !!slug && canOrganise,
   })
 
+  const isSingles = (tournamentDetail?.play_format || active?.tournament.play_format) === 'SINGLES'
+
   const { data: friends = [] } = useQuery({
     queryKey: ['friends'],
     queryFn: async () => (await communityApi.friends()).data,
@@ -136,6 +139,16 @@ export default function OrganiserDashboard() {
     onError: (e: unknown) => {
       showToast(apiErrorMessage(e, 'Generate failed. You need at least 2 paid teams.'))
     },
+  })
+
+  const seedKoMut = useMutation({
+    mutationFn: () => tournamentApi.seedKnockout(tid!),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['org-matches'] })
+      const d = res.data as { filled?: number }
+      showToast(`Knockout seeded · ${d.filled ?? 0} slots filled`)
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not seed knockout')),
   })
 
   const openMut = useMutation({
@@ -196,7 +209,7 @@ export default function OrganiserDashboard() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['org-teams'] })
       qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
-      showToast('Team checked in')
+      showToast(isSingles ? 'Player checked in' : 'Team checked in')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Check-in failed')),
   })
@@ -335,10 +348,12 @@ export default function OrganiserDashboard() {
                   <strong>{active.players}</strong>
                   <span>Players</span>
                 </div>
-                <div>
-                  <strong>{active.teams}</strong>
-                  <span>Teams</span>
-                </div>
+                {!isSingles && (
+                  <div>
+                    <strong>{active.teams}</strong>
+                    <span>Teams</span>
+                  </div>
+                )}
                 <div>
                   <strong>{formatMoney(active.revenue_cents)}</strong>
                   <span>Revenue</span>
@@ -384,10 +399,10 @@ export default function OrganiserDashboard() {
 
               <section className="org-section">
                 <div className="org-section-head">
-                  <h2>Teams & check-in</h2>
+                  <h2>{isSingles ? 'Players & check-in' : 'Teams & check-in'}</h2>
                   {canAddTeams && (
                     <button type="button" className="btn btn-dark btn-sm" onClick={() => setShowAddTeam(true)}>
-                      Add team
+                      {isSingles ? 'Add player' : 'Add team'}
                     </button>
                   )}
                 </div>
@@ -414,48 +429,74 @@ export default function OrganiserDashboard() {
                       </div>
                     ),
                   )}
-                  {teams.length === 0 && <p className="muted">No teams registered yet. Share the invite or add a team.</p>}
+                  {teams.length === 0 && (
+                    <p className="muted">
+                      {isSingles
+                        ? 'No players registered yet. Share the invite or add a player.'
+                        : 'No teams registered yet. Share the invite or add a team.'}
+                    </p>
+                  )}
                 </div>
               </section>
 
               <section className="org-section">
-                <h2>Matches & scoring</h2>
+                <div className="org-section-head">
+                  <h2>Matches & scoring</h2>
+                  {matches.some((m) => m.stage === 'KNOCKOUT' && (!m.team_a_id || !m.team_b_id)) &&
+                    matches.some((m) => m.stage === 'GROUP') && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={seedKoMut.isPending}
+                        onClick={() => seedKoMut.mutate()}
+                      >
+                        {seedKoMut.isPending ? 'Seeding…' : 'Seed knockout'}
+                      </button>
+                    )}
+                </div>
                 <div className="org-table">
-                  {matches.slice(0, 40).map((m) => (
-                    <div key={m.id} className="org-row">
-                      <div>
-                        <strong>
-                          {m.round.replace(/_/g, ' ')} · Court {m.court_number ?? '-'}
-                        </strong>
-                        <span>
-                          {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
-                          {m.team_b_name || m.team_b_placeholder || 'TBD'}
-                        </span>
+                  {matches.map((m) => {
+                    const canScore = !!(m.team_a_id && m.team_b_id)
+                    return (
+                      <div key={m.id} className="org-row">
+                        <div>
+                          <strong>
+                            {m.round.replace(/_/g, ' ')} · {courtLabel(m.court_name, m.court_number)}
+                            {m.scheduled_start ? ` · ${formatTime(m.scheduled_start)}` : ''}
+                          </strong>
+                          <span>
+                            {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                            {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                          </span>
+                        </div>
+                        <div className="org-row-right">
+                          <span className="badge badge-draft">{m.status}</span>
+                          <button
+                            className="btn btn-dark btn-sm"
+                            disabled={!canScore}
+                            title={canScore ? 'Enter score' : 'Waiting for teams to be seeded'}
+                            onClick={() => {
+                              if (!canScore) return
+                              setScoreMatch(m)
+                              setScoreForm({
+                                set1_a: m.score?.set1_a ?? 0,
+                                set1_b: m.score?.set1_b ?? 0,
+                                set2_a: m.score?.set2_a ?? 0,
+                                set2_b: m.score?.set2_b ?? 0,
+                                set3_a: m.score?.set3_a ?? 0,
+                                set3_b: m.score?.set3_b ?? 0,
+                                current_set: m.score?.current_set ?? 1,
+                                status: m.status === 'SCHEDULED' ? 'LIVE' : m.status,
+                                winner_id: m.winner_id || '',
+                              })
+                            }}
+                          >
+                            Score
+                          </button>
+                        </div>
                       </div>
-                      <div className="org-row-right">
-                        <span className="badge badge-draft">{m.status}</span>
-                        <button
-                          className="btn btn-dark btn-sm"
-                          onClick={() => {
-                            setScoreMatch(m)
-                            setScoreForm({
-                              set1_a: m.score?.set1_a ?? 0,
-                              set1_b: m.score?.set1_b ?? 0,
-                              set2_a: m.score?.set2_a ?? 0,
-                              set2_b: m.score?.set2_b ?? 0,
-                              set3_a: m.score?.set3_a ?? 0,
-                              set3_b: m.score?.set3_b ?? 0,
-                              current_set: m.score?.current_set ?? 1,
-                              status: m.status === 'SCHEDULED' ? 'LIVE' : m.status,
-                              winner_id: m.winner_id || '',
-                            })
-                          }}
-                        >
-                          Score
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   {matches.length === 0 && (
                     <p className="muted">Generate the tournament to create fixtures.</p>
                   )}
@@ -506,6 +547,7 @@ export default function OrganiserDashboard() {
       {showAddTeam && tid && (
         <AddTeamModal
           tournamentId={tid}
+          playFormat={isSingles ? 'SINGLES' : 'DOUBLES'}
           friends={friendOptions}
           onClose={() => setShowAddTeam(false)}
           onAdded={(msg) => {
@@ -643,17 +685,21 @@ export default function OrganiserDashboard() {
   )
 }
 
+
 function AddTeamModal({
   tournamentId,
+  playFormat = 'DOUBLES',
   friends,
   onClose,
   onAdded,
 }: {
   tournamentId: string
+  playFormat?: string
   friends: Array<{ user_id: string; full_name: string; university_short?: string | null }>
   onClose: () => void
   onAdded: (msg: string) => void
 }) {
+  const singles = playFormat === 'SINGLES'
   const [teamName, setTeamName] = useState('')
   const [player1Id, setPlayer1Id] = useState('')
   const [player2Id, setPlayer2Id] = useState('')
@@ -686,7 +732,7 @@ function AddTeamModal({
   const addFromSearch = (p: PlayerSearch) => {
     setPicked((prev) => (prev.some((x) => x.id === p.id) ? prev : [...prev, p]))
     if (!player1Id) setPlayer1Id(p.id)
-    else if (!player2Id && p.id !== player1Id) setPlayer2Id(p.id)
+    else if (!singles && !player2Id && p.id !== player1Id) setPlayer2Id(p.id)
     setSearch('')
   }
 
@@ -694,10 +740,14 @@ function AddTeamModal({
     e.preventDefault()
     setError('')
     if (teamName.trim().length < 2) {
-      setError('Enter a team name')
+      setError(singles ? 'Enter a player / entry name' : 'Enter a team name')
       return
     }
-    if (!player1Id || !player2Id || player1Id === player2Id) {
+    if (!player1Id) {
+      setError('Pick a player')
+      return
+    }
+    if (!singles && (!player2Id || player1Id === player2Id)) {
       setError('Pick two different players')
       return
     }
@@ -706,12 +756,12 @@ function AddTeamModal({
       await tournamentApi.organiserAddTeam(tournamentId, {
         team_name: teamName.trim(),
         player1_id: player1Id,
-        player2_id: player2Id,
+        ...(singles ? {} : { player2_id: player2Id }),
       })
-      onAdded('Team added (entry fee waived)')
+      onAdded(singles ? 'Player added (entry fee waived)' : 'Team added (entry fee waived)')
       onClose()
     } catch (err: unknown) {
-      setError(apiErrorMessage(err, 'Could not add team'))
+      setError(apiErrorMessage(err, 'Could not add entry'))
     } finally {
       setSaving(false)
     }
@@ -726,14 +776,16 @@ function AddTeamModal({
         aria-labelledby="add-team-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="add-team-title">Add team</h2>
+        <h2 id="add-team-title">{singles ? 'Add player' : 'Add team'}</h2>
         <p className="muted" style={{ marginBottom: '1rem' }}>
-          Adds a doubles pair and marks them paid (fee waived). Use friends or search by name.
+          {singles
+            ? 'Adds a singles entry and marks them paid (fee waived).'
+            : 'Adds a doubles pair and marks them paid (fee waived). Use friends or search by name.'}
         </p>
         <form onSubmit={onSubmit}>
           <div className="form-group">
             <label className="form-label" htmlFor="add-team-name">
-              Team name
+              {singles ? 'Entry name' : 'Team name'}
             </label>
             <input
               id="add-team-name"
@@ -742,12 +794,12 @@ function AddTeamModal({
               onChange={(e) => setTeamName(e.target.value)}
               required
               minLength={2}
-              placeholder="e.g. UL Smash"
+              placeholder={singles ? 'e.g. Aoife Murphy' : 'e.g. UL Smash'}
             />
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="add-p1">
-              Player 1
+              {singles ? 'Player' : 'Player 1'}
             </label>
             <select
               id="add-p1"
@@ -765,26 +817,28 @@ function AddTeamModal({
               ))}
             </select>
           </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="add-p2">
-              Player 2
-            </label>
-            <select
-              id="add-p2"
-              className="form-select"
-              value={player2Id}
-              onChange={(e) => setPlayer2Id(e.target.value)}
-              required
-            >
-              <option value="">Select player</option>
-              {options.map((p) => (
-                <option key={p.user_id} value={p.user_id} disabled={p.user_id === player1Id}>
-                  {p.full_name}
-                  {p.university_short ? ` (${p.university_short})` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!singles && (
+            <div className="form-group">
+              <label className="form-label" htmlFor="add-p2">
+                Player 2
+              </label>
+              <select
+                id="add-p2"
+                className="form-select"
+                value={player2Id}
+                onChange={(e) => setPlayer2Id(e.target.value)}
+                required
+              >
+                <option value="">Select player</option>
+                {options.map((p) => (
+                  <option key={p.user_id} value={p.user_id} disabled={p.user_id === player1Id}>
+                    {p.full_name}
+                    {p.university_short ? ` (${p.university_short})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label" htmlFor="add-search">
               Search players
@@ -825,7 +879,7 @@ function AddTeamModal({
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Adding...' : 'Add team'}
+              {saving ? 'Adding...' : singles ? 'Add player' : 'Add team'}
             </button>
           </div>
         </form>
@@ -842,6 +896,7 @@ function CreateTournamentModal({
   onCreated: (msg: string, id?: string) => void
 }) {
   const qc = useQueryClient()
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [form, setForm] = useState({
     name: '',
     location: '',
@@ -852,7 +907,14 @@ function CreateTournamentModal({
     entry_fee_euros: 50,
     max_teams: 48,
     format: 'GROUP_KNOCKOUT',
+    play_format: 'DOUBLES',
+    match_duration_minutes: 20,
+    group_size: 4,
+    teams_advance_per_group: 2,
   })
+  const [courtNames, setCourtNames] = useState<string[]>(
+    Array.from({ length: 6 }, (_, i) => `Court ${i + 1}`),
+  )
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -863,6 +925,16 @@ function CreateTournamentModal({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, saving])
+
+  const setCourtCount = (n: number) => {
+    const count = Math.max(1, Math.min(32, n || 1))
+    setForm((f) => ({ ...f, number_of_courts: count }))
+    setCourtNames((prev) => {
+      const next = [...prev]
+      while (next.length < count) next.push(`Court ${next.length + 1}`)
+      return next.slice(0, count)
+    })
+  }
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -876,9 +948,14 @@ function CreateTournamentModal({
         event_date: form.event_date,
         start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
         number_of_courts: form.number_of_courts,
+        court_names: courtNames.map((n, i) => n.trim() || `Court ${i + 1}`),
         entry_fee_cents: Math.round(form.entry_fee_euros * 100),
         max_teams: form.max_teams,
         format: form.format,
+        play_format: form.play_format,
+        match_duration_minutes: form.match_duration_minutes,
+        group_size: form.group_size,
+        teams_advance_per_group: form.teams_advance_per_group,
       })
       await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
       onCreated('Tournament created', data.id)
@@ -890,10 +967,13 @@ function CreateTournamentModal({
     }
   }
 
+  const singles = form.play_format === 'SINGLES'
+  const entryUnit = singles ? 'player' : 'doubles team'
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal"
+        className="modal modal-wide"
         role="dialog"
         aria-modal="true"
         aria-labelledby="create-tournament-title"
@@ -921,8 +1001,21 @@ function CreateTournamentModal({
               />
             </div>
           ))}
+
           <div className="form-group">
-            <label className="form-label">Format</label>
+            <label className="form-label">Singles or doubles</label>
+            <select
+              className="form-select"
+              value={form.play_format}
+              onChange={(e) => setForm({ ...form, play_format: e.target.value })}
+            >
+              <option value="DOUBLES">Doubles (pairs)</option>
+              <option value="SINGLES">Singles (1v1)</option>
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Bracket format</label>
             <select
               className="form-select"
               value={form.format}
@@ -932,19 +1025,61 @@ function CreateTournamentModal({
               <option value="ROUND_ROBIN">Round robin</option>
             </select>
           </div>
+
           <div className="form-group">
-            <label className="form-label">Courts</label>
+            <label className="form-label">Number of courts</label>
             <input
               className="form-input"
               type="number"
               min={1}
               max={32}
               value={form.number_of_courts}
-              onChange={(e) => setForm({ ...form, number_of_courts: Number(e.target.value) })}
+              onChange={(e) => setCourtCount(Number(e.target.value))}
             />
           </div>
+
           <div className="form-group">
-            <label className="form-label">Max doubles teams</label>
+            <label className="form-label">Court names</label>
+            <p className="muted" style={{ marginBottom: 8, fontSize: '0.85rem' }}>
+              Shown to players and on the TV board — e.g. Glass Court, Court 3.
+            </p>
+            <div className="court-name-grid">
+              {courtNames.map((name, i) => (
+                <input
+                  key={i}
+                  className="form-input"
+                  value={name}
+                  onChange={(e) => {
+                    const next = [...courtNames]
+                    next[i] = e.target.value
+                    setCourtNames(next)
+                  }}
+                  placeholder={`Court ${i + 1}`}
+                  aria-label={`Court ${i + 1} name`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Match length (minutes)</label>
+            <input
+              className="form-input"
+              type="number"
+              min={5}
+              max={120}
+              value={form.match_duration_minutes}
+              onChange={(e) =>
+                setForm({ ...form, match_duration_minutes: Number(e.target.value) || 20 })
+              }
+            />
+            <p className="muted" style={{ marginTop: 6, fontSize: '0.85rem' }}>
+              Used to schedule start times across courts.
+            </p>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Max {singles ? 'players' : 'doubles teams'}</label>
             <input
               className="form-input"
               type="number"
@@ -954,8 +1089,9 @@ function CreateTournamentModal({
               onChange={(e) => setForm({ ...form, max_teams: Number(e.target.value) })}
             />
           </div>
+
           <div className="form-group">
-            <label className="form-label">Entry fee (€ per doubles team)</label>
+            <label className="form-label">Entry fee (€ per {entryUnit})</label>
             <input
               className="form-input"
               type="number"
@@ -965,6 +1101,45 @@ function CreateTournamentModal({
               onChange={(e) => setForm({ ...form, entry_fee_euros: Number(e.target.value) })}
             />
           </div>
+
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            style={{ marginBottom: '1rem' }}
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            {showAdvanced ? 'Hide advanced' : 'Advanced options'}
+          </button>
+
+          {showAdvanced && form.format === 'GROUP_KNOCKOUT' && (
+            <>
+              <div className="form-group">
+                <label className="form-label">Teams per group</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  min={2}
+                  max={8}
+                  value={form.group_size}
+                  onChange={(e) => setForm({ ...form, group_size: Number(e.target.value) || 4 })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Advance to knockout per group</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  max={4}
+                  value={form.teams_advance_per_group}
+                  onChange={(e) =>
+                    setForm({ ...form, teams_advance_per_group: Number(e.target.value) || 2 })
+                  }
+                />
+              </div>
+            </>
+          )}
+
           {error && <p className="auth-error">{error}</p>}
           <div className="modal-actions">
             <button type="button" className="btn btn-ghost" onClick={onClose}>

@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models import MatchStatus, TournamentFormat, TournamentStatus, UserRole
+from app.models import MatchStatus, PlayFormat, TournamentFormat, TournamentStatus, UserRole
 
 
 class TokenResponse(BaseModel):
@@ -35,6 +35,12 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+class AccountDeleteRequest(BaseModel):
+    """Confirm deletion with the account password (App Store 5.1.1(v))."""
+
+    password: str = Field(min_length=1, max_length=128)
 
 
 class UserPublic(BaseModel):
@@ -105,16 +111,26 @@ class TournamentCreate(BaseModel):
     event_date: date
     start_time: time
     number_of_courts: int = Field(default=4, ge=1, le=32)
+    court_names: Optional[list[str]] = None
     entry_fee_cents: int = Field(default=5000, ge=0)
     max_teams: int = Field(default=48, ge=2, le=256)
     registration_deadline: Optional[datetime] = None
     format: TournamentFormat = TournamentFormat.GROUP_KNOCKOUT
+    play_format: PlayFormat = PlayFormat.DOUBLES
     rules: Optional[str] = None
     description: Optional[str] = None
     match_duration_minutes: int = Field(default=20, ge=5, le=120)
     group_size: int = Field(default=4, ge=2, le=8)
     teams_advance_per_group: int = Field(default=2, ge=1, le=4)
     tie_break_order: Optional[str] = None
+
+    @field_validator("court_names")
+    @classmethod
+    def _clean_court_names(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        if v is None:
+            return None
+        # Keep positions so Court 2 stays index 1 even if left blank
+        return [n.strip() if n else "" for n in v]
 
 
 class TournamentUpdate(BaseModel):
@@ -124,10 +140,12 @@ class TournamentUpdate(BaseModel):
     event_date: Optional[date] = None
     start_time: Optional[time] = None
     number_of_courts: Optional[int] = Field(default=None, ge=1, le=32)
+    court_names: Optional[list[str]] = None
     entry_fee_cents: Optional[int] = Field(default=None, ge=0)
     max_teams: Optional[int] = Field(default=None, ge=2, le=256)
     registration_deadline: Optional[datetime] = None
     format: Optional[TournamentFormat] = None
+    play_format: Optional[PlayFormat] = None
     rules: Optional[str] = None
     description: Optional[str] = None
     status: Optional[TournamentStatus] = None
@@ -151,6 +169,7 @@ class TournamentOut(BaseModel):
     max_teams: int
     registration_deadline: Optional[datetime] = None
     format: str
+    play_format: str = PlayFormat.DOUBLES.value
     rules: Optional[str] = None
     description: Optional[str] = None
     status: str
@@ -160,6 +179,7 @@ class TournamentOut(BaseModel):
     teams_advance_per_group: int
     registered_teams: int = 0
     invite_code: Optional[str] = None
+    courts: list[dict] = []
 
     model_config = {"from_attributes": True}
 
@@ -190,11 +210,11 @@ class RegisterTeamRequest(BaseModel):
 
 
 class OrganiserAddTeamRequest(BaseModel):
-    """Organiser adds a doubles team (waives payment / marks paid)."""
+    """Organiser adds a team (waives payment / marks paid). player2 optional for singles."""
 
     team_name: str = Field(min_length=2, max_length=120)
     player1_id: UUID
-    player2_id: UUID
+    player2_id: Optional[UUID] = None
     university_id: Optional[UUID] = None
 
 
@@ -230,6 +250,7 @@ class MatchOut(BaseModel):
     round: str
     stage: str
     court_number: Optional[int] = None
+    court_name: Optional[str] = None
     scheduled_start: Optional[datetime] = None
     team_a_id: Optional[UUID] = None
     team_b_id: Optional[UUID] = None
@@ -286,7 +307,7 @@ class StandingOut(BaseModel):
 
 class CheckInRequest(BaseModel):
     player1_present: bool = True
-    player2_present: bool = True
+    player2_present: bool = True  # ignored for singles; treated as present
 
 
 class SponsorOut(BaseModel):

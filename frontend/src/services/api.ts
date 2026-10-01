@@ -75,6 +75,7 @@ export type Tournament = {
   max_teams: number
   registration_deadline?: string | null
   format: string
+  play_format?: string
   rules?: string | null
   description?: string | null
   status: string
@@ -84,6 +85,7 @@ export type Tournament = {
   teams_advance_per_group: number
   registered_teams: number
   invite_code?: string | null
+  courts?: Array<{ number: number; name: string; id: string }>
 }
 
 export type Match = {
@@ -92,6 +94,7 @@ export type Match = {
   round: string
   stage: string
   court_number?: number | null
+  court_name?: string | null
   scheduled_start?: string | null
   team_a_id?: string | null
   team_b_id?: string | null
@@ -277,6 +280,7 @@ export const authApi = {
   register: (data: Record<string, unknown>) => api.post('/api/auth/register', data),
   login: (data: { email: string; password: string }) => api.post('/api/auth/login', data),
   me: () => api.get<User>('/api/auth/me'),
+  deleteAccount: (password: string) => api.delete('/api/auth/me', { data: { password } }),
 }
 
 export const tournamentApi = {
@@ -294,6 +298,8 @@ export const tournamentApi = {
   teams: (tournamentId: string) => api.get(`/api/tournaments/${tournamentId}/teams`),
   generate: (tournamentId: string, data?: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/generate`, data || {}),
+  seedKnockout: (tournamentId: string) =>
+    api.post(`/api/tournaments/${tournamentId}/seed-knockout`),
   matches: (slugOrId: string) => api.get<Match[]>(`/api/tournaments/${slugOrId}/matches`),
   standings: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/standings`),
   playerView: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/player-view`),

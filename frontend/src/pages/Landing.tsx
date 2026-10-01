@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import { tournamentApi, type Tournament } from '../services/api'
-import { formatDoublesEntry, parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
+import { formatEntrySummary, parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
 import { FlipWords } from '../components/ui/FlipWords'
 import { InfiniteMovingCards } from '../components/ui/InfiniteMovingCards'
 import { Globe } from '../components/ui/Globe'
@@ -334,7 +334,7 @@ export default function Landing() {
                       <div className="lp-event-side">
                         <span className={`badge ${statusBadgeClass(t.status)}`}>{statusLabel(t.status)}</span>
                         <span className="lp-event-fee">
-                          {formatDoublesEntry(t.registered_teams, t.max_teams, t.entry_fee_cents, t.currency)}
+                          {formatEntrySummary(t.registered_teams, t.max_teams, t.entry_fee_cents, t.currency, t.play_format)}
                         </span>
                       </div>
                     </Link>
@@ -428,6 +428,8 @@ export default function Landing() {
           <span>Student Padel Ireland</span>
           <div className="lp-footer-links">
             <a href="#upcoming">Upcoming</a>
+            <Link to="/privacy">Privacy</Link>
+            <Link to="/terms">Terms</Link>
             <a href="mailto:hello@studentpadelireland.ie">Contact</a>
           </div>
         </div>

@@ -105,7 +105,7 @@ export function LoginPage() {
               checked={remember}
               onChange={(e) => setRemember(e.target.checked)}
             />
-            <span>Keep me signed in on this browser</span>
+            <span>Stay signed in</span>
           </label>
           {error && <p className="auth-error">{error}</p>}
           <button className="btn btn-primary btn-block" disabled={loading}>

@@ -364,6 +364,16 @@
   margin: auto;
 }
 
+.modal.modal-wide {
+  width: min(560px, 100%);
+}
+
+.court-name-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.5rem;
+}
+
 .modal h2 {
   margin-bottom: 0.5rem;
 }

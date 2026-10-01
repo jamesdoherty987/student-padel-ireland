@@ -80,7 +80,10 @@ class Settings(BaseSettings):
             "http://localhost:5173",
             "http://localhost:3000",
             "http://127.0.0.1:5173",
-            # Production web
+            # Production web (canonical domain)
+            "https://studentpadelireland.ie",
+            "https://www.studentpadelireland.ie",
+            # Legacy short domain (keep until DNS fully cut over)
             "https://studentpadel.ie",
             "https://www.studentpadel.ie",
             # Capacitor WebView (see capacitor.config.ts server.hostname)

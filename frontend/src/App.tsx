@@ -3,8 +3,12 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import NativeTabBar from './components/NativeTabBar'
+import OfflineBanner from './components/OfflineBanner'
 import { NativeDeepLinkRouter } from './native/NativeDeepLinkRouter'
+import { isNativeApp } from './native/platform'
 import Landing from './pages/Landing'
+import NativeWelcomePage from './pages/NativeWelcomePage'
 import { LoginPage, SignupPage } from './pages/Auth'
 import TournamentsPage from './pages/TournamentsPage'
 import TournamentDetailPage from './pages/TournamentDetailPage'
@@ -21,6 +25,8 @@ import CommunityPage from './pages/CommunityPage'
 import CompetitionDetailPage from './pages/CompetitionDetailPage'
 import JoinCompetitionPage from './pages/JoinCompetitionPage'
 import NotFoundPage from './pages/NotFoundPage'
+import PrivacyPage from './pages/PrivacyPage'
+import TermsPage from './pages/TermsPage'
 import { communityApi, platformApi, tournamentApi } from './services/api'
 import { clearQueryCachePersist, restoreQueryCache, schedulePersistQueryCache } from './utils/queryPersist'
 
@@ -97,6 +103,11 @@ function AuthPersistBridge({ children }: { children: ReactNode }) {
   )
 }
 
+function RootRoute() {
+  if (isNativeApp()) return <NativeWelcomePage />
+  return <Landing />
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -104,8 +115,12 @@ export default function App() {
         <BrowserRouter>
           <AuthPersistBridge>
             <NativeDeepLinkRouter />
+            <OfflineBanner />
             <Routes>
-              <Route path="/" element={<Landing />} />
+              <Route path="/" element={<RootRoute />} />
+              <Route path="/welcome" element={<NativeWelcomePage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/tournaments" element={<TournamentsPage />} />
@@ -162,6 +177,7 @@ export default function App() {
               <Route path="/404" element={<NotFoundPage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
+            <NativeTabBar />
           </AuthPersistBridge>
         </BrowserRouter>
       </AuthProvider>

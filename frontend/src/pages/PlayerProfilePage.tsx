@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
-import { apiErrorMessage, communityApi, platformApi, type ProfileMedia } from '../services/api'
+import {
+  apiErrorMessage,
+  authApi,
+  communityApi,
+  platformApi,
+  type ProfileMedia,
+} from '../services/api'
 import { mediaUrl } from '../utils/media'
 import './Tournament.css'
 import './Profile.css'
@@ -35,7 +41,8 @@ function winRate(wins: number, losses: number) {
 
 export default function PlayerProfilePage() {
   const { id = '' } = useParams()
-  const { user } = useAuth()
+  const navigate = useNavigate()
+  const { user, logout } = useAuth()
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -47,6 +54,9 @@ export default function PlayerProfilePage() {
   const [asAvatar, setAsAvatar] = useState(false)
   const [brokenMedia, setBrokenMedia] = useState<Set<string>>(() => new Set())
   const [lightboxError, setLightboxError] = useState(false)
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState('')
 
   const { data: player, isLoading, isError, refetch } = useQuery({
     queryKey: ['player', id],
@@ -175,6 +185,15 @@ export default function PlayerProfilePage() {
       qc.invalidateQueries({ queryKey: ['friends'] })
     },
     onError: (e) => setError(apiErrorMessage(e)),
+  })
+
+  const deleteAccountMut = useMutation({
+    mutationFn: (password: string) => authApi.deleteAccount(password),
+    onSuccess: () => {
+      logout()
+      navigate('/', { replace: true })
+    },
+    onError: (e) => setDeleteError(apiErrorMessage(e)),
   })
 
   const rate = player ? winRate(player.wins, player.losses) : null
@@ -493,6 +512,76 @@ export default function PlayerProfilePage() {
                 </div>
               )}
             </section>
+
+            {isOwn && (
+              <section className="profile-account-danger" aria-labelledby="account-danger-title">
+                <h2 id="account-danger-title">Account</h2>
+                <p className="muted-note">
+                  Delete your account to remove personal data from Student Padel Ireland. Tournament history may
+                  remain in anonymised form.
+                </p>
+                {!showDeleteAccount ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm profile-delete-trigger"
+                    onClick={() => {
+                      setShowDeleteAccount(true)
+                      setDeleteError('')
+                      setDeletePassword('')
+                    }}
+                  >
+                    Delete account
+                  </button>
+                ) : (
+                  <form
+                    className="profile-delete-form"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      setDeleteError('')
+                      if (!deletePassword.trim()) {
+                        setDeleteError('Enter your password to confirm')
+                        return
+                      }
+                      deleteAccountMut.mutate(deletePassword)
+                    }}
+                  >
+                    <label className="profile-delete-label" htmlFor="delete-account-password">
+                      Confirm with your password
+                    </label>
+                    <input
+                      id="delete-account-password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                      placeholder="Password"
+                    />
+                    {deleteError && <p className="form-error">{deleteError}</p>}
+                    <div className="profile-upload-actions">
+                      <button
+                        type="submit"
+                        className="btn btn-primary btn-sm"
+                        disabled={deleteAccountMut.isPending}
+                      >
+                        {deleteAccountMut.isPending ? 'Deleting…' : 'Permanently delete'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={deleteAccountMut.isPending}
+                        onClick={() => {
+                          setShowDeleteAccount(false)
+                          setDeletePassword('')
+                          setDeleteError('')
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </section>
+            )}
 
             <div className="profile-footer-links">
               <Link to="/community" className="btn btn-ghost">

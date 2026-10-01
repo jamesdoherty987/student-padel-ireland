@@ -57,6 +57,13 @@ class TournamentFormat(StrEnum):
     SWISS = "SWISS"
 
 
+class PlayFormat(StrEnum):
+    """Singles or doubles entry for an official tournament."""
+
+    SINGLES = "SINGLES"
+    DOUBLES = "DOUBLES"
+
+
 class MatchStatus(StrEnum):
     SCHEDULED = "SCHEDULED"
     CALLED = "CALLED"
@@ -144,6 +151,7 @@ class Tournament(Base, TimestampMixin):
     max_teams: Mapped[int] = mapped_column(Integer, default=48)
     registration_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     format: Mapped[str] = mapped_column(String(40), default=TournamentFormat.GROUP_KNOCKOUT.value)
+    play_format: Mapped[str] = mapped_column(String(20), default=PlayFormat.DOUBLES.value)
     rules: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(40), default=TournamentStatus.DRAFT.value)
     organiser_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)

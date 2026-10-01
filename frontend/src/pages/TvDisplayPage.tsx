@@ -7,7 +7,13 @@ import { tournamentApi, type Match } from '../services/api'
 import { currentSetScores } from '../utils/format'
 import './TvDisplay.css'
 
-function CourtPanel({ court, matches }: { court: number; matches: Match[] }) {
+function CourtPanel({
+  label,
+  matches,
+}: {
+  label: string
+  matches: Match[]
+}) {
   const current =
     matches.find((m) => m.status === 'LIVE') ||
     matches.find((m) => m.status === 'CALLED') ||
@@ -15,7 +21,7 @@ function CourtPanel({ court, matches }: { court: number; matches: Match[] }) {
   if (!current) {
     return (
       <div className="tv-court empty">
-        <div className="tv-court-num">Court {court}</div>
+        <div className="tv-court-num">{label}</div>
         <p>Open</p>
       </div>
     )
@@ -25,7 +31,7 @@ function CourtPanel({ court, matches }: { court: number; matches: Match[] }) {
   return (
     <div className={`tv-court ${current.status === 'LIVE' ? 'is-live' : ''}`}>
       <div className="tv-court-num">
-        Court {court}
+        {label}
         {current.status === 'LIVE' && <span className="tv-live">LIVE</span>}
       </div>
       <div className="tv-row">
@@ -76,6 +82,7 @@ export default function TvDisplayPage() {
   }
 
   const courts = data.courts as Record<string, Match[]>
+  const courtNames = (data.court_names || {}) as Record<string, string>
   const total = data.tournament.number_of_courts || Object.keys(courts).length || 6
   const slots = Array.from({ length: total }, (_, i) => i + 1)
 
@@ -87,7 +94,11 @@ export default function TvDisplayPage() {
       </header>
       <div className="tv-grid" style={{ '--cols': Math.min(slots.length, 3) } as CSSProperties}>
         {slots.map((n) => (
-          <CourtPanel key={n} court={n} matches={courts[String(n)] || []} />
+          <CourtPanel
+            key={n}
+            label={courtNames[String(n)] || `Court ${n}`}
+            matches={courts[String(n)] || []}
+          />
         ))}
       </div>
     </div>

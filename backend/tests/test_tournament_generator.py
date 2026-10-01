@@ -167,3 +167,28 @@ def test_appearances_balanced_within_group():
             appearances[m.team_b_id] += 1
     for tid, count in appearances.items():
         assert count == 3  # 4-team groups → 3 matches each
+
+
+def test_team_conflict_schedule_no_overlap():
+    result = generate_tournament(_config(8, courts=2, group_size=4, advance=2))
+    by_team: dict[str, list] = defaultdict(list)
+    for m in result.matches:
+        if m.stage != "GROUP":
+            continue
+        assert m.scheduled_start is not None
+        for tid in (m.team_a_id, m.team_b_id):
+            for prev_start in by_team[tid]:
+                assert prev_start != m.scheduled_start
+            by_team[tid].append(m.scheduled_start)
+
+
+def test_advance_one_placeholders():
+    result = generate_tournament(_config(8, group_size=4, advance=1))
+    ko_first = [m for m in result.matches if m.stage == "KNOCKOUT"][0].round
+    first = [m for m in result.matches if m.round == ko_first]
+    labels = []
+    for m in first:
+        labels.append(m.team_a_placeholder)
+        labels.append(m.team_b_placeholder)
+    assert any(l and l.startswith("1st") for l in labels)
+    assert not any(l and l.startswith("2nd") for l in labels)
