@@ -80,6 +80,9 @@ class Settings(BaseSettings):
             "http://localhost:5173",
             "http://localhost:3000",
             "http://127.0.0.1:5173",
+            # Production web
+            "https://studentpadel.ie",
+            "https://www.studentpadel.ie",
             # Capacitor WebView (see capacitor.config.ts server.hostname)
             "https://app.studentpadelireland.ie",
             "capacitor://localhost",
