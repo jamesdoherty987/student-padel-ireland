@@ -13,14 +13,14 @@ export function formatMoney(cents: number, currency = 'EUR') {
   }
 }
 
-/** e.g. "12/48 doubles · €50/team" or when empty "€50/team · 48 doubles spots" */
+/** e.g. "12/48 doubles · €35/player" or when empty "€35/player · 48 doubles spots" */
 export function formatDoublesEntry(
   registered: number,
   maxTeams: number,
   entryFeeCents: number,
   currency = 'EUR',
 ) {
-  const fee = `${formatMoney(entryFeeCents, currency)}/team`
+  const fee = `${formatMoney(entryFeeCents, currency)}/player`
   if (registered <= 0) {
     return `${fee} · ${maxTeams} doubles spots`
   }

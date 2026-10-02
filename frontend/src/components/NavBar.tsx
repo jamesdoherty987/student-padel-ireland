@@ -50,7 +50,7 @@ export default function NavBar() {
   return (
     <header className={`app-nav ${open ? 'is-menu-open' : ''}`}>
       <Link to="/" className="app-nav-brand" onClick={close}>
-        <span className="app-nav-brand-text">Student Padel Ireland</span>
+        <img src="/logo.png" alt="Student Padel Ireland" className="app-nav-logo" />
       </Link>
       <nav className={`app-nav-links ${open ? 'is-open' : ''}`}>
         <NavLink to="/tournaments" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>

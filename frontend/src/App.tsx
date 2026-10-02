@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from './context/AuthContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { ConfirmDialogProvider } from './components/ConfirmDialog'
 import { NativeDeepLinkRouter } from './native/NativeDeepLinkRouter'
 import Landing from './pages/Landing'
 import { LoginPage, SignupPage } from './pages/Auth'
@@ -31,23 +32,24 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <NativeDeepLinkRouter />
+          <ConfirmDialogProvider />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/tournaments" element={<TournamentsPage />} />
-            <Route path="/t/:slug" element={<TournamentDetailPage />} />
-            <Route
-              path="/t/:slug/join"
-              element={
-                <ProtectedRoute>
-                  <JoinTournamentPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/t/:slug/live" element={<PlayerLivePage />} />
-            <Route
-              path="/t/:slug/confirmed"
+              <Route path="/t/:slug" element={<TournamentDetailPage />} />
+              <Route
+                path="/t/:slug/join"
+                element={
+                  <ProtectedRoute>
+                    <JoinTournamentPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/t/:slug/live" element={<PlayerLivePage />} />
+              <Route
+                path="/t/:slug/confirmed"
               element={
                 <ProtectedRoute>
                   <JoinTournamentPage />

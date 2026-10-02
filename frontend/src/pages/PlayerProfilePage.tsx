@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
+import { confirmDialog } from '../components/ConfirmDialog'
 import { apiErrorMessage, communityApi, platformApi, type ProfileMedia } from '../services/api'
 import { mediaUrl } from '../utils/media'
 import './Tournament.css'
@@ -425,8 +426,14 @@ export default function PlayerProfilePage() {
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
-                    onClick={() => {
-                      if (window.confirm('Remove this from your profile?')) {
+                    onClick={async () => {
+                      const confirmed = await confirmDialog({
+                        title: 'Remove from profile?',
+                        message: 'This photo or video will be removed from your profile.',
+                        confirmLabel: 'Remove',
+                        cancelLabel: 'Keep',
+                      })
+                      if (confirmed) {
                         deleteMut.mutate(lightbox.id)
                       }
                     }}

@@ -21,6 +21,7 @@ export default function OrganiserDashboard() {
   const [toast, setToast] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(params.get('t'))
   const [showCreate, setShowCreate] = useState(false)
+  const [editing, setEditing] = useState<string | null>(null)
   const [confirmGenerate, setConfirmGenerate] = useState(false)
   const [announce, setAnnounce] = useState({ title: '', body: '' })
   const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
@@ -37,21 +38,22 @@ export default function OrganiserDashboard() {
   })
 
   useEffect(() => {
-    const open = showCreate || confirmGenerate || !!scoreMatch
+    const open = showCreate || !!editing || confirmGenerate || !!scoreMatch
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [showCreate, confirmGenerate, scoreMatch])
+  }, [showCreate, editing, confirmGenerate, scoreMatch])
 
   useEffect(() => {
-    if (!confirmGenerate && !scoreMatch) return
+    if (!confirmGenerate && !scoreMatch && !editing) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setConfirmGenerate(false)
       setScoreMatch(null)
+      setEditing(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [confirmGenerate, scoreMatch])
+  }, [confirmGenerate, scoreMatch, editing])
 
   const tournaments = (data?.tournaments || []) as Array<{
     tournament: {
@@ -201,13 +203,21 @@ export default function OrganiserDashboard() {
         <aside className="org-nav">
           <p className="org-nav-label">Organiser</p>
           {tournaments.map((t) => (
-            <button
-              key={t.tournament.id}
-              className={`org-nav-item ${active?.tournament.id === t.tournament.id ? 'active' : ''}`}
-              onClick={() => setSelectedId(t.tournament.id)}
-            >
-              {t.tournament.name}
-            </button>
+            <div key={t.tournament.id} className="org-nav-item-wrapper">
+              <button
+                className={`org-nav-item ${active?.tournament.id === t.tournament.id ? 'active' : ''}`}
+                onClick={() => setSelectedId(t.tournament.id)}
+              >
+                {t.tournament.name}
+              </button>
+              <button
+                className="org-nav-item-edit"
+                onClick={() => setEditing(t.tournament.id)}
+                title="Edit tournament"
+              >
+                <i className="fas fa-edit" />
+              </button>
+            </div>
           ))}
           <button className="btn btn-ghost btn-block" onClick={() => setShowCreate(true)}>
             + New tournament
@@ -425,6 +435,18 @@ export default function OrganiserDashboard() {
         />
       )}
 
+      {editing && (
+        <EditTournamentModal
+          tournamentId={editing}
+          tournaments={tournaments}
+          onClose={() => setEditing(null)}
+          onUpdated={(msg) => {
+            showToast(msg)
+            qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+          }}
+        />
+      )}
+
       {confirmGenerate && (
         <div className="modal-backdrop" onClick={() => setConfirmGenerate(false)}>
           <div
@@ -566,8 +588,11 @@ function CreateTournamentModal({
     event_date: '',
     start_time: '10:00',
     number_of_courts: 6,
-    entry_fee_euros: 50,
+    entry_fee_euros: '',
     max_teams: 48,
+    description: '',
+    rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day. Entry is per player.',
+    registration_deadline: '',
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -592,9 +617,14 @@ function CreateTournamentModal({
         event_date: form.event_date,
         start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
         number_of_courts: form.number_of_courts,
-        entry_fee_cents: Math.round(form.entry_fee_euros * 100),
+        entry_fee_cents: Math.round(Number(form.entry_fee_euros) * 100),
         max_teams: form.max_teams,
         format: 'GROUP_KNOCKOUT',
+        description: form.description.trim() || null,
+        rules: form.rules.trim() || null,
+        registration_deadline: form.registration_deadline
+          ? `${form.registration_deadline}T23:59:00`
+          : null,
       })
       await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
       onCreated('Tournament created', data.id)
@@ -660,14 +690,41 @@ function CreateTournamentModal({
             />
           </div>
           <div className="form-group">
-            <label className="form-label">Entry fee (€ per doubles team)</label>
+            <label className="form-label">Registration deadline (optional)</label>
+            <input
+              className="form-input"
+              type="date"
+              value={form.registration_deadline}
+              onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Entry fee (€ per player)</label>
             <input
               className="form-input"
               type="number"
               min={0}
-              step={1}
+              step={0.01}
               value={form.entry_fee_euros}
-              onChange={(e) => setForm({ ...form, entry_fee_euros: Number(e.target.value) })}
+              onChange={(e) => setForm({ ...form, entry_fee_euros: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Description</label>
+            <textarea
+              className="form-textarea"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Rules</label>
+            <textarea
+              className="form-textarea"
+              value={form.rules}
+              onChange={(e) => setForm({ ...form, rules: e.target.value })}
+              rows={3}
             />
           </div>
           {error && <p className="auth-error">{error}</p>}
@@ -677,6 +734,265 @@ function CreateTournamentModal({
             </button>
             <button className="btn btn-primary" disabled={saving}>
               {saving ? 'Creating…' : 'Create'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+function EditTournamentModal({
+  tournamentId,
+  tournaments,
+  onClose,
+  onUpdated,
+}: {
+  tournamentId: string
+  tournaments: Array<{ tournament: { id: string; name: string } }>
+  onClose: () => void
+  onUpdated: (msg: string) => void
+}) {
+  const qc = useQueryClient()
+  const tournament = tournaments.find((t) => t.tournament.id === tournamentId)?.tournament
+  const [form, setForm] = useState({
+    name: tournament?.name || '',
+    location: '',
+    venue: '',
+    event_date: '',
+    start_time: '10:00',
+    number_of_courts: 6,
+    entry_fee_euros: '',
+    max_teams: 48,
+    description: '',
+    rules: '',
+    registration_deadline: '',
+  })
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [loadingTournament, setLoadingTournament] = useState(true)
+
+  useEffect(() => {
+    const loadTournament = async () => {
+      try {
+        const { data } = await tournamentApi.get(tournamentId)
+        setForm({
+          name: data.name,
+          location: data.location,
+          venue: data.venue,
+          event_date: data.event_date.slice(0, 10),
+          start_time: data.start_time?.slice(0, 5) || '10:00',
+          number_of_courts: data.number_of_courts,
+          entry_fee_euros: String(Math.round(data.entry_fee_cents) / 100),
+          max_teams: data.max_teams,
+          description: data.description || '',
+          rules: data.rules || '',
+          registration_deadline: data.registration_deadline ? data.registration_deadline.slice(0, 10) : '',
+        })
+      } catch (err: unknown) {
+        setError(apiErrorMessage(err, 'Could not load tournament'))
+      } finally {
+        setLoadingTournament(false)
+      }
+    }
+    void loadTournament()
+  }, [tournamentId])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !saving) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, saving])
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSaving(true)
+    try {
+      const payload: Record<string, unknown> = {
+        name: form.name.trim(),
+        location: form.location.trim(),
+        venue: form.venue.trim(),
+        event_date: form.event_date,
+        start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
+        entry_fee_cents: Math.round(Number(form.entry_fee_euros) * 100),
+        max_teams: Number(form.max_teams),
+        description: form.description.trim() || null,
+        rules: form.rules.trim() || null,
+        registration_deadline: form.registration_deadline
+          ? `${form.registration_deadline}T23:59:00`
+          : null,
+      }
+      if (form.number_of_courts) {
+        payload.number_of_courts = form.number_of_courts
+      }
+      await tournamentApi.update(tournamentId, payload)
+      await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      onUpdated('Tournament updated')
+      onClose()
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, 'Could not update tournament'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loadingTournament) {
+    return (
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="edit-tournament-title">
+          <h2 id="edit-tournament-title">Loading…</h2>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-tournament-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 id="edit-tournament-title">Edit tournament</h2>
+        <p className="admin-modal-lead">Entry fee is per player.</p>
+        <form onSubmit={onSubmit}>
+          <div className="form-group">
+            <label className="form-label">Name</label>
+            <input
+              className="form-input"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              required
+              minLength={3}
+              disabled={saving}
+            />
+          </div>
+          <div className="admin-form-row admin-form-row-2">
+            <div className="form-group">
+              <label className="form-label">City</label>
+              <input
+                className="form-input"
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                required
+                disabled={saving}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Venue</label>
+              <input
+                className="form-input"
+                value={form.venue}
+                onChange={(e) => setForm({ ...form, venue: e.target.value })}
+                required
+                disabled={saving}
+              />
+            </div>
+          </div>
+          <div className="admin-form-row admin-form-row-2">
+            <div className="form-group">
+              <label className="form-label">Event date</label>
+              <input
+                className="form-input"
+                type="date"
+                value={form.event_date}
+                onChange={(e) => setForm({ ...form, event_date: e.target.value })}
+                required
+                disabled={saving}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Start time</label>
+              <input
+                className="form-input"
+                type="time"
+                value={form.start_time}
+                onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+                required
+                disabled={saving}
+              />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Registration deadline (optional)</label>
+            <input
+              className="form-input"
+              type="date"
+              value={form.registration_deadline}
+              onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })}
+              disabled={saving}
+            />
+          </div>
+          <div className="admin-form-row">
+            <div className="form-group">
+              <label className="form-label">Courts</label>
+              <input
+                className="form-input"
+                type="number"
+                min={1}
+                max={32}
+                value={form.number_of_courts}
+                onChange={(e) => setForm({ ...form, number_of_courts: Number(e.target.value) })}
+                disabled={saving}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Max doubles teams</label>
+              <input
+                className="form-input"
+                type="number"
+                min={2}
+                max={256}
+                value={form.max_teams}
+                onChange={(e) => setForm({ ...form, max_teams: Number(e.target.value) })}
+                disabled={saving}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">€ / player</label>
+              <input
+                className="form-input"
+                type="number"
+                min={0}
+                step={0.01}
+                value={form.entry_fee_euros}
+                onChange={(e) => setForm({ ...form, entry_fee_euros: e.target.value })}
+                disabled={saving}
+              />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Description</label>
+            <textarea
+              className="form-textarea"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+              disabled={saving}
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Rules</label>
+            <textarea
+              className="form-textarea"
+              value={form.rules}
+              onChange={(e) => setForm({ ...form, rules: e.target.value })}
+              rows={3}
+              disabled={saving}
+            />
+          </div>
+          {error && <p className="form-error">{error}</p>}
+          <div className="modal-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
           </div>
         </form>

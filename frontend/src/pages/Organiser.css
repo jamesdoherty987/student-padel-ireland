@@ -125,6 +125,38 @@
   }
 }
 
+.org-nav-item-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem;
+}
+
+.org-nav-item-wrapper .org-nav-item {
+  flex: 1;
+  padding: 0.7rem 0.75rem;
+  margin: 0;
+  border-radius: var(--radius-sm);
+}
+
+.org-nav-item-edit {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 0.5rem;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+}
+
+@media (hover: hover) {
+  .org-nav-item-edit:hover {
+    color: var(--court-deep);
+    background: var(--brand-soft);
+  }
+}
+
 .org-main {
   padding: 1.5rem;
   padding-left: max(1.5rem, env(safe-area-inset-left));

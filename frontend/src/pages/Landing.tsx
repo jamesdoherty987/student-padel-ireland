@@ -136,7 +136,7 @@ export default function Landing() {
       <header className={`lp-header ${scrolled ? 'is-scrolled' : ''} ${menuOpen ? 'is-menu-open' : ''}`}>
         <div className="lp-header-inner">
           <a href="#top" className="lp-logo" onClick={close}>
-            <span className="lp-logo-text">Student Padel Ireland</span>
+            <img src="/logo.png" alt="Student Padel Ireland" className="lp-logo-img" />
           </a>
           <nav className={`lp-nav ${menuOpen ? 'is-open' : ''}`}>
             <Link to="/tournaments" onClick={close}>

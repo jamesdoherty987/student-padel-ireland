@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { Share } from '@capacitor/share'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
+import { confirmDialog } from '../components/ConfirmDialog'
 import { isNativeApp, publicWebOrigin } from '../native/platform'
 import {
   apiErrorMessage,
@@ -516,8 +517,14 @@ export default function CompetitionDetailPage() {
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm standings-remove"
-                      onClick={() => {
-                        if (window.confirm(`Remove ${m.full_name} from this competition?`)) {
+                      onClick={async () => {
+                        const confirmed = await confirmDialog({
+                          title: 'Remove member?',
+                          message: `Remove ${m.full_name} from this competition?`,
+                          confirmLabel: 'Remove',
+                          cancelLabel: 'Keep',
+                        })
+                        if (confirmed) {
                           removeMemberMut.mutate(m.user_id)
                         }
                       }}
@@ -662,14 +669,20 @@ export default function CompetitionDetailPage() {
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              onClick={() => {
+              onClick={async () => {
                 if (pendingConfirms.length > 0) {
                   setError(
                     `Finish or cancel ${pendingConfirms.length} score${pendingConfirms.length === 1 ? '' : 's'} waiting for confirm first.`,
                   )
                   return
                 }
-                if (window.confirm('Mark this competition complete? You can still view results.')) {
+                const confirmed = await confirmDialog({
+                  title: 'Mark complete?',
+                  message: 'Mark this competition complete? You can still view results.',
+                  confirmLabel: 'Complete',
+                  cancelLabel: 'Cancel',
+                })
+                if (confirmed) {
                   closeMut.mutate()
                 }
               }}
@@ -680,8 +693,14 @@ export default function CompetitionDetailPage() {
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            onClick={() => {
-              if (window.confirm(c.is_owner ? 'Leave as host? Only works if you are the only member.' : 'Leave this competition?')) {
+            onClick={async () => {
+              const confirmed = await confirmDialog({
+                title: 'Leave competition?',
+                message: c.is_owner ? 'Leave as host? Only works if you are the only member.' : 'Leave this competition?',
+                confirmLabel: 'Leave',
+                cancelLabel: 'Stay',
+              })
+              if (confirmed) {
                 leaveMut.mutate()
               }
             }}

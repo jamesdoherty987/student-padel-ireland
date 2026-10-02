@@ -32,7 +32,7 @@ type TournamentFormState = {
   event_date: string
   start_time: string
   number_of_courts: number
-  entry_fee_euros: number
+  entry_fee_euros: string
   max_teams: number
   description: string
   rules: string
@@ -47,10 +47,10 @@ const EMPTY_FORM: TournamentFormState = {
   event_date: '',
   start_time: '10:00',
   number_of_courts: 6,
-  entry_fee_euros: 50,
+  entry_fee_euros: '',
   max_teams: 48,
   description: '',
-  rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day. Entry is per doubles team.',
+  rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day. Entry is per player.',
   registration_deadline: '',
   open_now: true,
 }
@@ -81,7 +81,7 @@ function formFromTournament(t: Tournament): TournamentFormState {
     event_date: t.event_date.slice(0, 10),
     start_time: t.start_time?.slice(0, 5) || '10:00',
     number_of_courts: t.number_of_courts,
-    entry_fee_euros: Math.round(t.entry_fee_cents) / 100,
+    entry_fee_euros: String(Math.round(t.entry_fee_cents) / 100),
     max_teams: t.max_teams,
     description: t.description || '',
     rules: t.rules || '',
@@ -506,7 +506,7 @@ function TournamentModal({
             </button>
           )}
         </div>
-        <p className="admin-modal-lead">Entry fee is per doubles team (2 players).</p>
+        <p className="admin-modal-lead">Entry fee is per player.</p>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label">Name</label>
@@ -601,14 +601,14 @@ function TournamentModal({
               />
             </div>
             <div className="form-group">
-              <label className="form-label">€ / doubles team</label>
+              <label className="form-label">€ / player</label>
               <input
                 className="form-input"
                 type="number"
                 min={0}
-                step={1}
+                step={0.01}
                 value={form.entry_fee_euros}
-                onChange={(e) => set('entry_fee_euros', Number(e.target.value))}
+                onChange={(e) => set('entry_fee_euros', e.target.value)}
                 disabled={saving}
               />
             </div>

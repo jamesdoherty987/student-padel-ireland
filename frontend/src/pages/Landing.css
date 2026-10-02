@@ -58,6 +58,13 @@
   display: block;
 }
 
+.lp-logo-img {
+  height: 35px;
+  width: auto;
+  max-width: 150px;
+  object-fit: contain;
+}
+
 .lp-logo-text {
   display: block;
   min-width: 0;
