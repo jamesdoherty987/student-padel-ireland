@@ -374,9 +374,54 @@ export default function PlayerProfilePage() {
               )}
             </section>
 
+            {isOwn && (
+              <section className="profile-section">
+                <div className="profile-section-head">
+                  <h2>Profile Photo</h2>
+                </div>
+                <p className="muted-note" style={{ marginBottom: '1rem' }}>
+                  Your profile photo is displayed at the top of your profile and in rankings. Choose a clear photo of yourself.
+                </p>
+                {avatarSrc && (
+                  <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
+                    <img src={avatarSrc} alt="Current profile photo" style={{ maxWidth: '120px', borderRadius: '8px' }} />
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => {
+                      setShowUpload(true)
+                      setAsAvatar(true)
+                    }}
+                  >
+                    {avatarSrc ? 'Change' : 'Upload'} Profile Photo
+                  </button>
+                  {avatarSrc && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        const confirmed = window.confirm('Remove your profile photo?')
+                        if (confirmed) {
+                          const avatarMedia = media.find((m) => m.is_avatar)
+                          if (avatarMedia) {
+                            deleteMut.mutate(avatarMedia.id)
+                          }
+                        }
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+
             <section className="profile-section">
               <div className="profile-section-head">
-                <h2>Photos</h2>
+                <h2>Photos & Videos</h2>
                 {isOwn && (
                   <button
                     type="button"
@@ -418,13 +463,16 @@ export default function PlayerProfilePage() {
                       placeholder="Optional caption"
                       maxLength={200}
                     />
+                    <p className="muted-note" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                      Check the box below to set this as your profile photo, or leave unchecked to add to your gallery.
+                    </p>
                     <label className="avatar-check">
                       <input
                         type="checkbox"
                         checked={asAvatar}
                         onChange={(e) => setAsAvatar(e.target.checked)}
                       />
-                      Use as profile photo
+                      Set as profile photo
                     </label>
                   </div>
                   <div className="profile-upload-actions">
