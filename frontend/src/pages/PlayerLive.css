@@ -47,11 +47,16 @@
 }
 
 .pl-brand {
+  color: var(--court-mid);
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.pl-brand .brand-logo-text {
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--court-mid);
-  margin-bottom: 0.25rem;
 }
 
 .pl-header h1 {

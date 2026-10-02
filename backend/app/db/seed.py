@@ -238,8 +238,8 @@ def _seed_demo_accounts(db: Session) -> None:
     organiser = User(
         email="organiser@studentpadelireland.ie",
         password_hash=hash_password("organiser123"),
-        full_name="Aoife Organiser",
-        role=UserRole.ORGANISER.value,
+        full_name="Aoife Host",
+        role=UserRole.PLAYER.value,
         university_id=ul.id if ul else None,
     )
     player = User(

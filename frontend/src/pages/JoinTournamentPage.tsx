@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import BrandLogo from '../components/BrandLogo'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { hapticSuccess } from '../native/haptics'
@@ -31,7 +32,7 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
     <div className="app-shell">
       <NavBar />
       <main className="page confirm-page">
-        <p className="eyebrow">Student Padel Ireland</p>
+        <BrandLogo to="/tournaments" className="confirm-brand" size="sm" />
         <h1 className="page-title">{paid ? 'Registration confirmed' : 'Registration received'}</h1>
         <p className="confirm-tour">{data.tournament?.name}</p>
         <div className="confirm-box">

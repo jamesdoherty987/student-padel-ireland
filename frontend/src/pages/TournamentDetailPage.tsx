@@ -138,7 +138,7 @@ export default function TournamentDetailPage() {
           {isOps && (
             <>
               <Link to={`/organiser?t=${tournament.id}`} className="btn btn-dark">
-                Organiser desk
+                Manage event
               </Link>
               <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost">
                 TV display

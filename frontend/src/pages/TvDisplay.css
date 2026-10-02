@@ -19,13 +19,18 @@
   margin-bottom: 2rem;
 }
 
-.tv-header p {
+.tv-brand {
+  justify-content: center;
+  color: var(--ball);
+  margin-bottom: 0.5rem;
+}
+
+.tv-brand .brand-logo-text {
   letter-spacing: 0.04em;
   text-transform: none;
   color: var(--ball);
   font-size: 1rem;
   font-weight: 600;
-  margin-bottom: 0.35rem;
 }
 
 .tv-header h1 {

@@ -121,7 +121,8 @@ export async function hideNativeSplash(): Promise<void> {
 
 /**
  * Native shell bootstrap - status bar, keyboard, deep links.
- * Call once from main.tsx before React render; splash hides after router mount.
+ * Call from main.tsx without blocking React mount.
+ * Starts a splash safety timer immediately so a hung plugin cannot white-screen the app.
  */
 export async function initNativeShell(): Promise<void> {
   if (!isNativeApp() || nativeReady) return
@@ -129,6 +130,12 @@ export async function initNativeShell(): Promise<void> {
 
   document.documentElement.classList.add('native-app')
   document.documentElement.classList.add(`native-${nativePlatform()}`)
+
+  // Safety: never leave the splash up if plugins hang or React is slow
+  splashHideTimer = window.setTimeout(() => {
+    splashHideTimer = null
+    void hideNativeSplash()
+  }, 3500)
 
   try {
     await StatusBar.setStyle({ style: Style.Light })
@@ -158,10 +165,4 @@ export async function initNativeShell(): Promise<void> {
   } catch {
     /* no launch URL */
   }
-
-  // Safety: never leave the splash up if React fails to mount
-  splashHideTimer = window.setTimeout(() => {
-    splashHideTimer = null
-    void hideNativeSplash()
-  }, 4000)
 }

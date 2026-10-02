@@ -721,6 +721,13 @@
   position: relative;
 }
 
+.globe-wrap--static {
+  background:
+    radial-gradient(circle at 45% 40%, rgba(200, 230, 0, 0.18), transparent 45%),
+    radial-gradient(circle at 50% 55%, #146644, #0b3d2e 70%);
+  border-radius: 50%;
+}
+
 .globe-canvas {
   display: block;
   max-width: 100%;
@@ -783,7 +790,8 @@
   margin-bottom: 1rem;
 }
 
-.lp-footer-row > span {
+.lp-footer-row > span,
+.lp-footer-brand {
   font-weight: 600;
   color: #fff;
 }

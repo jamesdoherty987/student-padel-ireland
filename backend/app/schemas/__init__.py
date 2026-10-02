@@ -22,14 +22,16 @@ class UserCreate(BaseModel):
     phone: Optional[str] = None
     university_id: Optional[UUID] = None
     student_number: Optional[str] = None
+    # Legacy clients may still send role; only PLAYER is accepted.
     role: UserRole = UserRole.PLAYER
 
     @field_validator("role")
     @classmethod
-    def only_player_or_organiser_signup(cls, v: UserRole) -> UserRole:
+    def player_only_signup(cls, v: UserRole) -> UserRole:
         if v == UserRole.ADMIN:
             raise ValueError("Cannot self-register as ADMIN")
-        return v
+        # ORGANISER account type removed — everyone signs up as a player
+        return UserRole.PLAYER
 
 
 class UserLogin(BaseModel):

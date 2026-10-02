@@ -566,21 +566,55 @@ img {
   min-width: 0;
 }
 
-.app-nav-brand::before {
-  content: '';
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--ball);
-  box-shadow: 0 0 0 3px rgba(200, 230, 0, 0.25);
-  flex-shrink: 0;
-}
-
 .app-nav-brand-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Shared brand mark (real logo) */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brand-logo-mark {
+  display: block;
+  width: auto;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.brand-logo--sm .brand-logo-mark {
+  height: 2rem;
+}
+
+.brand-logo--md .brand-logo-mark {
+  height: 2.75rem;
+}
+
+.brand-logo--lg .brand-logo-mark {
+  height: 3.5rem;
+}
+
+.brand-logo--xl .brand-logo-mark {
+  height: 5rem;
+}
+
+.brand-logo-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.15;
 }
 
 .app-nav-links {

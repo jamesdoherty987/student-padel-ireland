@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import BrandLogo from '../components/BrandLogo'
 import { useAuth } from '../context/AuthContext'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { apiErrorMessage, platformApi } from '../services/api'
@@ -14,6 +15,10 @@ function useDarkStatusBar() {
       void setStatusBarForLightScreen()
     }
   }, [])
+}
+
+function homeForRole(role: string) {
+  return role === 'ADMIN' ? '/admin' : '/tournaments'
 }
 
 export function LoginPage() {
@@ -40,10 +45,7 @@ export function LoginPage() {
   }
 
   if (user) {
-    const dest =
-      next ||
-      (user.role === 'ORGANISER' || user.role === 'ADMIN' ? '/organiser' : '/tournaments')
-    return <Navigate to={dest} replace />
+    return <Navigate to={next || homeForRole(user.role)} replace />
   }
 
   const onSubmit = async (e: FormEvent) => {
@@ -52,9 +54,7 @@ export function LoginPage() {
     setLoading(true)
     try {
       const u = await login(email, password, remember)
-      if (next) navigate(next)
-      else if (u.role === 'ORGANISER' || u.role === 'ADMIN') navigate('/organiser')
-      else navigate('/tournaments')
+      navigate(next || homeForRole(u.role))
     } catch (err) {
       setError(apiErrorMessage(err, 'Invalid email or password'))
     } finally {
@@ -65,9 +65,7 @@ export function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-panel">
-        <Link to="/" className="auth-brand">
-          Student Padel Ireland
-        </Link>
+        <BrandLogo to="/" className="auth-brand" size="md" />
         <h1>Welcome back</h1>
         <p className="auth-lead">Log in to join tournaments and see your next match.</p>
         <form onSubmit={onSubmit}>
@@ -133,7 +131,6 @@ export function SignupPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = safeNextPath(params.get('next'))
-  const defaultRole = params.get('role') === 'ORGANISER' ? 'ORGANISER' : 'PLAYER'
   const { data: universities = [] } = useQuery({
     queryKey: ['universities'],
     queryFn: async () => (await platformApi.universities()).data,
@@ -146,7 +143,6 @@ export function SignupPage() {
     phone: '',
     university_id: '',
     student_number: '',
-    role: defaultRole,
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -163,10 +159,7 @@ export function SignupPage() {
   }
 
   if (user) {
-    const dest =
-      next ||
-      (user.role === 'ORGANISER' || user.role === 'ADMIN' ? '/organiser' : '/tournaments')
-    return <Navigate to={dest} replace />
+    return <Navigate to={next || homeForRole(user.role)} replace />
   }
 
   const onSubmit = async (e: FormEvent) => {
@@ -180,8 +173,7 @@ export function SignupPage() {
         phone: form.phone || null,
         student_number: form.student_number || null,
       })
-      if (next) navigate(next)
-      else navigate(u.role === 'ORGANISER' ? '/organiser' : '/tournaments')
+      navigate(next || homeForRole(u.role))
     } catch (err) {
       setError(apiErrorMessage(err, 'Could not create account'))
     } finally {
@@ -192,26 +184,12 @@ export function SignupPage() {
   return (
     <div className="auth-page">
       <div className="auth-panel">
-        <Link to="/" className="auth-brand">
-          Student Padel Ireland
-        </Link>
+        <BrandLogo to="/" className="auth-brand" size="md" />
         <h1>Create account</h1>
-        <p className="auth-lead">Create a player or organiser account.</p>
+        <p className="auth-lead">
+          Sign up to play, join events, and host tournaments from My events.
+        </p>
         <form onSubmit={onSubmit}>
-          <div className="form-group">
-            <label className="form-label" htmlFor="signup-role">
-              I am a
-            </label>
-            <select
-              id="signup-role"
-              className="form-select"
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-            >
-              <option value="PLAYER">Player</option>
-              <option value="ORGANISER">Tournament organiser</option>
-            </select>
-          </div>
           <div className="form-group">
             <label className="form-label" htmlFor="signup-name">
               Full name

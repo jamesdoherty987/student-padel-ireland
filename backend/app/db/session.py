@@ -159,6 +159,7 @@ def init_db() -> None:
     _sqlite_ensure_ranking_history_nullable_tournament()
     _pg_ensure_ranking_history_nullable_tournament()
     _backfill_tournament_invite_codes()
+    _migrate_organiser_roles_to_player()
     # Migrate legacy zero/low “Ireland points” onto Elo baseline (Elo starts ~1500)
     with engine.begin() as conn:
         try:
@@ -168,6 +169,15 @@ def init_db() -> None:
                     "WHERE points < 800"
                 )
             )
+        except Exception:
+            pass
+
+
+def _migrate_organiser_roles_to_player() -> None:
+    """ORGANISER was a signup role; hosting is now per-tournament ownership/co-admin."""
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("UPDATE users SET role = 'PLAYER' WHERE role = 'ORGANISER'"))
         except Exception:
             pass
 

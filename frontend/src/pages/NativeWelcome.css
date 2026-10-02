@@ -27,13 +27,16 @@
 }
 
 .native-welcome-brand {
-  font-family: var(--font-display);
-  font-weight: 800;
+  color: #fff;
+  margin-bottom: 0.75rem;
+}
+
+.native-welcome-brand .brand-logo-text {
+  color: var(--ball);
   font-size: 0.95rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ball);
-  margin-bottom: 0.75rem;
+  font-weight: 800;
 }
 
 .native-welcome h1 {

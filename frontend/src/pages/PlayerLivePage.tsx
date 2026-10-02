@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import BrandLogo from '../components/BrandLogo'
 import NavBar from '../components/NavBar'
 import { tournamentApi, type Match } from '../services/api'
 import { formatMatchScore, formatTime, courtLabel } from '../utils/format'
@@ -74,7 +75,7 @@ export default function PlayerLivePage() {
       <NavBar />
       <main className="pl-page">
         <header className="pl-header">
-          <p className="pl-brand">Student Padel Ireland</p>
+          <BrandLogo to="/tournaments" className="pl-brand" size="sm" />
           <h1>{t.name}</h1>
           {data.live_matches?.length > 0 && (
             <span className="badge badge-live">

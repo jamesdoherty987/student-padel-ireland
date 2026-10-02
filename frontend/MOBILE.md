@@ -39,7 +39,7 @@ npm run assets:native
 
 ## What was wired for App Store readiness
 
-- Relative Vite `base: './'` so WebView assets resolve
+- Absolute Vite `base: '/'` so nested mobile routes (`/t/...`) load JS/CSS correctly (Capacitor uses https hostname)
 - Capacitor plugins: App, Browser, Keyboard, SplashScreen, StatusBar, Share
 - Service worker **disabled** inside the native shell (PWA still works on web)
 - Stripe Checkout opens in the system browser; returning to the app confirms registration

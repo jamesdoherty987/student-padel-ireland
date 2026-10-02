@@ -54,24 +54,15 @@
 }
 
 .auth-brand {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.55rem;
   font-family: var(--font-display);
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--court-deep);
   margin-bottom: 1.5rem;
-}
-
-.auth-brand::before {
-  content: '';
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--ball);
-  box-shadow: 0 0 0 3px rgba(200, 230, 0, 0.25);
-  flex-shrink: 0;
+  text-decoration: none;
 }
 
 .auth-panel h1 {

@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react'
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import BrandLogo from '../components/BrandLogo'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { tournamentApi, type Match } from '../services/api'
 import { currentSetScores } from '../utils/format'
@@ -89,7 +90,7 @@ export default function TvDisplayPage() {
   return (
     <div className="tv-root">
       <header className="tv-header">
-        <p>Student Padel Ireland</p>
+        <BrandLogo to={null} className="tv-brand" size="md" />
         <h1>{data.tournament.name}</h1>
       </header>
       <div className="tv-grid" style={{ '--cols': Math.min(slots.length, 3) } as CSSProperties}>

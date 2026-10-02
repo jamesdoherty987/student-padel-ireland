@@ -105,7 +105,7 @@ Bundle ID: `ie.studentpadelireland.app`
 
 ### Phases shipped in this MVP
 
-1. **Foundation** - auth, roles (PLAYER / ORGANISER / ADMIN), schema, seed data  
+1. **Foundation** - auth, roles (PLAYER / ADMIN), schema, seed data  
 2. **Tournament** - create, register + pay (Stripe or demo), teams, configurable generator  
 3. **Live event** - fixtures, scoring (organiser only), standings, player mobile view, QR, TV `/tournament/:id/display`  
 4. **Community** - friends, private competitions/ladders, log singles & doubles matches  

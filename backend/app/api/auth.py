@@ -49,7 +49,7 @@ def register(body: UserCreate, db: Session = Depends(get_db)):
             return TokenResponse(access_token=token, user=UserPublic.model_validate(existing))
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    role = body.role.value if body.role != UserRole.ADMIN else UserRole.PLAYER.value
+    role = UserRole.PLAYER.value
     user = User(
         email=body.email.lower(),
         password_hash=hash_password(body.password),

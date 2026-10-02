@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import BrandLogo from '../components/BrandLogo'
 import { useAuth } from '../context/AuthContext'
 import { tournamentApi, type Tournament } from '../services/api'
 import { formatEntrySummary, parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
@@ -427,7 +428,7 @@ export default function Landing() {
 
       <footer className="lp-footer">
         <div className="lp-wrap lp-footer-row">
-          <span>Student Padel Ireland</span>
+          <BrandLogo to="/" className="lp-footer-brand" size="sm" />
           <div className="lp-footer-links">
             <a href="#upcoming">Upcoming</a>
             <Link to="/privacy">Privacy</Link>

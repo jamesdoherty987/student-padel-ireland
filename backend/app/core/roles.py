@@ -3,14 +3,15 @@ from enum import StrEnum
 
 class Role(StrEnum):
     PLAYER = "PLAYER"
-    ORGANISER = "ORGANISER"
     ADMIN = "ADMIN"
+    # Legacy — migrated to PLAYER on startup; kept so old tokens/rows don't explode
+    ORGANISER = "ORGANISER"
 
 
 ROLE_RANK = {
     Role.PLAYER: 1,
-    Role.ORGANISER: 2,
-    Role.ADMIN: 3,
+    Role.ORGANISER: 1,  # treated as player
+    Role.ADMIN: 2,
 }
 
 

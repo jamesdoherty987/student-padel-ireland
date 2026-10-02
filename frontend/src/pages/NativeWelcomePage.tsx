@@ -1,5 +1,6 @@
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import BrandLogo from '../components/BrandLogo'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { useEffect } from 'react'
@@ -28,7 +29,7 @@ export default function NativeWelcomePage() {
     <div className="native-welcome">
       <div className="native-welcome-bg" aria-hidden />
       <div className="native-welcome-inner">
-        <p className="native-welcome-brand">Student Padel Ireland</p>
+        <BrandLogo to={null} className="native-welcome-brand" size="xl" />
         <h1>Play. Score. Climb.</h1>
         <p className="native-welcome-sub">
           Join student tournaments, log community matches, and follow live scores across Ireland.

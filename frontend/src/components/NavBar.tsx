@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { isNativeApp } from '../native/platform'
+import BrandLogo from './BrandLogo'
 import NotificationsBell from './NotificationsBell'
 
 export default function NavBar() {
@@ -44,9 +45,7 @@ export default function NavBar() {
 
   return (
     <header className={`app-nav ${open ? 'is-menu-open' : ''} ${native ? 'is-native' : ''}`}>
-      <Link to={brandTo} className="app-nav-brand" onClick={close}>
-        <span className="app-nav-brand-text">Student Padel Ireland</span>
-      </Link>
+      <BrandLogo to={brandTo} className="app-nav-brand" size="sm" onClick={close} />
       <div className="app-nav-end">
         {!native && (
           <nav className={`app-nav-links ${open ? 'is-open' : ''}`}>

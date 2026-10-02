@@ -1,9 +1,15 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Share } from '@capacitor/share'
 import { QRCodeSVG } from 'qrcode.react'
 import { hapticLight, hapticSuccess } from '../native/haptics'
 import { isNativeApp, publicWebOrigin } from '../native/platform'
+
+function qrPixelSize() {
+  if (typeof window === 'undefined') return 200
+  // Keep scannable on phones; leave room for padding + safe areas
+  return Math.max(160, Math.min(220, Math.floor(window.innerWidth - 72)))
+}
 
 export function ShareQr({
   url,
@@ -13,9 +19,20 @@ export function ShareQr({
   openLabel?: string
 }) {
   const [copied, setCopied] = useState(false)
+  const [size, setSize] = useState(qrPixelSize)
   const navigate = useNavigate()
   const display = url.replace(/^https?:\/\//, '')
   const origin = publicWebOrigin()
+
+  useEffect(() => {
+    const onResize = () => setSize(qrPixelSize())
+    onResize()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // Remount QR if the value or size changes (helps flaky mobile WebViews)
+  const qrKey = useMemo(() => `${url}:${size}`, [url, size])
 
   const inAppPath = (() => {
     try {
@@ -69,16 +86,21 @@ export function ShareQr({
 
   return (
     <div className="qr-wrap">
-      <div className="qr-canvas">
-        <QRCodeSVG
-          value={url}
-          size={220}
-          level="H"
-          marginSize={4}
-          bgColor="#ffffff"
-          fgColor="#0b3d2e"
-          title={url}
-        />
+      <div className="qr-canvas" aria-label="QR code">
+        {url ? (
+          <QRCodeSVG
+            key={qrKey}
+            value={url}
+            size={size}
+            level="M"
+            marginSize={2}
+            bgColor="#ffffff"
+            fgColor="#0b3d2e"
+            title={url}
+          />
+        ) : (
+          <p className="qr-fallback muted">QR unavailable — use Copy link or Share instead.</p>
+        )}
       </div>
       <code className="qr-url">{display}</code>
       <div className="qr-actions">
