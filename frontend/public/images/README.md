@@ -2,6 +2,7 @@
 
 | Path | Used for |
 |------|----------|
+| `logo.png` | Header brand mark (transparent background) |
 | `heroes/hero-01.jpeg` … `hero-05.webp` | Rotating hero backgrounds |
 | `gallery-1.jpg` | Feature video poster |
 | `../videos/feature.mp4` | How-it-works feature video |

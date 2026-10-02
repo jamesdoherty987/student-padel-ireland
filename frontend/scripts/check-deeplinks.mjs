@@ -1,4 +1,32 @@
-import { pathFromAppUrl } from '../src/native/deepLink.ts'
+/**
+ * Deep-link path parsing tests (kept in plain JS so Node can run without a TS loader).
+ * Keep in sync with src/native/deepLink.ts
+ */
+function pathFromAppUrl(url) {
+  const raw = url?.trim()
+  if (!raw) return null
+
+  try {
+    const parsed = new URL(raw)
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      const path = `${parsed.pathname}${parsed.search}${parsed.hash}`
+      return path === '/' ? null : path
+    }
+
+    const host = parsed.hostname
+    const path = parsed.pathname || ''
+    if (host && host !== 'localhost' && !host.includes('.')) {
+      const combined = `/${host}${path === '/' ? '' : path}${parsed.search}${parsed.hash}`
+      return combined === '/' ? null : combined
+    }
+
+    const combined = `${path}${parsed.search}${parsed.hash}`
+    if (!combined || combined === '/') return null
+    return combined.startsWith('/') ? combined : `/${combined}`
+  } catch {
+    return null
+  }
+}
 
 const cases = [
   ['', null],

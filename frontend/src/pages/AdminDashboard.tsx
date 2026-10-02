@@ -2,10 +2,11 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
+import NumberInput from '../components/NumberInput'
 import { useAuth } from '../context/AuthContext'
-import { publicWebOrigin } from '../native/platform'
+import { publicPathUrl, publicWebOrigin } from '../native/platform'
 import { apiErrorMessage, platformApi, tournamentApi, type Tournament } from '../services/api'
-import { formatDate, formatDoublesEntry, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
+import { formatDate, formatEntrySummary, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
 import './Organiser.css'
 import './Admin.css'
 
@@ -32,8 +33,11 @@ type TournamentFormState = {
   event_date: string
   start_time: string
   number_of_courts: number
-  entry_fee_euros: string
+  entry_fee_euros: number
   max_teams: number
+  format: string
+  play_format: string
+  match_duration_minutes: number
   description: string
   rules: string
   registration_deadline: string
@@ -47,10 +51,13 @@ const EMPTY_FORM: TournamentFormState = {
   event_date: '',
   start_time: '10:00',
   number_of_courts: 6,
-  entry_fee_euros: '',
+  entry_fee_euros: 50,
   max_teams: 48,
+  format: 'GROUP_KNOCKOUT',
+  play_format: 'DOUBLES',
+  match_duration_minutes: 20,
   description: '',
-  rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day. Entry is per player.',
+  rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day.',
   registration_deadline: '',
   open_now: true,
 }
@@ -60,7 +67,7 @@ const LIMERICK_TEMPLATE: TournamentFormState = {
   name: 'Limerick Open',
   location: 'Limerick',
   venue: 'UL Padel Centre',
-  description: "Ireland's student padel open — doubles teams, groups then knockout.",
+  description: 'Ireland student padel open. Doubles teams, groups then knockout.',
   open_now: true,
 }
 
@@ -83,6 +90,9 @@ function formFromTournament(t: Tournament): TournamentFormState {
     number_of_courts: t.number_of_courts,
     entry_fee_euros: Math.round(t.entry_fee_cents) / 100,
     max_teams: t.max_teams,
+    format: t.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : 'GROUP_KNOCKOUT',
+    play_format: t.play_format === 'SINGLES' ? 'SINGLES' : 'DOUBLES',
+    match_duration_minutes: t.match_duration_minutes || 20,
     description: t.description || '',
     rules: t.rules || '',
     registration_deadline: t.registration_deadline ? t.registration_deadline.slice(0, 10) : '',
@@ -99,7 +109,9 @@ function payloadFromForm(form: TournamentFormState, previous?: Tournament) {
     start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
     entry_fee_cents: Math.round(Number(form.entry_fee_euros) * 100),
     max_teams: Number(form.max_teams),
-    format: 'GROUP_KNOCKOUT',
+    format: form.format || 'GROUP_KNOCKOUT',
+    play_format: form.play_format || 'DOUBLES',
+    match_duration_minutes: Number(form.match_duration_minutes) || 20,
     description: form.description.trim() || null,
     rules: form.rules.trim() || null,
     registration_deadline: form.registration_deadline
@@ -181,7 +193,26 @@ export default function AdminDashboard() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not update status')),
   })
 
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => tournamentApi.delete(id),
+    onSuccess: (res, id) => {
+      qc.setQueryData(['organiser-dashboard'], (old: unknown) => {
+        const data = old as { tournaments?: Array<{ tournament: { id: string } }> } | undefined
+        if (!data?.tournaments) return old
+        return {
+          ...data,
+          tournaments: data.tournaments.filter((row) => row.tournament.id !== id),
+        }
+      })
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['tournaments'] })
+      showToast(`Deleted "${res.data.deleted}"`)
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not delete tournament')),
+  })
+
   const pendingStatusId = statusMut.isPending ? statusMut.variables?.id : null
+  const pendingDeleteId = deleteMut.isPending ? deleteMut.variables : null
 
   if (authLoading || (isLoading && isAdmin)) {
     return (
@@ -270,12 +301,21 @@ export default function AdminDashboard() {
               <AdminTournamentCard
                 key={row.tournament.id}
                 row={row}
-                busy={pendingStatusId === row.tournament.id}
+                busy={pendingStatusId === row.tournament.id || pendingDeleteId === row.tournament.id}
                 onStatus={(status) => {
                   if (status === row.tournament.status) return
                   statusMut.mutate({ id: row.tournament.id, status })
                 }}
                 onEdit={() => setEditing(row.tournament)}
+                onDelete={() => {
+                  if (
+                    window.confirm(
+                      `Permanently delete "${row.tournament.name}"? This removes teams, matches, and scores.`,
+                    )
+                  ) {
+                    deleteMut.mutate(row.tournament.id)
+                  }
+                }}
                 onCopied={(msg) => showToast(msg)}
               />
             ))}
@@ -299,7 +339,7 @@ export default function AdminDashboard() {
               } catch {
                 await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
                 await qc.invalidateQueries({ queryKey: ['tournaments'] })
-                showToast('Created, but could not open registration — open it from the list')
+                showToast('Created, but could not open registration. Open it from the list.')
                 return
               }
             }
@@ -333,18 +373,22 @@ function AdminTournamentCard({
   busy,
   onStatus,
   onEdit,
+  onDelete,
   onCopied,
 }: {
   row: DashRow
   busy: boolean
   onStatus: (status: string) => void
   onEdit: () => void
+  onDelete: () => void
   onCopied: (msg: string) => void
 }) {
   const t = row.tournament
   const origin = publicWebOrigin()
   const publicUrl = `${origin}/t/${t.slug}`
-  const joinUrl = `${origin}/t/${t.slug}/join`
+  const joinUrl = t.invite_code
+    ? publicPathUrl(`/join/${t.invite_code}`)
+    : `${origin}/t/${t.slug}/join`
 
   const quickAction =
     t.status === 'DRAFT' || t.status === 'REGISTRATION_CLOSED'
@@ -360,7 +404,7 @@ function AdminTournamentCard({
       await copyText(url)
       onCopied(msg)
     } catch {
-      onCopied('Could not copy — copy from the address bar')
+      onCopied('Could not copy. Copy the link from the address bar.')
     }
   }
 
@@ -375,7 +419,7 @@ function AdminTournamentCard({
             {t.start_time ? ` · ${t.start_time.slice(0, 5)}` : ''}
           </p>
           <p className="admin-meta">
-            {formatDoublesEntry(row.paid_registrations, t.max_teams, t.entry_fee_cents, t.currency)} · Revenue{' '}
+            {formatEntrySummary(row.paid_registrations, t.max_teams, t.entry_fee_cents, t.currency, t.play_format)} · Revenue{' '}
             {formatMoney(row.revenue_cents)}
           </p>
         </div>
@@ -390,7 +434,7 @@ function AdminTournamentCard({
             disabled={busy}
             onClick={() => onStatus(quickAction.status)}
           >
-            {busy ? 'Updating…' : quickAction.label}
+            {busy ? 'Updating...' : quickAction.label}
           </button>
         )}
         {t.status === 'REGISTRATION_CLOSED' && (
@@ -416,6 +460,9 @@ function AdminTournamentCard({
         </select>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>
           Edit
+        </button>
+        <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={onDelete}>
+          Delete
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(publicUrl, 'Public link copied')}>
           Copy link
@@ -506,7 +553,9 @@ function TournamentModal({
             </button>
           )}
         </div>
-        <p className="admin-modal-lead">Entry fee is per player.</p>
+        <p className="admin-modal-lead">
+          Entry fee is per {form.play_format === 'SINGLES' ? 'player' : 'doubles team'}.
+        </p>
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label className="form-label">Name</label>
@@ -575,40 +624,80 @@ function TournamentModal({
               disabled={saving}
             />
           </div>
+          <div className="form-group">
+            <label className="form-label">Singles or doubles</label>
+            <select
+              className="form-select"
+              value={form.play_format}
+              onChange={(e) => set('play_format', e.target.value)}
+              disabled={saving}
+            >
+              <option value="DOUBLES">Doubles</option>
+              <option value="SINGLES">Singles</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Format</label>
+            <select
+              className="form-select"
+              value={form.format}
+              onChange={(e) => set('format', e.target.value)}
+              disabled={saving}
+            >
+              <option value="GROUP_KNOCKOUT">Groups then knockout</option>
+              <option value="ROUND_ROBIN">Round robin</option>
+            </select>
+          </div>
           <div className="admin-form-row">
             <div className="form-group">
               <label className="form-label">Courts</label>
-              <input
+              <NumberInput
                 className="form-input"
-                type="number"
                 min={1}
                 max={32}
+                emptyValue={1}
                 value={form.number_of_courts}
-                onChange={(e) => set('number_of_courts', Number(e.target.value))}
+                onValueChange={(n) => set('number_of_courts', n)}
                 disabled={saving}
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Max doubles teams</label>
-              <input
+              <label className="form-label">Match mins</label>
+              <NumberInput
                 className="form-input"
-                type="number"
+                min={5}
+                max={120}
+                emptyValue={20}
+                value={form.match_duration_minutes}
+                onValueChange={(n) => set('match_duration_minutes', n)}
+                disabled={saving}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">
+                Max {form.play_format === 'SINGLES' ? 'players' : 'doubles teams'}
+              </label>
+              <NumberInput
+                className="form-input"
                 min={2}
                 max={256}
+                emptyValue={2}
                 value={form.max_teams}
-                onChange={(e) => set('max_teams', Number(e.target.value))}
+                onValueChange={(n) => set('max_teams', n)}
                 disabled={saving}
               />
             </div>
             <div className="form-group">
-              <label className="form-label">€ / player</label>
-              <input
+              <label className="form-label">
+                € / {form.play_format === 'SINGLES' ? 'player' : 'doubles team'}
+              </label>
+              <NumberInput
                 className="form-input"
-                type="number"
                 min={0}
-                step={1}
+                step={0.5}
+                emptyValue={0}
                 value={form.entry_fee_euros}
-                onChange={(e) => set('entry_fee_euros', Number(e.target.value))}
+                onValueChange={(n) => set('entry_fee_euros', n)}
                 disabled={saving}
               />
             </div>
@@ -650,7 +739,7 @@ function TournamentModal({
               Cancel
             </button>
             <button className="btn btn-primary" disabled={saving}>
-              {saving ? 'Saving…' : submitLabel}
+              {saving ? 'Saving...' : submitLabel}
             </button>
           </div>
         </form>

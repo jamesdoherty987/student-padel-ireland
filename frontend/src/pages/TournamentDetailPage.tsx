@@ -1,11 +1,12 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { QRCodeSVG } from 'qrcode.react'
 import NavBar from '../components/NavBar'
+import { ShareQr } from '../components/ShareQr'
 import { useAuth } from '../context/AuthContext'
 import { tournamentApi } from '../services/api'
-import { publicWebOrigin } from '../native/platform'
+import { publicPathUrl } from '../native/platform'
 import {
+  courtLabel,
   currentSetScores,
   formatDate,
   formatMoney,
@@ -20,11 +21,11 @@ import './Tournament.css'
 export default function TournamentDetailPage() {
   const { slug = '' } = useParams()
   const { user } = useAuth()
-  const isOps = user?.role === 'ORGANISER' || user?.role === 'ADMIN'
-  const { data: tournament, isLoading, isError } = useQuery({
-    queryKey: ['tournament', slug],
+  const { data: tournament, isLoading, isError, refetch, isFetching } = useQuery({
+    queryKey: ['tournament', slug, user?.id],
     queryFn: async () => (await tournamentApi.get(slug)).data,
     enabled: !!slug,
+    retry: 4,
   })
   const { data: announcements = [] } = useQuery({
     queryKey: ['announcements', slug],
@@ -44,6 +45,8 @@ export default function TournamentDetailPage() {
     enabled: !!slug,
   })
 
+  const isOps = !!user && !!tournament?.can_manage
+
   if (isLoading) {
     return (
       <div className="app-shell">
@@ -61,11 +64,16 @@ export default function TournamentDetailPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Tournament not found</h1>
-          <p className="page-sub">Check the link or browse upcoming events.</p>
-          <Link to="/tournaments" className="btn btn-primary">
-            Browse tournaments
-          </Link>
+          <h1 className="page-title">Could not load this tournament</h1>
+          <p className="page-sub">The server may be waking up. Try again in a few seconds.</p>
+          <div className="header-actions" style={{ justifyContent: 'center' }}>
+            <button type="button" className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
+              {isFetching ? 'Retrying...' : 'Retry'}
+            </button>
+            <Link to="/tournaments" className="btn btn-ghost">
+              Browse tournaments
+            </Link>
+          </div>
         </main>
       </div>
     )
@@ -73,8 +81,22 @@ export default function TournamentDetailPage() {
 
   const live = matches.filter((m) => m.status === 'LIVE')
   const upcoming = matches.filter((m) => m.status === 'SCHEDULED' || m.status === 'CALLED').slice(0, 8)
-  const qrUrl = `${publicWebOrigin()}/t/${tournament.slug}`
-  const spots = spotsLeftLabel(tournament.registered_teams, tournament.max_teams)
+  const liveUrl = publicPathUrl(`/t/${tournament.slug}/live`)
+  const joinUrl = tournament.invite_code
+    ? publicPathUrl(`/join/${tournament.invite_code}`)
+    : publicPathUrl(`/t/${tournament.slug}/join`)
+  const myPayment = (playerView?.my_team as { payment_status?: string } | null)?.payment_status
+  const hasPaidEntry = !!playerView?.my_team && myPayment === 'PAID'
+  const hasPendingEntry = !!playerView?.my_team && myPayment === 'PENDING'
+
+  const singles = tournament.play_format === 'SINGLES'
+  const spots = spotsLeftLabel(tournament.registered_teams, tournament.max_teams, tournament.play_format)
+  const canJoin =
+    tournament.status === 'REGISTRATION_OPEN' &&
+    tournament.registered_teams < tournament.max_teams &&
+    !isPastCalendarDate(tournament.registration_deadline) &&
+    !hasPaidEntry
+  const showInvite = !!tournament.invite_code && (canJoin || isOps)
 
   return (
     <div className="app-shell">
@@ -88,45 +110,47 @@ export default function TournamentDetailPage() {
         </p>
 
         <div className="tour-actions">
-          {tournament.status === 'REGISTRATION_OPEN' &&
-            !playerView?.my_team &&
-            tournament.registered_teams < tournament.max_teams &&
-            !isPastCalendarDate(tournament.registration_deadline) && (
+          {canJoin && (
               <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
-                Join Tournament
+                {hasPendingEntry ? 'Complete payment' : 'Join tournament'}
               </Link>
             )}
           {tournament.status === 'REGISTRATION_OPEN' &&
-            !playerView?.my_team &&
+            !hasPaidEntry &&
             (tournament.registered_teams >= tournament.max_teams ||
               isPastCalendarDate(tournament.registration_deadline)) && (
               <p className="muted-note tour-closed-note">
                 {isPastCalendarDate(tournament.registration_deadline)
                   ? 'Registration closed'
-                  : 'Tournament full — watch this page for withdrawals'}
+                  : `Tournament is full. Check back if a ${singles ? 'player' : 'team'} withdraws.`}
               </p>
             )}
-          {playerView?.my_team && (
+          {hasPaidEntry && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
-              My matches · {playerView.my_team.name}
+              My matches · {playerView?.my_team?.name}
             </Link>
           )}
-          {!playerView?.my_team && (
-            <Link to={`/t/${tournament.slug}/live`} className="btn btn-dark">
+          {!hasPaidEntry && (
+            <Link to={`/t/${tournament.slug}/live`} className="btn btn-ghost">
               Live scores
             </Link>
           )}
           {isOps && (
-            <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost">
-              TV display
-            </Link>
+            <>
+              <Link to={`/organiser?t=${tournament.id}`} className="btn btn-dark">
+                Manage event
+              </Link>
+              <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost">
+                TV display
+              </Link>
+            </>
           )}
         </div>
 
         <div className="tour-stats">
           <div>
             <strong>{tournament.registered_teams}</strong>
-            <span>Doubles teams</span>
+            <span>{singles ? 'Players' : 'Doubles teams'}</span>
           </div>
           <div>
             <strong>{tournament.number_of_courts}</strong>
@@ -134,7 +158,7 @@ export default function TournamentDetailPage() {
           </div>
           <div>
             <strong>{formatMoney(tournament.entry_fee_cents, tournament.currency)}</strong>
-            <span>Per player</span>
+            <span>{singles ? 'Per player' : 'Per doubles team'}</span>
           </div>
           <div>
             <strong>{spots === 'Full' ? 'Full' : tournament.max_teams - tournament.registered_teams}</strong>
@@ -161,7 +185,7 @@ export default function TournamentDetailPage() {
                 const s = currentSetScores(m.score)
                 return (
                   <div key={m.id} className="live-tile">
-                    <div className="live-court">Court {m.court_number}</div>
+                    <div className="live-court">{courtLabel(m.court_name, m.court_number)}</div>
                     <div className="live-score-row">
                       <span>{m.team_a_name || m.team_a_placeholder || 'TBD'}</span>
                       <strong>{s.a}</strong>
@@ -185,7 +209,9 @@ export default function TournamentDetailPage() {
               {upcoming.map((m) => (
                 <li key={m.id}>
                   <span className="match-preview-court">
-                    {m.status === 'CALLED' ? 'Called' : `Court ${m.court_number ?? 'TBC'}`}
+                    {m.status === 'CALLED'
+                      ? `Called · ${courtLabel(m.court_name, m.court_number)}`
+                      : courtLabel(m.court_name, m.court_number)}
                   </span>
                   <span>
                     {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}
@@ -226,13 +252,25 @@ export default function TournamentDetailPage() {
           </section>
         )}
 
+        {showInvite && (
+          <section className="block qr-block">
+            <h2>Invite players</h2>
+            <p>
+              Share the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
+            </p>
+            {tournament.invite_code && (
+              <p className="invite-code-line">
+                Code <code className="share-code">{tournament.invite_code}</code>
+              </p>
+            )}
+            <ShareQr url={joinUrl} openLabel="Open join page" />
+          </section>
+        )}
+
         <section className="block qr-block">
-          <h2>Share this event</h2>
-          <p>Send the link to your partner, or put the QR on a poster at the venue.</p>
-          <div className="qr-wrap">
-            <QRCodeSVG value={qrUrl} size={160} bgColor="#ffffff" fgColor="#0b3d2e" />
-            <code>{qrUrl.replace(/^https?:\/\//, '')}</code>
-          </div>
+          <h2>Share live scores</h2>
+          <p>Scan this QR on your phone to open the live board. No login needed.</p>
+          <ShareQr url={liveUrl} openLabel="Open live board" />
         </section>
       </main>
     </div>

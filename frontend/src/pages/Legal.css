@@ -1,0 +1,36 @@
+.legal-page {
+  max-width: 40rem;
+}
+
+.legal-body {
+  margin-top: 1.25rem;
+  color: var(--text, #1a1a1a);
+  line-height: 1.65;
+  font-size: 0.98rem;
+}
+
+.legal-body h2 {
+  margin: 1.75rem 0 0.55rem;
+  font-family: var(--font-display, inherit);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--court-deep, #0b3d2e);
+}
+
+.legal-body p,
+.legal-body ul {
+  margin: 0 0 0.85rem;
+}
+
+.legal-body ul {
+  padding-left: 1.2rem;
+}
+
+.legal-body li {
+  margin-bottom: 0.35rem;
+}
+
+.legal-body a {
+  color: var(--court-mid, #1a7a52);
+  font-weight: 600;
+}

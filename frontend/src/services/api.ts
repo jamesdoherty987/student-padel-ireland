@@ -1,13 +1,15 @@
 import axios from 'axios'
 import { apiBaseUrl } from '../native/platform'
+import { clearAuthStorage, getAuthToken } from '../utils/authStorage'
 
 const api = axios.create({
   baseURL: apiBaseUrl(),
   headers: { 'Content-Type': 'application/json' },
+  timeout: 20_000,
 })
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('isp_token')
+  const token = getAuthToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -23,13 +25,12 @@ api.interceptors.response.use(
   (error) => {
     if (error?.response?.status === 401) {
       const url = String(error.config?.url || '')
-      const hadToken = !!localStorage.getItem('isp_token')
+      const hadToken = !!getAuthToken()
       if (hadToken && !url.includes('/auth/login')) {
-        localStorage.removeItem('isp_token')
-        localStorage.removeItem('isp_user')
+        clearAuthStorage()
         window.dispatchEvent(new Event('isp:logout'))
 
-        // Only bounce to login on routes that require auth — public pages stay put
+        // Only bounce to login on routes that require auth - public pages stay put
         const path = window.location.pathname
         const isTournamentJoin = /\/t\/[^/]+\/(join|confirmed)/.test(path)
         const isCommunityPrivate =
@@ -74,6 +75,7 @@ export type Tournament = {
   max_teams: number
   registration_deadline?: string | null
   format: string
+  play_format?: string
   rules?: string | null
   description?: string | null
   status: string
@@ -82,6 +84,29 @@ export type Tournament = {
   group_size: number
   teams_advance_per_group: number
   registered_teams: number
+  invite_code?: string | null
+  courts?: Array<{ number: number; name: string; id: string }>
+  can_manage?: boolean
+}
+
+export type TournamentAdmin = {
+  id: string
+  tournament_id: string
+  user_id: string
+  full_name: string
+  email: string
+  role: string
+  is_owner: boolean
+  created_at?: string | null
+}
+
+export type TournamentAnnouncement = {
+  id: string
+  tournament_id: string
+  title: string
+  body: string
+  is_pinned: boolean
+  created_at: string
 }
 
 export type Match = {
@@ -90,6 +115,7 @@ export type Match = {
   round: string
   stage: string
   court_number?: number | null
+  court_name?: string | null
   scheduled_start?: string | null
   team_a_id?: string | null
   team_b_id?: string | null
@@ -99,6 +125,7 @@ export type Match = {
   team_b_placeholder?: string | null
   status: string
   winner_id?: string | null
+  ratings_applied?: boolean
   score?: {
     set1_a: number
     set1_b: number
@@ -233,6 +260,25 @@ export type CommunityMatch = {
   rating_changes: RatingDelta[]
 }
 
+export type NotificationItem = {
+  id: string
+  kind: string
+  title: string
+  body: string
+  href: string
+  created_at: string
+  actionable: boolean
+  friendship_id?: string | null
+  match_id?: string | null
+  actor_user_id?: string | null
+  actor_name?: string | null
+}
+
+export type NotificationsFeed = {
+  items: NotificationItem[]
+  actionable_count: number
+}
+
 export type CommunityHome = {
   competitions: Competition[]
   needs_confirm: CommunityMatch[]
@@ -256,33 +302,56 @@ export const authApi = {
   register: (data: Record<string, unknown>) => api.post('/api/auth/register', data),
   login: (data: { email: string; password: string }) => api.post('/api/auth/login', data),
   me: () => api.get<User>('/api/auth/me'),
+  deleteAccount: (password: string) => api.delete('/api/auth/me', { data: { password } }),
 }
 
 export const tournamentApi = {
   list: (params?: { status?: string; upcoming?: boolean }) =>
     api.get<Tournament[]>('/api/tournaments', { params }),
   get: (slugOrId: string) => api.get<Tournament>(`/api/tournaments/${slugOrId}`),
+  getByCode: (code: string) => api.get<Tournament>(`/api/tournaments/code/${code}`),
   create: (data: Record<string, unknown>) => api.post<Tournament>('/api/tournaments', data),
   update: (id: string, data: Record<string, unknown>) =>
     api.patch<Tournament>(`/api/tournaments/${id}`, data),
+  delete: (id: string) => api.delete<{ ok: boolean; deleted: string }>(`/api/tournaments/${id}`),
   register: (tournamentId: string, data: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/register`, data),
+  organiserAddTeam: (tournamentId: string, data: Record<string, unknown>) =>
+    api.post(`/api/tournaments/${tournamentId}/organiser-add-team`, data),
   teams: (tournamentId: string) => api.get(`/api/tournaments/${tournamentId}/teams`),
   generate: (tournamentId: string, data?: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/generate`, data || {}),
+  seedKnockout: (tournamentId: string) =>
+    api.post(`/api/tournaments/${tournamentId}/seed-knockout`),
   matches: (slugOrId: string) => api.get<Match[]>(`/api/tournaments/${slugOrId}/matches`),
   standings: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/standings`),
   playerView: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/player-view`),
   display: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/display`),
-  announcements: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/announcements`),
+  announcements: (slugOrId: string) =>
+    api.get<TournamentAnnouncement[]>(`/api/tournaments/${slugOrId}/announcements`),
   createAnnouncement: (id: string, data: Record<string, unknown>) =>
-    api.post(`/api/tournaments/${id}/announcements`, data),
+    api.post<TournamentAnnouncement>(`/api/tournaments/${id}/announcements`, data),
+  updateAnnouncement: (tournamentId: string, announcementId: string, data: Record<string, unknown>) =>
+    api.patch<TournamentAnnouncement>(
+      `/api/tournaments/${tournamentId}/announcements/${announcementId}`,
+      data,
+    ),
+  deleteAnnouncement: (tournamentId: string, announcementId: string) =>
+    api.delete(`/api/tournaments/${tournamentId}/announcements/${announcementId}`),
+  admins: (tournamentId: string) =>
+    api.get<TournamentAdmin[]>(`/api/tournaments/${tournamentId}/admins`),
+  addAdmin: (tournamentId: string, data: { user_id: string; role?: string }) =>
+    api.post<TournamentAdmin>(`/api/tournaments/${tournamentId}/admins`, data),
+  removeAdmin: (tournamentId: string, adminUserId: string) =>
+    api.delete(`/api/tournaments/${tournamentId}/admins/${adminUserId}`),
   updateScore: (matchId: string, data: Record<string, unknown>) =>
     api.patch(`/api/matches/${matchId}/score`, data),
   moveMatch: (matchId: string, data: Record<string, unknown>) =>
     api.patch(`/api/matches/${matchId}`, data),
   checkIn: (tournamentId: string, teamId: string, data: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/check-in`, data),
+  withdrawTeam: (tournamentId: string, teamId: string) =>
+    api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
   getRegistration: (id: string) => api.get<RegistrationConfirm>(`/api/registrations/${id}`),
   confirmPaymentSession: (sessionId: string) =>
     api.get<RegistrationConfirm>('/api/payments/confirm', { params: { session_id: sessionId } }),
@@ -293,10 +362,19 @@ export const platformApi = {
     api.get<{ demo_payments: boolean; stripe_publishable_key: string | null }>('/api/config/public'),
   universities: () => api.get<University[]>('/api/universities'),
   rankings: (limit = 50) => api.get<RankingRow[]>('/api/rankings', { params: { limit } }),
+  resolveInvite: (code: string) =>
+    api.get<{
+      kind: 'tournament' | 'competition'
+      slug: string
+      name: string
+      invite_code: string
+      join_path: string
+      hint: string
+    }>(`/api/invite/${encodeURIComponent(code)}`),
   player: (id: string) => api.get<RankingRow>(`/api/players/${id}`),
   updateProfile: (data: { bio?: string; full_name?: string }) =>
     api.patch<RankingRow>('/api/me/profile', data),
-    uploadMedia: (file: File, opts?: { caption?: string; set_as_avatar?: boolean }) => {
+  uploadMedia: (file: File, opts?: { caption?: string; set_as_avatar?: boolean }) => {
     const form = new FormData()
     form.append('file', file)
     if (opts?.caption) form.append('caption', opts.caption)
@@ -310,6 +388,7 @@ export const platformApi = {
 
 export const communityApi = {
   home: () => api.get<CommunityHome>('/api/community/home'),
+  notifications: () => api.get<NotificationsFeed>('/api/notifications'),
   searchPlayers: (q: string) => api.get<PlayerSearch[]>('/api/players/search', { params: { q } }),
   friends: () => api.get<Friendship[]>('/api/friends'),
   requestFriend: (user_id: string) => api.post<Friendship>('/api/friends/request', { user_id }),

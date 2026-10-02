@@ -12,7 +12,7 @@ const leftFeatures = [
     icon: Sparkles,
     title: "Generative editing",
     description:
-      "Describe the look you want in plain language—relight scenes, swap backgrounds, and refine portraits with models built for real photography, not generic stock.",
+      "Describe the look you want in plain language-relight scenes, swap backgrounds, and refine portraits with models built for real photography, not generic stock.",
   },
   {
     icon: Users,

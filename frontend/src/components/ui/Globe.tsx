@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import createGlobe from 'cobe'
 
 type GlobeProps = {
@@ -7,62 +7,76 @@ type GlobeProps = {
 
 const RAD_PER_MS = 0.0035 / 16.67
 
-/** Aceternity-style spinning globe (cobe v2) — court green theme */
+/** Aceternity-style spinning globe (cobe v2) - court green theme. Soft-fails on weak mobile GPUs. */
 export function Globe({ className = '' }: GlobeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [failed, setFailed] = useState(false)
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas || failed) return
 
     let phi = (-7.5 * Math.PI) / 180 + Math.PI
-    let width = canvas.offsetWidth
+    let width = canvas.offsetWidth || 280
     let raf = 0
     let last = performance.now()
+    let globe: ReturnType<typeof createGlobe> | null = null
 
-    const onResize = () => {
-      width = canvas.offsetWidth
-      globe.update({ width: width * 2, height: width * 2 })
-    }
+    try {
+      const onResize = () => {
+        if (!globe) return
+        width = canvas.offsetWidth || 280
+        globe.update({ width: width * 2, height: width * 2 })
+      }
 
-    const globe = createGlobe(canvas, {
-      devicePixelRatio: Math.min(window.devicePixelRatio || 2, 2),
-      width: width * 2,
-      height: width * 2,
-      phi,
-      theta: 0.28,
-      dark: 1,
-      diffuse: 1.2,
-      mapSamples: 16000,
-      mapBrightness: 4.5,
-      baseColor: [0.04, 0.18, 0.14],
-      markerColor: [0.78, 0.9, 0],
-      glowColor: [0.08, 0.28, 0.2],
-      markerElevation: 0,
-      markers: [
-        // Anchor only — slim DOM pin is the visible marker
-        { location: [53.3498, -6.2603], size: 0, id: 'ie' },
-      ],
-    })
+      globe = createGlobe(canvas, {
+        devicePixelRatio: Math.min(window.devicePixelRatio || 2, 2),
+        width: width * 2,
+        height: width * 2,
+        phi,
+        theta: 0.28,
+        dark: 1,
+        diffuse: 1.2,
+        mapSamples: 12000,
+        mapBrightness: 4.5,
+        baseColor: [0.04, 0.18, 0.14],
+        markerColor: [0.78, 0.9, 0],
+        glowColor: [0.08, 0.28, 0.2],
+        markerElevation: 0,
+        markers: [{ location: [53.3498, -6.2603], size: 0, id: 'ie' }],
+      })
 
-    const tick = (now: number) => {
-      const dt = Math.min(32, now - last)
-      last = now
-      // Frame-rate independent rotation keeps the anchored pin steadier
-      phi += RAD_PER_MS * dt
-      globe.update({ phi })
+      const tick = (now: number) => {
+        if (!globe) return
+        const dt = Math.min(32, now - last)
+        last = now
+        phi += RAD_PER_MS * dt
+        globe.update({ phi })
+        raf = requestAnimationFrame(tick)
+      }
+
+      window.addEventListener('resize', onResize)
       raf = requestAnimationFrame(tick)
-    }
 
-    window.addEventListener('resize', onResize)
-    raf = requestAnimationFrame(tick)
-
-    return () => {
-      cancelAnimationFrame(raf)
-      globe.destroy()
-      window.removeEventListener('resize', onResize)
+      return () => {
+        cancelAnimationFrame(raf)
+        window.removeEventListener('resize', onResize)
+        try {
+          globe?.destroy()
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch (err) {
+      console.warn('Globe unavailable on this device', err)
+      setFailed(true)
+      return
     }
-  }, [])
+  }, [failed])
+
+  if (failed) {
+    return <div className={`globe-wrap globe-wrap--static ${className}`.trim()} aria-hidden />
+  }
 
   return (
     <div className={`globe-wrap ${className}`.trim()}>

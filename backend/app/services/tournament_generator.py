@@ -147,7 +147,7 @@ def _seed_into_groups(teams: Sequence[TeamRef], group_count: int, group_size: in
 
 
 def _round_robin_pairs(team_ids: list[str]) -> list[tuple[str, str]]:
-    """Circle method — each team plays every other once. No self-matches."""
+    """Circle method - each team plays every other once. No self-matches."""
     ids = list(team_ids)
     if len(ids) < 2:
         return []
@@ -171,6 +171,49 @@ def _round_robin_pairs(team_ids: list[str]) -> list[tuple[str, str]]:
     return pairs
 
 
+def _ordinal(n: int) -> str:
+    return {1: "1st", 2: "2nd", 3: "3rd", 4: "4th"}.get(n, f"{n}th")
+
+
+def _knockout_first_round_placeholders(
+    group_names: list[str],
+    teams_advance: int,
+    first_round_count: int,
+) -> list[tuple[str, str]]:
+    """
+    Build first-round KO placeholders honouring teams_advance_per_group.
+
+    Classic advance=2: 1A vs 2B, 1B vs 2A, ...
+    Other advance values: seed order of all advancing slots, pad with BYE.
+    """
+    group_count = len(group_names)
+    if group_count < 1 or teams_advance < 1:
+        return [("BYE", "BYE")] * first_round_count
+
+    pairs: list[tuple[str, str]] = []
+
+    if teams_advance == 2:
+        for i in range(group_count):
+            g1 = group_names[i]
+            g2 = group_names[(i + 1) % group_count] if group_count > 1 else g1
+            pairs.append((f"1st Group {g1}", f"2nd Group {g2}"))
+    else:
+        slots: list[str] = []
+        for rank in range(1, teams_advance + 1):
+            names = group_names if rank % 2 == 1 else list(reversed(group_names))
+            for g in names:
+                slots.append(f"{_ordinal(rank)} Group {g}")
+        while len(slots) < first_round_count * 2:
+            slots.append("BYE")
+        slots = slots[: first_round_count * 2]
+        for i in range(0, len(slots), 2):
+            pairs.append((slots[i], slots[i + 1]))
+
+    while len(pairs) < first_round_count:
+        pairs.append(("BYE", "BYE"))
+    return pairs[:first_round_count]
+
+
 def _schedule_on_courts(
     matches: list[GeneratedMatch],
     courts: int,
@@ -178,16 +221,33 @@ def _schedule_on_courts(
     duration_minutes: int,
     buffer_minutes: int = 0,
 ) -> None:
-    """Assign court numbers and start times greedily across courts."""
+    """Assign courts + times; avoid double-booking the same team when IDs are known."""
     if courts < 1:
         raise ValueError("courts must be >= 1")
     slot = timedelta(minutes=duration_minutes + buffer_minutes)
     court_free_at = [start for _ in range(courts)]
+    team_free_at: dict[str, datetime] = {}
+
     for m in matches:
-        court_idx = min(range(courts), key=lambda i: court_free_at[i])
-        m.court_number = court_idx + 1
-        m.scheduled_start = court_free_at[court_idx]
-        court_free_at[court_idx] = court_free_at[court_idx] + slot
+        earliest = start
+        for tid in (m.team_a_id, m.team_b_id):
+            if tid:
+                earliest = max(earliest, team_free_at.get(tid, start))
+
+        best_court = 0
+        best_time = max(court_free_at[0], earliest)
+        for i in range(1, courts):
+            candidate = max(court_free_at[i], earliest)
+            if candidate < best_time:
+                best_time = candidate
+                best_court = i
+
+        m.court_number = best_court + 1
+        m.scheduled_start = best_time
+        court_free_at[best_court] = best_time + slot
+        for tid in (m.team_a_id, m.team_b_id):
+            if tid:
+                team_free_at[tid] = best_time + slot
 
 
 class GroupKnockoutGenerator:
@@ -272,7 +332,7 @@ class GroupKnockoutGenerator:
         # Knockout bracket size
         advancing = group_count * config.teams_advance_per_group
         if advancing < 2:
-            # No knockout — group stage only
+            # No knockout - group stage only
             return result
 
         bracket_size = _next_power_of_two(advancing)
@@ -287,22 +347,10 @@ class GroupKnockoutGenerator:
         ko_matches: list[GeneratedMatch] = []
         first_round_count = bracket_size // 2
 
-        # Placeholders: Winner Group A / Runner-up Group B style pairing
-        # Standard: 1A vs 2B, 1B vs 2A, 1C vs 2D, 1D vs 2C, ...
-        placeholders: list[tuple[str, str]] = []
         group_names = [_group_letter(i) for i in range(group_count)]
-        for i in range(group_count):
-            g1 = group_names[i]
-            g2 = group_names[(i + 1) % group_count] if group_count > 1 else g1
-            placeholders.append((f"1st Group {g1}", f"2nd Group {g2}"))
-
-        # If more first-round slots than placeholder pairs (byes / unused), pad
-        while len(placeholders) < first_round_count:
-            placeholders.append(("TBD", "TBD"))
-        placeholders = placeholders[:first_round_count]
-
-        # If bracket larger than advancing (byes), mark excess as BYE
-        # (kept as TBD placeholders for organiser to resolve)
+        placeholders = _knockout_first_round_placeholders(
+            group_names, config.teams_advance_per_group, first_round_count
+        )
 
         for i in range(first_round_count):
             pa, pb = placeholders[i]
@@ -425,7 +473,7 @@ def generate_tournament(config: GeneratorConfig) -> GeneratedTournament:
 
 
 def validate_generated(result: GeneratedTournament, expected_team_ids: set[str]) -> None:
-    """Hard invariants — fail loudly rather than produce broken brackets."""
+    """Hard invariants - fail loudly rather than produce broken brackets."""
     assigned = set()
     for g in result.groups:
         for tid in g.team_ids:
@@ -446,7 +494,7 @@ def validate_generated(result: GeneratedTournament, expected_team_ids: set[str])
             if m.team_a_id not in expected_team_ids or m.team_b_id not in expected_team_ids:
                 raise ValueError("Group match references unknown team")
 
-    # Count team appearances in group stage — each pair once
+    # Count team appearances in group stage - each pair once
     from collections import Counter
 
     appearances: Counter[str] = Counter()

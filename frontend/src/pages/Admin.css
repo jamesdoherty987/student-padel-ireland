@@ -42,9 +42,15 @@
 
 .admin-list {
   list-style: none;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 0.75rem;
+}
+
+@media (min-width: 900px) {
+  .admin-list {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .admin-card {

@@ -12,7 +12,7 @@ type InfiniteMovingCardsProps = {
   className?: string
 }
 
-/** Aceternity infinite-moving-cards — CSS-driven for this app */
+/** Aceternity infinite-moving-cards - CSS-driven for this app */
 export function InfiniteMovingCards({
   items,
   direction = 'left',

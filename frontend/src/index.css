@@ -1,4 +1,4 @@
-/* Student Padel Ireland — design system */
+/* Student Padel Ireland - design system */
 
 *,
 *::before,
@@ -58,12 +58,15 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Capacitor shell — avoid overscroll rubber-banding fighting the WebView */
+/* Capacitor shell - avoid overscroll rubber-banding fighting the WebView */
 html.native-app,
 html.native-app body {
   overscroll-behavior: none;
   -webkit-user-select: none;
   user-select: none;
+  /* App-like: prefer system UI fonts when web fonts are slow/offline */
+  --font-display: 'Syne', 'Outfit', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --font-body: 'Outfit', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
 }
 
 html.native-app input,
@@ -71,6 +74,33 @@ html.native-app textarea,
 html.native-app [contenteditable] {
   -webkit-user-select: text;
   user-select: text;
+}
+
+html.native-app .app-nav.is-native .app-nav-menu-btn {
+  display: none;
+}
+
+html.native-app .app-nav-native-link {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--court-mid);
+  padding: 0.35rem 0.45rem;
+}
+
+html.native-app .app-nav-native-logout {
+  font-size: 0.8rem;
+  padding: 0.35rem 0.5rem;
+}
+
+html.native-app a,
+html.native-app button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.native-app .btn,
+html.native-app .native-tab,
+html.native-app .app-nav-native-link {
+  touch-action: manipulation;
 }
 
 body {
@@ -92,6 +122,7 @@ body.modal-open {
 
 .modal,
 .score-modal,
+.join-modal,
 .lightbox-inner {
   touch-action: pan-y;
 }
@@ -187,6 +218,19 @@ img {
   color: var(--court-deep);
 }
 
+.btn-danger {
+  background: #b42318;
+  color: #fff;
+  border-color: #b42318;
+}
+
+@media (hover: hover) {
+  .btn-danger:hover:not(:disabled) {
+    background: #912018;
+    border-color: #912018;
+  }
+}
+
 .btn-secondary,
 .btn-outline {
   background: transparent;
@@ -209,50 +253,18 @@ img {
   padding: 0.85rem 1.5rem;
 }
 
-/* Shared compact button — single source of truth (page CSS must not redefine) */
+/* Shared compact button - single source of truth (page CSS must not redefine) */
 .btn-sm {
   min-height: 44px;
   padding: 0.45rem 0.85rem;
   font-size: 0.88rem;
 }
 
-/* Confirm Dialog Modal */
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal {
-  background: var(--white);
-  border-radius: var(--radius-lg);
-  padding: 2rem;
-  max-width: 400px;
-  box-shadow: var(--shadow-lg);
-}
-
-.modal h2 {
-  font-size: 1.25rem;
-  margin-bottom: 0.5rem;
-  color: var(--ink);
-}
-
-.modal p {
-  color: var(--text-secondary);
-  margin-bottom: 1.5rem;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
+.btn-xs {
+  min-height: 36px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 /* Forms */
@@ -310,7 +322,7 @@ img {
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.55rem;
 }
 
 .filter-chip {
@@ -330,6 +342,32 @@ img {
   background: var(--court-deep);
   border-color: var(--court-deep);
   color: var(--white);
+}
+
+.filter-chips-subtle {
+  gap: 0.4rem;
+}
+
+.filter-chip-subtle {
+  min-height: 36px;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.filter-chip-subtle.on,
+.filter-chip-subtle[aria-selected='true'] {
+  background: rgba(11, 61, 46, 0.1);
+  border-color: var(--court-deep);
+  color: var(--court-deep);
+}
+
+.filter-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .badge {
@@ -361,26 +399,26 @@ img {
 }
 
 .container {
-  width: min(1120px, 100%);
+  width: min(1240px, 100%);
   margin-inline: auto;
-  padding-left: max(1rem, env(safe-area-inset-left));
-  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
   box-sizing: border-box;
 }
 
 .page {
-  width: min(800px, 100%);
+  width: min(1120px, 100%);
   margin: 0 auto;
-  padding-top: 1.5rem;
-  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-top: 2rem;
+  padding-right: max(1.5rem, env(safe-area-inset-right));
   padding-bottom: max(3.5rem, calc(2rem + env(safe-area-inset-bottom)));
-  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-left: max(1.5rem, env(safe-area-inset-left));
   box-sizing: border-box;
 }
 
 .page-title {
   font-family: var(--font-display);
-  font-size: clamp(1.55rem, 4vw, 2.15rem);
+  font-size: clamp(1.7rem, 3.2vw, 2.45rem);
   font-weight: 700;
   letter-spacing: -0.03em;
   text-transform: none;
@@ -411,7 +449,7 @@ img {
 .header-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.65rem;
   align-items: center;
 }
 
@@ -484,7 +522,7 @@ img {
   }
 }
 
-/* App nav — blur on ::before so fixed mobile menu isn't trapped by backdrop-filter */
+/* App nav - blur on ::before so fixed mobile menu isn't trapped by backdrop-filter */
 .app-nav {
   position: sticky;
   top: 0;
@@ -493,10 +531,11 @@ img {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.85rem 1.25rem;
-  padding-top: max(0.85rem, env(safe-area-inset-top));
-  padding-left: max(1.25rem, env(safe-area-inset-left));
-  padding-right: max(1.25rem, env(safe-area-inset-right));
+  width: 100%;
+  padding: 0.95rem 2rem;
+  padding-top: max(0.95rem, env(safe-area-inset-top));
+  padding-left: max(2rem, env(safe-area-inset-left));
+  padding-right: max(2rem, env(safe-area-inset-right));
   background: transparent;
   border-bottom: 1px solid transparent;
 }
@@ -516,7 +555,7 @@ img {
 .app-nav-brand {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 0.98rem;
+  font-size: 1.05rem;
   letter-spacing: -0.02em;
   text-transform: none;
   color: var(--court-deep);
@@ -527,26 +566,55 @@ img {
   min-width: 0;
 }
 
-.app-nav-brand::before {
-  content: '';
-  width: 0;
-  height: 0;
-  display: none;
-}
-
-.app-nav-logo {
-  height: 40px;
-  width: auto;
-  max-width: 180px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
 .app-nav-brand-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Shared brand mark (real logo) */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brand-logo-mark {
+  display: block;
+  width: auto;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.brand-logo--sm .brand-logo-mark {
+  height: 2rem;
+}
+
+.brand-logo--md .brand-logo-mark {
+  height: 2.75rem;
+}
+
+.brand-logo--lg .brand-logo-mark {
+  height: 3.5rem;
+}
+
+.brand-logo--xl .brand-logo-mark {
+  height: 5rem;
+}
+
+.brand-logo-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.15;
 }
 
 .app-nav-links {
@@ -557,7 +625,7 @@ img {
 
 .app-nav-links a {
   font-weight: 500;
-  font-size: 0.92rem;
+  font-size: 0.98rem;
   color: var(--ink-soft);
   padding: 0.45rem 0.7rem;
   border-radius: 8px;
@@ -619,6 +687,193 @@ img {
   line-height: 1;
 }
 
+.app-nav-end {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.app-nav-bell-slot {
+  flex-shrink: 0;
+  z-index: 60;
+}
+
+.notif-root {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 60;
+}
+
+.notif-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  color: var(--court-deep);
+  cursor: pointer;
+}
+
+.notif-bell.is-open,
+.notif-bell:hover {
+  background: rgba(11, 61, 46, 0.08);
+  border-color: rgba(11, 61, 46, 0.25);
+}
+
+.notif-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  font-size: 0.65rem;
+}
+
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: min(22.5rem, calc(100vw - 1.5rem));
+  max-height: min(70vh, 32rem);
+  overflow: auto;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 40px rgba(11, 40, 30, 0.16);
+  padding: 0.85rem 0.9rem 1rem;
+}
+
+.notif-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.65rem;
+}
+
+.notif-panel-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  color: var(--court-deep);
+}
+
+.notif-close {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.notif-close:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.notif-error {
+  margin: 0 0 0.65rem;
+}
+
+.notif-empty {
+  padding: 0.85rem 0.25rem 0.5rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.notif-empty p {
+  margin: 0 0 0.35rem;
+}
+
+.notif-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.notif-section h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.notif-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.notif-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 0.65rem 0.7rem;
+}
+
+.notif-item.is-new {
+  background: rgba(11, 61, 46, 0.05);
+  border-color: rgba(11, 61, 46, 0.18);
+}
+
+.notif-item.is-action {
+  border-left: 3px solid var(--court-deep);
+}
+
+.notif-item-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.notif-item-main strong {
+  font-size: 0.92rem;
+  color: var(--court-deep);
+}
+
+.notif-item-main span {
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  line-height: 1.35;
+}
+
+.notif-item-main em {
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 0.15rem;
+}
+
+.notif-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
 .app-nav-user {
   color: var(--muted);
   font-size: 0.88rem;
@@ -671,7 +926,20 @@ img {
 
   .app-nav-brand {
     font-size: 0.88rem;
-    max-width: calc(100% - 3.5rem);
+    max-width: calc(100% - 7rem);
+  }
+
+  .app-nav-end {
+    gap: 0.4rem;
+  }
+
+  .notif-panel {
+    position: fixed;
+    top: max(4.25rem, calc(3.5rem + env(safe-area-inset-top)));
+    right: max(0.75rem, env(safe-area-inset-right));
+    left: max(0.75rem, env(safe-area-inset-left));
+    width: auto;
+    max-height: min(75vh, 34rem);
   }
 
   .app-nav-brand-text {
@@ -731,8 +999,8 @@ img {
   .page {
     width: 100%;
     padding-top: 1.15rem;
-    padding-left: max(0.75rem, env(safe-area-inset-left));
-    padding-right: max(0.75rem, env(safe-area-inset-right));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
   }
 
   .page-header-row {

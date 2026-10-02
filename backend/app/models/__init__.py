@@ -12,6 +12,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -19,7 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, deferred, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
 
@@ -36,8 +37,9 @@ class TimestampMixin:
 
 class UserRole(StrEnum):
     PLAYER = "PLAYER"
-    ORGANISER = "ORGANISER"
     ADMIN = "ADMIN"
+    # Deprecated account type — existing rows are migrated to PLAYER
+    ORGANISER = "ORGANISER"
 
 
 class TournamentStatus(StrEnum):
@@ -56,6 +58,13 @@ class TournamentFormat(StrEnum):
     SWISS = "SWISS"
 
 
+class PlayFormat(StrEnum):
+    """Singles or doubles entry for an official tournament."""
+
+    SINGLES = "SINGLES"
+    DOUBLES = "DOUBLES"
+
+
 class MatchStatus(StrEnum):
     SCHEDULED = "SCHEDULED"
     CALLED = "CALLED"
@@ -70,6 +79,7 @@ class PaymentStatus(StrEnum):
     PAID = "PAID"
     REFUNDED = "REFUNDED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class FriendshipStatus(StrEnum):
@@ -143,6 +153,7 @@ class Tournament(Base, TimestampMixin):
     max_teams: Mapped[int] = mapped_column(Integer, default=48)
     registration_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     format: Mapped[str] = mapped_column(String(40), default=TournamentFormat.GROUP_KNOCKOUT.value)
+    play_format: Mapped[str] = mapped_column(String(20), default=PlayFormat.DOUBLES.value)
     rules: Mapped[Optional[str]] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(40), default=TournamentStatus.DRAFT.value)
     organiser_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -155,6 +166,7 @@ class Tournament(Base, TimestampMixin):
         default="points,head_to_head,set_difference,game_difference,games_won",
     )
     description: Mapped[Optional[str]] = mapped_column(Text)
+    invite_code: Mapped[Optional[str]] = mapped_column(String(12), unique=True, index=True)
 
     organiser: Mapped[User] = relationship()
     teams: Mapped[list["Team"]] = relationship(back_populates="tournament")
@@ -163,6 +175,28 @@ class Tournament(Base, TimestampMixin):
     groups: Mapped[list["Group"]] = relationship(back_populates="tournament")
     announcements: Mapped[list["Announcement"]] = relationship(back_populates="tournament")
     sponsors: Mapped[list["Sponsor"]] = relationship(back_populates="tournament")
+    admins: Mapped[list["TournamentAdmin"]] = relationship(
+        back_populates="tournament", cascade="all, delete-orphan"
+    )
+
+
+class TournamentAdmin(Base, TimestampMixin):
+    """Co-organiser who can manage a tournament (score, edit, announce)."""
+
+    __tablename__ = "tournament_admins"
+    __table_args__ = (UniqueConstraint("tournament_id", "user_id", name="uq_tournament_admin"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # MANAGER = full day-of ops; SCORER = scores/matches only (reserved for later)
+    role: Mapped[str] = mapped_column(String(20), default="MANAGER")
+    added_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+
+    tournament: Mapped[Tournament] = relationship(back_populates="admins")
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
 
 
 class Court(Base, TimestampMixin):
@@ -352,7 +386,7 @@ class Friendship(Base, TimestampMixin):
 
 
 class CommunityCompetition(Base, TimestampMixin):
-    """Private friend competition / ladder — no entry fee, invite-only."""
+    """Private friend competition / ladder - no entry fee, invite-only."""
 
     __tablename__ = "community_competitions"
 
@@ -468,6 +502,10 @@ class ProfileMedia(Base, TimestampMixin):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     media_type: Mapped[str] = mapped_column(String(20), nullable=False)  # image | video
     url: Mapped[str] = mapped_column(String(500), nullable=False)
+    # Persist bytes in DB so media survives ephemeral host disks (e.g. Render free).
+    # Deferred so profile/list queries do not load multi-MB blobs into memory.
+    content_type: Mapped[Optional[str]] = mapped_column(String(100))
+    file_data: Mapped[Optional[bytes]] = deferred(mapped_column(LargeBinary))
     caption: Mapped[Optional[str]] = mapped_column(String(200))
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_avatar: Mapped[bool] = mapped_column(Boolean, default=False)

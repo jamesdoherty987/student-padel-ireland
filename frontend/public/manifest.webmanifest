@@ -1,7 +1,7 @@
 {
   "name": "Student Padel Ireland",
-  "short_name": "SPI Padel",
-  "description": "Student padel in Ireland — tournaments, community games, friends, and ratings.",
+  "short_name": "Student Padel",
+  "description": "Student padel in Ireland - tournaments, community games, friends, and ratings.",
   "theme_color": "#0b3d2e",
   "background_color": "#0b3d2e",
   "display": "standalone",

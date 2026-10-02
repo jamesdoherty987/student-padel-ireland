@@ -1,0 +1,74 @@
+.native-welcome {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: flex-end;
+  padding: max(2rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right))
+    max(2rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+  color: #fff;
+  overflow: hidden;
+}
+
+.native-welcome-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(200, 230, 0, 0.28), transparent 55%),
+    linear-gradient(165deg, #0b3d2e 0%, #146644 45%, #0a2e24 100%);
+}
+
+.native-welcome-inner {
+  position: relative;
+  width: 100%;
+  max-width: 24rem;
+  margin: 0 auto;
+  padding-bottom: 0.5rem;
+}
+
+.native-welcome-brand {
+  color: #fff;
+  margin-bottom: 0.75rem;
+}
+
+.native-welcome-brand .brand-logo-text {
+  color: var(--ball);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 800;
+}
+
+.native-welcome h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 8vw, 2.6rem);
+  font-weight: 800;
+  line-height: 1.1;
+  margin-bottom: 0.75rem;
+}
+
+.native-welcome-sub {
+  color: rgba(255, 255, 255, 0.82);
+  margin-bottom: 1.75rem;
+  line-height: 1.5;
+}
+
+.native-welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.native-welcome-ghost {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+.native-welcome-signup {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 600;
+  font-size: 0.92rem;
+  padding: 0.35rem;
+}

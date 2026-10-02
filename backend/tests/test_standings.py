@@ -25,7 +25,7 @@ def test_basic_points_and_ranking():
 
 def test_head_to_head_tiebreak():
     teams = ["A", "B", "C"]
-    # A and B both 1-1 on points vs rest — A beat B
+    # A and B both 1-1 on points vs rest - A beat B
     results = [
         MatchResult("A", "B", [(6, 4), (6, 3)]),
         MatchResult("A", "C", [(3, 6), (2, 6)]),

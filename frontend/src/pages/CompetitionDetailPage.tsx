@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { QRCodeSVG } from 'qrcode.react'
 import { Share } from '@capacitor/share'
 import NavBar from '../components/NavBar'
+import NumberInput from '../components/NumberInput'
+import { ShareQr } from '../components/ShareQr'
 import { useAuth } from '../context/AuthContext'
-import { confirmDialog } from '../components/ConfirmDialog'
-import { isNativeApp, publicWebOrigin } from '../native/platform'
+import { isNativeApp, publicPathUrl } from '../native/platform'
 import {
   apiErrorMessage,
   communityApi,
@@ -81,6 +81,7 @@ export default function CompetitionDetailPage() {
     qc.invalidateQueries({ queryKey: ['community-home'] })
     qc.invalidateQueries({ queryKey: ['rankings'] })
     qc.invalidateQueries({ queryKey: ['friends'] })
+    qc.invalidateQueries({ queryKey: ['notifications'] })
   }
 
   const createMatchMut = useMutation({
@@ -113,7 +114,7 @@ export default function CompetitionDetailPage() {
     onSuccess: () => {
       setScoreError('')
       setScoringMatch(null)
-      setPendingNotice('Score saved — waiting for someone else on court to confirm before ratings update.')
+      setPendingNotice('Score saved. Someone else on court needs to confirm before ratings update.')
       setLastDeltas([])
       refresh()
     },
@@ -127,6 +128,7 @@ export default function CompetitionDetailPage() {
       setPendingNotice('')
       setLastDeltas(res.data.rating_changes || [])
       refresh()
+      qc.invalidateQueries({ queryKey: ['rankings'] })
       for (const d of res.data.rating_changes || []) {
         qc.invalidateQueries({ queryKey: ['player', d.user_id] })
       }
@@ -211,14 +213,14 @@ export default function CompetitionDetailPage() {
 
   const copyLink = async () => {
     if (!c?.invite_code) return
-    const url = `${publicWebOrigin()}/community/join/${c.invite_code}`
+    const url = publicPathUrl(`/join/${c.invite_code}`)
     try {
       if (isNativeApp()) {
         const can = await Share.canShare()
         if (can.value) {
           await Share.share({
             title: c.name,
-            text: `Join my padel competition on Student Padel Ireland`,
+            text: `Join my padel group on Student Padel Ireland (code ${c.invite_code})`,
             url,
             dialogTitle: 'Invite friends',
           })
@@ -231,7 +233,7 @@ export default function CompetitionDetailPage() {
       setCopied('link')
       setTimeout(() => setCopied(''), 1500)
     } catch (err: unknown) {
-      // User dismissed the share sheet — not an error
+      // User dismissed the share sheet - not an error
       const msg = err instanceof Error ? err.message : String(err)
       if (/cancel|dismiss/i.test(msg)) return
       setError('Could not share / copy link')
@@ -288,9 +290,7 @@ export default function CompetitionDetailPage() {
   const selected = new Set([a1, a2, b1, b2].filter(Boolean))
   const canLog = c.status !== 'CANCELLED' && c.status !== 'COMPLETED'
   const courtCount = c.number_of_courts || 2
-  const joinUrl = c.invite_code
-    ? `${publicWebOrigin()}/community/join/${c.invite_code}`
-    : ''
+  const joinUrl = c.invite_code ? publicPathUrl(`/join/${c.invite_code}`) : ''
   const memberList = members || []
 
   return (
@@ -336,7 +336,9 @@ export default function CompetitionDetailPage() {
           <div className="share-panel">
             <div>
               <h2>Invite friends</h2>
-              <p className="muted-note">Send the code, link, or show the QR at the courts.</p>
+              <p className="muted-note">
+                Send the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
+              </p>
               <div className="share-code-row">
                 <code className="share-code">{c.invite_code}</code>
                 <button type="button" className="btn btn-dark btn-sm" onClick={copyCode}>
@@ -348,7 +350,7 @@ export default function CompetitionDetailPage() {
               </div>
             </div>
             <div className="share-qr">
-              <QRCodeSVG value={joinUrl} size={140} bgColor="#ffffff" fgColor="#0b3d2e" />
+              <ShareQr url={joinUrl} openLabel="Open join page" />
             </div>
           </div>
         )}
@@ -504,7 +506,7 @@ export default function CompetitionDetailPage() {
                     <strong>{m.full_name}</strong>
                   </Link>
                   <div className="rank-meta">
-                    {m.comp_wins}W–{m.comp_losses}L · rating {m.points}
+                    {m.comp_wins}W-{m.comp_losses}L · rating {m.points}
                     {m.role === 'OWNER' ? ' · host' : ''}
                   </div>
                 </span>
@@ -517,14 +519,8 @@ export default function CompetitionDetailPage() {
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm standings-remove"
-                      onClick={async () => {
-                        const confirmed = await confirmDialog({
-                          title: 'Remove member?',
-                          message: `Remove ${m.full_name} from this competition?`,
-                          confirmLabel: 'Remove',
-                          cancelLabel: 'Keep',
-                        })
-                        if (confirmed) {
+                      onClick={() => {
+                        if (window.confirm(`Remove ${m.full_name} from this competition?`)) {
                           removeMemberMut.mutate(m.user_id)
                         }
                       }}
@@ -538,7 +534,7 @@ export default function CompetitionDetailPage() {
           </ol>
 
           {invitable.length > 0 && canLog && c.is_owner && (
-            <div className="community-panel" style={{ marginTop: 16 }}>
+            <div className="community-panel" style={{ marginTop: '1.5rem' }}>
               <h2>Add friends</h2>
               <div className="friend-chip-row">
                 {invitable.map((f) => (
@@ -582,7 +578,7 @@ export default function CompetitionDetailPage() {
         <section className="community-section">
           <h2>Games</h2>
           {(matchesQ.data || []).length === 0 && (
-            <p className="muted-note">No games yet — tap New game.</p>
+            <p className="muted-note">No games yet. Tap New game.</p>
           )}
           <div className="match-feed">
             {(matchesQ.data || []).map((m) => (
@@ -610,8 +606,8 @@ export default function CompetitionDetailPage() {
                 <p className="rank-meta">
                   {labelFormat(m.format)} · {labelStatus(m.status)}
                   {m.status === 'COMPLETED'
-                    ? ` · ${m.set1_a}–${m.set1_b}, ${m.set2_a}–${m.set2_b}${
-                        m.set3_a || m.set3_b ? `, ${m.set3_a}–${m.set3_b}` : ''
+                    ? ` · ${m.set1_a}-${m.set1_b}, ${m.set2_a}-${m.set2_b}${
+                        m.set3_a || m.set3_b ? `, ${m.set3_a}-${m.set3_b}` : ''
                       }`
                     : ''}
                 </p>
@@ -619,7 +615,7 @@ export default function CompetitionDetailPage() {
                   <p className="rank-meta" style={{ marginTop: 6 }}>
                     Waiting for someone else to confirm
                     {m.set1_a || m.set1_b
-                      ? ` · ${m.set1_a}–${m.set1_b}, ${m.set2_a}–${m.set2_b}`
+                      ? ` · ${m.set1_a}-${m.set1_b}, ${m.set2_a}-${m.set2_b}`
                       : ''}
                   </p>
                 )}
@@ -669,20 +665,14 @@ export default function CompetitionDetailPage() {
             <button
               type="button"
               className="btn btn-ghost btn-sm"
-              onClick={async () => {
+              onClick={() => {
                 if (pendingConfirms.length > 0) {
                   setError(
                     `Finish or cancel ${pendingConfirms.length} score${pendingConfirms.length === 1 ? '' : 's'} waiting for confirm first.`,
                   )
                   return
                 }
-                const confirmed = await confirmDialog({
-                  title: 'Mark complete?',
-                  message: 'Mark this competition complete? You can still view results.',
-                  confirmLabel: 'Complete',
-                  cancelLabel: 'Cancel',
-                })
-                if (confirmed) {
+                if (window.confirm('Mark this competition complete? You can still view results.')) {
                   closeMut.mutate()
                 }
               }}
@@ -693,14 +683,8 @@ export default function CompetitionDetailPage() {
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            onClick={async () => {
-              const confirmed = await confirmDialog({
-                title: 'Leave competition?',
-                message: c.is_owner ? 'Leave as host? Only works if you are the only member.' : 'Leave this competition?',
-                confirmLabel: 'Leave',
-                cancelLabel: 'Stay',
-              })
-              if (confirmed) {
+            onClick={() => {
+              if (window.confirm(c.is_owner ? 'Leave as host? Only works if you are the only member.' : 'Leave this competition?')) {
                 leaveMut.mutate()
               }
             }}
@@ -773,25 +757,29 @@ export default function CompetitionDetailPage() {
                   <div key={label} className="form-group">
                     <label>{label}</label>
                     <div className="score-pair">
-                      <input
-                        type="number"
+                      <NumberInput
                         inputMode="numeric"
                         pattern="[0-9]*"
                         min={0}
                         max={7}
+                        emptyValue={0}
                         value={sets[ka]}
-                        onChange={(e) => setSets((s) => ({ ...s, [ka]: Number(e.target.value) }))}
+                        onValueChange={(n) =>
+                          setSets((s) => ({ ...s, [ka]: Math.max(0, Math.min(7, Math.trunc(n))) }))
+                        }
                         aria-label={`${label} side A`}
                       />
-                      <span>–</span>
-                      <input
-                        type="number"
+                      <span>-</span>
+                      <NumberInput
                         inputMode="numeric"
                         pattern="[0-9]*"
                         min={0}
                         max={7}
+                        emptyValue={0}
                         value={sets[kb]}
-                        onChange={(e) => setSets((s) => ({ ...s, [kb]: Number(e.target.value) }))}
+                        onValueChange={(n) =>
+                          setSets((s) => ({ ...s, [kb]: Math.max(0, Math.min(7, Math.trunc(n))) }))
+                        }
                         aria-label={`${label} side B`}
                       />
                     </div>
@@ -850,7 +838,7 @@ function SidePick({
       <div className="form-group">
         <label>Player</label>
         <select className="form-select" value={p1} onChange={(e) => setP1(e.target.value)} required>
-          <option value="">Select…</option>
+          <option value="">Select player</option>
           {options(p1).map((m) => (
             <option key={m.user_id} value={m.user_id}>
               {m.full_name}
@@ -862,7 +850,7 @@ function SidePick({
         <div className="form-group">
           <label>Partner</label>
           <select className="form-select" value={p2} onChange={(e) => setP2(e.target.value)} required>
-            <option value="">Select…</option>
+            <option value="">Select player</option>
             {options(p2).map((m) => (
               <option key={m.user_id} value={m.user_id}>
                 {m.full_name}

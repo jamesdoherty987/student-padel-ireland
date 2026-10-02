@@ -25,7 +25,7 @@ const DEFAULT_ITEMS: FeatureItem[] = [
     title: "Design Agencies",
     description: "Agencies that value efficiency.",
     content:
-      "Deliver stunning websites to clients faster than ever. Streamline your workflow and let your team focus on what matters—designing memorable experiences.",
+      "Deliver stunning websites to clients faster than ever. Streamline your workflow and let your team focus on what matters-designing memorable experiences.",
     src: "https://assets.aceternity.com/logos/twitch.webp",
     className: "text-red-500 dark:text-red-500",
   },
@@ -58,7 +58,7 @@ const DEFAULT_ITEMS: FeatureItem[] = [
     title: "Marketing Teams",
     description: "Marketers who need agility.",
     content:
-      "Quickly launch campaigns and landing pages with pre-built blocks. Focus on strategy while the design just works—no bottlenecks, no stress.",
+      "Quickly launch campaigns and landing pages with pre-built blocks. Focus on strategy while the design just works-no bottlenecks, no stress.",
     src: "https://assets.aceternity.com/logos/vercel.png",
     className: "text-blue-500 dark:text-blue-500",
   },

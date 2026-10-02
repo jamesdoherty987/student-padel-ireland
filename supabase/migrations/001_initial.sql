@@ -1,4 +1,4 @@
--- Student Padel Ireland — Supabase / Postgres schema
+-- Student Padel Ireland - Supabase / Postgres schema
 -- Run in Supabase SQL editor or via migration tooling.
 -- UUIDs + timestamps on all tables.
 

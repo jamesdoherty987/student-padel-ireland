@@ -10,7 +10,7 @@ Approach (used by padel apps / Tennis Abstract "D-Lo"):
 
 Beating stronger opposition (or a stronger pair) moves your rating more;
 beating weaker opposition moves it less. Changing partners does not
-reset your rating — it stays personal.
+reset your rating - it stays personal.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def compute_side_updates(
     """
     side_*_ratings: list of (user_id, rating, matches_played).
     Works for 1v1 (singles) and 2v2 (doubles). Uneven sides are allowed
-    but rare — team strength is still the average of whoever played.
+    but rare - team strength is still the average of whoever played.
     """
     if not side_a_ratings or not side_b_ratings:
         raise ValueError("Both sides need at least one player")
@@ -161,6 +161,17 @@ def apply_rating_updates(
             ranking.wins = (ranking.wins or 0) + 1
         else:
             ranking.losses = (ranking.losses or 0) + 1
+        if tournament_id:
+            already_in_event = (
+                db.query(RankingHistory.id)
+                .filter(
+                    RankingHistory.user_id == u.user_id,
+                    RankingHistory.tournament_id == tournament_id,
+                )
+                .first()
+            )
+            if not already_in_event:
+                ranking.tournaments_played = (ranking.tournaments_played or 0) + 1
         db.add(
             RankingHistory(
                 user_id=u.user_id,

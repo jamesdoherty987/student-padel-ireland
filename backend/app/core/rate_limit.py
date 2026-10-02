@@ -21,5 +21,5 @@ def rate_limit(request: Request, *, key: str, limit: int, window_seconds: int = 
     while q and q[0] < cutoff:
         q.popleft()
     if len(q) >= limit:
-        raise HTTPException(status_code=429, detail="Too many requests — try again shortly")
+        raise HTTPException(status_code=429, detail="Too many requests. Try again shortly.")
     q.append(now)

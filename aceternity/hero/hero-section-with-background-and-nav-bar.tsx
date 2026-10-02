@@ -51,7 +51,7 @@ export function HeroWithBackgroundAndNavbar() {
           </h1>
           <p className="mt-4 max-w-xl text-base text-neutral-600 md:mt-6 md:text-lg dark:text-neutral-400">
             Create breathtaking images with AI that understands your vision. No
-            design skills needed—just describe what you imagine and watch it
+            design skills needed-just describe what you imagine and watch it
             come to life.
           </p>
           <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center md:mt-10">

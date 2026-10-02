@@ -41,8 +41,6 @@
 	<string>Student Padel Ireland uses the camera so you can add photos to your player profile.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Student Padel Ireland needs photo access so you can upload profile pictures and match media.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Student Padel Ireland may save images you choose for your profile.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

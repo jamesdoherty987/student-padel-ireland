@@ -29,6 +29,18 @@
       ]
     },
     {
+      "source": "/videos/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/images/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
       "source": "/icons/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
@@ -43,7 +55,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!\\.well-known/).*)",
+      "source": "/((?!\\.well-known/|videos/|images/|icons/|assets/|favicon\\.svg|apple-touch-icon\\.png|manifest\\.webmanifest|sw\\.js|robots\\.txt).*)",
       "destination": "/index.html"
     }
   ]

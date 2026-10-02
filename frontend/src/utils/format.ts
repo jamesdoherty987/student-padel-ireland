@@ -13,25 +13,50 @@ export function formatMoney(cents: number, currency = 'EUR') {
   }
 }
 
-/** e.g. "12/48 doubles · €35/player" or when empty "€35/player · 48 doubles spots" */
+/** e.g. "12/48 teams · €50/team" — works for singles & doubles */
+export function formatEntrySummary(
+  registered: number,
+  maxTeams: number,
+  entryFeeCents: number,
+  currency = 'EUR',
+  playFormat: string = 'DOUBLES',
+) {
+  const unit = playFormat === 'SINGLES' ? 'player' : 'team'
+  const spots = playFormat === 'SINGLES' ? 'singles spots' : 'doubles spots'
+  const fee = `${formatMoney(entryFeeCents, currency)}/${unit}`
+  if (registered <= 0) {
+    return `${fee} · ${maxTeams} ${spots}`
+  }
+  const noun = playFormat === 'SINGLES' ? 'singles' : 'doubles'
+  return `${registered}/${maxTeams} ${noun} · ${fee}`
+}
+
+/** @deprecated use formatEntrySummary */
 export function formatDoublesEntry(
   registered: number,
   maxTeams: number,
   entryFeeCents: number,
   currency = 'EUR',
 ) {
-  const fee = `${formatMoney(entryFeeCents, currency)}/player`
-  if (registered <= 0) {
-    return `${fee} · ${maxTeams} doubles spots`
-  }
-  return `${registered}/${maxTeams} doubles · ${fee}`
+  return formatEntrySummary(registered, maxTeams, entryFeeCents, currency, 'DOUBLES')
 }
 
-export function spotsLeftLabel(registered: number, maxTeams: number) {
+export function spotsLeftLabel(registered: number, maxTeams: number, playFormat: string = 'DOUBLES') {
   const left = Math.max(0, maxTeams - registered)
   if (left === 0) return 'Full'
-  if (left === 1) return '1 doubles spot left'
-  return `${left} doubles spots left`
+  const noun = playFormat === 'SINGLES' ? 'singles spot' : 'doubles spot'
+  if (left === 1) return `1 ${noun} left`
+  return `${left} ${noun}s left`
+}
+
+export function courtLabel(courtName?: string | null, courtNumber?: number | null) {
+  if (courtName) return courtName
+  if (courtNumber != null) return `Court ${courtNumber}`
+  return 'Court TBC'
+}
+
+export function playFormatLabel(playFormat?: string | null) {
+  return playFormat === 'SINGLES' ? 'Singles' : 'Doubles'
 }
 
 export function parseCalendarDate(iso: string) {
@@ -64,12 +89,28 @@ export function formatTime(iso: string | null | undefined) {
 }
 
 export function statusLabel(status: string) {
-  return status.replace(/_/g, ' ')
+  const labels: Record<string, string> = {
+    DRAFT: 'Draft',
+    REGISTRATION_OPEN: 'Open',
+    REGISTRATION_CLOSED: 'Closed',
+    LIVE: 'Live',
+    COMPLETED: 'Past',
+    CANCELLED: 'Cancelled',
+    OPEN: 'Open',
+  }
+  return labels[status] || status.replace(/_/g, ' ')
 }
 
 export function statusBadgeClass(status: string) {
-  if (status === 'LIVE') return 'badge-live'
-  if (status === 'REGISTRATION_OPEN' || status === 'PAID' || status === 'COMPLETED') return 'badge-open'
+  if (status === 'LIVE' || status === 'CALLED') return 'badge-live'
+  if (
+    status === 'REGISTRATION_OPEN' ||
+    status === 'OPEN' ||
+    status === 'PAID' ||
+    status === 'COMPLETED'
+  ) {
+    return 'badge-open'
+  }
   if (status === 'CANCELLED') return 'badge-draft'
   return 'badge-draft'
 }
@@ -98,9 +139,9 @@ export function formatMatchScore(score: {
   set3_a: number
   set3_b: number
 } | null | undefined) {
-  if (!score) return '—'
-  const parts = [`${score.set1_a}–${score.set1_b}`]
-  if (score.set2_a || score.set2_b) parts.push(`${score.set2_a}–${score.set2_b}`)
-  if (score.set3_a || score.set3_b) parts.push(`${score.set3_a}–${score.set3_b}`)
+  if (!score) return '-'
+  const parts = [`${score.set1_a}-${score.set1_b}`]
+  if (score.set2_a || score.set2_b) parts.push(`${score.set2_a}-${score.set2_b}`)
+  if (score.set3_a || score.set3_b) parts.push(`${score.set3_a}-${score.set3_b}`)
   return parts.join('  ')
 }

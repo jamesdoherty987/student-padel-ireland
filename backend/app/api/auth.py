@@ -1,14 +1,28 @@
+import secrets
+import shutil
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
-from app.models import Ranking, TeamPlayer, User, UserRole
-from app.schemas import TokenResponse, UserCreate, UserLogin, UserPublic
+from app.models import (
+    CompetitionMember,
+    Friendship,
+    ProfileMedia,
+    Ranking,
+    TeamPlayer,
+    User,
+    UserRole,
+)
+from app.schemas import AccountDeleteRequest, TokenResponse, UserCreate, UserLogin, UserPublic
 from app.services.rating import INITIAL_RATING
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+_UPLOAD_ROOT = Path(__file__).resolve().parents[2] / "uploads" / "profiles"
 
 
 @router.post("/register", response_model=TokenResponse)
@@ -35,7 +49,7 @@ def register(body: UserCreate, db: Session = Depends(get_db)):
             return TokenResponse(access_token=token, user=UserPublic.model_validate(existing))
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    role = body.role.value if body.role != UserRole.ADMIN else UserRole.PLAYER.value
+    role = UserRole.PLAYER.value
     user = User(
         email=body.email.lower(),
         password_hash=hash_password(body.password),
@@ -68,3 +82,56 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserPublic)
 def me(user: User = Depends(get_current_user)):
     return UserPublic.model_validate(user)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(
+    body: AccountDeleteRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Anonymise and deactivate the signed-in account (keeps tournament history FKs intact)."""
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
+
+    uid = user.id
+
+    db.query(ProfileMedia).filter(ProfileMedia.user_id == uid).delete(synchronize_session=False)
+    db.query(Friendship).filter(
+        (Friendship.requester_id == uid) | (Friendship.addressee_id == uid)
+    ).delete(synchronize_session=False)
+    db.query(CompetitionMember).filter(CompetitionMember.user_id == uid).delete(
+        synchronize_session=False
+    )
+
+    try:
+        folder = _UPLOAD_ROOT / str(uid)
+        if folder.is_dir():
+            shutil.rmtree(folder, ignore_errors=True)
+    except OSError:
+        pass
+
+    # Free the email for re-registration; wipe personal fields
+    user.email = f"deleted-{uid}@deleted.studentpadelireland.ie"
+    user.password_hash = hash_password(secrets.token_urlsafe(48))
+    user.full_name = "Deleted User"
+    user.phone = None
+    user.student_number = None
+    user.university_id = None
+    user.bio = None
+    user.avatar_url = None
+    user.is_active = False
+    user.is_suspended = False
+    user.must_set_password = False
+
+    ranking = db.query(Ranking).filter(Ranking.user_id == uid).first()
+    if ranking:
+        ranking.points = INITIAL_RATING
+        ranking.rank_ireland = None
+        ranking.tournaments_played = 0
+        ranking.matches_played = 0
+        ranking.wins = 0
+        ranking.losses = 0
+
+    db.commit()
+    return None

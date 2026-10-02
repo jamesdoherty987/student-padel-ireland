@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -39,6 +39,8 @@ from app.schemas import (
     CompetitionOut,
     FriendRequestCreate,
     FriendshipOut,
+    NotificationOut,
+    NotificationsFeedOut,
     PlayerSearchOut,
     RatingDeltaOut,
 )
@@ -55,6 +57,14 @@ def _slugify(name: str) -> str:
 def _invite_code() -> str:
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+def _unique_invite_code(db: Session) -> str:
+    for _ in range(40):
+        code = _invite_code()
+        if not db.query(CommunityCompetition).filter(CommunityCompetition.invite_code == code).first():
+            return code
+    return _invite_code() + secrets.token_hex(1)[:2].upper()
 
 
 def _user_points(db: Session, user_id: UUID) -> int:
@@ -332,7 +342,7 @@ def search_players(
 ):
     rate_limit(request, key="player-search", limit=30, window_seconds=60)
     term = f"%{q.strip()}%"
-    # Name search only — never return emails to strangers
+    # Name search only - never return emails to strangers
     rows = (
         db.query(User)
         .filter(
@@ -556,7 +566,7 @@ def create_competition(
         description=body.description,
         format=fmt,
         status=CompetitionStatus.OPEN.value,
-        invite_code=_invite_code(),
+        invite_code=_unique_invite_code(db),
         created_by_id=user.id,
         max_players=body.max_players,
         number_of_courts=body.number_of_courts,
@@ -698,13 +708,13 @@ def remove_member(
     if c.created_by_id != user.id:
         raise HTTPException(403, "Only the host can remove players")
     if member_user_id == user.id:
-        raise HTTPException(400, "Host cannot remove themselves — leave or cancel instead")
+        raise HTTPException(400, "Host cannot remove themselves. Leave or cancel instead.")
     member = _is_member(db, c.id, member_user_id)
     if not member:
         raise HTTPException(404, "Player is not in this competition")
     db.delete(member)
     # Rotate invite code so a removed player cannot rejoin with the old code
-    c.invite_code = _invite_code()
+    c.invite_code = _unique_invite_code(db)
     db.commit()
     return {"ok": True, "invite_code": c.invite_code}
 
@@ -911,7 +921,7 @@ def confirm_community_match(
     if m.ratings_applied:
         return _match_out(db, m, viewer=user, competition=c)
     if m.status != "AWAITING_CONFIRM":
-        raise HTTPException(400, "Nothing to confirm yet — enter the score first")
+        raise HTTPException(400, "Nothing to confirm yet. Enter the score first.")
     if user.id not in _match_players(m):
         raise HTTPException(403, "Only players in this match can confirm")
     if m.recorded_by_id == user.id:
@@ -1011,4 +1021,266 @@ def community_home(
         needs_score=needs_score,
         my_next_matches=my_next,
         friend_request_count=friend_request_count,
+    )
+
+
+def _score_line(m: CommunityMatch) -> str:
+    parts = [f"{m.set1_a}-{m.set1_b}"]
+    if m.set2_a or m.set2_b:
+        parts.append(f"{m.set2_a}-{m.set2_b}")
+    if m.set3_a or m.set3_b:
+        parts.append(f"{m.set3_a}-{m.set3_b}")
+    return ", ".join(parts)
+
+
+def _user_won(m: CommunityMatch, user_id: UUID) -> bool | None:
+    if not m.winner_side:
+        return None
+    side_a = {uid for uid in (m.player_a1_id, m.player_a2_id) if uid}
+    if user_id in side_a:
+        return m.winner_side == "A"
+    side_b = {uid for uid in (m.player_b1_id, m.player_b2_id) if uid}
+    if user_id in side_b:
+        return m.winner_side == "B"
+    return None
+
+
+def _users_map(db: Session, ids: set[UUID]) -> dict[UUID, User]:
+    if not ids:
+        return {}
+    rows = db.query(User).filter(User.id.in_(list(ids))).all()
+    return {u.id: u for u in rows}
+
+
+def _side_names_from_map(users: dict[UUID, User], m: CommunityMatch, side: str) -> str:
+    if side == "A":
+        n1 = users.get(m.player_a1_id)
+        n2 = users.get(m.player_a2_id) if m.player_a2_id else None
+        a = n1.full_name if n1 else "Player"
+        return f"{a} / {n2.full_name}" if n2 else a
+    n1 = users.get(m.player_b1_id)
+    n2 = users.get(m.player_b2_id) if m.player_b2_id else None
+    b = n1.full_name if n1 else "Player"
+    return f"{b} / {n2.full_name}" if n2 else b
+
+
+@router.get("/notifications", response_model=NotificationsFeedOut)
+def list_notifications(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Personal feed: friend requests, match actions, and recent results."""
+    items: list[NotificationOut] = []
+    now = datetime.now(timezone.utc)
+
+    incoming = (
+        db.query(Friendship)
+        .filter(
+            Friendship.addressee_id == user.id,
+            Friendship.status == FriendshipStatus.PENDING.value,
+        )
+        .order_by(Friendship.created_at.desc())
+        .limit(20)
+        .all()
+    )
+    accepted = (
+        db.query(Friendship)
+        .filter(
+            Friendship.requester_id == user.id,
+            Friendship.status == FriendshipStatus.ACCEPTED.value,
+        )
+        .order_by(Friendship.updated_at.desc())
+        .limit(20)
+        .all()
+    )
+
+    friend_user_ids = {f.requester_id for f in incoming} | {f.addressee_id for f in accepted}
+    friend_users = _users_map(db, friend_user_ids)
+    # Prefetch uni short names in one pass via university_id
+    uni_ids = {u.university_id for u in friend_users.values() if u.university_id}
+    uni_short: dict[UUID, str] = {}
+    if uni_ids:
+        for uni in db.query(University).filter(University.id.in_(list(uni_ids))).all():
+            uni_short[uni.id] = uni.short_name or uni.name
+
+    for f in incoming:
+        other = friend_users.get(f.requester_id)
+        if not other:
+            continue
+        label = uni_short.get(other.university_id) if other.university_id else None
+        items.append(
+            NotificationOut(
+                id=f"friend_request:{f.id}",
+                kind="friend_request",
+                title="Friend request",
+                body=f"{other.full_name} wants to connect" + (f" ({label})" if label else ""),
+                href="/community",
+                created_at=f.created_at or now,
+                actionable=True,
+                friendship_id=f.id,
+                actor_user_id=other.id,
+                actor_name=other.full_name,
+            )
+        )
+
+    cutoff = now - timedelta(days=14)
+    for f in accepted:
+        other = friend_users.get(f.addressee_id)
+        if not other:
+            continue
+        when = f.updated_at or f.created_at or now
+        when_aware = when if when.tzinfo else when.replace(tzinfo=timezone.utc)
+        if when_aware < cutoff:
+            continue
+        items.append(
+            NotificationOut(
+                id=f"friend_accepted:{f.id}",
+                kind="friend_accepted",
+                title="New friend",
+                body=f"{other.full_name} accepted your friend request",
+                href=f"/players/{other.id}",
+                created_at=when,
+                actionable=False,
+                friendship_id=f.id,
+                actor_user_id=other.id,
+                actor_name=other.full_name,
+            )
+        )
+
+    member_rows = db.query(CompetitionMember).filter(CompetitionMember.user_id == user.id).all()
+    comp_ids = [m.competition_id for m in member_rows]
+
+    if comp_ids:
+        comps = {
+            c.id: c
+            for c in db.query(CommunityCompetition)
+            .filter(CommunityCompetition.id.in_(comp_ids))
+            .all()
+        }
+        active = (
+            db.query(CommunityMatch)
+            .filter(
+                CommunityMatch.competition_id.in_(comp_ids),
+                CommunityMatch.status.in_(
+                    [MatchStatus.SCHEDULED.value, MatchStatus.LIVE.value, "AWAITING_CONFIRM"]
+                ),
+            )
+            .order_by(CommunityMatch.updated_at.desc())
+            .limit(25)
+            .all()
+        )
+        done = (
+            db.query(CommunityMatch)
+            .filter(
+                CommunityMatch.competition_id.in_(comp_ids),
+                CommunityMatch.status == MatchStatus.COMPLETED.value,
+                CommunityMatch.ratings_applied.is_(True),
+            )
+            .order_by(CommunityMatch.updated_at.desc())
+            .limit(15)
+            .all()
+        )
+        match_users: set[UUID] = set()
+        for m in active + done:
+            match_users.update(_match_players(m))
+        users = _users_map(db, match_users)
+
+        for m in active:
+            if user.id not in _match_players(m):
+                continue
+            out = _match_out(db, m, viewer=user, competition=comps.get(m.competition_id))
+            comp = comps.get(m.competition_id)
+            slug = comp.slug if comp else str(m.competition_id)
+            href = f"/community/{slug}"
+            vs = f"{_side_names_from_map(users, m, 'A')} vs {_side_names_from_map(users, m, 'B')}"
+            when = m.updated_at or m.created_at or now
+            if out.needs_my_confirm:
+                items.append(
+                    NotificationOut(
+                        id=f"match_confirm:{m.id}",
+                        kind="match_confirm",
+                        title="Confirm score",
+                        body=f"{vs} · {comp.name if comp else 'Match'}",
+                        href=href,
+                        created_at=when,
+                        actionable=True,
+                        match_id=m.id,
+                    )
+                )
+            elif out.can_i_score:
+                items.append(
+                    NotificationOut(
+                        id=f"match_score:{m.id}",
+                        kind="match_score",
+                        title="Enter score",
+                        body=f"{vs} · {comp.name if comp else 'Match'}",
+                        href=href,
+                        created_at=when,
+                        actionable=True,
+                        match_id=m.id,
+                    )
+                )
+            elif m.status in (MatchStatus.SCHEDULED.value, MatchStatus.LIVE.value):
+                court = f"Court {m.court_number}" if m.court_number else "Court TBC"
+                items.append(
+                    NotificationOut(
+                        id=f"upcoming:{m.id}",
+                        kind="upcoming",
+                        title="Upcoming game",
+                        body=f"{vs} · {court}",
+                        href=href,
+                        created_at=when,
+                        actionable=False,
+                        match_id=m.id,
+                    )
+                )
+
+        for m in done:
+            if user.id not in _match_players(m):
+                continue
+            comp = comps.get(m.competition_id)
+            slug = comp.slug if comp else str(m.competition_id)
+            won = _user_won(m, user.id)
+            result = "You won" if won is True else "You lost" if won is False else "Result in"
+            vs = f"{_side_names_from_map(users, m, 'A')} vs {_side_names_from_map(users, m, 'B')}"
+            when = m.played_at or m.updated_at or m.created_at or now
+            items.append(
+                NotificationOut(
+                    id=f"match_result:{m.id}",
+                    kind="match_result",
+                    title=f"{result} · {_score_line(m)}",
+                    body=f"{vs} · {comp.name if comp else 'Match'}",
+                    href=f"/community/{slug}",
+                    created_at=when,
+                    actionable=False,
+                    match_id=m.id,
+                )
+            )
+
+    kind_priority = {
+        "friend_request": 0,
+        "match_confirm": 1,
+        "match_score": 2,
+        "upcoming": 3,
+        "friend_accepted": 4,
+        "match_result": 5,
+    }
+
+    def sort_key(n: NotificationOut):
+        ts = n.created_at
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return (kind_priority.get(n.kind, 9), -ts.timestamp())
+
+    items.sort(key=sort_key)
+    actionable = [n for n in items if n.actionable]
+    upcoming = [n for n in items if n.kind == "upcoming"][:3]
+    other_info = [n for n in items if not n.actionable and n.kind != "upcoming"][:20]
+    feed = actionable + upcoming + other_info
+    feed.sort(key=sort_key)
+    feed = feed[:40]
+
+    return NotificationsFeedOut(
+        items=feed,
+        actionable_count=len(actionable),
     )

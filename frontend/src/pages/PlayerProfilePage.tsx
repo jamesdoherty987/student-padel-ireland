@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
-import { confirmDialog } from '../components/ConfirmDialog'
-import { apiErrorMessage, communityApi, platformApi, type ProfileMedia } from '../services/api'
+import {
+  apiErrorMessage,
+  authApi,
+  communityApi,
+  platformApi,
+  type ProfileMedia,
+} from '../services/api'
 import { mediaUrl } from '../utils/media'
 import './Tournament.css'
 import './Profile.css'
@@ -21,17 +26,37 @@ function validateMediaFile(file: File): string | null {
   return null
 }
 
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+function winRate(wins: number, losses: number) {
+  const total = wins + losses
+  if (total === 0) return null
+  return Math.round((wins / total) * 100)
+}
+
 export default function PlayerProfilePage() {
   const { id = '' } = useParams()
-  const { user } = useAuth()
+  const navigate = useNavigate()
+  const { user, logout } = useAuth()
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const [bioDraft, setBioDraft] = useState<string | null>(null)
   const [caption, setCaption] = useState('')
   const [lightbox, setLightbox] = useState<ProfileMedia | null>(null)
+  const [showUpload, setShowUpload] = useState(false)
   const [error, setError] = useState('')
   const [asAvatar, setAsAvatar] = useState(false)
+  const [brokenMedia, setBrokenMedia] = useState<Set<string>>(() => new Set())
+  const [lightboxError, setLightboxError] = useState(false)
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false)
+  const [deletePassword, setDeletePassword] = useState('')
+  const [deleteError, setDeleteError] = useState('')
 
   const { data: player, isLoading, isError, refetch } = useQuery({
     queryKey: ['player', id],
@@ -41,6 +66,11 @@ export default function PlayerProfilePage() {
 
   const isOwn = Boolean(player?.is_own_profile || (user && player && user.id === player.id))
   const media = player?.media || []
+
+  const lightboxIndex = useMemo(
+    () => (lightbox ? media.findIndex((m) => m.id === lightbox.id) : -1),
+    [lightbox, media],
+  )
 
   const friendsQ = useQuery({
     queryKey: ['friends'],
@@ -55,13 +85,32 @@ export default function PlayerProfilePage() {
   }, [lightbox])
 
   useEffect(() => {
+    setLightboxError(false)
+  }, [lightbox?.id])
+
+  useEffect(() => {
     if (!lightbox) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setLightbox(null)
+      if (e.key === 'ArrowRight' && lightboxIndex >= 0 && lightboxIndex < media.length - 1) {
+        setLightbox(media[lightboxIndex + 1])
+      }
+      if (e.key === 'ArrowLeft' && lightboxIndex > 0) {
+        setLightbox(media[lightboxIndex - 1])
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightbox])
+  }, [lightbox, lightboxIndex, media])
+
+  const markBroken = (id: string) => {
+    setBrokenMedia((prev) => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
+  }
 
   const startUpload = (file: File) => {
     const problem = validateMediaFile(file)
@@ -69,7 +118,6 @@ export default function PlayerProfilePage() {
       setError(problem)
       return
     }
-    // Videos cannot be avatars — clear the flag so the request doesn't fail
     const setAvatar = asAvatar && file.type.startsWith('image/')
     uploadMut.mutate({ file, setAvatar })
   }
@@ -93,10 +141,12 @@ export default function PlayerProfilePage() {
     onSuccess: () => {
       setCaption('')
       setAsAvatar(false)
+      setShowUpload(false)
       setError('')
       if (fileRef.current) fileRef.current.value = ''
       if (cameraRef.current) cameraRef.current.value = ''
       qc.invalidateQueries({ queryKey: ['player', id] })
+      qc.invalidateQueries({ queryKey: ['rankings'] })
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
@@ -106,13 +156,17 @@ export default function PlayerProfilePage() {
     onSuccess: () => {
       setLightbox(null)
       qc.invalidateQueries({ queryKey: ['player', id] })
+      qc.invalidateQueries({ queryKey: ['rankings'] })
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
 
   const avatarMut = useMutation({
     mutationFn: (mediaId: string) => platformApi.setAvatar(mediaId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['player', id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['player', id] })
+      qc.invalidateQueries({ queryKey: ['rankings'] })
+    },
     onError: (e) => setError(apiErrorMessage(e)),
   })
 
@@ -133,115 +187,161 @@ export default function PlayerProfilePage() {
     onError: (e) => setError(apiErrorMessage(e)),
   })
 
+  const deleteAccountMut = useMutation({
+    mutationFn: (password: string) => authApi.deleteAccount(password),
+    onSuccess: () => {
+      logout()
+      navigate('/', { replace: true })
+    },
+    onError: (e) => setDeleteError(apiErrorMessage(e)),
+  })
+
+  const rate = player ? winRate(player.wins, player.losses) : null
+  const avatarSrc = player ? mediaUrl(player.avatar_url) : undefined
+
   return (
     <div className="app-shell">
       <NavBar />
-      <main className="page">
+      <main className="page profile-page">
         {isLoading && (
-          <>
-            <div className="skeleton" style={{ height: 28, width: '50%', marginBottom: 12 }} />
-            <div className="skeleton" style={{ height: 100 }} />
-          </>
+          <div className="profile-skeleton">
+            <div className="skeleton profile-skeleton-hero" />
+            <div className="skeleton" style={{ height: 72, marginTop: 16 }} />
+            <div className="skeleton" style={{ height: 160, marginTop: 16 }} />
+          </div>
         )}
         {isError && (
           <div className="empty-state">
             <h1 className="page-title">Player not found</h1>
             <p className="page-sub">This profile may have been removed.</p>
-            <button className="btn btn-ghost" onClick={() => refetch()}>
-              Retry
-            </button>
-            <Link to="/rankings" className="btn btn-primary" style={{ marginLeft: 8 }}>
-              Rankings
-            </Link>
+            <div className="header-actions" style={{ justifyContent: 'center' }}>
+              <button type="button" className="btn btn-ghost" onClick={() => refetch()}>
+                Retry
+              </button>
+              <Link to="/rankings" className="btn btn-primary">
+                Rankings
+              </Link>
+            </div>
           </div>
         )}
         {player && (
           <>
-            <p className="eyebrow">
-              <Link to="/rankings" style={{ color: 'inherit' }}>
-                ← Rankings
-              </Link>
+            <p className="eyebrow profile-back">
+              <Link to="/rankings">← Rankings</Link>
             </p>
 
-            <div className="profile-header">
-              <div className="profile-avatar-wrap">
-                {(() => {
-                  const avatar = mediaUrl(player.avatar_url)
-                  return avatar ? (
-                    <img src={avatar} alt="" className="profile-avatar" />
+            <header className="profile-hero">
+              <div className="profile-hero-bg" aria-hidden />
+              <div className="profile-hero-body">
+                <div className="profile-avatar-wrap">
+                  {avatarSrc ? (
+                    <button
+                      type="button"
+                      className="profile-avatar-btn"
+                      onClick={() => {
+                        const avatarMedia = media.find((m) => m.is_avatar) || media.find((m) => m.url === player.avatar_url)
+                        if (avatarMedia) setLightbox(avatarMedia)
+                      }}
+                      aria-label="View profile photo"
+                    >
+                      <img src={avatarSrc} alt="" className="profile-avatar" />
+                    </button>
                   ) : (
                     <div className="profile-avatar placeholder">{initials(player.full_name)}</div>
-                  )
-                })()}
-              </div>
-              <div>
-                <h1 className="page-title">{player.full_name}</h1>
-                <p className="page-sub">
-                  {player.university_short || player.university_name || '—'}
-                </p>
-                {user && !isOwn && (
-                  <div className="profile-friend-action">
-                    {!relation && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        disabled={friendMut.isPending}
-                        onClick={() => friendMut.mutate(player.id)}
-                      >
-                        Add friend
-                      </button>
-                    )}
-                    {relation?.direction === 'incoming' && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        disabled={acceptFriendMut.isPending}
-                        onClick={() => acceptFriendMut.mutate(relation.id)}
-                      >
-                        Accept request
-                      </button>
-                    )}
-                    {relation?.direction === 'outgoing' && (
-                      <span className="muted-note">Friend request sent</span>
-                    )}
-                    {relation?.direction === 'friend' && <span className="muted-note">Friends</span>}
-                  </div>
-                )}
-                {!user && (
-                  <div className="profile-friend-action">
-                    <Link to={`/login?next=${encodeURIComponent(`/players/${player.id}`)}`} className="btn btn-ghost btn-sm">
-                      Log in to add friend
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </div>
+                  )}
+                </div>
 
-            <div className="tour-stats">
-              <div>
-                <strong>#{player.rank_ireland ?? '—'}</strong>
+                <div className="profile-hero-copy">
+                  <h1 className="profile-name">{player.full_name}</h1>
+                  <p className="profile-uni">
+                    {player.university_short || player.university_name || 'Student padel'}
+                  </p>
+                  {isOwn && <span className="profile-you-tag">Your profile</span>}
+
+                  {user && !isOwn && (
+                    <div className="profile-friend-action">
+                      {!relation && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={friendMut.isPending}
+                          onClick={() => friendMut.mutate(player.id)}
+                        >
+                          Add friend
+                        </button>
+                      )}
+                      {relation?.direction === 'incoming' && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={acceptFriendMut.isPending}
+                          onClick={() => acceptFriendMut.mutate(relation.id)}
+                        >
+                          Accept request
+                        </button>
+                      )}
+                      {relation?.direction === 'outgoing' && (
+                        <span className="profile-friend-status">Request sent</span>
+                      )}
+                      {relation?.direction === 'friend' && (
+                        <span className="profile-friend-status is-friend">Friends</span>
+                      )}
+                    </div>
+                  )}
+                  {!user && (
+                    <div className="profile-friend-action">
+                      <Link
+                        to={`/login?next=${encodeURIComponent(`/players/${player.id}`)}`}
+                        className="btn btn-ghost btn-sm"
+                      >
+                        Log in to add friend
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </header>
+
+            <div className="profile-stats" role="list">
+              <div role="listitem">
+                <strong>#{player.rank_ireland ?? '-'}</strong>
                 <span>Ireland</span>
               </div>
-              <div>
+              <div role="listitem">
                 <strong>{player.points}</strong>
-                <span>Elo rating</span>
+                <span>Elo</span>
               </div>
-              <div>
+              <div role="listitem">
+                <strong>
+                  {player.wins}-{player.losses}
+                </strong>
+                <span>W-L{rate !== null ? ` · ${rate}%` : ''}</span>
+              </div>
+              <div role="listitem">
                 <strong>{player.matches_played}</strong>
                 <span>Matches</span>
               </div>
-              <div>
-                <strong>
-                  {player.wins}–{player.losses}
-                </strong>
-                <span>W–L</span>
+              <div role="listitem">
+                <strong>{player.tournaments_played}</strong>
+                <span>Events</span>
               </div>
             </div>
 
             {error && <p className="form-error">{error}</p>}
 
             <section className="profile-section">
-              <h2>About</h2>
+              <div className="profile-section-head">
+                <h2>About</h2>
+                {isOwn && bioDraft === null && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setBioDraft(player.bio || '')}
+                  >
+                    {player.bio ? 'Edit' : 'Add bio'}
+                  </button>
+                )}
+              </div>
               {isOwn && bioDraft !== null ? (
                 <div className="profile-bio-edit">
                   <textarea
@@ -249,7 +349,7 @@ export default function PlayerProfilePage() {
                     value={bioDraft}
                     onChange={(e) => setBioDraft(e.target.value.slice(0, 500))}
                     rows={3}
-                    placeholder="A short intro — club, hand, favourite shot…"
+                    placeholder="Club, hand, favourite shot..."
                     maxLength={500}
                   />
                   <div className="profile-bio-actions">
@@ -264,40 +364,31 @@ export default function PlayerProfilePage() {
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBioDraft(null)}>
                       Cancel
                     </button>
-                    <span className="rank-meta">{bioDraft.length}/500</span>
+                    <span className="profile-char-count">{bioDraft.length}/500</span>
                   </div>
                 </div>
               ) : (
-                <div className="profile-bio">
-                  <p>{player.bio || (isOwn ? 'Add a short bio so friends know who’s on court.' : 'No bio yet.')}</p>
-                  {isOwn && (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => setBioDraft(player.bio || '')}
-                    >
-                      {player.bio ? 'Edit bio' : 'Add bio'}
-                    </button>
-                  )}
-                </div>
+                <p className={`profile-bio-text ${player.bio ? '' : 'is-empty'}`}>
+                  {player.bio || (isOwn ? "Add a short bio so friends know who's on court." : 'No bio yet.')}
+                </p>
               )}
             </section>
 
             <section className="profile-section">
               <div className="profile-section-head">
-                <h2>Photos & clips</h2>
+                <h2>Photos</h2>
                 {isOwn && (
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    onClick={() => fileRef.current?.click()}
+                    onClick={() => setShowUpload((v) => !v)}
                   >
-                    Add media
+                    {showUpload ? 'Close' : 'Add'}
                   </button>
                 )}
               </div>
 
-              {isOwn && (
+              {isOwn && showUpload && (
                 <div className="profile-upload">
                   <input
                     ref={fileRef}
@@ -354,17 +445,26 @@ export default function PlayerProfilePage() {
                       Take photo
                     </button>
                   </div>
-                  {uploadMut.isPending && <p className="muted-note">Uploading…</p>}
-                  <p className="muted-note">Photos up to 5MB · short videos up to 25MB (MP4/WebM/MOV).</p>
+                  {uploadMut.isPending && <p className="muted-note">Uploading...</p>}
+                  <p className="muted-note">Photos up to 5MB · short videos up to 25MB.</p>
                 </div>
               )}
 
               {media.length === 0 ? (
-                <p className="muted-note">
-                  {isOwn ? 'No media yet — add a photo from a match or training.' : 'No media yet.'}
-                </p>
+                <div className="profile-media-empty">
+                  <p>{isOwn ? 'No photos yet.' : 'No media yet.'}</p>
+                  {isOwn && (
+                    <button
+                      type="button"
+                      className="btn btn-dark btn-sm"
+                      onClick={() => setShowUpload(true)}
+                    >
+                      Add a match photo
+                    </button>
+                  )}
+                </div>
               ) : (
-                <div className="profile-grid">
+                <div className={`profile-grid ${media.length === 1 ? 'is-single' : ''}`}>
                   {media.map((m) => (
                     <button
                       key={m.id}
@@ -377,21 +477,118 @@ export default function PlayerProfilePage() {
                       }
                     >
                       {m.media_type === 'video' ? (
-                        <video src={mediaUrl(m.url)} muted playsInline preload="metadata" />
+                        brokenMedia.has(m.id) ? (
+                          <span className="media-missing">Unavailable</span>
+                        ) : (
+                          <video
+                            src={mediaUrl(m.url)}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            onError={() => markBroken(m.id)}
+                          />
+                        )
+                      ) : brokenMedia.has(m.id) ? (
+                        <span className="media-missing">Unavailable</span>
                       ) : (
-                        <img src={mediaUrl(m.url)} alt={m.caption || ''} loading="lazy" />
+                        <img
+                          src={mediaUrl(m.url)}
+                          alt={m.caption || ''}
+                          loading="lazy"
+                          onError={() => markBroken(m.id)}
+                        />
                       )}
-                      {m.is_avatar && <span className="media-badge">Photo</span>}
-                      {m.media_type === 'video' && <span className="media-badge video">Video</span>}
+                      {m.media_type === 'video' && (
+                        <span className="media-play" aria-hidden>
+                          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                            <path d="M8 5v14l11-7z" />
+                          </svg>
+                        </span>
+                      )}
+                      {m.is_avatar && <span className="media-badge">Profile</span>}
+                      {m.caption && <span className="media-caption">{m.caption}</span>}
                     </button>
                   ))}
                 </div>
               )}
             </section>
 
-            <div style={{ marginTop: 20 }}>
+            {isOwn && (
+              <section className="profile-account-danger" aria-labelledby="account-danger-title">
+                <h2 id="account-danger-title">Account</h2>
+                <p className="muted-note">
+                  Delete your account to remove personal data from Student Padel Ireland. Tournament history may
+                  remain in anonymised form.
+                </p>
+                {!showDeleteAccount ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm profile-delete-trigger"
+                    onClick={() => {
+                      setShowDeleteAccount(true)
+                      setDeleteError('')
+                      setDeletePassword('')
+                    }}
+                  >
+                    Delete account
+                  </button>
+                ) : (
+                  <form
+                    className="profile-delete-form"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      setDeleteError('')
+                      if (!deletePassword.trim()) {
+                        setDeleteError('Enter your password to confirm')
+                        return
+                      }
+                      deleteAccountMut.mutate(deletePassword)
+                    }}
+                  >
+                    <label className="profile-delete-label" htmlFor="delete-account-password">
+                      Confirm with your password
+                    </label>
+                    <input
+                      id="delete-account-password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={deletePassword}
+                      onChange={(e) => setDeletePassword(e.target.value)}
+                      placeholder="Password"
+                    />
+                    {deleteError && <p className="form-error">{deleteError}</p>}
+                    <div className="profile-upload-actions">
+                      <button
+                        type="submit"
+                        className="btn btn-primary btn-sm"
+                        disabled={deleteAccountMut.isPending}
+                      >
+                        {deleteAccountMut.isPending ? 'Deleting…' : 'Permanently delete'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={deleteAccountMut.isPending}
+                        onClick={() => {
+                          setShowDeleteAccount(false)
+                          setDeletePassword('')
+                          setDeleteError('')
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </section>
+            )}
+
+            <div className="profile-footer-links">
               <Link to="/community" className="btn btn-ghost">
                 Community
+              </Link>
+              <Link to="/rankings" className="btn btn-ghost">
+                Rankings
               </Link>
             </div>
           </>
@@ -405,45 +602,111 @@ export default function PlayerProfilePage() {
             aria-label={lightbox.caption || 'Media'}
             onClick={() => setLightbox(null)}
           >
+            {lightboxIndex > 0 && (
+              <button
+                type="button"
+                className="lightbox-nav prev"
+                aria-label="Previous"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setLightbox(media[lightboxIndex - 1])
+                }}
+              >
+                ‹
+              </button>
+            )}
+            {lightboxIndex >= 0 && lightboxIndex < media.length - 1 && (
+              <button
+                type="button"
+                className="lightbox-nav next"
+                aria-label="Next"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setLightbox(media[lightboxIndex + 1])
+                }}
+              >
+                ›
+              </button>
+            )}
             <div className="lightbox-inner" onClick={(e) => e.stopPropagation()}>
-              {lightbox.media_type === 'video' ? (
-                <video src={mediaUrl(lightbox.url)} controls autoPlay playsInline />
-              ) : (
-                <img src={mediaUrl(lightbox.url)} alt={lightbox.caption || ''} />
-              )}
-              {lightbox.caption && <p className="lightbox-caption">{lightbox.caption}</p>}
-              <div className="lightbox-actions">
-                {isOwn && lightbox.media_type === 'image' && !lightbox.is_avatar && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => avatarMut.mutate(lightbox.id)}
-                  >
-                    Set as profile photo
-                  </button>
-                )}
-                {isOwn && (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={async () => {
-                      const confirmed = await confirmDialog({
-                        title: 'Remove from profile?',
-                        message: 'This photo or video will be removed from your profile.',
-                        confirmLabel: 'Remove',
-                        cancelLabel: 'Keep',
-                      })
-                      if (confirmed) {
-                        deleteMut.mutate(lightbox.id)
-                      }
+              <div className="lightbox-stage">
+                {lightbox.media_type === 'video' ? (
+                  lightboxError || brokenMedia.has(lightbox.id) ? (
+                    <p className="lightbox-caption is-muted">
+                      This video is missing from the server. {isOwn ? 'Delete it and upload again.' : ''}
+                    </p>
+                  ) : (
+                    <video
+                      key={lightbox.id}
+                      src={mediaUrl(lightbox.url)}
+                      controls
+                      autoPlay
+                      muted
+                      playsInline
+                      preload="auto"
+                      onError={() => {
+                        setLightboxError(true)
+                        markBroken(lightbox.id)
+                      }}
+                      onCanPlay={(e) => {
+                        const el = e.currentTarget
+                        void el.play().catch(() => {})
+                      }}
+                    />
+                  )
+                ) : lightboxError || brokenMedia.has(lightbox.id) ? (
+                  <p className="lightbox-caption is-muted">
+                    This photo is missing from the server. {isOwn ? 'Delete it and upload again.' : ''}
+                  </p>
+                ) : (
+                  <img
+                    src={mediaUrl(lightbox.url)}
+                    alt={lightbox.caption || ''}
+                    onError={() => {
+                      setLightboxError(true)
+                      markBroken(lightbox.id)
                     }}
-                  >
-                    Delete
-                  </button>
+                  />
                 )}
-                <button type="button" className="btn btn-dark btn-sm" onClick={() => setLightbox(null)}>
-                  Close
-                </button>
+              </div>
+              <div className="lightbox-meta">
+                {lightbox.caption ? (
+                  <p className="lightbox-caption">{lightbox.caption}</p>
+                ) : (
+                  <p className="lightbox-caption is-muted">
+                    {lightbox.media_type === 'video' ? 'Video (unmute in controls if needed)' : 'Photo'}
+                    {media.length > 1 ? ` · ${lightboxIndex + 1} of ${media.length}` : ''}
+                  </p>
+                )}
+                <div className="lightbox-actions">
+                  {isOwn && lightbox.media_type === 'image' && !lightbox.is_avatar && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => avatarMut.mutate(lightbox.id)}
+                      disabled={avatarMut.isPending}
+                    >
+                      Set as profile photo
+                    </button>
+                  )}
+                  {isOwn && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        if (window.confirm('Remove this from your profile?')) {
+                          deleteMut.mutate(lightbox.id)
+                        }
+                      }}
+                      disabled={deleteMut.isPending}
+                    >
+                      Delete
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-dark btn-sm" onClick={() => setLightbox(null)}>
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -451,11 +714,4 @@ export default function PlayerProfilePage() {
       </main>
     </div>
   )
-}
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }

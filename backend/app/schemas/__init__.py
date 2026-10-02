@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models import MatchStatus, TournamentFormat, TournamentStatus, UserRole
+from app.models import MatchStatus, PlayFormat, TournamentFormat, TournamentStatus, UserRole
 
 
 class TokenResponse(BaseModel):
@@ -22,19 +22,27 @@ class UserCreate(BaseModel):
     phone: Optional[str] = None
     university_id: Optional[UUID] = None
     student_number: Optional[str] = None
+    # Legacy clients may still send role; only PLAYER is accepted.
     role: UserRole = UserRole.PLAYER
 
     @field_validator("role")
     @classmethod
-    def only_player_or_organiser_signup(cls, v: UserRole) -> UserRole:
+    def player_only_signup(cls, v: UserRole) -> UserRole:
         if v == UserRole.ADMIN:
             raise ValueError("Cannot self-register as ADMIN")
-        return v
+        # ORGANISER account type removed — everyone signs up as a player
+        return UserRole.PLAYER
 
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+class AccountDeleteRequest(BaseModel):
+    """Confirm deletion with the account password (App Store 5.1.1(v))."""
+
+    password: str = Field(min_length=1, max_length=128)
 
 
 class UserPublic(BaseModel):
@@ -105,16 +113,26 @@ class TournamentCreate(BaseModel):
     event_date: date
     start_time: time
     number_of_courts: int = Field(default=4, ge=1, le=32)
+    court_names: Optional[list[str]] = None
     entry_fee_cents: int = Field(default=5000, ge=0)
     max_teams: int = Field(default=48, ge=2, le=256)
     registration_deadline: Optional[datetime] = None
     format: TournamentFormat = TournamentFormat.GROUP_KNOCKOUT
+    play_format: PlayFormat = PlayFormat.DOUBLES
     rules: Optional[str] = None
     description: Optional[str] = None
     match_duration_minutes: int = Field(default=20, ge=5, le=120)
     group_size: int = Field(default=4, ge=2, le=8)
     teams_advance_per_group: int = Field(default=2, ge=1, le=4)
     tie_break_order: Optional[str] = None
+
+    @field_validator("court_names")
+    @classmethod
+    def _clean_court_names(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        if v is None:
+            return None
+        # Keep positions so Court 2 stays index 1 even if left blank
+        return [n.strip() if n else "" for n in v]
 
 
 class TournamentUpdate(BaseModel):
@@ -124,10 +142,12 @@ class TournamentUpdate(BaseModel):
     event_date: Optional[date] = None
     start_time: Optional[time] = None
     number_of_courts: Optional[int] = Field(default=None, ge=1, le=32)
+    court_names: Optional[list[str]] = None
     entry_fee_cents: Optional[int] = Field(default=None, ge=0)
     max_teams: Optional[int] = Field(default=None, ge=2, le=256)
     registration_deadline: Optional[datetime] = None
     format: Optional[TournamentFormat] = None
+    play_format: Optional[PlayFormat] = None
     rules: Optional[str] = None
     description: Optional[str] = None
     status: Optional[TournamentStatus] = None
@@ -135,6 +155,14 @@ class TournamentUpdate(BaseModel):
     group_size: Optional[int] = Field(default=None, ge=2, le=8)
     teams_advance_per_group: Optional[int] = Field(default=None, ge=1, le=4)
     tie_break_order: Optional[str] = None
+    # Transfer ownership — only current owner or platform ADMIN may set this
+    organiser_id: Optional[UUID] = None
+
+
+class CourtOut(BaseModel):
+    number: int
+    name: str
+    id: Optional[str] = None
 
 
 class TournamentOut(BaseModel):
@@ -151,6 +179,7 @@ class TournamentOut(BaseModel):
     max_teams: int
     registration_deadline: Optional[datetime] = None
     format: str
+    play_format: str = PlayFormat.DOUBLES.value
     rules: Optional[str] = None
     description: Optional[str] = None
     status: str
@@ -159,6 +188,9 @@ class TournamentOut(BaseModel):
     group_size: int
     teams_advance_per_group: int
     registered_teams: int = 0
+    invite_code: Optional[str] = None
+    courts: list[CourtOut] = Field(default_factory=list)
+    can_manage: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -180,11 +212,21 @@ class TeamOut(BaseModel):
 class RegisterTeamRequest(BaseModel):
     tournament_id: UUID
     team_name: str = Field(min_length=2, max_length=120)
-    partner_name: str = Field(min_length=2, max_length=200)
-    partner_email: EmailStr
+    partner_name: str = Field(default="", max_length=200)
+    partner_email: Optional[EmailStr] = None
+    partner_user_id: Optional[UUID] = None
     phone: Optional[str] = None
     university_id: Optional[UUID] = None
     student_number: Optional[str] = None
+
+
+class OrganiserAddTeamRequest(BaseModel):
+    """Organiser adds a team (waives payment / marks paid). player2 optional for singles."""
+
+    team_name: str = Field(min_length=2, max_length=120)
+    player1_id: UUID
+    player2_id: Optional[UUID] = None
+    university_id: Optional[UUID] = None
 
 
 class CheckoutResponse(BaseModel):
@@ -211,6 +253,8 @@ class ScoreUpdate(BaseModel):
     current_set: int = Field(default=1, ge=1, le=3)
     status: MatchStatus = MatchStatus.LIVE
     winner_id: Optional[UUID] = None
+    # Allow correcting a finished match (standings/bracket only — ratings stay as first applied)
+    force: bool = False
 
 
 class MatchOut(BaseModel):
@@ -219,6 +263,7 @@ class MatchOut(BaseModel):
     round: str
     stage: str
     court_number: Optional[int] = None
+    court_name: Optional[str] = None
     scheduled_start: Optional[datetime] = None
     team_a_id: Optional[UUID] = None
     team_b_id: Optional[UUID] = None
@@ -229,6 +274,7 @@ class MatchOut(BaseModel):
     status: str
     winner_id: Optional[UUID] = None
     score: Optional[dict] = None
+    ratings_applied: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -247,6 +293,12 @@ class AnnouncementCreate(BaseModel):
     is_pinned: bool = False
 
 
+class AnnouncementUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    body: Optional[str] = Field(default=None, min_length=1)
+    is_pinned: Optional[bool] = None
+
+
 class AnnouncementOut(BaseModel):
     id: UUID
     tournament_id: UUID
@@ -254,6 +306,24 @@ class AnnouncementOut(BaseModel):
     body: str
     is_pinned: bool
     created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TournamentAdminCreate(BaseModel):
+    user_id: UUID
+    role: str = Field(default="MANAGER", pattern="^(MANAGER|SCORER)$")
+
+
+class TournamentAdminOut(BaseModel):
+    id: UUID
+    tournament_id: UUID
+    user_id: UUID
+    full_name: str
+    email: str
+    role: str
+    is_owner: bool = False
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -275,7 +345,7 @@ class StandingOut(BaseModel):
 
 class CheckInRequest(BaseModel):
     player1_present: bool = True
-    player2_present: bool = True
+    player2_present: bool = True  # ignored for singles; treated as present
 
 
 class SponsorOut(BaseModel):
@@ -378,7 +448,7 @@ class CommunityMatchScore(BaseModel):
     set2_b: int = Field(default=0, ge=0, le=7)
     set3_a: int = Field(default=0, ge=0, le=7)
     set3_b: int = Field(default=0, ge=0, le=7)
-    winner_side: Optional[str] = None  # A | B — inferred from sets if omitted
+    winner_side: Optional[str] = None  # A | B - inferred from sets if omitted
     status: str = "AWAITING_CONFIRM"  # AWAITING_CONFIRM | CANCELLED
 
 
@@ -431,4 +501,34 @@ class CommunityHomeOut(BaseModel):
     friend_request_count: int = 0
 
 
+class NotificationOut(BaseModel):
+    id: str
+    kind: str
+    title: str
+    body: str
+    href: str
+    created_at: datetime
+    actionable: bool = False
+    friendship_id: Optional[UUID] = None
+    match_id: Optional[UUID] = None
+    actor_user_id: Optional[UUID] = None
+    actor_name: Optional[str] = None
+
+
+class NotificationsFeedOut(BaseModel):
+    items: list[NotificationOut]
+    actionable_count: int = 0
+
+
 TokenResponse.model_rebuild()
+
+
+class InviteResolveOut(BaseModel):
+    """Lookup for any invite code (tournament or community competition)."""
+
+    kind: str  # tournament | competition
+    slug: str
+    name: str
+    invite_code: str
+    join_path: str
+    hint: str = ""

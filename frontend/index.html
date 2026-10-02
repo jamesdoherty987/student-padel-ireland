@@ -15,7 +15,7 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="SPI Padel" />
+    <meta name="apple-mobile-web-app-title" content="Student Padel Ireland" />
     <meta name="application-name" content="Student Padel Ireland" />
     <meta name="format-detection" content="telephone=no" />
     <title>Student Padel Ireland</title>
@@ -31,7 +31,24 @@
     />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div
+        id="boot-splash"
+        style="
+          min-height: 100dvh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #0b3d2e;
+          color: #c8e600;
+          font-family: system-ui, sans-serif;
+          font-weight: 700;
+          letter-spacing: 0.02em;
+        "
+      >
+        Student Padel Ireland
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

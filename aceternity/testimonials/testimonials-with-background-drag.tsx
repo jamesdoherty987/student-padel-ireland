@@ -66,7 +66,7 @@ const DEFAULT_TESTIMONIALS: Testimonial[] = [
   {
     title: "Exceeded all expectations",
     quote:
-      "The attention to detail is remarkable. Every animation, every transition — it all feels premium without any extra effort.",
+      "The attention to detail is remarkable. Every animation, every transition - it all feels premium without any extra effort.",
     imageSrc: "https://assets.aceternity.com/avatars/1.webp",
     name: "Marcus Johnson",
   },
@@ -726,7 +726,7 @@ export function TestimonialsCanvas({
     startAutoPan();
   }, [animate, startAutoPan]);
 
-  // Initialize (no wheel handler — drag only)
+  // Initialize (no wheel handler - drag only)
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;

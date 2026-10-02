@@ -1,50 +1,64 @@
 from __future__ import annotations
 
 import re
+import secrets
 from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, get_optional_user, require_role
+from app.api.deps import get_current_user, get_optional_user, user_can_manage_tournament, user_owns_tournament
 from app.core.config import get_settings
 from app.core.roles import Role
 from app.core.security import hash_password
 from app.db.session import get_db
 from app.models import (
     Announcement,
+    CommunityCompetition,
     Court,
     Group,
     GroupTeam,
     Match,
     MatchScore,
     MatchStatus,
+    Payment,
     PaymentStatus,
+    PlayFormat,
     Ranking,
+    RankingHistory,
     Registration,
     Sponsor,
     Team,
     TeamPlayer,
     Tournament,
+    TournamentAdmin,
     TournamentStatus,
     University,
     User,
 )
+
 from app.services.rating import INITIAL_RATING, rate_match
 from app.schemas import (
     AnnouncementCreate,
     AnnouncementOut,
+    AnnouncementUpdate,
     CheckInRequest,
     CheckoutResponse,
     GenerateRequest,
+    InviteResolveOut,
     MatchMove,
     MatchOut,
+    OrganiserAddTeamRequest,
     RegisterTeamRequest,
     ScoreUpdate,
     SponsorOut,
     StandingOut,
     TeamOut,
+    TournamentAdminCreate,
+    TournamentAdminOut,
     TournamentCreate,
     TournamentOut,
     TournamentUpdate,
@@ -55,6 +69,19 @@ from app.services.standings import MatchResult, accumulate_standings, rank_stand
 from app.services.tournament_generator import GeneratorConfig, TeamRef, generate_tournament
 
 router = APIRouter(tags=["tournaments"])
+
+
+def _dublin_tz():
+    """Europe/Dublin — fall back to fixed +01:00 if tzdata isn't installed (Windows)."""
+    try:
+        return ZoneInfo("Europe/Dublin")
+    except Exception:
+        from datetime import timedelta
+
+        return timezone(timedelta(hours=1), name="IST")
+
+
+DUBLIN_TZ = _dublin_tz()
 
 
 def _slugify(name: str) -> str:
@@ -70,6 +97,75 @@ def _unique_slug(db: Session, name: str) -> str:
         slug = f"{base}-{i}"
         i += 1
     return slug
+
+
+def _invite_code() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(8))
+
+
+def _unique_invite_code(db: Session) -> str:
+    for _ in range(40):
+        code = _invite_code()
+        if not db.query(Tournament).filter(Tournament.invite_code == code).first():
+            return code
+    return _invite_code() + secrets.token_hex(1)[:2].upper()
+
+
+def _ensure_invite_code(db: Session, t: Tournament) -> str:
+    if t.invite_code:
+        return t.invite_code
+    t.invite_code = _unique_invite_code(db)
+    db.add(t)
+    # Persist immediately — get_db does not auto-commit, and this runs on GET/list
+    db.commit()
+    db.refresh(t)
+    return t.invite_code
+
+
+def _clean_invite_code(raw: str) -> str:
+    return "".join(ch for ch in (raw or "").strip().upper() if ch.isalnum())[:12]
+
+
+def _resolve_by_invite_code(db: Session, code: str) -> Tournament:
+    cleaned = _clean_invite_code(code)
+    if len(cleaned) < 6:
+        raise HTTPException(404, "Tournament not found")
+    t = db.query(Tournament).filter(Tournament.invite_code == cleaned).first()
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    return t
+
+
+def _team_out(team: Team) -> TeamOut:
+    names = [m.user.full_name for m in sorted(team.members, key=lambda x: x.slot) if m.user]
+    return TeamOut(
+        id=team.id,
+        tournament_id=team.tournament_id,
+        name=team.name,
+        university_id=team.university_id,
+        seed=team.seed,
+        checked_in=team.checked_in,
+        withdrawn=team.withdrawn,
+        player_names=names,
+        payment_status=team.registration.status if team.registration else None,
+    )
+
+
+def _players_already_registered(db: Session, tournament_id: UUID, user_ids: list[UUID]) -> bool:
+    return (
+        db.query(TeamPlayer)
+        .join(Team)
+        .join(Registration, Registration.team_id == Team.id)
+        .filter(
+            Team.tournament_id == tournament_id,
+            Team.withdrawn.is_(False),
+            TeamPlayer.user_id.in_(user_ids),
+            Registration.status == PaymentStatus.PAID.value,
+        )
+        .first()
+        is not None
+    )
 
 
 def _paid_team_count(db: Session, tournament_id: UUID) -> int:
@@ -100,13 +196,103 @@ def _ensure_ranking(db: Session, user_id: UUID) -> None:
         db.add(Ranking(user_id=user_id, points=INITIAL_RATING))
 
 
-def _tournament_out(db: Session, t: Tournament) -> TournamentOut:
-    data = TournamentOut.model_validate(t)
-    data.registered_teams = _team_count(db, t.id)
-    return data
+def _team_user_ids(db: Session, team_id: UUID | None) -> list[UUID]:
+    if not team_id:
+        return []
+    return [
+        tp.user_id
+        for tp in db.query(TeamPlayer).filter(TeamPlayer.team_id == team_id).all()
+        if tp.user_id
+    ]
 
 
-def _match_out(db: Session, m: Match) -> MatchOut:
+def _apply_tournament_match_ratings(db: Session, m: Match, t: Tournament | None) -> None:
+    """Apply Ireland Elo for every completed tournament match, any event or stage."""
+    if getattr(m, "ratings_applied", False):
+        return
+    if m.status not in (MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value):
+        return
+    if not m.winner_id or not m.team_a_id or not m.team_b_id:
+        return
+    side_a = _team_user_ids(db, m.team_a_id)
+    side_b = _team_user_ids(db, m.team_b_id)
+    if not side_a or not side_b:
+        return
+    score = m.score
+    sets = [
+        (score.set1_a if score else 0, score.set1_b if score else 0),
+        (score.set2_a if score else 0, score.set2_b if score else 0),
+        (score.set3_a if score else 0, score.set3_b if score else 0),
+    ]
+    sets_a = sum(1 for a, b in sets if a > b and (a or b))
+    sets_b = sum(1 for a, b in sets if b > a and (a or b))
+    rate_match(
+        db,
+        side_a_user_ids=side_a,
+        side_b_user_ids=side_b,
+        a_won=(m.winner_id == m.team_a_id),
+        sets_a=sets_a,
+        sets_b=sets_b,
+        tournament_id=m.tournament_id,
+        placement=f"t:{(t.slug if t else m.round)}"[:40],
+    )
+    m.ratings_applied = True
+
+
+def _tournament_out(
+    db: Session,
+    t: Tournament,
+    *,
+    viewer: User | None = None,
+) -> TournamentOut:
+    _ensure_invite_code(db, t)
+    courts = (
+        db.query(Court)
+        .filter(Court.tournament_id == t.id)
+        .order_by(Court.court_number)
+        .all()
+    )
+    can_manage = bool(viewer and user_can_manage_tournament(viewer, t, db))
+    # Always build plain data — never pass ORM Court objects into the response model
+    return TournamentOut(
+        id=t.id,
+        name=t.name,
+        slug=t.slug,
+        location=t.location,
+        venue=t.venue,
+        event_date=t.event_date,
+        start_time=t.start_time,
+        number_of_courts=t.number_of_courts,
+        entry_fee_cents=t.entry_fee_cents,
+        currency=t.currency or "EUR",
+        max_teams=t.max_teams,
+        registration_deadline=t.registration_deadline,
+        format=t.format,
+        play_format=getattr(t, "play_format", None) or PlayFormat.DOUBLES.value,
+        rules=t.rules,
+        description=t.description,
+        status=t.status,
+        organiser_id=t.organiser_id,
+        match_duration_minutes=t.match_duration_minutes,
+        group_size=t.group_size,
+        teams_advance_per_group=t.teams_advance_per_group,
+        registered_teams=_team_count(db, t.id),
+        invite_code=t.invite_code,
+        courts=[
+            {"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts
+        ],
+        can_manage=can_manage,
+    )
+
+
+def _court_label_map(db: Session, tournament_id: UUID) -> dict[int, str]:
+    return {
+        c.court_number: c.name
+        for c in db.query(Court).filter(Court.tournament_id == tournament_id).all()
+    }
+
+
+def _match_out(db: Session, m: Match, court_names: dict[int, str] | None = None) -> MatchOut:
     team_a = db.get(Team, m.team_a_id) if m.team_a_id else None
     team_b = db.get(Team, m.team_b_id) if m.team_b_id else None
     score = None
@@ -120,12 +306,17 @@ def _match_out(db: Session, m: Match) -> MatchOut:
             "set3_b": m.score.set3_b,
             "current_set": m.score.current_set,
         }
+    names = court_names if court_names is not None else _court_label_map(db, m.tournament_id)
+    court_name = None
+    if m.court_number is not None:
+        court_name = names.get(m.court_number) or f"Court {m.court_number}"
     return MatchOut(
         id=m.id,
         tournament_id=m.tournament_id,
         round=m.round,
         stage=m.stage,
         court_number=m.court_number,
+        court_name=court_name,
         scheduled_start=m.scheduled_start,
         team_a_id=m.team_a_id,
         team_b_id=m.team_b_id,
@@ -136,14 +327,269 @@ def _match_out(db: Session, m: Match) -> MatchOut:
         status=m.status,
         winner_id=m.winner_id,
         score=score,
+        ratings_applied=bool(getattr(m, "ratings_applied", False)),
     )
 
 
-def _assert_organiser(user: User, tournament: Tournament) -> None:
-    if user.role == Role.ADMIN.value:
+def _default_court_name(i: int) -> str:
+    return f"Court {i}"
+
+
+def _sync_courts(
+    db: Session,
+    tournament_id: UUID,
+    number_of_courts: int,
+    court_names: list[str] | None = None,
+) -> None:
+    """Add/remove/rename courts without wiping custom names unnecessarily."""
+    existing = (
+        db.query(Court)
+        .filter(Court.tournament_id == tournament_id)
+        .order_by(Court.court_number)
+        .all()
+    )
+    by_num = {c.court_number: c for c in existing}
+
+    for i in range(1, number_of_courts + 1):
+        desired = (
+            court_names[i - 1].strip()
+            if court_names and i - 1 < len(court_names) and court_names[i - 1].strip()
+            else _default_court_name(i)
+        )
+        if i in by_num:
+            if court_names is not None:
+                by_num[i].name = desired
+            by_num[i].is_active = True
+        else:
+            db.add(Court(tournament_id=tournament_id, name=desired, court_number=i))
+
+    for num, court in by_num.items():
+        if num > number_of_courts:
+            db.delete(court)
+
+
+def _is_singles(t: Tournament) -> bool:
+    return (getattr(t, "play_format", None) or PlayFormat.DOUBLES.value) == PlayFormat.SINGLES.value
+
+
+def _parse_group_placeholder(label: str | None) -> tuple[str, int] | None:
+    """Parse '1st Group A' → ('A', 1). Returns None for BYE / Winner match…"""
+    if not label:
+        return None
+    text = label.strip()
+    if text.upper() == "BYE" or text.upper() == "TBD":
+        return None
+    import re
+
+    m = re.match(r"^(1st|2nd|3rd|4th|\d+th)\s+Group\s+([A-Z]+)$", text, re.I)
+    if not m:
+        return None
+    ordinal = m.group(1).lower()
+    group = m.group(2).upper()
+    rank_map = {"1st": 1, "2nd": 2, "3rd": 3, "4th": 4}
+    if ordinal in rank_map:
+        rank = rank_map[ordinal]
+    else:
+        rank = int(ordinal.replace("th", ""))
+    return group, rank
+
+
+def _group_standings_ranked(
+    db: Session, t: Tournament, group: Group
+) -> list[UUID]:
+    """Return team IDs in ranked order for a group."""
+    tie_order = [x.strip() for x in (t.tie_break_order or "").split(",") if x.strip()]
+    gts = db.query(GroupTeam).filter(GroupTeam.group_id == group.id).all()
+    team_ids = [str(gt.team_id) for gt in gts]
+    matches = (
+        db.query(Match)
+        .options(joinedload(Match.score))
+        .filter(
+            Match.group_id == group.id,
+            Match.status.in_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
+        )
+        .all()
+    )
+    results = []
+    for m in matches:
+        if not m.team_a_id or not m.team_b_id:
+            continue
+        sets = []
+        if m.score:
+            sets = [
+                (m.score.set1_a, m.score.set1_b),
+                (m.score.set2_a, m.score.set2_b),
+                (m.score.set3_a, m.score.set3_b),
+            ]
+            sets = [(a, b) for a, b in sets if a or b]
+        results.append(
+            MatchResult(
+                str(m.team_a_id),
+                str(m.team_b_id),
+                sets,
+                walkover_winner_id=str(m.winner_id)
+                if m.status == MatchStatus.WALKOVER.value and m.winner_id
+                else None,
+                status=m.status,
+            )
+        )
+    rows = accumulate_standings(team_ids, results)
+    ranked = rank_standings(rows, tie_order or None)
+    return [UUID(r.team_id) for r in ranked]
+
+
+def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
+    """
+    Fill first-round KO slots from finished group standings.
+    Also auto-advances BYE sides. Returns number of slots filled.
+    """
+    groups = db.query(Group).filter(Group.tournament_id == t.id).order_by(Group.sort_order).all()
+    if not groups:
+        return 0
+
+    # All group matches must be finished
+    unfinished = (
+        db.query(Match)
+        .filter(
+            Match.tournament_id == t.id,
+            Match.stage == "GROUP",
+            Match.status.notin_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value, MatchStatus.CANCELLED.value]),
+        )
+        .count()
+    )
+    if unfinished > 0:
+        return 0
+
+    ranked_by_group: dict[str, list[UUID]] = {}
+    for g in groups:
+        ranked_by_group[g.name.upper()] = _group_standings_ranked(db, t, g)
+
+    advance = t.teams_advance_per_group or 2
+    first_round = (
+        db.query(Match)
+        .filter(Match.tournament_id == t.id, Match.stage == "KNOCKOUT")
+        .order_by(Match.sort_order)
+        .all()
+    )
+    if not first_round:
+        return 0
+
+    # First KO round = matches that are fed INTO by nothing from other KO, or lowest sort
+    # Identify first round by round name of earliest KO matches
+    first_round_name = first_round[0].round
+    first_matches = [m for m in first_round if m.round == first_round_name]
+
+    filled = 0
+
+    def resolve_slot(label: str | None) -> UUID | None:
+        if not label or label.upper() in ("BYE", "TBD"):
+            return None
+        parsed = _parse_group_placeholder(label)
+        if not parsed:
+            return None
+        gname, rank = parsed
+        teams = ranked_by_group.get(gname, [])
+        if 1 <= rank <= len(teams) and rank <= advance:
+            return teams[rank - 1]
+        return None
+
+    for m in first_matches:
+        # Skip if already has both teams
+        changed = False
+        if not m.team_a_id:
+            tid = resolve_slot(m.team_a_placeholder)
+            if tid:
+                m.team_a_id = tid
+                m.team_a_placeholder = None
+                changed = True
+                filled += 1
+            elif m.team_a_placeholder and m.team_a_placeholder.upper() == "BYE":
+                m.team_a_placeholder = "BYE"
+        if not m.team_b_id:
+            tid = resolve_slot(m.team_b_placeholder)
+            if tid:
+                m.team_b_id = tid
+                m.team_b_placeholder = None
+                changed = True
+                filled += 1
+            elif m.team_b_placeholder and m.team_b_placeholder.upper() == "BYE":
+                m.team_b_placeholder = "BYE"
+
+        # Auto-advance bye: one team present, other is BYE
+        a_bye = (m.team_a_placeholder or "").upper() == "BYE" and not m.team_a_id
+        b_bye = (m.team_b_placeholder or "").upper() == "BYE" and not m.team_b_id
+        winner = None
+        if m.team_a_id and b_bye and not m.team_b_id:
+            winner = m.team_a_id
+            m.team_b_placeholder = "BYE"
+        elif m.team_b_id and a_bye and not m.team_a_id:
+            winner = m.team_b_id
+            m.team_a_placeholder = "BYE"
+        if winner and m.status not in (MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value):
+            m.winner_id = winner
+            m.status = MatchStatus.WALKOVER.value
+            if m.next_match_id and m.next_match_slot:
+                nxt = db.get(Match, m.next_match_id)
+                if nxt:
+                    if m.next_match_slot == "A":
+                        nxt.team_a_id = winner
+                        nxt.team_a_placeholder = None
+                    else:
+                        nxt.team_b_id = winner
+                        nxt.team_b_placeholder = None
+            changed = True
+        if changed:
+            db.add(m)
+
+    return filled
+
+
+def _assert_organiser(user: User, tournament: Tournament, db: Session) -> None:
+    """Allow platform ADMIN, primary organiser, or tournament co-admin."""
+    if user_can_manage_tournament(user, tournament, db):
         return
-    if tournament.organiser_id != user.id:
-        raise HTTPException(403, "Not the tournament organiser")
+    raise HTTPException(403, "Not a tournament organiser")
+
+
+def _assert_owner(user: User, tournament: Tournament) -> None:
+    """Delete, transfer ownership, and manage admin list — owner or platform ADMIN only."""
+    if not user_owns_tournament(user, tournament):
+        raise HTTPException(403, "Only the tournament owner can do this")
+
+
+def _purge_tournament(db: Session, t: Tournament) -> None:
+    """Delete a tournament and all dependent rows (handles non-cascade FKs)."""
+    tid = t.id
+    match_ids = [row[0] for row in db.query(Match.id).filter(Match.tournament_id == tid).all()]
+    if match_ids:
+        db.query(MatchScore).filter(MatchScore.match_id.in_(match_ids)).delete(synchronize_session=False)
+        db.query(Match).filter(Match.tournament_id == tid).update(
+            {Match.next_match_id: None}, synchronize_session=False
+        )
+        db.query(Match).filter(Match.tournament_id == tid).delete(synchronize_session=False)
+
+    group_ids = [row[0] for row in db.query(Group.id).filter(Group.tournament_id == tid).all()]
+    if group_ids:
+        db.query(GroupTeam).filter(GroupTeam.group_id.in_(group_ids)).delete(synchronize_session=False)
+        db.query(Group).filter(Group.tournament_id == tid).delete(synchronize_session=False)
+
+    team_ids = [row[0] for row in db.query(Team.id).filter(Team.tournament_id == tid).all()]
+    reg_ids = [row[0] for row in db.query(Registration.id).filter(Registration.tournament_id == tid).all()]
+    if reg_ids:
+        db.query(Payment).filter(Payment.registration_id.in_(reg_ids)).delete(synchronize_session=False)
+    db.query(Payment).filter(Payment.tournament_id == tid).delete(synchronize_session=False)
+    db.query(Registration).filter(Registration.tournament_id == tid).delete(synchronize_session=False)
+    if team_ids:
+        db.query(TeamPlayer).filter(TeamPlayer.team_id.in_(team_ids)).delete(synchronize_session=False)
+        db.query(Team).filter(Team.tournament_id == tid).delete(synchronize_session=False)
+
+    db.query(Announcement).filter(Announcement.tournament_id == tid).delete(synchronize_session=False)
+    db.query(Sponsor).filter(Sponsor.tournament_id == tid).delete(synchronize_session=False)
+    db.query(Court).filter(Court.tournament_id == tid).delete(synchronize_session=False)
+    db.query(TournamentAdmin).filter(TournamentAdmin.tournament_id == tid).delete(synchronize_session=False)
+    # Drop history rows rather than nulling FK (works even if column is still NOT NULL)
+    db.query(RankingHistory).filter(RankingHistory.tournament_id == tid).delete(synchronize_session=False)
+    db.delete(t)
 
 
 # ── Universities ──────────────────────────────────────────────
@@ -179,9 +625,13 @@ def list_tournaments(
 
 
 @router.get("/tournaments/{slug_or_id}", response_model=TournamentOut)
-def get_tournament(slug_or_id: str, db: Session = Depends(get_db)):
+def get_tournament(
+    slug_or_id: str,
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
     t = _resolve_tournament(db, slug_or_id)
-    return _tournament_out(db, t)
+    return _tournament_out(db, t, viewer=user)
 
 
 def _resolve_tournament(db: Session, slug_or_id: str) -> Tournament:
@@ -198,7 +648,7 @@ def _resolve_tournament(db: Session, slug_or_id: str) -> Tournament:
 @router.post("/tournaments", response_model=TournamentOut)
 def create_tournament(
     body: TournamentCreate,
-    user: User = Depends(require_role(Role.ORGANISER)),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     t = Tournament(
@@ -213,6 +663,7 @@ def create_tournament(
         max_teams=body.max_teams,
         registration_deadline=body.registration_deadline,
         format=body.format.value,
+        play_format=body.play_format.value,
         rules=body.rules,
         description=body.description,
         status=TournamentStatus.DRAFT.value,
@@ -220,16 +671,16 @@ def create_tournament(
         match_duration_minutes=body.match_duration_minutes,
         group_size=body.group_size,
         teams_advance_per_group=body.teams_advance_per_group,
+        invite_code=_unique_invite_code(db),
         tie_break_order=body.tie_break_order
         or "points,head_to_head,set_difference,game_difference,games_won",
     )
     db.add(t)
     db.flush()
-    for i in range(1, body.number_of_courts + 1):
-        db.add(Court(tournament_id=t.id, name=f"Court {i}", court_number=i))
+    _sync_courts(db, t.id, body.number_of_courts, body.court_names)
     db.commit()
     db.refresh(t)
-    return _tournament_out(db, t)
+    return _tournament_out(db, t, viewer=user)
 
 
 @router.patch("/tournaments/{tournament_id}", response_model=TournamentOut)
@@ -242,25 +693,115 @@ def update_tournament(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
-    for field, value in body.model_dump(exclude_unset=True).items():
+    _assert_organiser(user, t, db)
+    data = body.model_dump(exclude_unset=True)
+    court_names = data.pop("court_names", None)
+    new_organiser_id = data.pop("organiser_id", None)
+    if new_organiser_id is not None:
+        _assert_owner(user, t)
+        new_owner = db.get(User, new_organiser_id)
+        if not new_owner or not new_owner.is_active:
+            raise HTTPException(400, "New organiser user not found")
+        old_owner_id = t.organiser_id
+        t.organiser_id = new_organiser_id
+        # Keep previous owner as a co-admin so they aren't locked out abruptly
+        if old_owner_id != new_organiser_id:
+            existing = (
+                db.query(TournamentAdmin)
+                .filter(
+                    TournamentAdmin.tournament_id == t.id,
+                    TournamentAdmin.user_id == old_owner_id,
+                )
+                .first()
+            )
+            if not existing:
+                db.add(
+                    TournamentAdmin(
+                        tournament_id=t.id,
+                        user_id=old_owner_id,
+                        role="MANAGER",
+                        added_by_id=user.id,
+                    )
+                )
+            # New owner doesn't need a co-admin row
+            db.query(TournamentAdmin).filter(
+                TournamentAdmin.tournament_id == t.id,
+                TournamentAdmin.user_id == new_organiser_id,
+            ).delete(synchronize_session=False)
+    for field, value in data.items():
         if hasattr(value, "value"):
             value = value.value
         setattr(t, field, value)
-    # Sync courts only when the count actually changes (avoid wiping mid-event)
-    if body.number_of_courts is not None:
-        existing = db.query(Court).filter(Court.tournament_id == t.id).order_by(Court.court_number).all()
-        if len(existing) != body.number_of_courts:
-            for c in existing:
-                db.delete(c)
-            for i in range(1, body.number_of_courts + 1):
-                db.add(Court(tournament_id=t.id, name=f"Court {i}", court_number=i))
+    if body.number_of_courts is not None or court_names is not None:
+        _sync_courts(
+            db,
+            t.id,
+            t.number_of_courts,
+            court_names if court_names is not None else None,
+        )
     db.commit()
     db.refresh(t)
-    return _tournament_out(db, t)
+    return _tournament_out(db, t, viewer=user)
+
+
+@router.delete("/tournaments/{tournament_id}")
+def delete_tournament(
+    tournament_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_owner(user, t)
+    name = t.name
+    _purge_tournament(db, t)
+    db.commit()
+    return {"ok": True, "deleted": name}
 
 
 # ── Registration / Teams ──────────────────────────────────────
+
+@router.get("/invite/{invite_code}", response_model=InviteResolveOut)
+def resolve_invite_code(invite_code: str, db: Session = Depends(get_db)):
+    """Find a tournament or community competition by invite code.
+
+    One lookup so players can paste a code on any Join box.
+    """
+    cleaned = _clean_invite_code(invite_code)
+    if len(cleaned) < 6:
+        raise HTTPException(404, "Invite code not found")
+
+    t = db.query(Tournament).filter(Tournament.invite_code == cleaned).first()
+    if t:
+        return InviteResolveOut(
+            kind="tournament",
+            slug=t.slug,
+            name=t.name,
+            invite_code=cleaned,
+            join_path=f"/t/{t.slug}/join",
+            hint="Tournament event: register to play",
+        )
+
+    c = db.query(CommunityCompetition).filter(CommunityCompetition.invite_code == cleaned).first()
+    if c:
+        return InviteResolveOut(
+            kind="competition",
+            slug=c.slug,
+            name=c.name,
+            invite_code=cleaned,
+            join_path=f"/community/join/{cleaned}",
+            hint="Friend group / community competition",
+        )
+
+    raise HTTPException(404, "Invite code not found. Check the code and try again.")
+
+
+@router.get("/tournaments/code/{invite_code}", response_model=TournamentOut)
+def get_tournament_by_invite_code(invite_code: str, db: Session = Depends(get_db)):
+    t = _resolve_by_invite_code(db, invite_code)
+    return _tournament_out(db, t)
+
 
 @router.post("/tournaments/{tournament_id}/register", response_model=CheckoutResponse)
 def register_team(
@@ -279,38 +820,48 @@ def register_team(
     if _paid_team_count(db, t.id) >= t.max_teams:
         raise HTTPException(400, "Tournament is full")
 
-    # Partner user — create placeholder account if needed
-    partner = db.query(User).filter(User.email == body.partner_email.lower()).first()
-    if not partner:
-        partner = User(
-            email=body.partner_email.lower(),
-            password_hash=hash_password(str(uuid4())),
-            full_name=body.partner_name.strip(),
-            role="PLAYER",
-            university_id=body.university_id,
-            must_set_password=True,
-        )
-        db.add(partner)
-        db.flush()
-        _ensure_ranking(db, partner.id)
+    singles = _is_singles(t)
+    partner: User | None = None
 
-    if partner.id == user.id:
-        raise HTTPException(400, "Partner must be a different player")
+    if singles:
+        if body.partner_user_id or body.partner_email:
+            raise HTTPException(400, "This is a singles tournament — no partner needed")
+    else:
+        if body.partner_user_id:
+            partner = db.get(User, body.partner_user_id)
+            if not partner or not partner.is_active:
+                raise HTTPException(400, "Partner not found")
+        elif body.partner_email:
+            partner = db.query(User).filter(User.email == body.partner_email.lower()).first()
+            if not partner:
+                name = (body.partner_name or "").strip()
+                if len(name) < 2:
+                    raise HTTPException(400, "Partner name is required for a new email")
+                partner = User(
+                    email=body.partner_email.lower(),
+                    password_hash=hash_password(str(uuid4())),
+                    full_name=name,
+                    role="PLAYER",
+                    university_id=body.university_id,
+                    must_set_password=True,
+                )
+                db.add(partner)
+                db.flush()
+                _ensure_ranking(db, partner.id)
+        else:
+            raise HTTPException(400, "Pick a partner from your friends or enter their email")
 
-    paid_already = (
-        db.query(TeamPlayer)
-        .join(Team)
-        .join(Registration, Registration.team_id == Team.id)
-        .filter(
-            Team.tournament_id == t.id,
-            Team.withdrawn.is_(False),
-            TeamPlayer.user_id.in_([user.id, partner.id]),
-            Registration.status == PaymentStatus.PAID.value,
+        if partner.id == user.id:
+            raise HTTPException(400, "Partner must be a different player")
+
+    player_ids = [user.id] if singles else [user.id, partner.id]  # type: ignore[union-attr]
+    if _players_already_registered(db, t.id, player_ids):
+        raise HTTPException(
+            400,
+            "You are already registered for this tournament"
+            if singles
+            else "You or your partner are already registered for this tournament",
         )
-        .first()
-    )
-    if paid_already:
-        raise HTTPException(400, "You or your partner are already registered for this tournament")
 
     pending_mine = (
         db.query(Registration)
@@ -328,6 +879,28 @@ def register_team(
         team = db.get(Team, pending_mine.team_id)
         if team:
             team.name = body.team_name.strip()
+            if not singles and partner:
+                # Refresh partner on slot 2
+                slot2 = (
+                    db.query(TeamPlayer)
+                    .filter(TeamPlayer.team_id == team.id, TeamPlayer.slot == 2)
+                    .first()
+                )
+                if slot2:
+                    if slot2.user_id != partner.id:
+                        if _players_already_registered(db, t.id, [partner.id]):
+                            raise HTTPException(400, "That partner is already registered")
+                        slot2.user_id = partner.id
+                        slot2.invitation_accepted = bool(body.partner_user_id)
+                else:
+                    db.add(
+                        TeamPlayer(
+                            team_id=team.id,
+                            user_id=partner.id,
+                            slot=2,
+                            invitation_accepted=bool(body.partner_user_id),
+                        )
+                    )
         return _issue_checkout(db, t, team, pending_mine)
 
     team = Team(
@@ -338,7 +911,20 @@ def register_team(
     db.add(team)
     db.flush()
     db.add(TeamPlayer(team_id=team.id, user_id=user.id, slot=1, invitation_accepted=True))
-    db.add(TeamPlayer(team_id=team.id, user_id=partner.id, slot=2, invitation_accepted=False))
+    if partner:
+        db.add(
+            TeamPlayer(
+                team_id=team.id,
+                user_id=partner.id,
+                slot=2,
+                invitation_accepted=bool(body.partner_user_id),
+            )
+        )
+
+    if body.phone and not user.phone:
+        user.phone = body.phone
+    if body.student_number and not user.student_number:
+        user.student_number = body.student_number
 
     reg = Registration(
         tournament_id=t.id,
@@ -353,9 +939,95 @@ def register_team(
     return _issue_checkout(db, t, team, reg)
 
 
+@router.post("/tournaments/{tournament_id}/organiser-add-team", response_model=TeamOut)
+def organiser_add_team(
+    tournament_id: UUID,
+    body: OrganiserAddTeamRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organiser adds a team from known players (marks entry as paid)."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        raise HTTPException(400, "Cannot add teams to a finished tournament")
+    if _paid_team_count(db, t.id) >= t.max_teams:
+        raise HTTPException(400, "Tournament is full")
+
+    singles = _is_singles(t)
+    p1 = db.get(User, body.player1_id)
+    if not p1 or not p1.is_active:
+        raise HTTPException(400, "Player 1 was not found")
+
+    p2: User | None = None
+    if singles:
+        if body.player2_id:
+            raise HTTPException(400, "Singles tournaments only need one player")
+    else:
+        if not body.player2_id:
+            raise HTTPException(400, "Pick two players for doubles")
+        if body.player1_id == body.player2_id:
+            raise HTTPException(400, "Pick two different players")
+        p2 = db.get(User, body.player2_id)
+        if not p2 or not p2.is_active:
+            raise HTTPException(400, "Player 2 was not found")
+
+    ids = [p1.id] if singles else [p1.id, p2.id]  # type: ignore[union-attr]
+    if _players_already_registered(db, t.id, ids):
+        raise HTTPException(400, "One of these players is already in this tournament")
+
+    team = Team(
+        tournament_id=t.id,
+        name=body.team_name.strip(),
+        university_id=body.university_id or p1.university_id or (p2.university_id if p2 else None),
+    )
+    db.add(team)
+    db.flush()
+    db.add(TeamPlayer(team_id=team.id, user_id=p1.id, slot=1, invitation_accepted=True))
+    _ensure_ranking(db, p1.id)
+    if p2:
+        db.add(TeamPlayer(team_id=team.id, user_id=p2.id, slot=2, invitation_accepted=True))
+        _ensure_ranking(db, p2.id)
+
+    reg = Registration(
+        tournament_id=t.id,
+        team_id=team.id,
+        status=PaymentStatus.PAID.value,
+        amount_cents=0,
+        currency=t.currency,
+        paid_at=datetime.now(timezone.utc),
+    )
+    db.add(reg)
+    db.commit()
+    db.refresh(team)
+    team = (
+        db.query(Team)
+        .options(joinedload(Team.members).joinedload(TeamPlayer.user), joinedload(Team.registration))
+        .filter(Team.id == team.id)
+        .first()
+    )
+    return _team_out(team)
+
+
 def _issue_checkout(db: Session, t: Tournament, team: Team | None, reg: Registration) -> CheckoutResponse:
     if not team:
         raise HTTPException(404, "Team not found")
+
+    # Free entry — mark paid immediately (Stripe rejects €0 line items)
+    if t.entry_fee_cents <= 0:
+        from app.services.payments import mark_registration_paid
+
+        mark_registration_paid(db, reg, stripe_payment_id="free_entry")
+        db.commit()
+        return CheckoutResponse(
+            checkout_url=None,
+            registration_id=reg.id,
+            demo_mode=True,
+            message="Registration confirmed — free entry.",
+        )
+
     settings = get_settings()
     if settings.stripe_secret_key:
         import stripe
@@ -367,14 +1039,14 @@ def _issue_checkout(db: Session, t: Tournament, team: Team | None, reg: Registra
                 {
                     "price_data": {
                         "currency": t.currency.lower(),
-                        "product_data": {"name": f"{t.name} — {team.name}"},
+                        "product_data": {"name": f"{t.name} - {team.name}"},
                         "unit_amount": t.entry_fee_cents,
                     },
                     "quantity": 1,
                 }
             ],
             success_url=f"{settings.frontend_url}/t/{t.slug}/confirmed?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{settings.frontend_url}/t/{t.slug}/join",
+            cancel_url=f"{settings.frontend_url}/t/{t.slug}/join?cancelled=1",
             metadata={"registration_id": str(reg.id), "tournament_id": str(t.id)},
         )
         reg.stripe_session_id = session.id
@@ -394,7 +1066,7 @@ def _issue_checkout(db: Session, t: Tournament, team: Team | None, reg: Registra
         checkout_url=None,
         registration_id=reg.id,
         demo_mode=True,
-        message="Registration confirmed (demo payment — set STRIPE_SECRET_KEY for live payments)",
+        message="Registration confirmed (demo payment). Set STRIPE_SECRET_KEY for live payments.",
     )
 
 
@@ -439,11 +1111,11 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
     )
     t = db.get(Tournament, reg.tournament_id)
     member_ids = {m.user_id for m in members}
-    if (
-        user.id not in member_ids
-        and user.role != Role.ADMIN.value
-        and (not t or t.organiser_id != user.id)
-    ):
+    can_view = (
+        user.id in member_ids
+        or (t is not None and user_can_manage_tournament(user, t, db))
+    )
+    if not can_view:
         raise HTTPException(403, "Not allowed to view this registration")
     return {
         "registration_id": str(reg.id),
@@ -524,13 +1196,17 @@ def check_in_team(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
     team = db.get(Team, team_id)
     if not team or team.tournament_id != tournament_id:
         raise HTTPException(404, "Team not found")
     team.player1_present = body.player1_present
-    team.player2_present = body.player2_present
-    team.checked_in = body.player1_present and body.player2_present
+    if _is_singles(t):
+        team.player2_present = True
+        team.checked_in = body.player1_present
+    else:
+        team.player2_present = body.player2_present
+        team.checked_in = body.player1_present and body.player2_present
     db.commit()
     return TeamOut(
         id=team.id,
@@ -542,6 +1218,65 @@ def check_in_team(
         withdrawn=team.withdrawn,
         player_names=[],
         payment_status=None,
+    )
+
+
+@router.post("/tournaments/{tournament_id}/teams/{team_id}/withdraw", response_model=TeamOut)
+def withdraw_team(
+    tournament_id: UUID,
+    team_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Withdraw a team. Unpaid/pending entries can always be removed; paid only before LIVE."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    team = db.get(Team, team_id)
+    if not team or team.tournament_id != tournament_id or team.withdrawn:
+        raise HTTPException(404, "Team not found")
+
+    paid = team.registration and team.registration.status == PaymentStatus.PAID.value
+    if paid and t.status in (TournamentStatus.LIVE.value, TournamentStatus.COMPLETED.value):
+        raise HTTPException(400, "Cannot withdraw a paid team after the event is live")
+
+    # Don't remove paid teams already placed in fixtures without regenerate
+    if paid:
+        in_draw = (
+            db.query(Match)
+            .filter(
+                Match.tournament_id == tournament_id,
+                ((Match.team_a_id == team.id) | (Match.team_b_id == team.id)),
+            )
+            .first()
+        )
+        if in_draw:
+            raise HTTPException(
+                400,
+                "This team is already in the draw. Regenerate the tournament after withdrawing, "
+                "or withdraw only unpaid entries.",
+            )
+
+    team.withdrawn = True
+    team.checked_in = False
+    if team.registration and team.registration.status in (
+        PaymentStatus.PENDING.value,
+        PaymentStatus.FAILED.value,
+        PaymentStatus.CANCELLED.value,
+    ):
+        team.registration.status = PaymentStatus.CANCELLED.value
+    db.commit()
+    return TeamOut(
+        id=team.id,
+        tournament_id=team.tournament_id,
+        name=team.name,
+        university_id=team.university_id,
+        seed=team.seed,
+        checked_in=team.checked_in,
+        withdrawn=team.withdrawn,
+        player_names=[],
+        payment_status=team.registration.status if team.registration else None,
     )
 
 
@@ -557,7 +1292,25 @@ def generate(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
+
+    if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        raise HTTPException(400, "Cannot regenerate a finished tournament")
+
+    completed_count = (
+        db.query(Match)
+        .filter(
+            Match.tournament_id == tournament_id,
+            Match.status.in_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
+        )
+        .count()
+    )
+    if completed_count > 0 and t.status == TournamentStatus.LIVE.value:
+        raise HTTPException(
+            400,
+            "Cannot regenerate while the event is live with completed matches. "
+            "Mark the tournament back to registration closed first if you really need to rebuild.",
+        )
 
     paid_teams = (
         db.query(Team)
@@ -592,11 +1345,18 @@ def generate(
     group_size = body.group_size or t.group_size
     advance = body.teams_advance_per_group or t.teams_advance_per_group
 
+    # Persist overrides so regenerate stays consistent
+    t.number_of_courts = courts
+    t.match_duration_minutes = duration
+    t.group_size = group_size
+    t.teams_advance_per_group = advance
+    _sync_courts(db, t.id, courts)
+
     # Seed teams
     for i, team in enumerate(sorted(paid_teams, key=lambda x: x.name), start=1):
         team.seed = i
 
-    start_dt = datetime.combine(t.event_date, t.start_time).replace(tzinfo=timezone.utc)
+    start_dt = datetime.combine(t.event_date, t.start_time, tzinfo=DUBLIN_TZ).astimezone(timezone.utc)
     config = GeneratorConfig(
         teams=[TeamRef(id=str(tm.id), name=tm.name, seed=tm.seed) for tm in paid_teams],
         courts=courts,
@@ -607,6 +1367,11 @@ def generate(
         format=t.format,
     )
     generated = generate_tournament(config)
+
+    court_by_num = {
+        c.court_number: c
+        for c in db.query(Court).filter(Court.tournament_id == t.id).all()
+    }
 
     group_map: dict[str, Group] = {}
     for g in generated.groups:
@@ -619,11 +1384,13 @@ def generate(
 
     created_matches: list[Match] = []
     for gm in generated.matches:
+        court = court_by_num.get(gm.court_number) if gm.court_number else None
         m = Match(
             tournament_id=t.id,
             round=gm.round,
             stage=gm.stage,
             group_id=group_map[gm.group_name].id if gm.group_name else None,
+            court_id=court.id if court else None,
             court_number=gm.court_number,
             scheduled_start=gm.scheduled_start,
             team_a_id=UUID(gm.team_a_id) if gm.team_a_id else None,
@@ -682,10 +1449,24 @@ def update_score(
     if not m:
         raise HTTPException(404, "Match not found")
     t = db.get(Tournament, m.tournament_id)
-    _assert_organiser(user, t)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
 
     if getattr(m, "ratings_applied", False):
-        raise HTTPException(400, "This match already updated ratings and cannot be re-scored")
+        if not body.force:
+            raise HTTPException(
+                400,
+                "This match already updated ratings. Re-save with force to correct the score "
+                "(standings update; Ireland ratings stay as first recorded).",
+            )
+        correcting = True
+    else:
+        correcting = False
+
+    if body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER, MatchStatus.LIVE):
+        if not m.team_a_id or not m.team_b_id:
+            raise HTTPException(400, "Both teams must be set before scoring this match")
 
     if not m.score:
         m.score = MatchScore(match_id=m.id)
@@ -731,41 +1512,14 @@ def update_score(
     elif body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
         raise HTTPException(400, "Completed matches need a winner (or set scores that determine one)")
 
-    # Apply doubles/singles Elo once when a match first completes
-    if (
-        body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER)
-        and m.winner_id
-        and m.team_a_id
-        and m.team_b_id
-        and not m.ratings_applied
-    ):
-        side_a = [
-            tp.user_id
-            for tp in db.query(TeamPlayer).filter(TeamPlayer.team_id == m.team_a_id).all()
-        ]
-        side_b = [
-            tp.user_id
-            for tp in db.query(TeamPlayer).filter(TeamPlayer.team_id == m.team_b_id).all()
-        ]
-        if side_a and side_b:
-            sets = [
-                (body.set1_a, body.set1_b),
-                (body.set2_a, body.set2_b),
-                (body.set3_a, body.set3_b),
-            ]
-            sets_a = sum(1 for a, b in sets if a > b and (a or b))
-            sets_b = sum(1 for a, b in sets if b > a and (a or b))
-            rate_match(
-                db,
-                side_a_user_ids=side_a,
-                side_b_user_ids=side_b,
-                a_won=(m.winner_id == m.team_a_id),
-                sets_a=sets_a,
-                sets_b=sets_b,
-                tournament_id=m.tournament_id,
-                placement=f"t:{t.slug if t else m.round}"[:40],
-            )
-            m.ratings_applied = True
+    if not correcting:
+        _apply_tournament_match_ratings(db, m, t)
+
+    # When group stage finishes, seed knockout placeholders → real teams
+    if t and m.stage == "GROUP" and body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
+        _seed_knockout_from_standings(db, t)
+        if t.status != TournamentStatus.LIVE.value:
+            t.status = TournamentStatus.LIVE.value
 
     db.commit()
     db.refresh(m)
@@ -783,12 +1537,15 @@ def move_match(
     if not m:
         raise HTTPException(404, "Match not found")
     t = db.get(Tournament, m.tournament_id)
-    _assert_organiser(user, t)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
     data = body.model_dump(exclude_unset=True)
     if "status" in data and data["status"] is not None:
         data["status"] = data["status"].value
     for k, v in data.items():
         setattr(m, k, v)
+    _apply_tournament_match_ratings(db, m, t)
     db.commit()
     db.refresh(m)
     return _match_out(db, m)
@@ -880,7 +1637,7 @@ def create_announcement(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
     a = Announcement(
         tournament_id=t.id,
         title=body.title,
@@ -892,6 +1649,177 @@ def create_announcement(
     db.commit()
     db.refresh(a)
     return a
+
+
+@router.patch("/tournaments/{tournament_id}/announcements/{announcement_id}", response_model=AnnouncementOut)
+def update_announcement(
+    tournament_id: UUID,
+    announcement_id: UUID,
+    body: AnnouncementUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    a = db.get(Announcement, announcement_id)
+    if not a or a.tournament_id != t.id:
+        raise HTTPException(404, "Announcement not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(a, field, value)
+    db.commit()
+    db.refresh(a)
+    return a
+
+
+@router.delete("/tournaments/{tournament_id}/announcements/{announcement_id}")
+def delete_announcement(
+    tournament_id: UUID,
+    announcement_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    a = db.get(Announcement, announcement_id)
+    if not a or a.tournament_id != t.id:
+        raise HTTPException(404, "Announcement not found")
+    db.delete(a)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Tournament admins ─────────────────────────────────────────
+
+@router.get("/tournaments/{tournament_id}/admins", response_model=list[TournamentAdminOut])
+def list_tournament_admins(
+    tournament_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    out: list[TournamentAdminOut] = []
+    owner = db.get(User, t.organiser_id)
+    if owner:
+        out.append(
+            TournamentAdminOut(
+                id=t.id,  # synthetic — owner has no tournament_admins row
+                tournament_id=t.id,
+                user_id=owner.id,
+                full_name=owner.full_name,
+                email=owner.email,
+                role="OWNER",
+                is_owner=True,
+                created_at=t.created_at,
+            )
+        )
+    rows = (
+        db.query(TournamentAdmin)
+        .filter(
+            TournamentAdmin.tournament_id == t.id,
+            TournamentAdmin.user_id != t.organiser_id,
+        )
+        .order_by(TournamentAdmin.created_at.asc())
+        .all()
+    )
+    for row in rows:
+        u = db.get(User, row.user_id)
+        if not u or not u.is_active:
+            continue
+        out.append(
+            TournamentAdminOut(
+                id=row.id,
+                tournament_id=row.tournament_id,
+                user_id=u.id,
+                full_name=u.full_name,
+                email=u.email,
+                role=row.role,
+                is_owner=False,
+                created_at=row.created_at,
+            )
+        )
+    return out
+
+
+@router.post("/tournaments/{tournament_id}/admins", response_model=TournamentAdminOut)
+def add_tournament_admin(
+    tournament_id: UUID,
+    body: TournamentAdminCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_owner(user, t)
+    if body.user_id == t.organiser_id:
+        raise HTTPException(400, "That user is already the tournament owner")
+    target = db.get(User, body.user_id)
+    if not target or not target.is_active:
+        raise HTTPException(404, "User not found")
+    existing = (
+        db.query(TournamentAdmin)
+        .filter(
+            TournamentAdmin.tournament_id == t.id,
+            TournamentAdmin.user_id == body.user_id,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(400, "User is already an admin of this tournament")
+    row = TournamentAdmin(
+        tournament_id=t.id,
+        user_id=body.user_id,
+        role=body.role,
+        added_by_id=user.id,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return TournamentAdminOut(
+        id=row.id,
+        tournament_id=row.tournament_id,
+        user_id=target.id,
+        full_name=target.full_name,
+        email=target.email,
+        role=row.role,
+        is_owner=False,
+        created_at=row.created_at,
+    )
+
+
+@router.delete("/tournaments/{tournament_id}/admins/{admin_user_id}")
+def remove_tournament_admin(
+    tournament_id: UUID,
+    admin_user_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_owner(user, t)
+    if admin_user_id == t.organiser_id:
+        raise HTTPException(400, "Cannot remove the tournament owner — transfer ownership first")
+    row = (
+        db.query(TournamentAdmin)
+        .filter(
+            TournamentAdmin.tournament_id == t.id,
+            TournamentAdmin.user_id == admin_user_id,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(404, "Admin not found")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/tournaments/{slug_or_id}/sponsors", response_model=list[SponsorOut])
@@ -908,43 +1836,68 @@ def player_view(
 ):
     t = _resolve_tournament(db, slug_or_id)
     my_team = None
+    my_payment_status = None
     next_match = None
     my_results = []
+    my_upcoming: list = []
     if user:
-        membership = (
+        memberships = (
             db.query(TeamPlayer)
             .join(Team)
             .filter(Team.tournament_id == t.id, TeamPlayer.user_id == user.id, Team.withdrawn.is_(False))
-            .first()
+            .all()
         )
+        membership = None
+        for mp in memberships:
+            team = db.get(Team, mp.team_id)
+            if team and team.registration and team.registration.status == PaymentStatus.PAID.value:
+                membership = mp
+                break
+        if membership is None and memberships:
+            membership = memberships[0]
         if membership:
-            my_team = db.get(Team, membership.team_id)
-            upcoming = (
-                db.query(Match)
-                .options(joinedload(Match.score))
-                .filter(
-                    Match.tournament_id == t.id,
-                    Match.status.in_([MatchStatus.SCHEDULED.value, MatchStatus.CALLED.value, MatchStatus.LIVE.value]),
-                    ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
-                )
-                .order_by(Match.scheduled_start)
+            my_team = (
+                db.query(Team)
+                .options(joinedload(Team.registration))
+                .filter(Team.id == membership.team_id)
                 .first()
             )
-            if upcoming:
-                next_match = _match_out(db, upcoming)
-            done = (
-                db.query(Match)
-                .options(joinedload(Match.score))
-                .filter(
-                    Match.tournament_id == t.id,
-                    Match.status.in_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
-                    ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
+            if my_team and my_team.registration:
+                my_payment_status = my_team.registration.status
+            # Only expose fixtures for paid entries
+            if my_team and my_payment_status == PaymentStatus.PAID.value:
+                upcoming = (
+                    db.query(Match)
+                    .options(joinedload(Match.score))
+                    .filter(
+                        Match.tournament_id == t.id,
+                        Match.status.in_(
+                            [
+                                MatchStatus.SCHEDULED.value,
+                                MatchStatus.CALLED.value,
+                                MatchStatus.LIVE.value,
+                            ]
+                        ),
+                        ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
+                    )
+                    .order_by(Match.scheduled_start)
+                    .all()
                 )
-                .order_by(Match.scheduled_start)
-                .all()
-            )
-            for m in done:
-                my_results.append(_match_out(db, m))
+                my_upcoming = [_match_out(db, m) for m in upcoming]
+                next_match = my_upcoming[0] if my_upcoming else None
+                done = (
+                    db.query(Match)
+                    .options(joinedload(Match.score))
+                    .filter(
+                        Match.tournament_id == t.id,
+                        Match.status.in_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
+                        ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
+                    )
+                    .order_by(Match.scheduled_start)
+                    .all()
+                )
+                for m in done:
+                    my_results.append(_match_out(db, m))
 
     live = (
         db.query(Match)
@@ -952,19 +1905,43 @@ def player_view(
         .filter(Match.tournament_id == t.id, Match.status == MatchStatus.LIVE.value)
         .all()
     )
+    court_names = _court_label_map(db, t.id)
+    announcements = (
+        db.query(Announcement)
+        .filter(Announcement.tournament_id == t.id)
+        .order_by(Announcement.is_pinned.desc(), Announcement.created_at.desc())
+        .limit(8)
+        .all()
+    )
     return {
         "tournament": _tournament_out(db, t),
-        "my_team": {"id": my_team.id, "name": my_team.name} if my_team else None,
+        "my_team": (
+            {"id": my_team.id, "name": my_team.name, "payment_status": my_payment_status}
+            if my_team
+            else None
+        ),
         "next_match": next_match,
+        "my_upcoming": my_upcoming,
         "my_results": my_results,
-        "live_matches": [_match_out(db, m) for m in live],
+        "live_matches": [_match_out(db, m, court_names) for m in live],
         "standings": get_standings(slug_or_id, db),
+        "announcements": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "body": a.body,
+                "is_pinned": a.is_pinned,
+                "created_at": a.created_at,
+            }
+            for a in announcements
+        ],
     }
 
 
 @router.get("/tournaments/{slug_or_id}/display")
 def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
     t = _resolve_tournament(db, slug_or_id)
+    court_names = _court_label_map(db, t.id)
     matches = (
         db.query(Match)
         .options(joinedload(Match.score))
@@ -979,44 +1956,89 @@ def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
     for m in matches:
         if m.court_number is None:
             continue
-        by_court.setdefault(m.court_number, []).append(_match_out(db, m))
+        by_court.setdefault(m.court_number, []).append(_match_out(db, m, court_names))
     return {
         "tournament": _tournament_out(db, t),
         "courts": by_court,
+        "court_names": {str(k): v for k, v in court_names.items()},
         "live_count": sum(1 for m in matches if m.status == MatchStatus.LIVE.value),
     }
 
 
+@router.post("/tournaments/{tournament_id}/seed-knockout")
+def seed_knockout(
+    tournament_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Manually seed knockout from group standings (also runs automatically when groups finish)."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    filled = _seed_knockout_from_standings(db, t)
+    if filled == 0:
+        unfinished = (
+            db.query(Match)
+            .filter(
+                Match.tournament_id == t.id,
+                Match.stage == "GROUP",
+                Match.status.notin_(
+                    [MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value, MatchStatus.CANCELLED.value]
+                ),
+            )
+            .count()
+        )
+        if unfinished:
+            raise HTTPException(400, f"Finish all group matches first ({unfinished} remaining)")
+        raise HTTPException(400, "No knockout slots to fill (already seeded or no knockout)")
+    db.commit()
+    return {"filled": filled}
+
+
 @router.get("/rankings")
 def rankings(limit: int = 50, db: Session = Depends(get_db)):
-    from app.models import Ranking
-    from app.api.profiles import _public_url
+    from app.models import ProfileMedia, Ranking
+    from app.api.profiles import _api_media_path, _public_url
+    from sqlalchemy.orm import aliased
 
+    AvatarMedia = aliased(ProfileMedia)
     rows = (
-        db.query(Ranking, User, University)
+        db.query(Ranking, User, University, AvatarMedia)
         .join(User, Ranking.user_id == User.id)
         .outerjoin(University, User.university_id == University.id)
-        .order_by(Ranking.points.desc())
+        .outerjoin(
+            AvatarMedia,
+            (AvatarMedia.user_id == User.id) & (AvatarMedia.is_avatar.is_(True)),
+        )
+        .filter(or_(Ranking.matches_played > 0, Ranking.tournaments_played > 0))
+        .order_by(Ranking.points.desc(), Ranking.wins.desc())
         .limit(limit)
         .all()
     )
-    return [
-        UserProfilePublic(
-            id=u.id,
-            full_name=u.full_name,
-            university_name=uni.name if uni else None,
-            university_short=uni.short_name if uni else None,
-            points=r.points,
-            rank_ireland=r.rank_ireland or (i + 1),
-            tournaments_played=r.tournaments_played,
-            matches_played=r.matches_played,
-            wins=r.wins,
-            losses=r.losses,
-            bio=u.bio,
-            avatar_url=_public_url(u.avatar_url),
+    out = []
+    for i, (r, u, uni, avatar_m) in enumerate(rows):
+        if avatar_m is not None:
+            avatar = _public_url(_api_media_path(avatar_m.id))
+        else:
+            avatar = _public_url(u.avatar_url)
+        out.append(
+            UserProfilePublic(
+                id=u.id,
+                full_name=u.full_name,
+                university_name=uni.name if uni else None,
+                university_short=uni.short_name if uni else None,
+                points=r.points,
+                rank_ireland=r.rank_ireland or (i + 1),
+                tournaments_played=r.tournaments_played,
+                matches_played=r.matches_played,
+                wins=r.wins,
+                losses=r.losses,
+                bio=u.bio,
+                avatar_url=avatar,
+            )
         )
-        for i, (r, u, uni) in enumerate(rows)
-    ]
+    return out
 
 
 @router.get("/players/{user_id}", response_model=UserProfilePublic)
@@ -1034,11 +2056,25 @@ def player_profile(
 
 
 @router.get("/organiser/dashboard")
-def organiser_dashboard(user: User = Depends(require_role(Role.ORGANISER)), db: Session = Depends(get_db)):
-    q = db.query(Tournament)
-    if user.role != Role.ADMIN.value:
-        q = q.filter(Tournament.organiser_id == user.id)
-    tournaments = q.order_by(Tournament.event_date.desc()).all()
+def organiser_dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if user.role == Role.ADMIN.value:
+        tournaments = db.query(Tournament).order_by(Tournament.event_date.desc()).all()
+    else:
+        admin_ids = [
+            row[0]
+            for row in db.query(TournamentAdmin.tournament_id)
+            .filter(TournamentAdmin.user_id == user.id)
+            .all()
+        ]
+        filters = [Tournament.organiser_id == user.id]
+        if admin_ids:
+            filters.append(Tournament.id.in_(admin_ids))
+        tournaments = (
+            db.query(Tournament)
+            .filter(or_(*filters))
+            .order_by(Tournament.event_date.desc())
+            .all()
+        )
     stats = []
     for t in tournaments:
         teams = _team_count(db, t.id)
@@ -1062,17 +2098,31 @@ def organiser_dashboard(user: User = Depends(require_role(Role.ORGANISER)), db: 
             .filter(Match.tournament_id == t.id, Match.status == MatchStatus.COMPLETED.value)
             .count()
         )
-        checked = db.query(Team).filter(Team.tournament_id == t.id, Team.checked_in.is_(True)).count()
+        checked = (
+            db.query(Team)
+            .join(Registration, Registration.team_id == Team.id)
+            .filter(
+                Team.tournament_id == t.id,
+                Team.checked_in.is_(True),
+                Team.withdrawn.is_(False),
+                Registration.status == PaymentStatus.PAID.value,
+            )
+            .count()
+        )
+        per_team = 1 if _is_singles(t) else 2
+        is_owner = t.organiser_id == user.id or user.role == Role.ADMIN.value
         stats.append(
             {
                 "tournament": _tournament_out(db, t),
                 "teams": teams,
-                "players": teams * 2,
+                "players": teams * per_team,
                 "paid_registrations": paid,
                 "revenue_cents": sum(r.amount_cents for r in revenue),
                 "live_matches": live,
                 "completed_matches": completed,
                 "checked_in": checked,
+                "is_owner": is_owner,
+                "can_manage_admins": is_owner,
             }
         )
     return {"tournaments": stats}

@@ -326,7 +326,7 @@ const fragmentShaderSource = `
   uniform vec2 u_resolution;
 
   //
-  // 3D Simplex Noise (Ashima Arts — Ian McEwan, Stefan Gustavson)
+  // 3D Simplex Noise (Ashima Arts - Ian McEwan, Stefan Gustavson)
   //
   vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
   vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -397,13 +397,13 @@ const fragmentShaderSource = `
     float aspect = u_resolution.x / u_resolution.y;
     float time = u_time * 0.12;
 
-    // Low-frequency noise space — large, sweeping shapes
+    // Low-frequency noise space - large, sweeping shapes
     vec2 nCoord = vec2(uv.x * aspect, uv.y) * 0.35;
 
     // Base color: muted deep purple
     vec3 color = vec3(0.28, 0.15, 0.62);
 
-    // Layer 1 — Soft teal (large, slow-drifting wave)
+    // Layer 1 - Soft teal (large, slow-drifting wave)
     float n1 = snoise(vec3(
       nCoord.x * 1.2 + time * 0.4,
       nCoord.y * 1.8,
@@ -412,7 +412,7 @@ const fragmentShaderSource = `
     n1 = smoothstep(0.18, 0.65, n1 * 0.5 + 0.5);
     color = blendNormal(color, vec3(0.18, 0.65, 0.60), pow(n1, 4.0));
 
-    // Layer 2 — Dusty rose (broad, gentle)
+    // Layer 2 - Dusty rose (broad, gentle)
     float n2 = snoise(vec3(
       nCoord.x * 1.4 + time * 0.5,
       nCoord.y * 2.0,
@@ -421,7 +421,7 @@ const fragmentShaderSource = `
     n2 = smoothstep(0.20, 0.72, n2 * 0.5 + 0.5);
     color = blendNormal(color, vec3(0.72, 0.32, 0.50), pow(n2, 4.0));
 
-    // Layer 3 — Muted blue (wide sweep)
+    // Layer 3 - Muted blue (wide sweep)
     float n3 = snoise(vec3(
       nCoord.x * 1.0 - time * 0.3,
       nCoord.y * 1.6,

@@ -2,12 +2,19 @@ import type { CSSProperties } from 'react'
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import BrandLogo from '../components/BrandLogo'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { tournamentApi, type Match } from '../services/api'
 import { currentSetScores } from '../utils/format'
 import './TvDisplay.css'
 
-function CourtPanel({ court, matches }: { court: number; matches: Match[] }) {
+function CourtPanel({
+  label,
+  matches,
+}: {
+  label: string
+  matches: Match[]
+}) {
   const current =
     matches.find((m) => m.status === 'LIVE') ||
     matches.find((m) => m.status === 'CALLED') ||
@@ -15,7 +22,7 @@ function CourtPanel({ court, matches }: { court: number; matches: Match[] }) {
   if (!current) {
     return (
       <div className="tv-court empty">
-        <div className="tv-court-num">Court {court}</div>
+        <div className="tv-court-num">{label}</div>
         <p>Open</p>
       </div>
     )
@@ -25,7 +32,7 @@ function CourtPanel({ court, matches }: { court: number; matches: Match[] }) {
   return (
     <div className={`tv-court ${current.status === 'LIVE' ? 'is-live' : ''}`}>
       <div className="tv-court-num">
-        Court {court}
+        {label}
         {current.status === 'LIVE' && <span className="tv-live">LIVE</span>}
       </div>
       <div className="tv-row">
@@ -55,10 +62,11 @@ export default function TvDisplayPage() {
     queryFn: async () => (await tournamentApi.display(id)).data,
     enabled: !!id,
     refetchInterval: 5000,
+    retry: 4,
   })
 
   if (isLoading) {
-    return <div className="tv-root loading">Loading display…</div>
+    return <div className="tv-root loading">Loading display...</div>
   }
 
   if (isError || !data) {
@@ -67,7 +75,7 @@ export default function TvDisplayPage() {
         <div style={{ textAlign: 'center' }}>
           <p style={{ marginBottom: 16 }}>Could not load the display.</p>
           <button className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
-            {isFetching ? 'Retrying…' : 'Retry'}
+            {isFetching ? 'Retrying...' : 'Retry'}
           </button>
         </div>
       </div>
@@ -75,18 +83,23 @@ export default function TvDisplayPage() {
   }
 
   const courts = data.courts as Record<string, Match[]>
+  const courtNames = (data.court_names || {}) as Record<string, string>
   const total = data.tournament.number_of_courts || Object.keys(courts).length || 6
   const slots = Array.from({ length: total }, (_, i) => i + 1)
 
   return (
     <div className="tv-root">
       <header className="tv-header">
-        <p>Student Padel Ireland</p>
+        <BrandLogo to={null} className="tv-brand" size="md" />
         <h1>{data.tournament.name}</h1>
       </header>
       <div className="tv-grid" style={{ '--cols': Math.min(slots.length, 3) } as CSSProperties}>
         {slots.map((n) => (
-          <CourtPanel key={n} court={n} matches={courts[String(n)] || []} />
+          <CourtPanel
+            key={n}
+            label={courtNames[String(n)] || `Court ${n}`}
+            matches={courts[String(n)] || []}
+          />
         ))}
       </div>
     </div>

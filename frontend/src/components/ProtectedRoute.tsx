@@ -31,22 +31,23 @@ export function ProtectedRoute({
   }
 
   if (roles && !roles.includes(user.role)) {
+    const adminOnly = roles.includes('ADMIN') && roles.length === 1
     return (
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">{roles?.includes('ADMIN') && roles.length === 1 ? 'Admin access required' : 'Organiser access required'}</h1>
+          <h1 className="page-title">{adminOnly ? 'Admin access required' : 'Access required'}</h1>
           <p className="page-sub">
-            {roles?.includes('ADMIN') && roles.length === 1
+            {adminOnly
               ? 'This area is for platform admins only.'
-              : 'This area is for tournament organisers. Browse events or create an organiser account.'}
+              : 'You do not have permission to view this page.'}
           </p>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Link to="/tournaments" className="btn btn-primary">
               Browse tournaments
             </Link>
-            <Link to="/signup?role=ORGANISER" className="btn btn-ghost">
-              Become an organiser
+            <Link to="/organiser" className="btn btn-ghost">
+              My events
             </Link>
           </div>
         </main>

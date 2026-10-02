@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +26,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
 )
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
@@ -42,13 +44,13 @@ def _warn_production_config() -> None:
     if not settings.is_production():
         return
     if settings.secret_key in {"", "dev-secret-change-me", "change-me-to-a-long-random-string"}:
-        print("WARNING: SECRET_KEY is still a default value — set a long random secret in production.")
+        print("WARNING: SECRET_KEY is still a default value - set a long random secret in production.")
     if settings.is_sqlite_db():
-        print("WARNING: DATABASE_URL is SQLite — use Supabase Postgres for production.")
+        print("WARNING: DATABASE_URL is SQLite - use Supabase Postgres for production.")
     if not settings.stripe_secret_key:
-        print("INFO: Stripe not configured — tournament registration will use demo (free) payments.")
+        print("INFO: Stripe not configured - tournament registration will use demo (free) payments.")
     if settings.should_seed_demo():
-        print("WARNING: SEED_DEMO_DATA is enabled in production — demo passwords will be created.")
+        print("WARNING: SEED_DEMO_DATA is enabled in production - demo passwords will be created.")
 
 
 @app.on_event("startup")
@@ -60,7 +62,13 @@ def on_startup():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "student-padel-ireland"}
+    # RENDER_GIT_COMMIT is set automatically on Render deploys
+    sha = (os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or "").strip()
+    return {
+        "status": "ok",
+        "service": "student-padel-ireland",
+        "git_sha": sha[:12] if sha else "unknown",
+    }
 
 
 @app.get("/api/config/public")
