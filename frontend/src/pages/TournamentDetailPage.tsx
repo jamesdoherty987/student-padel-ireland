@@ -148,10 +148,12 @@ export default function TournamentDetailPage() {
         </div>
 
         <div className="tour-stats">
-          <div>
-            <strong>{tournament.registered_teams}</strong>
-            <span>{singles ? 'Players' : 'Doubles teams'}</span>
-          </div>
+          {isOps && (
+            <div>
+              <strong>{tournament.registered_teams}</strong>
+              <span>{singles ? 'Players' : 'Doubles teams'}</span>
+            </div>
+          )}
           <div>
             <strong>{tournament.number_of_courts}</strong>
             <span>Courts</span>
@@ -160,10 +162,12 @@ export default function TournamentDetailPage() {
             <strong>{formatMoney(tournament.entry_fee_cents, tournament.currency)}</strong>
             <span>Per player</span>
           </div>
-          <div>
-            <strong>{spots === 'Full' ? 'Full' : tournament.max_teams - tournament.registered_teams}</strong>
-            <span>{spots === 'Full' ? 'No spots left' : 'Spots left'}</span>
-          </div>
+          {isOps && (
+            <div>
+              <strong>{spots === 'Full' ? 'Full' : tournament.max_teams - tournament.registered_teams}</strong>
+              <span>{spots === 'Full' ? 'No spots left' : 'Spots left'}</span>
+            </div>
+          )}
         </div>
 
         <div className="tour-status-row">

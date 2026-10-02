@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import { useAuth } from '../context/AuthContext'
 import { tournamentApi, type Tournament } from '../services/api'
-import { formatEntrySummary, parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
+import { parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
 import { FlipWords } from '../components/ui/FlipWords'
 import { InfiniteMovingCards } from '../components/ui/InfiniteMovingCards'
 import { Globe } from '../components/ui/Globe'
@@ -337,7 +337,7 @@ export default function Landing() {
                       <div className="lp-event-side">
                         <span className={`badge ${statusBadgeClass(t.status)}`}>{statusLabel(t.status)}</span>
                         <span className="lp-event-fee">
-                          {formatEntrySummary(t.registered_teams, t.max_teams, t.entry_fee_cents, t.currency, t.play_format)}
+                          €{(t.entry_fee_cents / 100).toFixed(0)}/player
                         </span>
                       </div>
                     </Link>
