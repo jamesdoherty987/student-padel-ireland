@@ -135,9 +135,14 @@ export default function TournamentDetailPage() {
             </Link>
           )}
           {isOps && (
-            <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost">
-              TV display
-            </Link>
+            <>
+              <Link to={`/organiser?t=${tournament.id}`} className="btn btn-dark">
+                Organiser desk
+              </Link>
+              <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost">
+                TV display
+              </Link>
+            </>
           )}
         </div>
 
@@ -203,7 +208,9 @@ export default function TournamentDetailPage() {
               {upcoming.map((m) => (
                 <li key={m.id}>
                   <span className="match-preview-court">
-                    {m.status === 'CALLED' ? 'Called' : courtLabel(m.court_name, m.court_number)}
+                    {m.status === 'CALLED'
+                      ? `Called · ${courtLabel(m.court_name, m.court_number)}`
+                      : courtLabel(m.court_name, m.court_number)}
                   </span>
                   <span>
                     {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}

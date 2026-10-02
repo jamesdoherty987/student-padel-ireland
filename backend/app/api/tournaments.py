@@ -4,6 +4,7 @@ import re
 import secrets
 from datetime import date, datetime, timezone
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import or_
@@ -35,6 +36,7 @@ from app.models import (
     University,
     User,
 )
+
 from app.services.rating import INITIAL_RATING, rate_match
 from app.schemas import (
     AnnouncementCreate,
@@ -61,6 +63,19 @@ from app.services.standings import MatchResult, accumulate_standings, rank_stand
 from app.services.tournament_generator import GeneratorConfig, TeamRef, generate_tournament
 
 router = APIRouter(tags=["tournaments"])
+
+
+def _dublin_tz():
+    """Europe/Dublin — fall back to fixed +01:00 if tzdata isn't installed (Windows)."""
+    try:
+        return ZoneInfo("Europe/Dublin")
+    except Exception:
+        from datetime import timedelta
+
+        return timezone(timedelta(hours=1), name="IST")
+
+
+DUBLIN_TZ = _dublin_tz()
 
 
 def _slugify(name: str) -> str:
@@ -278,6 +293,7 @@ def _match_out(db: Session, m: Match, court_names: dict[int, str] | None = None)
         status=m.status,
         winner_id=m.winner_id,
         score=score,
+        ratings_applied=bool(getattr(m, "ratings_applied", False)),
     )
 
 
@@ -1078,6 +1094,65 @@ def check_in_team(
     )
 
 
+@router.post("/tournaments/{tournament_id}/teams/{team_id}/withdraw", response_model=TeamOut)
+def withdraw_team(
+    tournament_id: UUID,
+    team_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Withdraw a team. Unpaid/pending entries can always be removed; paid only before LIVE."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t)
+    team = db.get(Team, team_id)
+    if not team or team.tournament_id != tournament_id or team.withdrawn:
+        raise HTTPException(404, "Team not found")
+
+    paid = team.registration and team.registration.status == PaymentStatus.PAID.value
+    if paid and t.status in (TournamentStatus.LIVE.value, TournamentStatus.COMPLETED.value):
+        raise HTTPException(400, "Cannot withdraw a paid team after the event is live")
+
+    # Don't remove paid teams already placed in fixtures without regenerate
+    if paid:
+        in_draw = (
+            db.query(Match)
+            .filter(
+                Match.tournament_id == tournament_id,
+                ((Match.team_a_id == team.id) | (Match.team_b_id == team.id)),
+            )
+            .first()
+        )
+        if in_draw:
+            raise HTTPException(
+                400,
+                "This team is already in the draw. Regenerate the tournament after withdrawing, "
+                "or withdraw only unpaid entries.",
+            )
+
+    team.withdrawn = True
+    team.checked_in = False
+    if team.registration and team.registration.status in (
+        PaymentStatus.PENDING.value,
+        PaymentStatus.FAILED.value,
+        PaymentStatus.CANCELLED.value,
+    ):
+        team.registration.status = PaymentStatus.CANCELLED.value
+    db.commit()
+    return TeamOut(
+        id=team.id,
+        tournament_id=team.tournament_id,
+        name=team.name,
+        university_id=team.university_id,
+        seed=team.seed,
+        checked_in=team.checked_in,
+        withdrawn=team.withdrawn,
+        player_names=[],
+        payment_status=team.registration.status if team.registration else None,
+    )
+
+
 # ── Generate ──────────────────────────────────────────────────
 
 @router.post("/tournaments/{tournament_id}/generate")
@@ -1154,7 +1229,7 @@ def generate(
     for i, team in enumerate(sorted(paid_teams, key=lambda x: x.name), start=1):
         team.seed = i
 
-    start_dt = datetime.combine(t.event_date, t.start_time).replace(tzinfo=timezone.utc)
+    start_dt = datetime.combine(t.event_date, t.start_time, tzinfo=DUBLIN_TZ).astimezone(timezone.utc)
     config = GeneratorConfig(
         teams=[TeamRef(id=str(tm.id), name=tm.name, seed=tm.seed) for tm in paid_teams],
         courts=courts,
@@ -1250,7 +1325,15 @@ def update_score(
     _assert_organiser(user, t)
 
     if getattr(m, "ratings_applied", False):
-        raise HTTPException(400, "This match already updated ratings and cannot be re-scored")
+        if not body.force:
+            raise HTTPException(
+                400,
+                "This match already updated ratings. Re-save with force to correct the score "
+                "(standings update; Ireland ratings stay as first recorded).",
+            )
+        correcting = True
+    else:
+        correcting = False
 
     if body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER, MatchStatus.LIVE):
         if not m.team_a_id or not m.team_b_id:
@@ -1300,7 +1383,8 @@ def update_score(
     elif body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
         raise HTTPException(400, "Completed matches need a winner (or set scores that determine one)")
 
-    _apply_tournament_match_ratings(db, m, t)
+    if not correcting:
+        _apply_tournament_match_ratings(db, m, t)
 
     # When group stage finishes, seed knockout placeholders → real teams
     if t and m.stage == "GROUP" and body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
@@ -1453,6 +1537,7 @@ def player_view(
     my_payment_status = None
     next_match = None
     my_results = []
+    my_upcoming: list = []
     if user:
         memberships = (
             db.query(TeamPlayer)
@@ -1484,14 +1569,20 @@ def player_view(
                     .options(joinedload(Match.score))
                     .filter(
                         Match.tournament_id == t.id,
-                        Match.status.in_([MatchStatus.SCHEDULED.value, MatchStatus.CALLED.value, MatchStatus.LIVE.value]),
+                        Match.status.in_(
+                            [
+                                MatchStatus.SCHEDULED.value,
+                                MatchStatus.CALLED.value,
+                                MatchStatus.LIVE.value,
+                            ]
+                        ),
                         ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
                     )
                     .order_by(Match.scheduled_start)
-                    .first()
+                    .all()
                 )
-                if upcoming:
-                    next_match = _match_out(db, upcoming)
+                my_upcoming = [_match_out(db, m) for m in upcoming]
+                next_match = my_upcoming[0] if my_upcoming else None
                 done = (
                     db.query(Match)
                     .options(joinedload(Match.score))
@@ -1513,6 +1604,13 @@ def player_view(
         .all()
     )
     court_names = _court_label_map(db, t.id)
+    announcements = (
+        db.query(Announcement)
+        .filter(Announcement.tournament_id == t.id)
+        .order_by(Announcement.is_pinned.desc(), Announcement.created_at.desc())
+        .limit(8)
+        .all()
+    )
     return {
         "tournament": _tournament_out(db, t),
         "my_team": (
@@ -1521,9 +1619,20 @@ def player_view(
             else None
         ),
         "next_match": next_match,
+        "my_upcoming": my_upcoming,
         "my_results": my_results,
         "live_matches": [_match_out(db, m, court_names) for m in live],
         "standings": get_standings(slug_or_id, db),
+        "announcements": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "body": a.body,
+                "is_pinned": a.is_pinned,
+                "created_at": a.created_at,
+            }
+            for a in announcements
+        ],
     }
 
 

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
+import EditTournamentModal from '../components/EditTournamentModal'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl } from '../native/platform'
 import {
@@ -13,8 +14,22 @@ import {
   type Match,
   type PlayerSearch,
 } from '../services/api'
-import { formatMoney, courtLabel, formatTime } from '../utils/format'
+import { formatMoney, courtLabel, formatTime, formatMatchScore, statusBadgeClass } from '../utils/format'
 import './Organiser.css'
+
+function inferCurrentSet(form: {
+  set1_a: number
+  set1_b: number
+  set2_a: number
+  set2_b: number
+  set3_a: number
+  set3_b: number
+  current_set: number
+}) {
+  if (form.set3_a || form.set3_b) return 3
+  if (form.set2_a || form.set2_b) return 2
+  return Math.min(3, Math.max(1, form.current_set || 1))
+}
 
 export default function OrganiserDashboard() {
   const { user, loading: authLoading } = useAuth()
@@ -30,11 +45,17 @@ export default function OrganiserDashboard() {
   const [toast, setToast] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(params.get('t'))
   const [showCreate, setShowCreate] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
   const [showAddTeam, setShowAddTeam] = useState(false)
   const [confirmGenerate, setConfirmGenerate] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [announce, setAnnounce] = useState({ title: '', body: '' })
   const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
+  const [moveMatch, setMoveMatch] = useState<Match | null>(null)
+  const [moveForm, setMoveForm] = useState({ court_number: 1, scheduled_time: '' })
+  const [matchView, setMatchView] = useState<'list' | 'courts'>('list')
+  const [courtFilter, setCourtFilter] = useState<string>('all')
+  const [matchFilter, setMatchFilter] = useState<'active' | 'all' | 'done'>('active')
   const [scoreForm, setScoreForm] = useState({
     set1_a: 0,
     set1_b: 0,
@@ -45,25 +66,28 @@ export default function OrganiserDashboard() {
     current_set: 1,
     status: 'LIVE',
     winner_id: '',
+    force: false,
   })
 
   useEffect(() => {
-    const open = showCreate || confirmGenerate || !!scoreMatch || showAddTeam
+    const open = showCreate || showEdit || confirmGenerate || !!scoreMatch || showAddTeam || !!moveMatch
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [showCreate, confirmGenerate, scoreMatch, showAddTeam])
+  }, [showCreate, showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch])
 
   useEffect(() => {
-    if (!confirmGenerate && !scoreMatch && !showAddTeam) return
+    if (!confirmGenerate && !scoreMatch && !showAddTeam && !moveMatch && !showEdit) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setConfirmGenerate(false)
       setScoreMatch(null)
       setShowAddTeam(false)
+      setMoveMatch(null)
+      setShowEdit(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [confirmGenerate, scoreMatch, showAddTeam])
+  }, [confirmGenerate, scoreMatch, showAddTeam, moveMatch, showEdit])
 
   const tournaments = (data?.tournaments || []) as Array<{
     tournament: {
@@ -83,9 +107,17 @@ export default function OrganiserDashboard() {
     checked_in: number
   }>
 
-  const active = tournaments.find((t) => t.tournament.id === selectedId) || tournaments[0]
+  const active = selectedId
+    ? tournaments.find((t) => t.tournament.id === selectedId) || null
+    : tournaments[0] || null
   const tid = active?.tournament.id
   const slug = active?.tournament.slug
+
+  useEffect(() => {
+    if (selectedId && tournaments.length > 0 && !tournaments.some((t) => t.tournament.id === selectedId)) {
+      setSelectedId(tournaments[0]?.tournament.id ?? null)
+    }
+  }, [selectedId, tournaments])
 
   const { data: teams = [] } = useQuery({
     queryKey: ['org-teams', tid],
@@ -103,6 +135,12 @@ export default function OrganiserDashboard() {
   const { data: tournamentDetail } = useQuery({
     queryKey: ['tournament', slug],
     queryFn: async () => (await tournamentApi.get(slug!)).data,
+    enabled: !!slug && canOrganise,
+  })
+
+  const { data: announcements = [] } = useQuery({
+    queryKey: ['announcements', slug],
+    queryFn: async () => (await tournamentApi.announcements(slug!)).data,
     enabled: !!slug && canOrganise,
   })
 
@@ -178,21 +216,36 @@ export default function OrganiserDashboard() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not go live')),
   })
 
+  const completeMut = useMutation({
+    mutationFn: () => tournamentApi.update(tid!, { status: 'COMPLETED' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      showToast('Tournament marked completed')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not complete tournament')),
+  })
+
   const announceMut = useMutation({
     mutationFn: () => tournamentApi.createAnnouncement(tid!, announce),
     onSuccess: () => {
       setAnnounce({ title: '', body: '' })
-      showToast('Announcement posted')
+      qc.invalidateQueries({ queryKey: ['player-view', slug] })
+      qc.invalidateQueries({ queryKey: ['announcements', slug] })
+      showToast('Announcement posted — visible on player live')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not post announcement')),
   })
 
   const scoreMut = useMutation({
-    mutationFn: () =>
-      tournamentApi.updateScore(scoreMatch!.id, {
+    mutationFn: () => {
+      const current_set = inferCurrentSet(scoreForm)
+      return tournamentApi.updateScore(scoreMatch!.id, {
         ...scoreForm,
+        current_set,
         winner_id: scoreForm.winner_id || null,
-      }),
+        force: scoreForm.force || !!scoreMatch?.ratings_applied,
+      })
+    },
     onSuccess: () => {
       setScoreMatch(null)
       qc.invalidateQueries({ queryKey: ['org-matches'] })
@@ -201,6 +254,18 @@ export default function OrganiserDashboard() {
       showToast('Score saved')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not save score')),
+  })
+
+  const moveMut = useMutation({
+    mutationFn: ({ matchId, data }: { matchId: string; data: Record<string, unknown> }) =>
+      tournamentApi.moveMatch(matchId, data),
+    onSuccess: () => {
+      setMoveMatch(null)
+      qc.invalidateQueries({ queryKey: ['org-matches'] })
+      qc.invalidateQueries({ queryKey: ['player-view'] })
+      showToast('Match updated')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not update match')),
   })
 
   const checkInMut = useMutation({
@@ -214,6 +279,17 @@ export default function OrganiserDashboard() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Check-in failed')),
   })
 
+  const withdrawMut = useMutation({
+    mutationFn: (teamId: string) => tournamentApi.withdrawTeam(tid!, teamId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['org-teams'] })
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['tournament', slug] })
+      showToast(isSingles ? 'Player withdrawn' : 'Team withdrawn')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not withdraw')),
+  })
+
   const copyInviteCode = async () => {
     if (!inviteCode) return
     try {
@@ -225,10 +301,142 @@ export default function OrganiserDashboard() {
     }
   }
 
+  const fixturesExist = matches.length > 0
   const canAddTeams =
     !!active &&
     active.tournament.status !== 'COMPLETED' &&
-    active.tournament.status !== 'CANCELLED'
+    active.tournament.status !== 'CANCELLED' &&
+    active.tournament.status !== 'LIVE' &&
+    !fixturesExist
+
+  const courtColumns = useMemo(() => {
+    const fromConfig = (tournamentDetail?.courts || [])
+      .slice()
+      .sort((a, b) => a.number - b.number)
+      .map((c) => ({ number: c.number, name: c.name }))
+    if (fromConfig.length) return fromConfig
+    const set = new Set<number>()
+    for (const m of matches) {
+      if (m.court_number != null) set.add(m.court_number)
+    }
+    return Array.from(set)
+      .sort((a, b) => a - b)
+      .map((n) => ({ number: n, name: `Court ${n}` }))
+  }, [tournamentDetail?.courts, matches])
+
+  const courtNumbers = useMemo(() => courtColumns.map((c) => c.number), [courtColumns])
+
+  const filteredMatches = useMemo(() => {
+    return matches.filter((m) => {
+      if (courtFilter !== 'all' && String(m.court_number) !== courtFilter) return false
+      if (matchFilter === 'active') {
+        return m.status === 'SCHEDULED' || m.status === 'CALLED' || m.status === 'LIVE'
+      }
+      if (matchFilter === 'done') {
+        return m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED'
+      }
+      return true
+    })
+  }, [matches, courtFilter, matchFilter])
+
+  const openScore = (m: Match) => {
+    if (!m.team_a_id || !m.team_b_id) return
+    setScoreMatch(m)
+    setScoreForm({
+      set1_a: m.score?.set1_a ?? 0,
+      set1_b: m.score?.set1_b ?? 0,
+      set2_a: m.score?.set2_a ?? 0,
+      set2_b: m.score?.set2_b ?? 0,
+      set3_a: m.score?.set3_a ?? 0,
+      set3_b: m.score?.set3_b ?? 0,
+      current_set: m.score?.current_set ?? 1,
+      status:
+        m.status === 'COMPLETED' || m.status === 'WALKOVER'
+          ? m.status
+          : m.status === 'SCHEDULED' || m.status === 'CALLED'
+            ? 'LIVE'
+            : m.status === 'LIVE'
+              ? 'LIVE'
+              : 'LIVE',
+      winner_id: m.winner_id || '',
+      force: !!m.ratings_applied,
+    })
+  }
+
+  const openMove = (m: Match) => {
+    setMoveMatch(m)
+    const t = m.scheduled_start ? new Date(m.scheduled_start) : null
+    const hhmm = t
+      ? `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`
+      : ''
+    setMoveForm({
+      court_number: m.court_number ?? courtNumbers[0] ?? 1,
+      scheduled_time: hhmm,
+    })
+  }
+
+  const renderMatchActions = (m: Match, compact = false) => {
+    const canScore = !!(m.team_a_id && m.team_b_id)
+    if (!canScore) return null
+    const locked = !!m.ratings_applied
+    const done = m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED'
+    const onScore = () => {
+      if (m.status === 'SCHEDULED') {
+        moveMut.mutate(
+          { matchId: m.id, data: { status: 'CALLED' } },
+          { onSettled: () => openScore({ ...m, status: 'CALLED' }) },
+        )
+        return
+      }
+      openScore(m)
+    }
+    return (
+      <div className="org-match-actions">
+        {!compact && (
+          <span className={`badge ${statusBadgeClass(m.status)}`}>
+            {m.status === 'CALLED' ? 'Called' : m.status.replace(/_/g, ' ')}
+          </span>
+        )}
+        {m.status === 'SCHEDULED' && (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={moveMut.isPending}
+            title="Call players to this court"
+            onClick={() => moveMut.mutate({ matchId: m.id, data: { status: 'CALLED' } })}
+          >
+            Call to court
+          </button>
+        )}
+        {m.status === 'CALLED' && (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={moveMut.isPending}
+            title="Mark the match as live"
+            onClick={() => moveMut.mutate({ matchId: m.id, data: { status: 'LIVE' } })}
+          >
+            Start live
+          </button>
+        )}
+        {(m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'SCHEDULED') && (
+          <button type="button" className="btn btn-dark btn-sm" onClick={onScore}>
+            Score
+          </button>
+        )}
+        {done && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => openScore(m)}>
+            {locked ? 'Correct' : 'Score'}
+          </button>
+        )}
+        {!done && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => openMove(m)}>
+            Move
+          </button>
+        )}
+      </div>
+    )
+  }
 
   if (authLoading) {
     return (
@@ -308,36 +516,98 @@ export default function OrganiserDashboard() {
                   </p>
                 </div>
                 <div className="org-header-actions">
+                  {tournamentDetail &&
+                    active.tournament.status !== 'COMPLETED' &&
+                    active.tournament.status !== 'CANCELLED' && (
+                      <button type="button" className="btn btn-ghost" onClick={() => setShowEdit(true)}>
+                        Edit
+                      </button>
+                    )}
                   {active.tournament.status === 'DRAFT' && (
-                    <button className="btn btn-ghost" onClick={() => openMut.mutate()} disabled={openMut.isPending}>
+                    <button className="btn btn-primary" onClick={() => openMut.mutate()} disabled={openMut.isPending}>
                       Open registration
                     </button>
                   )}
-                  {active.tournament.status === 'REGISTRATION_OPEN' && (
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => closeRegMut.mutate()}
-                      disabled={closeRegMut.isPending}
-                    >
-                      Close registration
-                    </button>
+                  {active.tournament.status === 'REGISTRATION_OPEN' && !fixturesExist && (
+                    <>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => closeRegMut.mutate()}
+                        disabled={closeRegMut.isPending}
+                      >
+                        Close registration
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => setConfirmGenerate(true)}
+                        disabled={generateMut.isPending}
+                      >
+                        Generate draw
+                      </button>
+                    </>
                   )}
-                  {(active.tournament.status === 'REGISTRATION_CLOSED' ||
-                    active.tournament.status === 'REGISTRATION_OPEN') &&
-                    matches.length > 0 && (
-                      <button className="btn btn-ghost" onClick={() => goLiveMut.mutate()} disabled={goLiveMut.isPending}>
+                  {active.tournament.status === 'REGISTRATION_OPEN' && fixturesExist && (
+                    <>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => setConfirmGenerate(true)}
+                        disabled={generateMut.isPending}
+                      >
+                        Re-generate
+                      </button>
+                      <button className="btn btn-primary" onClick={() => goLiveMut.mutate()} disabled={goLiveMut.isPending}>
                         Go LIVE
                       </button>
-                    )}
-                  {(active.tournament.status === 'DRAFT' ||
-                    active.tournament.status === 'REGISTRATION_OPEN' ||
-                    active.tournament.status === 'REGISTRATION_CLOSED') && (
+                    </>
+                  )}
+                  {active.tournament.status === 'REGISTRATION_CLOSED' && !fixturesExist && (
+                    <>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => openMut.mutate()}
+                        disabled={openMut.isPending}
+                      >
+                        Reopen registration
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => setConfirmGenerate(true)}
+                        disabled={generateMut.isPending}
+                      >
+                        Generate draw
+                      </button>
+                    </>
+                  )}
+                  {active.tournament.status === 'REGISTRATION_CLOSED' && fixturesExist && (
+                    <>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => openMut.mutate()}
+                        disabled={openMut.isPending}
+                      >
+                        Reopen registration
+                      </button>
+                      <button
+                        className="btn btn-ghost"
+                        onClick={() => setConfirmGenerate(true)}
+                        disabled={generateMut.isPending}
+                      >
+                        Re-generate
+                      </button>
+                      <button className="btn btn-primary" onClick={() => goLiveMut.mutate()} disabled={goLiveMut.isPending}>
+                        Go LIVE
+                      </button>
+                    </>
+                  )}
+                  {active.tournament.status === 'LIVE' && (
                     <button
                       className="btn btn-primary"
-                      onClick={() => setConfirmGenerate(true)}
-                      disabled={generateMut.isPending}
+                      onClick={() => {
+                        if (window.confirm('Mark this tournament as completed?')) completeMut.mutate()
+                      }}
+                      disabled={completeMut.isPending}
                     >
-                      Generate Tournament
+                      Mark completed
                     </button>
                   )}
                 </div>
@@ -378,10 +648,16 @@ export default function OrganiserDashboard() {
 
               <section className="org-section">
                 <h2>Invite players</h2>
-                <p className="muted org-section-lead">
-                  Share this code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
-                </p>
-                {inviteCode ? (
+                {active.tournament.status === 'DRAFT' ? (
+                  <p className="muted org-section-lead">
+                    Open registration first — players can’t join while this event is still a draft.
+                  </p>
+                ) : (
+                  <p className="muted org-section-lead">
+                    Share this code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
+                  </p>
+                )}
+                {inviteCode && active.tournament.status !== 'DRAFT' ? (
                   <div className="org-invite">
                     <div className="org-invite-code">
                       <span className="org-invite-label">Join code</span>
@@ -392,6 +668,8 @@ export default function OrganiserDashboard() {
                     </div>
                     {joinUrl && <ShareQr url={joinUrl} openLabel="Open join page" />}
                   </div>
+                ) : inviteCode && active.tournament.status === 'DRAFT' ? (
+                  <p className="muted">Join code is ready and will appear here after you open registration.</p>
                 ) : (
                   <p className="muted">Invite code will appear once the tournament is saved.</p>
                 )}
@@ -406,6 +684,11 @@ export default function OrganiserDashboard() {
                     </button>
                   )}
                 </div>
+                {!canAddTeams && fixturesExist && (
+                  <p className="muted org-section-lead">
+                    Fixtures already generated — add players before generate, or regenerate (replaces the draw).
+                  </p>
+                )}
                 <div className="org-table">
                   {(teams as Array<{ id: string; name: string; player_names: string[]; checked_in: boolean; payment_status: string }>).map(
                     (team) => (
@@ -420,11 +703,45 @@ export default function OrganiserDashboard() {
                           </span>
                           {team.checked_in ? (
                             <span className="checked">✓ Checked in</span>
-                          ) : (
+                          ) : team.payment_status === 'PAID' ? (
                             <button className="btn btn-ghost btn-sm" onClick={() => checkInMut.mutate(team.id)}>
                               Check in
                             </button>
+                          ) : null}
+                          {(team.payment_status === 'PENDING' ||
+                            team.payment_status === 'CANCELLED' ||
+                            team.payment_status === 'FAILED' ||
+                            team.payment_status === 'REFUNDED') && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              disabled={withdrawMut.isPending}
+                              onClick={() => {
+                                if (window.confirm(`Remove unpaid entry ${team.name}?`)) {
+                                  withdrawMut.mutate(team.id)
+                                }
+                              }}
+                            >
+                              Remove
+                            </button>
                           )}
+                          {team.payment_status === 'PAID' &&
+                            !fixturesExist &&
+                            active.tournament.status !== 'LIVE' &&
+                            active.tournament.status !== 'COMPLETED' && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                disabled={withdrawMut.isPending}
+                                onClick={() => {
+                                  if (window.confirm(`Withdraw ${team.name}?`)) {
+                                    withdrawMut.mutate(team.id)
+                                  }
+                                }}
+                              >
+                                Withdraw
+                              </button>
+                            )}
                         </div>
                       </div>
                     ),
@@ -454,57 +771,159 @@ export default function OrganiserDashboard() {
                       </button>
                     )}
                 </div>
-                <div className="org-table">
-                  {matches.map((m) => {
-                    const canScore = !!(m.team_a_id && m.team_b_id)
-                    return (
-                      <div key={m.id} className="org-row">
-                        <div>
-                          <strong>
-                            {m.round.replace(/_/g, ' ')} · {courtLabel(m.court_name, m.court_number)}
-                            {m.scheduled_start ? ` · ${formatTime(m.scheduled_start)}` : ''}
-                          </strong>
-                          <span>
-                            {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
-                            {m.team_b_name || m.team_b_placeholder || 'TBD'}
-                          </span>
+                {matches.length > 0 && (
+                  <p className="muted org-section-lead">
+                    <strong>Call to court</strong> notifies players · <strong>Start live</strong> begins scoring ·{' '}
+                    <strong>Move</strong> changes court or time
+                  </p>
+                )}
+                {matches.length > 0 && (
+                  <div className="org-match-filters">
+                    <div className="org-view-toggle" role="group" aria-label="Match view">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${matchView === 'list' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setMatchView('list')}
+                      >
+                        List
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${matchView === 'courts' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setMatchView('courts')}
+                      >
+                        By court
+                      </button>
+                    </div>
+                    <select
+                      className="form-select"
+                      value={matchFilter}
+                      onChange={(e) => setMatchFilter(e.target.value as 'active' | 'all' | 'done')}
+                      aria-label="Filter matches by status"
+                    >
+                      <option value="active">Active (scheduled / called / live)</option>
+                      <option value="done">Completed</option>
+                      <option value="all">All matches</option>
+                    </select>
+                    {matchView === 'list' && (
+                      <select
+                        className="form-select"
+                        value={courtFilter}
+                        onChange={(e) => setCourtFilter(e.target.value)}
+                        aria-label="Filter by court"
+                      >
+                        <option value="all">All courts</option>
+                        {courtColumns.map((c) => (
+                          <option key={c.number} value={String(c.number)}>
+                            {c.name || `Court ${c.number}`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+                {matchView === 'courts' && matches.length > 0 && (
+                  <div className="org-court-board">
+                    {filteredMatches.length === 0 ? (
+                      <p className="muted">No matches match this filter.</p>
+                    ) : (
+                      <>
+                        {courtColumns.map((col) => {
+                          const courtMatches = filteredMatches.filter((m) => m.court_number === col.number)
+                          return (
+                            <div key={col.number} className="org-court-col">
+                              <h3>{col.name || `Court ${col.number}`}</h3>
+                              {courtMatches.length === 0 && <p className="muted">Free</p>}
+                              {courtMatches.map((m) => (
+                                <div key={m.id} className={`org-court-card is-${m.status.toLowerCase()}`}>
+                                  <strong>
+                                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                                    {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                                  </strong>
+                                  <span>
+                                    {m.status.replace(/_/g, ' ')}
+                                    {m.score ? ` · ${formatMatchScore(m.score)}` : ''}
+                                    {m.scheduled_start ? ` · ${formatTime(m.scheduled_start)}` : ''}
+                                  </span>
+                                  {renderMatchActions(m, true)}
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        })}
+                        {filteredMatches.some((m) => m.court_number == null) && (
+                          <div className="org-court-col">
+                            <h3>Unassigned</h3>
+                            {filteredMatches
+                              .filter((m) => m.court_number == null)
+                              .map((m) => (
+                                <div key={m.id} className="org-court-card">
+                                  <strong>
+                                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                                    {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                                  </strong>
+                                  {renderMatchActions(m, true)}
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+                {matchView === 'list' && (
+                  <div className="org-table">
+                    {filteredMatches.map((m) => {
+                      const canScore = !!(m.team_a_id && m.team_b_id)
+                      return (
+                        <div
+                          key={m.id}
+                          className={`org-row ${m.status === 'CALLED' ? 'is-called' : ''} ${m.status === 'LIVE' ? 'is-live' : ''}`}
+                        >
+                          <div>
+                            <strong>
+                              {m.round.replace(/_/g, ' ')} · {courtLabel(m.court_name, m.court_number)}
+                              {m.scheduled_start ? ` · ${formatTime(m.scheduled_start)}` : ''}
+                            </strong>
+                            <span>
+                              {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                              {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                              {m.score ? ` · ${formatMatchScore(m.score)}` : ''}
+                            </span>
+                          </div>
+                          <div className="org-row-right">
+                            {canScore ? (
+                              renderMatchActions(m)
+                            ) : (
+                              <span className="badge badge-draft">Waiting for teams</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="org-row-right">
-                          <span className="badge badge-draft">{m.status}</span>
-                          <button
-                            className="btn btn-dark btn-sm"
-                            disabled={!canScore}
-                            title={canScore ? 'Enter score' : 'Waiting for teams to be seeded'}
-                            onClick={() => {
-                              if (!canScore) return
-                              setScoreMatch(m)
-                              setScoreForm({
-                                set1_a: m.score?.set1_a ?? 0,
-                                set1_b: m.score?.set1_b ?? 0,
-                                set2_a: m.score?.set2_a ?? 0,
-                                set2_b: m.score?.set2_b ?? 0,
-                                set3_a: m.score?.set3_a ?? 0,
-                                set3_b: m.score?.set3_b ?? 0,
-                                current_set: m.score?.current_set ?? 1,
-                                status: m.status === 'SCHEDULED' ? 'LIVE' : m.status,
-                                winner_id: m.winner_id || '',
-                              })
-                            }}
-                          >
-                            Score
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                  {matches.length === 0 && (
-                    <p className="muted">Generate the tournament to create fixtures.</p>
-                  )}
-                </div>
+                      )
+                    })}
+                    {matches.length === 0 && (
+                      <p className="muted">Generate the tournament to create fixtures.</p>
+                    )}
+                    {matches.length > 0 && filteredMatches.length === 0 && (
+                      <p className="muted">No matches match this filter.</p>
+                    )}
+                  </div>
+                )}
               </section>
 
               <section className="org-section">
-                <h2>Announcement</h2>
+                <h2>Announcements</h2>
+                <p className="muted org-section-lead">Posted notes appear on the player live page.</p>
+                {announcements.length > 0 && (
+                  <ul className="org-announce-list">
+                    {announcements.slice(0, 5).map((a: { id: string; title: string; body: string }) => (
+                      <li key={a.id}>
+                        <strong>{a.title}</strong>
+                        <span>{a.body}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <div className="form-group">
                   <input
                     className="form-input"
@@ -523,7 +942,7 @@ export default function OrganiserDashboard() {
                 </div>
                 <button
                   className="btn btn-primary"
-                  disabled={!announce.title || !announce.body}
+                  disabled={!announce.title || !announce.body || announceMut.isPending}
                   onClick={() => announceMut.mutate()}
                 >
                   Post announcement
@@ -541,6 +960,14 @@ export default function OrganiserDashboard() {
             showToast(msg)
             if (id) setSelectedId(id)
           }}
+        />
+      )}
+
+      {showEdit && tournamentDetail && (
+        <EditTournamentModal
+          tournament={tournamentDetail}
+          onClose={() => setShowEdit(false)}
+          onSaved={(msg) => showToast(msg)}
         />
       )}
 
@@ -642,6 +1069,18 @@ export default function OrganiserDashboard() {
               </div>
             ))}
             <div className="form-group">
+              <label className="form-label">Current set (shown on TV / live)</label>
+              <select
+                className="form-select"
+                value={scoreForm.current_set}
+                onChange={(e) => setScoreForm({ ...scoreForm, current_set: Number(e.target.value) })}
+              >
+                <option value={1}>Set 1</option>
+                <option value={2}>Set 2</option>
+                <option value={3}>Set 3</option>
+              </select>
+            </div>
+            <div className="form-group">
               <label className="form-label">Status</label>
               <select
                 className="form-select"
@@ -670,12 +1109,86 @@ export default function OrganiserDashboard() {
                 )}
               </select>
             </div>
+            {scoreMatch.ratings_applied && (
+              <p className="muted-note" style={{ marginBottom: '0.75rem' }}>
+                This match already affected Ireland ratings. Saving corrects standings and the bracket only.
+              </p>
+            )}
             <div className="modal-actions">
               <button className="btn btn-ghost" onClick={() => setScoreMatch(null)}>
                 Cancel
               </button>
               <button className="btn btn-primary" onClick={() => scoreMut.mutate()} disabled={scoreMut.isPending}>
-                {scoreMut.isPending ? 'Saving...' : 'Save score'}
+                {scoreMut.isPending ? 'Saving...' : scoreMatch.ratings_applied ? 'Correct score' : 'Save score'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {moveMatch && (
+        <div className="modal-backdrop" onClick={() => setMoveMatch(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="move-match-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="move-match-title">Move match</h2>
+            <p className="muted" style={{ marginBottom: '1rem' }}>
+              {moveMatch.team_a_name || 'TBD'} vs {moveMatch.team_b_name || 'TBD'}
+            </p>
+            <div className="form-group">
+              <label className="form-label">Court</label>
+              <select
+                className="form-select"
+                value={moveForm.court_number}
+                onChange={(e) => setMoveForm({ ...moveForm, court_number: Number(e.target.value) })}
+              >
+                {(tournamentDetail?.courts || courtNumbers.map((n) => ({ number: n, name: `Court ${n}` }))).map(
+                  (c: { number: number; name: string }) => (
+                    <option key={c.number} value={c.number}>
+                      {c.name}
+                    </option>
+                  ),
+                )}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Scheduled time</label>
+              <input
+                className="form-input"
+                type="time"
+                value={moveForm.scheduled_time}
+                onChange={(e) => setMoveForm({ ...moveForm, scheduled_time: e.target.value })}
+              />
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setMoveMatch(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={moveMut.isPending}
+                onClick={() => {
+                  const data: Record<string, unknown> = { court_number: moveForm.court_number }
+                  if (moveForm.scheduled_time) {
+                    const datePart =
+                      tournamentDetail?.event_date?.slice(0, 10) ||
+                      (moveMatch.scheduled_start
+                        ? String(moveMatch.scheduled_start).slice(0, 10)
+                        : null) ||
+                      new Date().toISOString().slice(0, 10)
+                    data.scheduled_start = new Date(
+                      `${datePart}T${moveForm.scheduled_time}:00`,
+                    ).toISOString()
+                  }
+                  moveMut.mutate({ matchId: moveMatch.id, data })
+                }}
+              >
+                {moveMut.isPending ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
@@ -911,6 +1424,9 @@ function CreateTournamentModal({
     match_duration_minutes: 20,
     group_size: 4,
     teams_advance_per_group: 2,
+    registration_deadline: '',
+    description: '',
+    rules: '',
   })
   const [courtNames, setCourtNames] = useState<string[]>(
     Array.from({ length: 6 }, (_, i) => `Court ${i + 1}`),
@@ -956,6 +1472,11 @@ function CreateTournamentModal({
         match_duration_minutes: form.match_duration_minutes,
         group_size: form.group_size,
         teams_advance_per_group: form.teams_advance_per_group,
+        registration_deadline: form.registration_deadline
+          ? new Date(form.registration_deadline).toISOString()
+          : null,
+        description: form.description.trim() || null,
+        rules: form.rules.trim() || null,
       })
       await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
       onCreated('Tournament created', data.id)
@@ -1001,6 +1522,16 @@ function CreateTournamentModal({
               />
             </div>
           ))}
+
+          <div className="form-group">
+            <label className="form-label">Registration deadline (optional)</label>
+            <input
+              className="form-input"
+              type="datetime-local"
+              value={form.registration_deadline}
+              onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })}
+            />
+          </div>
 
           <div className="form-group">
             <label className="form-label">Singles or doubles</label>
@@ -1099,6 +1630,28 @@ function CreateTournamentModal({
               step={1}
               value={form.entry_fee_euros}
               onChange={(e) => setForm({ ...form, entry_fee_euros: Number(e.target.value) })}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Description (optional)</label>
+            <textarea
+              className="form-textarea"
+              rows={2}
+              placeholder="Short note players see on the public page"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Rules (optional)</label>
+            <textarea
+              className="form-textarea"
+              rows={2}
+              placeholder="Scoring, check-in, or house rules"
+              value={form.rules}
+              onChange={(e) => setForm({ ...form, rules: e.target.value })}
             />
           </div>
 

@@ -331,6 +331,127 @@
   flex-wrap: wrap;
 }
 
+.org-match-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0 0 0.75rem;
+}
+
+.org-match-filters .form-select {
+  max-width: 16rem;
+  flex: 1 1 12rem;
+}
+
+.org-match-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.org-row.is-called {
+  background: rgba(200, 230, 0, 0.1);
+  margin: 0 -0.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  border-radius: 8px;
+}
+
+.org-row.is-live {
+  background: rgba(225, 29, 72, 0.06);
+  margin: 0 -0.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  border-radius: 8px;
+}
+
+.org-view-toggle {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.org-court-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.org-court-col {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  min-width: 0;
+}
+
+.org-court-col h3 {
+  font-size: 0.9rem;
+  margin: 0 0 0.65rem;
+  color: var(--court-deep);
+}
+
+.org-court-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.88rem;
+}
+
+.org-court-card strong {
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.org-court-card.is-called {
+  background: rgba(200, 230, 0, 0.12);
+  margin: 0 -0.4rem;
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
+  border-radius: 6px;
+}
+
+.org-court-card.is-live {
+  background: rgba(225, 29, 72, 0.08);
+  margin: 0 -0.4rem;
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
+  border-radius: 6px;
+}
+
+.org-announce-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.org-announce-list li {
+  padding: 0.65rem 0.75rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+
+.org-announce-list strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.org-announce-list span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.org-court-names {
+  display: grid;
+  gap: 0.45rem;
+}
+
+
 .checked {
   color: var(--success);
   font-weight: 600;

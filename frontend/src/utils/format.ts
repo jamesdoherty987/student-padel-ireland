@@ -102,7 +102,7 @@ export function statusLabel(status: string) {
 }
 
 export function statusBadgeClass(status: string) {
-  if (status === 'LIVE') return 'badge-live'
+  if (status === 'LIVE' || status === 'CALLED') return 'badge-live'
   if (
     status === 'REGISTRATION_OPEN' ||
     status === 'OPEN' ||

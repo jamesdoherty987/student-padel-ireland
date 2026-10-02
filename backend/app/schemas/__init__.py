@@ -242,6 +242,8 @@ class ScoreUpdate(BaseModel):
     current_set: int = Field(default=1, ge=1, le=3)
     status: MatchStatus = MatchStatus.LIVE
     winner_id: Optional[UUID] = None
+    # Allow correcting a finished match (standings/bracket only — ratings stay as first applied)
+    force: bool = False
 
 
 class MatchOut(BaseModel):
@@ -261,6 +263,7 @@ class MatchOut(BaseModel):
     status: str
     winner_id: Optional[UUID] = None
     score: Optional[dict] = None
+    ratings_applied: bool = False
 
     model_config = {"from_attributes": True}
 

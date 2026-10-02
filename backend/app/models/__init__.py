@@ -78,6 +78,7 @@ class PaymentStatus(StrEnum):
     PAID = "PAID"
     REFUNDED = "REFUNDED"
     FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
 
 
 class FriendshipStatus(StrEnum):

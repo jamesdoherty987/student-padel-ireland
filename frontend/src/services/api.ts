@@ -104,6 +104,7 @@ export type Match = {
   team_b_placeholder?: string | null
   status: string
   winner_id?: string | null
+  ratings_applied?: boolean
   score?: {
     set1_a: number
     set1_b: number
@@ -313,6 +314,8 @@ export const tournamentApi = {
     api.patch(`/api/matches/${matchId}`, data),
   checkIn: (tournamentId: string, teamId: string, data: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/check-in`, data),
+  withdrawTeam: (tournamentId: string, teamId: string) =>
+    api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
   getRegistration: (id: string) => api.get<RegistrationConfirm>(`/api/registrations/${id}`),
   confirmPaymentSession: (sessionId: string) =>
     api.get<RegistrationConfirm>('/api/payments/confirm', { params: { session_id: sessionId } }),

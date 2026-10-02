@@ -5,6 +5,13 @@ import { tournamentApi, type Match } from '../services/api'
 import { formatMatchScore, formatTime, courtLabel } from '../utils/format'
 import './PlayerLive.css'
 
+type LiveAnnouncement = {
+  id: string
+  title: string
+  body: string
+  is_pinned?: boolean
+}
+
 export default function PlayerLivePage() {
   const { slug = '' } = useParams()
   const { data, isLoading, isError, dataUpdatedAt, refetch, isFetching } = useQuery({
@@ -98,6 +105,20 @@ export default function PlayerLivePage() {
           </section>
         )}
 
+        {((data.announcements || []) as LiveAnnouncement[]).length > 0 && (
+          <section className="pl-block pl-announce">
+            <h2>Announcements</h2>
+            <ul className="pl-announce-list">
+              {((data.announcements || []) as LiveAnnouncement[]).map((a) => (
+                <li key={a.id}>
+                  <strong>{a.title}</strong>
+                  <span>{a.body}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         <section className="pl-next">
           <h2>Your next match</h2>
           {hasPendingEntry ? (
@@ -110,16 +131,26 @@ export default function PlayerLivePage() {
               </Link>
             </div>
           ) : next && hasPaidEntry ? (
-            <div className="pl-next-card">
+            <div
+              className={`pl-next-card ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''}`}
+            >
+              {next.status === 'CALLED' && <p className="pl-go-now">Go to court now</p>}
+              {next.status === 'LIVE' && <p className="pl-go-now">Your match is live</p>}
               <div className="pl-court">{courtLabel(next.court_name, next.court_number)}</div>
-              <div className="pl-time">{formatTime(next.scheduled_start)}</div>
+              <div className="pl-time">
+                {next.status === 'CALLED'
+                  ? 'Called to court'
+                  : next.status === 'LIVE'
+                    ? 'Playing now'
+                    : formatTime(next.scheduled_start)}
+              </div>
               <div className="pl-vs">
                 <div>{next.team_a_name || next.team_a_placeholder || 'TBD'}</div>
                 <span>VS</span>
                 <div>{next.team_b_name || next.team_b_placeholder || 'TBD'}</div>
               </div>
-              <Link to={`/t/${slug}`} className="btn btn-primary btn-block">
-                View tournament
+              <Link to={`/t/${slug}`} className="pl-details-link">
+                Full tournament page
               </Link>
             </div>
           ) : (
@@ -134,7 +165,36 @@ export default function PlayerLivePage() {
               Join tournament
             </Link>
           )}
+          {(!next || !hasPaidEntry) && (
+            <Link to={`/t/${slug}`} className="pl-details-link pl-details-link--muted">
+              Full tournament page
+            </Link>
+          )}
         </section>
+
+        {hasPaidEntry && ((data.my_upcoming || []) as Match[]).length > 1 && (
+          <section className="pl-block">
+            <h2>Your schedule</h2>
+            <ul className="pl-schedule">
+              {((data.my_upcoming || []) as Match[]).map((m, i) => (
+                <li key={m.id} className={i === 0 ? 'is-next' : ''}>
+                  <strong>{courtLabel(m.court_name, m.court_number)}</strong>
+                  <span>
+                    {m.status === 'CALLED'
+                      ? 'Called now'
+                      : m.status === 'LIVE'
+                        ? 'Live'
+                        : formatTime(m.scheduled_start)}
+                  </span>
+                  <span>
+                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                    {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="pl-block">
           <h2>Your results</h2>
