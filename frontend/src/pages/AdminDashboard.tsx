@@ -81,7 +81,7 @@ function formFromTournament(t: Tournament): TournamentFormState {
     event_date: t.event_date.slice(0, 10),
     start_time: t.start_time?.slice(0, 5) || '10:00',
     number_of_courts: t.number_of_courts,
-    entry_fee_euros: String(Math.round(t.entry_fee_cents) / 100),
+    entry_fee_euros: Math.round(t.entry_fee_cents) / 100,
     max_teams: t.max_teams,
     description: t.description || '',
     rules: t.rules || '',
@@ -606,9 +606,9 @@ function TournamentModal({
                 className="form-input"
                 type="number"
                 min={0}
-                step={0.01}
+                step={1}
                 value={form.entry_fee_euros}
-                onChange={(e) => set('entry_fee_euros', e.target.value)}
+                onChange={(e) => set('entry_fee_euros', Number(e.target.value))}
                 disabled={saving}
               />
             </div>

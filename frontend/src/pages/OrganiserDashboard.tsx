@@ -588,7 +588,7 @@ function CreateTournamentModal({
     event_date: '',
     start_time: '10:00',
     number_of_courts: 6,
-    entry_fee_euros: '',
+    entry_fee_euros: 50,
     max_teams: 48,
     description: '',
     rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day. Entry is per player.',
@@ -617,7 +617,7 @@ function CreateTournamentModal({
         event_date: form.event_date,
         start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
         number_of_courts: form.number_of_courts,
-        entry_fee_cents: Math.round(Number(form.entry_fee_euros) * 100),
+        entry_fee_cents: Math.round(form.entry_fee_euros * 100),
         max_teams: form.max_teams,
         format: 'GROUP_KNOCKOUT',
         description: form.description.trim() || null,
@@ -704,9 +704,9 @@ function CreateTournamentModal({
               className="form-input"
               type="number"
               min={0}
-              step={0.01}
+              step={1}
               value={form.entry_fee_euros}
-              onChange={(e) => setForm({ ...form, entry_fee_euros: e.target.value })}
+              onChange={(e) => setForm({ ...form, entry_fee_euros: Number(e.target.value) })}
             />
           </div>
           <div className="form-group">
@@ -762,7 +762,7 @@ function EditTournamentModal({
     event_date: '',
     start_time: '10:00',
     number_of_courts: 6,
-    entry_fee_euros: '',
+    entry_fee_euros: 50,
     max_teams: 48,
     description: '',
     rules: '',
@@ -783,7 +783,7 @@ function EditTournamentModal({
           event_date: data.event_date.slice(0, 10),
           start_time: data.start_time?.slice(0, 5) || '10:00',
           number_of_courts: data.number_of_courts,
-          entry_fee_euros: String(Math.round(data.entry_fee_cents) / 100),
+          entry_fee_euros: Math.round(data.entry_fee_cents) / 100,
           max_teams: data.max_teams,
           description: data.description || '',
           rules: data.rules || '',
@@ -959,9 +959,9 @@ function EditTournamentModal({
                 className="form-input"
                 type="number"
                 min={0}
-                step={0.01}
+                step={1}
                 value={form.entry_fee_euros}
-                onChange={(e) => setForm({ ...form, entry_fee_euros: e.target.value })}
+                onChange={(e) => setForm({ ...form, entry_fee_euros: Number(e.target.value) })}
                 disabled={saving}
               />
             </div>
