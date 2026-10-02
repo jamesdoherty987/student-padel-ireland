@@ -187,7 +187,7 @@ export default function Landing() {
       <header className={`lp-header ${scrolled ? 'is-scrolled' : ''} ${menuOpen ? 'is-menu-open' : ''}`}>
         <div className="lp-header-inner">
           <a href="#top" className="lp-logo" onClick={close}>
-            <img src="/images/logo.png" alt="" className="lp-logo-mark" width={54} height={73} />
+            <img src="/images/spi-logo.png" alt="" className="lp-logo-mark" width={54} height={73} />
             <span className="lp-logo-text">Student Padel Ireland</span>
           </a>
           <nav className={`lp-nav ${menuOpen ? 'is-open' : ''}`}>

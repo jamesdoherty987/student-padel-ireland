@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 
-const LOGO_SRC = '/images/logo.png'
+const LOGO_SRC = '/images/spi-logo.png'
 
 type Size = 'sm' | 'md' | 'lg' | 'xl'
 
