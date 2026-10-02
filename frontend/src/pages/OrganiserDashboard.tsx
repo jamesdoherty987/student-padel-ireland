@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
 import EditTournamentModal from '../components/EditTournamentModal'
+import NumberInput from '../components/NumberInput'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl } from '../native/platform'
 import {
@@ -35,7 +36,7 @@ export default function OrganiserDashboard() {
   const { user, loading: authLoading } = useAuth()
   const qc = useQueryClient()
   const [params] = useSearchParams()
-  const canOrganise = !!user && (user.role === 'ORGANISER' || user.role === 'ADMIN')
+  const canOrganise = !!user
   const { data, isLoading } = useQuery({
     queryKey: ['organiser-dashboard'],
     queryFn: async () => (await platformApi.organiserDashboard()).data,
@@ -44,7 +45,7 @@ export default function OrganiserDashboard() {
 
   const [toast, setToast] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(params.get('t'))
-  const [showCreate, setShowCreate] = useState(false)
+  const [showCreate, setShowCreate] = useState(params.get('create') === '1')
   const [showEdit, setShowEdit] = useState(false)
   const [showAddTeam, setShowAddTeam] = useState(false)
   const [confirmGenerate, setConfirmGenerate] = useState(false)
@@ -68,6 +69,12 @@ export default function OrganiserDashboard() {
     winner_id: '',
     force: false,
   })
+
+  useEffect(() => {
+    const t = params.get('t')
+    if (t) setSelectedId(t)
+    if (params.get('create') === '1') setShowCreate(true)
+  }, [params])
 
   useEffect(() => {
     const open = showCreate || showEdit || confirmGenerate || !!scoreMatch || showAddTeam || !!moveMatch
@@ -165,12 +172,24 @@ export default function OrganiserDashboard() {
     window.setTimeout(() => setToast(null), 3200)
   }
 
+  const invalidateTournamentPublic = () => {
+    qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+    qc.invalidateQueries({ queryKey: ['tournaments'] })
+    if (slug) {
+      qc.invalidateQueries({ queryKey: ['tournament', slug] })
+      qc.invalidateQueries({ queryKey: ['matches', slug] })
+      qc.invalidateQueries({ queryKey: ['display', slug] })
+      qc.invalidateQueries({ queryKey: ['player-view', slug] })
+      qc.invalidateQueries({ queryKey: ['announcements', slug] })
+    }
+  }
+
   const generateMut = useMutation({
     mutationFn: () => tournamentApi.generate(tid!),
     onSuccess: (res) => {
       setConfirmGenerate(false)
       qc.invalidateQueries({ queryKey: ['org-matches'] })
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      invalidateTournamentPublic()
       const d = res.data as { matches?: number; groups?: number }
       showToast(`Generated ${d.groups ?? '?'} groups · ${d.matches ?? '?'} matches`)
     },
@@ -183,6 +202,7 @@ export default function OrganiserDashboard() {
     mutationFn: () => tournamentApi.seedKnockout(tid!),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['org-matches'] })
+      invalidateTournamentPublic()
       const d = res.data as { filled?: number }
       showToast(`Knockout seeded · ${d.filled ?? 0} slots filled`)
     },
@@ -192,7 +212,7 @@ export default function OrganiserDashboard() {
   const openMut = useMutation({
     mutationFn: () => tournamentApi.update(tid!, { status: 'REGISTRATION_OPEN' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      invalidateTournamentPublic()
       showToast('Registration opened')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not open registration')),
@@ -201,7 +221,7 @@ export default function OrganiserDashboard() {
   const closeRegMut = useMutation({
     mutationFn: () => tournamentApi.update(tid!, { status: 'REGISTRATION_CLOSED' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      invalidateTournamentPublic()
       showToast('Registration closed')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not close registration')),
@@ -210,7 +230,7 @@ export default function OrganiserDashboard() {
   const goLiveMut = useMutation({
     mutationFn: () => tournamentApi.update(tid!, { status: 'LIVE' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      invalidateTournamentPublic()
       showToast('Tournament is now LIVE')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not go live')),
@@ -219,7 +239,7 @@ export default function OrganiserDashboard() {
   const completeMut = useMutation({
     mutationFn: () => tournamentApi.update(tid!, { status: 'COMPLETED' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      invalidateTournamentPublic()
       showToast('Tournament marked completed')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not complete tournament')),
@@ -251,19 +271,34 @@ export default function OrganiserDashboard() {
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       qc.invalidateQueries({ queryKey: ['rankings'] })
       qc.invalidateQueries({ queryKey: ['player-view'] })
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      if (slug) {
+        qc.invalidateQueries({ queryKey: ['matches', slug] })
+        qc.invalidateQueries({ queryKey: ['display', slug] })
+      }
       showToast('Score saved')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not save score')),
   })
 
   const moveMut = useMutation({
-    mutationFn: ({ matchId, data }: { matchId: string; data: Record<string, unknown> }) =>
-      tournamentApi.moveMatch(matchId, data),
-    onSuccess: () => {
+    mutationFn: ({
+      matchId,
+      data,
+    }: {
+      matchId: string
+      data: Record<string, unknown>
+      silent?: boolean
+    }) => tournamentApi.moveMatch(matchId, data),
+    onSuccess: (_data, vars) => {
       setMoveMatch(null)
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       qc.invalidateQueries({ queryKey: ['player-view'] })
-      showToast('Match updated')
+      if (slug) {
+        qc.invalidateQueries({ queryKey: ['matches', slug] })
+        qc.invalidateQueries({ queryKey: ['display', slug] })
+      }
+      if (!vars.silent) showToast('Match updated')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not update match')),
   })
@@ -383,8 +418,8 @@ export default function OrganiserDashboard() {
     const onScore = () => {
       if (m.status === 'SCHEDULED') {
         moveMut.mutate(
-          { matchId: m.id, data: { status: 'CALLED' } },
-          { onSettled: () => openScore({ ...m, status: 'CALLED' }) },
+          { matchId: m.id, data: { status: 'CALLED' }, silent: true },
+          { onSuccess: () => openScore({ ...m, status: 'CALLED' }) },
         )
         return
       }
@@ -420,7 +455,12 @@ export default function OrganiserDashboard() {
           </button>
         )}
         {(m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'SCHEDULED') && (
-          <button type="button" className="btn btn-dark btn-sm" onClick={onScore}>
+          <button
+            type="button"
+            className="btn btn-dark btn-sm"
+            disabled={moveMut.isPending}
+            onClick={onScore}
+          >
             Score
           </button>
         )}
@@ -449,15 +489,15 @@ export default function OrganiserDashboard() {
     )
   }
 
-  if (!canOrganise) {
+  if (!user) {
     return (
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Organiser access</h1>
-          <p className="page-sub">Sign up as a tournament organiser to manage events.</p>
-          <Link to="/signup?role=ORGANISER" className="btn btn-primary">
-            Become an organiser
+          <h1 className="page-title">Host a tournament</h1>
+          <p className="page-sub">Log in to create and run your own events.</p>
+          <Link to="/login?next=/organiser" className="btn btn-primary">
+            Log in
           </Link>
         </main>
       </div>
@@ -470,7 +510,7 @@ export default function OrganiserDashboard() {
       {toast && <div className="org-toast">{toast}</div>}
       <div className="org-shell">
         <aside className="org-nav">
-          <p className="org-nav-label">Organiser</p>
+          <p className="org-nav-label">My events</p>
           {tournaments.map((t) => (
             <button
               key={t.tournament.id}
@@ -495,8 +535,8 @@ export default function OrganiserDashboard() {
             <div className="org-empty">
               <h1>Running an event?</h1>
               <p>
-                Set up registration, payments, and live scoring for your university. Create your first tournament to get
-                started.
+                Set up registration, payments, and live scoring. Create a tournament to get started —
+                anyone signed in can host.
               </p>
               <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
                 Create a tournament
@@ -1043,27 +1083,27 @@ export default function OrganiserDashboard() {
             {(['set1', 'set2', 'set3'] as const).map((set) => (
               <div key={set} className="score-row">
                 <label>{set.replace('set', 'Set ')}</label>
-                <input
-                  type="number"
+                <NumberInput
                   inputMode="numeric"
                   pattern="[0-9]*"
                   min={0}
+                  emptyValue={0}
                   aria-label={`${set.replace('set', 'Set ')} team A`}
                   value={scoreForm[`${set}_a` as 'set1_a']}
-                  onChange={(e) =>
-                    setScoreForm({ ...scoreForm, [`${set}_a`]: Number(e.target.value) })
+                  onValueChange={(n) =>
+                    setScoreForm({ ...scoreForm, [`${set}_a`]: Math.max(0, Math.trunc(n)) })
                   }
                 />
                 <span>-</span>
-                <input
-                  type="number"
+                <NumberInput
                   inputMode="numeric"
                   pattern="[0-9]*"
                   min={0}
+                  emptyValue={0}
                   aria-label={`${set.replace('set', 'Set ')} team B`}
                   value={scoreForm[`${set}_b` as 'set1_b']}
-                  onChange={(e) =>
-                    setScoreForm({ ...scoreForm, [`${set}_b`]: Number(e.target.value) })
+                  onValueChange={(n) =>
+                    setScoreForm({ ...scoreForm, [`${set}_b`]: Math.max(0, Math.trunc(n)) })
                   }
                 />
               </div>
@@ -1443,7 +1483,7 @@ function CreateTournamentModal({
   }, [onClose, saving])
 
   const setCourtCount = (n: number) => {
-    const count = Math.max(1, Math.min(32, n || 1))
+    const count = Math.max(1, Math.min(32, Number.isFinite(n) ? Math.trunc(n) : 1))
     setForm((f) => ({ ...f, number_of_courts: count }))
     setCourtNames((prev) => {
       const next = [...prev]
@@ -1479,6 +1519,7 @@ function CreateTournamentModal({
         rules: form.rules.trim() || null,
       })
       await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      await qc.invalidateQueries({ queryKey: ['tournaments'] })
       onCreated('Tournament created', data.id)
       onClose()
     } catch (err: unknown) {
@@ -1559,13 +1600,13 @@ function CreateTournamentModal({
 
           <div className="form-group">
             <label className="form-label">Number of courts</label>
-            <input
+            <NumberInput
               className="form-input"
-              type="number"
               min={1}
               max={32}
+              emptyValue={1}
               value={form.number_of_courts}
-              onChange={(e) => setCourtCount(Number(e.target.value))}
+              onValueChange={setCourtCount}
             />
           </div>
 
@@ -1594,15 +1635,13 @@ function CreateTournamentModal({
 
           <div className="form-group">
             <label className="form-label">Match length (minutes)</label>
-            <input
+            <NumberInput
               className="form-input"
-              type="number"
               min={5}
               max={120}
+              emptyValue={20}
               value={form.match_duration_minutes}
-              onChange={(e) =>
-                setForm({ ...form, match_duration_minutes: Number(e.target.value) || 20 })
-              }
+              onValueChange={(n) => setForm({ ...form, match_duration_minutes: n })}
             />
             <p className="muted" style={{ marginTop: 6, fontSize: '0.85rem' }}>
               Used to schedule start times across courts.
@@ -1611,25 +1650,25 @@ function CreateTournamentModal({
 
           <div className="form-group">
             <label className="form-label">Max {singles ? 'players' : 'doubles teams'}</label>
-            <input
+            <NumberInput
               className="form-input"
-              type="number"
               min={2}
               max={256}
+              emptyValue={2}
               value={form.max_teams}
-              onChange={(e) => setForm({ ...form, max_teams: Number(e.target.value) })}
+              onValueChange={(n) => setForm({ ...form, max_teams: n })}
             />
           </div>
 
           <div className="form-group">
             <label className="form-label">Entry fee (€ per {entryUnit})</label>
-            <input
+            <NumberInput
               className="form-input"
-              type="number"
               min={0}
               step={1}
+              emptyValue={0}
               value={form.entry_fee_euros}
-              onChange={(e) => setForm({ ...form, entry_fee_euros: Number(e.target.value) })}
+              onValueChange={(n) => setForm({ ...form, entry_fee_euros: n })}
             />
           </div>
 
@@ -1668,26 +1707,24 @@ function CreateTournamentModal({
             <>
               <div className="form-group">
                 <label className="form-label">Teams per group</label>
-                <input
+                <NumberInput
                   className="form-input"
-                  type="number"
                   min={2}
                   max={8}
+                  emptyValue={4}
                   value={form.group_size}
-                  onChange={(e) => setForm({ ...form, group_size: Number(e.target.value) || 4 })}
+                  onValueChange={(n) => setForm({ ...form, group_size: n })}
                 />
               </div>
               <div className="form-group">
                 <label className="form-label">Advance to knockout per group</label>
-                <input
+                <NumberInput
                   className="form-input"
-                  type="number"
                   min={1}
                   max={4}
+                  emptyValue={2}
                   value={form.teams_advance_per_group}
-                  onChange={(e) =>
-                    setForm({ ...form, teams_advance_per_group: Number(e.target.value) || 2 })
-                  }
+                  onValueChange={(n) => setForm({ ...form, teams_advance_per_group: n })}
                 />
               </div>
             </>

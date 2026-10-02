@@ -59,6 +59,14 @@ def _invite_code() -> str:
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
+def _unique_invite_code(db: Session) -> str:
+    for _ in range(40):
+        code = _invite_code()
+        if not db.query(CommunityCompetition).filter(CommunityCompetition.invite_code == code).first():
+            return code
+    return _invite_code() + secrets.token_hex(1)[:2].upper()
+
+
 def _user_points(db: Session, user_id: UUID) -> int:
     r = db.query(Ranking).filter(Ranking.user_id == user_id).first()
     if not r:
@@ -558,7 +566,7 @@ def create_competition(
         description=body.description,
         format=fmt,
         status=CompetitionStatus.OPEN.value,
-        invite_code=_invite_code(),
+        invite_code=_unique_invite_code(db),
         created_by_id=user.id,
         max_players=body.max_players,
         number_of_courts=body.number_of_courts,
@@ -706,7 +714,7 @@ def remove_member(
         raise HTTPException(404, "Player is not in this competition")
     db.delete(member)
     # Rotate invite code so a removed player cannot rejoin with the old code
-    c.invite_code = _invite_code()
+    c.invite_code = _unique_invite_code(db)
     db.commit()
     return {"ok": True, "invite_code": c.invite_code}
 

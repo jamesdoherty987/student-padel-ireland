@@ -106,6 +106,30 @@ def _pg_add_column_if_missing(table: str, column: str, col_type: str) -> None:
         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"))
 
 
+def _pg_ensure_ranking_history_nullable_tournament() -> None:
+    """ranking_history.tournament_id must be nullable for community matches (Postgres)."""
+    if settings.is_sqlite_db():
+        return
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                  IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'ranking_history'
+                      AND column_name = 'tournament_id'
+                      AND is_nullable = 'NO'
+                  ) THEN
+                    ALTER TABLE ranking_history ALTER COLUMN tournament_id DROP NOT NULL;
+                  END IF;
+                END $$;
+                """
+            )
+        )
+
+
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _sqlite_add_column_if_missing("matches", "ratings_applied", "BOOLEAN DEFAULT 0")
@@ -115,17 +139,25 @@ def init_db() -> None:
     _sqlite_add_column_if_missing("tournaments", "play_format", "VARCHAR(20) DEFAULT 'DOUBLES'")
     _pg_add_column_if_missing("tournaments", "play_format", "VARCHAR(20) DEFAULT 'DOUBLES'")
     _sqlite_add_column_if_missing("ranking_history", "community_match_id", "CHAR(36)")
+    _pg_add_column_if_missing("ranking_history", "community_match_id", "UUID")
     _sqlite_add_column_if_missing("community_matches", "confirmed_by_id", "CHAR(36)")
+    _pg_add_column_if_missing("community_matches", "confirmed_by_id", "UUID")
     _sqlite_add_column_if_missing("community_matches", "court_number", "INTEGER")
+    _pg_add_column_if_missing("community_matches", "court_number", "INTEGER")
     _sqlite_add_column_if_missing("community_competitions", "number_of_courts", "INTEGER DEFAULT 2")
+    _pg_add_column_if_missing("community_competitions", "number_of_courts", "INTEGER DEFAULT 2")
     _sqlite_add_column_if_missing("users", "bio", "VARCHAR(500)")
+    _pg_add_column_if_missing("users", "bio", "VARCHAR(500)")
     _sqlite_add_column_if_missing("users", "avatar_url", "VARCHAR(500)")
+    _pg_add_column_if_missing("users", "avatar_url", "VARCHAR(500)")
     _sqlite_add_column_if_missing("users", "must_set_password", "BOOLEAN DEFAULT 0")
+    _pg_add_column_if_missing("users", "must_set_password", "BOOLEAN DEFAULT FALSE")
     _sqlite_add_column_if_missing("profile_media", "content_type", "VARCHAR(100)")
     _sqlite_add_column_if_missing("profile_media", "file_data", "BLOB")
     _pg_add_column_if_missing("profile_media", "content_type", "VARCHAR(100)")
     _pg_add_column_if_missing("profile_media", "file_data", "BYTEA")
     _sqlite_ensure_ranking_history_nullable_tournament()
+    _pg_ensure_ranking_history_nullable_tournament()
     _backfill_tournament_invite_codes()
     # Migrate legacy zero/low “Ireland points” onto Elo baseline (Elo starts ~1500)
     with engine.begin() as conn:

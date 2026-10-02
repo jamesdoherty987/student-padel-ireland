@@ -66,11 +66,9 @@ export default function NavBar() {
                     Admin
                   </NavLink>
                 )}
-                {(user.role === 'ORGANISER' || user.role === 'ADMIN') && (
-                  <NavLink to="/organiser" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-                    Dashboard
-                  </NavLink>
-                )}
+                <NavLink to="/organiser" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
+                  My events
+                </NavLink>
                 <NavLink to={`/players/${user.id}`} className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
                   Profile
                 </NavLink>
@@ -91,9 +89,9 @@ export default function NavBar() {
             )}
           </nav>
         )}
-        {native && user && (user.role === 'ORGANISER' || user.role === 'ADMIN') && (
+        {native && user && (
           <Link to="/organiser" className="app-nav-native-link" onClick={close}>
-            Organise
+            My events
           </Link>
         )}
         {native && user?.role === 'ADMIN' && (

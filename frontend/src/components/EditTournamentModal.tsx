@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import NumberInput from './NumberInput'
 import { apiErrorMessage, tournamentApi, type Tournament } from '../services/api'
 
 type Props = {
@@ -48,7 +49,7 @@ export default function EditTournamentModal({ tournament, onClose, onSaved }: Pr
   }, [onClose, saving])
 
   const setCourtCount = (n: number) => {
-    const count = Math.max(1, Math.min(32, n || 1))
+    const count = Math.max(1, Math.min(32, Number.isFinite(n) ? Math.trunc(n) : 1))
     setForm((f) => ({ ...f, number_of_courts: count }))
     setCourtNames((prev) => {
       const next = [...prev]
@@ -138,14 +139,13 @@ export default function EditTournamentModal({ tournament, onClose, onSaved }: Pr
 
           <div className="form-group">
             <label className="form-label">Number of courts</label>
-            <input
+            <NumberInput
               className="form-input"
-              type="number"
               min={1}
               max={32}
+              emptyValue={1}
               value={form.number_of_courts}
-              onChange={(e) => setCourtCount(Number(e.target.value))}
-              required
+              onValueChange={setCourtCount}
             />
           </div>
 
@@ -170,37 +170,37 @@ export default function EditTournamentModal({ tournament, onClose, onSaved }: Pr
 
           <div className="form-group">
             <label className="form-label">Entry fee (€ / {singles ? 'player' : 'team'})</label>
-            <input
+            <NumberInput
               className="form-input"
-              type="number"
               min={0}
               step={0.5}
+              emptyValue={0}
               value={form.entry_fee_euros}
-              onChange={(e) => setForm({ ...form, entry_fee_euros: Number(e.target.value) })}
+              onValueChange={(n) => setForm({ ...form, entry_fee_euros: n })}
             />
           </div>
 
           <div className="form-group">
             <label className="form-label">Max {singles ? 'players' : 'teams'}</label>
-            <input
+            <NumberInput
               className="form-input"
-              type="number"
               min={2}
               max={256}
+              emptyValue={2}
               value={form.max_teams}
-              onChange={(e) => setForm({ ...form, max_teams: Number(e.target.value) })}
+              onValueChange={(n) => setForm({ ...form, max_teams: n })}
             />
           </div>
 
           <div className="form-group">
             <label className="form-label">Match length (minutes)</label>
-            <input
+            <NumberInput
               className="form-input"
-              type="number"
               min={5}
               max={120}
+              emptyValue={20}
               value={form.match_duration_minutes}
-              onChange={(e) => setForm({ ...form, match_duration_minutes: Number(e.target.value) })}
+              onValueChange={(n) => setForm({ ...form, match_duration_minutes: n })}
             />
           </div>
 
@@ -208,26 +208,24 @@ export default function EditTournamentModal({ tournament, onClose, onSaved }: Pr
             <>
               <div className="form-group">
                 <label className="form-label">Teams per group</label>
-                <input
+                <NumberInput
                   className="form-input"
-                  type="number"
                   min={2}
                   max={8}
+                  emptyValue={4}
                   value={form.group_size}
-                  onChange={(e) => setForm({ ...form, group_size: Number(e.target.value) || 4 })}
+                  onValueChange={(n) => setForm({ ...form, group_size: n })}
                 />
               </div>
               <div className="form-group">
                 <label className="form-label">Advance to knockout per group</label>
-                <input
+                <NumberInput
                   className="form-input"
-                  type="number"
                   min={1}
                   max={4}
+                  emptyValue={2}
                   value={form.teams_advance_per_group}
-                  onChange={(e) =>
-                    setForm({ ...form, teams_advance_per_group: Number(e.target.value) || 2 })
-                  }
+                  onValueChange={(n) => setForm({ ...form, teams_advance_per_group: n })}
                 />
               </div>
             </>

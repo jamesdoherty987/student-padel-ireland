@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, get_optional_user, require_role
+from app.api.deps import get_current_user, get_optional_user
 from app.core.config import get_settings
 from app.core.roles import Role
 from app.core.security import hash_password
@@ -111,7 +111,9 @@ def _ensure_invite_code(db: Session, t: Tournament) -> str:
         return t.invite_code
     t.invite_code = _unique_invite_code(db)
     db.add(t)
-    db.flush()
+    # Persist immediately — get_db does not auto-commit, and this runs on GET/list
+    db.commit()
+    db.refresh(t)
     return t.invite_code
 
 
@@ -232,23 +234,44 @@ def _apply_tournament_match_ratings(db: Session, m: Match, t: Tournament | None)
 
 
 def _tournament_out(db: Session, t: Tournament) -> TournamentOut:
-    created = not t.invite_code
+    # Flush only — never commit inside a serializer (avoids expire/list races)
     _ensure_invite_code(db, t)
-    if created:
-        db.commit()
-        db.refresh(t)
-    data = TournamentOut.model_validate(t)
-    data.registered_teams = _team_count(db, t.id)
-    data.invite_code = t.invite_code
-    data.play_format = getattr(t, "play_format", None) or PlayFormat.DOUBLES.value
     courts = (
         db.query(Court)
         .filter(Court.tournament_id == t.id)
         .order_by(Court.court_number)
         .all()
     )
-    data.courts = [{"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts]
-    return data
+    court_payload = [{"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts]
+    # Build from columns + courts payload — do not validate ORM Court objects via relationship
+    return TournamentOut.model_validate(
+        {
+            "id": t.id,
+            "name": t.name,
+            "slug": t.slug,
+            "location": t.location,
+            "venue": t.venue,
+            "event_date": t.event_date,
+            "start_time": t.start_time,
+            "number_of_courts": t.number_of_courts,
+            "entry_fee_cents": t.entry_fee_cents,
+            "currency": t.currency or "EUR",
+            "max_teams": t.max_teams,
+            "registration_deadline": t.registration_deadline,
+            "format": t.format,
+            "play_format": getattr(t, "play_format", None) or PlayFormat.DOUBLES.value,
+            "rules": t.rules,
+            "description": t.description,
+            "status": t.status,
+            "organiser_id": t.organiser_id,
+            "match_duration_minutes": t.match_duration_minutes,
+            "group_size": t.group_size,
+            "teams_advance_per_group": t.teams_advance_per_group,
+            "registered_teams": _team_count(db, t.id),
+            "invite_code": t.invite_code,
+            "courts": court_payload,
+        }
+    )
 
 
 def _court_label_map(db: Session, tournament_id: UUID) -> dict[int, str]:
@@ -569,7 +592,7 @@ def _resolve_tournament(db: Session, slug_or_id: str) -> Tournament:
 @router.post("/tournaments", response_model=TournamentOut)
 def create_tournament(
     body: TournamentCreate,
-    user: User = Depends(require_role(Role.ORGANISER)),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     t = Tournament(
@@ -1322,6 +1345,8 @@ def update_score(
     if not m:
         raise HTTPException(404, "Match not found")
     t = db.get(Tournament, m.tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t)
 
     if getattr(m, "ratings_applied", False):
@@ -1408,6 +1433,8 @@ def move_match(
     if not m:
         raise HTTPException(404, "Match not found")
     t = db.get(Tournament, m.tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t)
     data = body.model_dump(exclude_unset=True)
     if "status" in data and data["status"] is not None:
@@ -1754,7 +1781,7 @@ def player_profile(
 
 
 @router.get("/organiser/dashboard")
-def organiser_dashboard(user: User = Depends(require_role(Role.ORGANISER)), db: Session = Depends(get_db)):
+def organiser_dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     q = db.query(Tournament)
     if user.role != Role.ADMIN.value:
         q = q.filter(Tournament.organiser_id == user.id)

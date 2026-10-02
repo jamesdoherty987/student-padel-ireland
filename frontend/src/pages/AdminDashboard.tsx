@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
+import NumberInput from '../components/NumberInput'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl, publicWebOrigin } from '../native/platform'
 import { apiErrorMessage, platformApi, tournamentApi, type Tournament } from '../services/api'
@@ -617,25 +618,25 @@ function TournamentModal({
           <div className="admin-form-row">
             <div className="form-group">
               <label className="form-label">Courts</label>
-              <input
+              <NumberInput
                 className="form-input"
-                type="number"
                 min={1}
                 max={32}
+                emptyValue={1}
                 value={form.number_of_courts}
-                onChange={(e) => set('number_of_courts', Number(e.target.value))}
+                onValueChange={(n) => set('number_of_courts', n)}
                 disabled={saving}
               />
             </div>
             <div className="form-group">
               <label className="form-label">Match mins</label>
-              <input
+              <NumberInput
                 className="form-input"
-                type="number"
                 min={5}
                 max={120}
+                emptyValue={20}
                 value={form.match_duration_minutes}
-                onChange={(e) => set('match_duration_minutes', Number(e.target.value))}
+                onValueChange={(n) => set('match_duration_minutes', n)}
                 disabled={saving}
               />
             </div>
@@ -643,13 +644,13 @@ function TournamentModal({
               <label className="form-label">
                 Max {form.play_format === 'SINGLES' ? 'players' : 'doubles teams'}
               </label>
-              <input
+              <NumberInput
                 className="form-input"
-                type="number"
                 min={2}
                 max={256}
+                emptyValue={2}
                 value={form.max_teams}
-                onChange={(e) => set('max_teams', Number(e.target.value))}
+                onValueChange={(n) => set('max_teams', n)}
                 disabled={saving}
               />
             </div>
@@ -657,13 +658,13 @@ function TournamentModal({
               <label className="form-label">
                 € / {form.play_format === 'SINGLES' ? 'player' : 'doubles team'}
               </label>
-              <input
+              <NumberInput
                 className="form-input"
-                type="number"
                 min={0}
-                step={1}
+                step={0.5}
+                emptyValue={0}
                 value={form.entry_fee_euros}
-                onChange={(e) => set('entry_fee_euros', Number(e.target.value))}
+                onValueChange={(n) => set('entry_fee_euros', n)}
                 disabled={saving}
               />
             </div>

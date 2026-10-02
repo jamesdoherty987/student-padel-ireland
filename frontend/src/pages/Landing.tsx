@@ -178,9 +178,8 @@ export default function Landing() {
 
   const upcoming = tournaments.slice(0, 6)
   const close = () => setMenuOpen(false)
-  const isOrganiser = user?.role === 'ORGANISER' || user?.role === 'ADMIN'
-  const primaryHref = user?.role === 'ADMIN' ? '/admin' : isOrganiser ? '/organiser' : user ? '/tournaments' : '/signup'
-  const primaryLabel = user?.role === 'ADMIN' ? 'Admin' : isOrganiser ? 'Dashboard' : user ? 'Tournaments' : 'Sign up'
+  const primaryHref = user?.role === 'ADMIN' ? '/admin' : user ? '/tournaments' : '/signup'
+  const primaryLabel = user?.role === 'ADMIN' ? 'Admin' : user ? 'Tournaments' : 'Sign up'
 
   return (
     <div className="landing">
@@ -205,6 +204,9 @@ export default function Landing() {
             </Link>
             {user ? (
               <>
+                <Link to="/organiser" onClick={close}>
+                  My events
+                </Link>
                 <Link to={`/players/${user.id}`} onClick={close}>
                   Profile
                 </Link>

@@ -157,7 +157,7 @@ export default function App() {
               <Route
                 path="/organiser"
                 element={
-                  <ProtectedRoute roles={['ORGANISER', 'ADMIN']}>
+                  <ProtectedRoute>
                     <OrganiserDashboard />
                   </ProtectedRoute>
                 }

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Share } from '@capacitor/share'
 import NavBar from '../components/NavBar'
+import NumberInput from '../components/NumberInput'
 import { ShareQr } from '../components/ShareQr'
 import { useAuth } from '../context/AuthContext'
 import { isNativeApp, publicPathUrl } from '../native/platform'
@@ -756,25 +757,29 @@ export default function CompetitionDetailPage() {
                   <div key={label} className="form-group">
                     <label>{label}</label>
                     <div className="score-pair">
-                      <input
-                        type="number"
+                      <NumberInput
                         inputMode="numeric"
                         pattern="[0-9]*"
                         min={0}
                         max={7}
+                        emptyValue={0}
                         value={sets[ka]}
-                        onChange={(e) => setSets((s) => ({ ...s, [ka]: Number(e.target.value) }))}
+                        onValueChange={(n) =>
+                          setSets((s) => ({ ...s, [ka]: Math.max(0, Math.min(7, Math.trunc(n))) }))
+                        }
                         aria-label={`${label} side A`}
                       />
                       <span>-</span>
-                      <input
-                        type="number"
+                      <NumberInput
                         inputMode="numeric"
                         pattern="[0-9]*"
                         min={0}
                         max={7}
+                        emptyValue={0}
                         value={sets[kb]}
-                        onChange={(e) => setSets((s) => ({ ...s, [kb]: Number(e.target.value) }))}
+                        onValueChange={(n) =>
+                          setSets((s) => ({ ...s, [kb]: Math.max(0, Math.min(7, Math.trunc(n))) }))
+                        }
                         aria-label={`${label} side B`}
                       />
                     </div>

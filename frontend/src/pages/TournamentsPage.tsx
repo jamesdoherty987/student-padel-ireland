@@ -214,8 +214,6 @@ export default function TournamentsPage() {
     return 'No events to show.'
   })()
 
-  const canOrganiseOfficial = user?.role === 'ORGANISER' || user?.role === 'ADMIN'
-
   return (
     <div className="app-shell">
       <NavBar />
@@ -233,18 +231,18 @@ export default function TournamentsPage() {
                   setError('')
                 }}
               >
-                Create tournament
+                Create
               </button>
             )}
-            {canOrganiseOfficial && (
+            {user && (
               <Link to="/organiser" className="btn btn-ghost btn-sm">
-                Dashboard
+                My events
               </Link>
             )}
           </div>
         </div>
         <p className="page-sub">
-          Official events and friend tournaments. Tap an event to join, or use a code / QR.
+          Join official brackets or friend tournaments. Host your own from Create or My events.
         </p>
 
         {error && <p className="form-error">{error}</p>}
@@ -258,10 +256,10 @@ export default function TournamentsPage() {
               createMut.mutate()
             }}
           >
-            <h2>Create a community tournament</h2>
+            <h2>Create a tournament</h2>
             <p className="muted-note" style={{ marginBottom: 12 }}>
-              Private open play for you and friends. Share the code or QR to join.
-              {canOrganiseOfficial ? ' Official bracket events are created from Dashboard.' : ''}
+              Friend open-play below, or{' '}
+              <Link to="/organiser?create=1">run a full bracket</Link> (groups, knockout, live scoring).
             </p>
             <div className="form-group">
               <label className="form-label" htmlFor="comp-name">
