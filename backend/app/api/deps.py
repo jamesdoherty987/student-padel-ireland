@@ -9,9 +9,33 @@ from sqlalchemy.orm import Session
 from app.core.roles import Role, has_min_role
 from app.core.security import decode_access_token
 from app.db.session import get_db
-from app.models import Tournament, User
+from app.models import Tournament, TournamentAdmin, User
 
 bearer = HTTPBearer(auto_error=False)
+
+
+def user_can_manage_tournament(user: User, tournament: Tournament, db: Session) -> bool:
+    """Platform ADMIN, primary organiser, or listed tournament admin."""
+    if user.role == Role.ADMIN.value:
+        return True
+    if tournament.organiser_id == user.id:
+        return True
+    return (
+        db.query(TournamentAdmin.id)
+        .filter(
+            TournamentAdmin.tournament_id == tournament.id,
+            TournamentAdmin.user_id == user.id,
+        )
+        .first()
+        is not None
+    )
+
+
+def user_owns_tournament(user: User, tournament: Tournament) -> bool:
+    """Primary organiser or platform ADMIN (delete / transfer / manage admins)."""
+    if user.role == Role.ADMIN.value:
+        return True
+    return tournament.organiser_id == user.id
 
 
 def get_current_user(
@@ -58,8 +82,6 @@ def require_tournament_organiser(
     tournament = db.get(Tournament, tournament_id)
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
-    if user.role == Role.ADMIN.value:
-        return tournament
-    if tournament.organiser_id != user.id:
-        raise HTTPException(status_code=403, detail="Not the tournament organiser")
+    if not user_can_manage_tournament(user, tournament, db):
+        raise HTTPException(status_code=403, detail="Not a tournament organiser")
     return tournament

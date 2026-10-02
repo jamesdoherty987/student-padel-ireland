@@ -436,6 +436,13 @@
   border-radius: var(--radius-sm);
 }
 
+.org-announce-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .org-announce-list strong {
   display: block;
   margin-bottom: 0.15rem;
@@ -444,6 +451,58 @@
 .org-announce-list span {
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.org-admin-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.org-admin-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+
+.org-admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.org-admin-list strong {
+  display: block;
+}
+
+.org-admin-list .muted {
+  font-size: 0.85rem;
+}
+
+.org-admin-search {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.org-admin-search li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
 }
 
 .org-court-names {

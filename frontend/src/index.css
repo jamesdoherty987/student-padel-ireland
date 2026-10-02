@@ -218,6 +218,19 @@ img {
   color: var(--court-deep);
 }
 
+.btn-danger {
+  background: #b42318;
+  color: #fff;
+  border-color: #b42318;
+}
+
+@media (hover: hover) {
+  .btn-danger:hover:not(:disabled) {
+    background: #912018;
+    border-color: #912018;
+  }
+}
+
 .btn-secondary,
 .btn-outline {
   background: transparent;

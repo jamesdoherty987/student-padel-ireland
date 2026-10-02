@@ -174,6 +174,28 @@ class Tournament(Base, TimestampMixin):
     groups: Mapped[list["Group"]] = relationship(back_populates="tournament")
     announcements: Mapped[list["Announcement"]] = relationship(back_populates="tournament")
     sponsors: Mapped[list["Sponsor"]] = relationship(back_populates="tournament")
+    admins: Mapped[list["TournamentAdmin"]] = relationship(
+        back_populates="tournament", cascade="all, delete-orphan"
+    )
+
+
+class TournamentAdmin(Base, TimestampMixin):
+    """Co-organiser who can manage a tournament (score, edit, announce)."""
+
+    __tablename__ = "tournament_admins"
+    __table_args__ = (UniqueConstraint("tournament_id", "user_id", name="uq_tournament_admin"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    # MANAGER = full day-of ops; SCORER = scores/matches only (reserved for later)
+    role: Mapped[str] = mapped_column(String(20), default="MANAGER")
+    added_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+
+    tournament: Mapped[Tournament] = relationship(back_populates="admins")
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
 
 
 class Court(Base, TimestampMixin):

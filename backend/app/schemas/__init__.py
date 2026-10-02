@@ -153,6 +153,8 @@ class TournamentUpdate(BaseModel):
     group_size: Optional[int] = Field(default=None, ge=2, le=8)
     teams_advance_per_group: Optional[int] = Field(default=None, ge=1, le=4)
     tie_break_order: Optional[str] = None
+    # Transfer ownership — only current owner or platform ADMIN may set this
+    organiser_id: Optional[UUID] = None
 
 
 class CourtOut(BaseModel):
@@ -186,6 +188,7 @@ class TournamentOut(BaseModel):
     registered_teams: int = 0
     invite_code: Optional[str] = None
     courts: list[CourtOut] = Field(default_factory=list)
+    can_manage: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -288,6 +291,12 @@ class AnnouncementCreate(BaseModel):
     is_pinned: bool = False
 
 
+class AnnouncementUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    body: Optional[str] = Field(default=None, min_length=1)
+    is_pinned: Optional[bool] = None
+
+
 class AnnouncementOut(BaseModel):
     id: UUID
     tournament_id: UUID
@@ -295,6 +304,24 @@ class AnnouncementOut(BaseModel):
     body: str
     is_pinned: bool
     created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TournamentAdminCreate(BaseModel):
+    user_id: UUID
+    role: str = Field(default="MANAGER", pattern="^(MANAGER|SCORER)$")
+
+
+class TournamentAdminOut(BaseModel):
+    id: UUID
+    tournament_id: UUID
+    user_id: UUID
+    full_name: str
+    email: str
+    role: str
+    is_owner: bool = False
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

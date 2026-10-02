@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
@@ -51,6 +51,10 @@ export default function OrganiserDashboard() {
   const [confirmGenerate, setConfirmGenerate] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [announce, setAnnounce] = useState({ title: '', body: '' })
+  const [adminQuery, setAdminQuery] = useState('')
+  const [adminResults, setAdminResults] = useState<PlayerSearch[]>([])
+  const [adminSearching, setAdminSearching] = useState(false)
+  const adminSearchSeq = useRef(0)
   const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
   const [moveMatch, setMoveMatch] = useState<Match | null>(null)
   const [moveForm, setMoveForm] = useState({ court_number: 1, scheduled_time: '' })
@@ -112,6 +116,8 @@ export default function OrganiserDashboard() {
     live_matches: number
     completed_matches: number
     checked_in: number
+    is_owner?: boolean
+    can_manage_admins?: boolean
   }>
 
   const active = selectedId
@@ -119,6 +125,13 @@ export default function OrganiserDashboard() {
     : tournaments[0] || null
   const tid = active?.tournament.id
   const slug = active?.tournament.slug
+
+  useEffect(() => {
+    setAdminQuery('')
+    setAdminResults([])
+    setAdminSearching(false)
+    adminSearchSeq.current += 1
+  }, [tid])
 
   useEffect(() => {
     if (selectedId && tournaments.length > 0 && !tournaments.some((t) => t.tournament.id === selectedId)) {
@@ -149,6 +162,14 @@ export default function OrganiserDashboard() {
     queryKey: ['announcements', slug],
     queryFn: async () => (await tournamentApi.announcements(slug!)).data,
     enabled: !!slug && canOrganise,
+  })
+
+  const isOwner = active?.is_owner ?? active?.can_manage_admins ?? false
+
+  const { data: tournamentAdmins = [] } = useQuery({
+    queryKey: ['tournament-admins', tid],
+    queryFn: async () => (await tournamentApi.admins(tid!)).data,
+    enabled: !!tid && canOrganise,
   })
 
   const isSingles = (tournamentDetail?.play_format || active?.tournament.play_format) === 'SINGLES'
@@ -245,6 +266,55 @@ export default function OrganiserDashboard() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not complete tournament')),
   })
 
+  const cancelMut = useMutation({
+    mutationFn: () => tournamentApi.update(tid!, { status: 'CANCELLED' }),
+    onSuccess: () => {
+      invalidateTournamentPublic()
+      showToast('Tournament cancelled')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not cancel tournament')),
+  })
+
+  const restoreMut = useMutation({
+    mutationFn: () => tournamentApi.update(tid!, { status: 'DRAFT' }),
+    onSuccess: () => {
+      invalidateTournamentPublic()
+      showToast('Restored as draft')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not restore tournament')),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: () => tournamentApi.delete(tid!),
+    onSuccess: (res) => {
+      const deletedId = tid
+      qc.setQueryData(['organiser-dashboard'], (old: unknown) => {
+        const data = old as { tournaments?: Array<{ tournament: { id: string } }> } | undefined
+        if (!data?.tournaments || !deletedId) return old
+        return {
+          ...data,
+          tournaments: data.tournaments.filter((row) => row.tournament.id !== deletedId),
+        }
+      })
+      invalidateTournamentPublic()
+      qc.removeQueries({ queryKey: ['tournament-admins', deletedId] })
+      setSelectedId(null)
+      showToast(`Deleted "${res.data.deleted}"`)
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not delete tournament')),
+  })
+
+  const transferOwnerMut = useMutation({
+    mutationFn: (userId: string) => tournamentApi.update(tid!, { organiser_id: userId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['tournament-admins', tid] })
+      qc.invalidateQueries({ queryKey: ['tournament', slug] })
+      showToast('Ownership transferred')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not transfer ownership')),
+  })
+
   const announceMut = useMutation({
     mutationFn: () => tournamentApi.createAnnouncement(tid!, announce),
     onSuccess: () => {
@@ -255,6 +325,58 @@ export default function OrganiserDashboard() {
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not post announcement')),
   })
+
+  const deleteAnnounceMut = useMutation({
+    mutationFn: (announcementId: string) => tournamentApi.deleteAnnouncement(tid!, announcementId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['player-view', slug] })
+      qc.invalidateQueries({ queryKey: ['announcements', slug] })
+      showToast('Announcement deleted')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not delete announcement')),
+  })
+
+  const addAdminMut = useMutation({
+    mutationFn: (userId: string) => tournamentApi.addAdmin(tid!, { user_id: userId }),
+    onSuccess: () => {
+      setAdminQuery('')
+      setAdminResults([])
+      qc.invalidateQueries({ queryKey: ['tournament-admins', tid] })
+      showToast('Admin added')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not add admin')),
+  })
+
+  const removeAdminMut = useMutation({
+    mutationFn: (userId: string) => tournamentApi.removeAdmin(tid!, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tournament-admins', tid] })
+      showToast('Admin removed')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not remove admin')),
+  })
+
+  const searchAdmins = async (q: string) => {
+    setAdminQuery(q)
+    const seq = ++adminSearchSeq.current
+    if (q.trim().length < 2) {
+      setAdminResults([])
+      setAdminSearching(false)
+      return
+    }
+    setAdminSearching(true)
+    try {
+      const { data: results } = await communityApi.searchPlayers(q.trim())
+      if (seq !== adminSearchSeq.current) return
+      const existing = new Set(tournamentAdmins.map((a) => a.user_id))
+      setAdminResults(results.filter((p) => !existing.has(p.id)))
+    } catch {
+      if (seq !== adminSearchSeq.current) return
+      setAdminResults([])
+    } finally {
+      if (seq === adminSearchSeq.current) setAdminSearching(false)
+    }
+  }
 
   const scoreMut = useMutation({
     mutationFn: () => {
@@ -556,13 +678,11 @@ export default function OrganiserDashboard() {
                   </p>
                 </div>
                 <div className="org-header-actions">
-                  {tournamentDetail &&
-                    active.tournament.status !== 'COMPLETED' &&
-                    active.tournament.status !== 'CANCELLED' && (
-                      <button type="button" className="btn btn-ghost" onClick={() => setShowEdit(true)}>
-                        Edit
-                      </button>
-                    )}
+                  {tournamentDetail && (
+                    <button type="button" className="btn btn-ghost" onClick={() => setShowEdit(true)}>
+                      Edit
+                    </button>
+                  )}
                   {active.tournament.status === 'DRAFT' && (
                     <button className="btn btn-primary" onClick={() => openMut.mutate()} disabled={openMut.isPending}>
                       Open registration
@@ -648,6 +768,57 @@ export default function OrganiserDashboard() {
                       disabled={completeMut.isPending}
                     >
                       Mark completed
+                    </button>
+                  )}
+                  {active.tournament.status === 'CANCELLED' && (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={restoreMut.isPending}
+                      onClick={() => {
+                        if (window.confirm('Restore this tournament as a draft?')) {
+                          restoreMut.mutate()
+                        }
+                      }}
+                    >
+                      {restoreMut.isPending ? 'Restoring…' : 'Restore as draft'}
+                    </button>
+                  )}
+                  {active.tournament.status !== 'CANCELLED' &&
+                    active.tournament.status !== 'COMPLETED' && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={cancelMut.isPending}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              'Cancel this tournament? Players will no longer be able to register or play.',
+                            )
+                          ) {
+                            cancelMut.mutate()
+                          }
+                        }}
+                      >
+                        Cancel event
+                      </button>
+                    )}
+                  {isOwner && (
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      disabled={deleteMut.isPending}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Permanently delete "${active.tournament.name}"? This removes teams, matches, and scores. This cannot be undone.`,
+                          )
+                        ) {
+                          deleteMut.mutate()
+                        }
+                      }}
+                    >
+                      {deleteMut.isPending ? 'Deleting…' : 'Delete'}
                     </button>
                   )}
                 </div>
@@ -956,10 +1127,24 @@ export default function OrganiserDashboard() {
                 <p className="muted org-section-lead">Posted notes appear on the player live page.</p>
                 {announcements.length > 0 && (
                   <ul className="org-announce-list">
-                    {announcements.slice(0, 5).map((a: { id: string; title: string; body: string }) => (
-                      <li key={a.id}>
-                        <strong>{a.title}</strong>
-                        <span>{a.body}</span>
+                    {announcements.slice(0, 8).map((a) => (
+                      <li key={a.id} className="org-announce-item">
+                        <div>
+                          <strong>{a.title}</strong>
+                          <span>{a.body}</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={deleteAnnounceMut.isPending}
+                          onClick={() => {
+                            if (window.confirm(`Delete announcement “${a.title}”?`)) {
+                              deleteAnnounceMut.mutate(a.id)
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -987,6 +1172,94 @@ export default function OrganiserDashboard() {
                 >
                   Post announcement
                 </button>
+              </section>
+
+              <section className="org-section">
+                <h2>Tournament admins</h2>
+                <p className="muted org-section-lead">
+                  Co-admins can edit the event, score matches, manage teams, and post announcements.
+                  {isOwner
+                    ? ' Only the owner can add or remove admins, transfer ownership, or delete the tournament.'
+                    : ' Ask the owner if you need changes to this admin list.'}
+                </p>
+                <ul className="org-admin-list">
+                  {tournamentAdmins.map((a) => (
+                    <li key={`${a.user_id}-${a.role}`}>
+                      <div>
+                        <strong>{a.full_name}</strong>
+                        <span className="muted">
+                          {a.email} · {a.is_owner ? 'Owner' : a.role === 'SCORER' ? 'Scorer' : 'Manager'}
+                        </span>
+                      </div>
+                      {isOwner && !a.is_owner && (
+                        <div className="org-admin-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={transferOwnerMut.isPending}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Transfer ownership to ${a.full_name}? The previous owner stays as a co-admin.`,
+                                )
+                              ) {
+                                transferOwnerMut.mutate(a.user_id)
+                              }
+                            }}
+                          >
+                            Make owner
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={removeAdminMut.isPending}
+                            onClick={() => {
+                              if (window.confirm(`Remove ${a.full_name} as admin?`)) {
+                                removeAdminMut.mutate(a.user_id)
+                              }
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {isOwner && (
+                  <div className="org-admin-add">
+                    <div className="form-group">
+                      <label className="form-label">Add admin by name or email</label>
+                      <input
+                        className="form-input"
+                        placeholder="Search players…"
+                        value={adminQuery}
+                        onChange={(e) => void searchAdmins(e.target.value)}
+                      />
+                    </div>
+                    {adminSearching && <p className="muted">Searching…</p>}
+                    {adminResults.length > 0 && (
+                      <ul className="org-admin-search">
+                        {adminResults.slice(0, 6).map((p) => (
+                          <li key={p.id}>
+                            <span>
+                              {p.full_name}
+                              {p.university_short ? ` · ${p.university_short}` : ''}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={addAdminMut.isPending}
+                              onClick={() => addAdminMut.mutate(p.id)}
+                            >
+                              Add
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </section>
             </>
           )}

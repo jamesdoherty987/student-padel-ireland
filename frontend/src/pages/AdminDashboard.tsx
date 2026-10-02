@@ -193,7 +193,26 @@ export default function AdminDashboard() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not update status')),
   })
 
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => tournamentApi.delete(id),
+    onSuccess: (res, id) => {
+      qc.setQueryData(['organiser-dashboard'], (old: unknown) => {
+        const data = old as { tournaments?: Array<{ tournament: { id: string } }> } | undefined
+        if (!data?.tournaments) return old
+        return {
+          ...data,
+          tournaments: data.tournaments.filter((row) => row.tournament.id !== id),
+        }
+      })
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['tournaments'] })
+      showToast(`Deleted "${res.data.deleted}"`)
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not delete tournament')),
+  })
+
   const pendingStatusId = statusMut.isPending ? statusMut.variables?.id : null
+  const pendingDeleteId = deleteMut.isPending ? deleteMut.variables : null
 
   if (authLoading || (isLoading && isAdmin)) {
     return (
@@ -282,12 +301,21 @@ export default function AdminDashboard() {
               <AdminTournamentCard
                 key={row.tournament.id}
                 row={row}
-                busy={pendingStatusId === row.tournament.id}
+                busy={pendingStatusId === row.tournament.id || pendingDeleteId === row.tournament.id}
                 onStatus={(status) => {
                   if (status === row.tournament.status) return
                   statusMut.mutate({ id: row.tournament.id, status })
                 }}
                 onEdit={() => setEditing(row.tournament)}
+                onDelete={() => {
+                  if (
+                    window.confirm(
+                      `Permanently delete "${row.tournament.name}"? This removes teams, matches, and scores.`,
+                    )
+                  ) {
+                    deleteMut.mutate(row.tournament.id)
+                  }
+                }}
                 onCopied={(msg) => showToast(msg)}
               />
             ))}
@@ -345,12 +373,14 @@ function AdminTournamentCard({
   busy,
   onStatus,
   onEdit,
+  onDelete,
   onCopied,
 }: {
   row: DashRow
   busy: boolean
   onStatus: (status: string) => void
   onEdit: () => void
+  onDelete: () => void
   onCopied: (msg: string) => void
 }) {
   const t = row.tournament
@@ -430,6 +460,9 @@ function AdminTournamentCard({
         </select>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>
           Edit
+        </button>
+        <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={onDelete}>
+          Delete
         </button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(publicUrl, 'Public link copied')}>
           Copy link

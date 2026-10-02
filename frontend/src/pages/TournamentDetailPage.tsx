@@ -22,7 +22,7 @@ export default function TournamentDetailPage() {
   const { slug = '' } = useParams()
   const { user } = useAuth()
   const { data: tournament, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ['tournament', slug],
+    queryKey: ['tournament', slug, user?.id],
     queryFn: async () => (await tournamentApi.get(slug)).data,
     enabled: !!slug,
     retry: 4,
@@ -45,8 +45,7 @@ export default function TournamentDetailPage() {
     enabled: !!slug,
   })
 
-  const isOps =
-    !!user && (user.role === 'ADMIN' || (!!tournament && user.id === tournament.organiser_id))
+  const isOps = !!user && !!tournament?.can_manage
 
   if (isLoading) {
     return (

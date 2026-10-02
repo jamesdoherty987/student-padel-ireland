@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, get_optional_user
+from app.api.deps import get_current_user, get_optional_user, user_can_manage_tournament, user_owns_tournament
 from app.core.config import get_settings
 from app.core.roles import Role
 from app.core.security import hash_password
@@ -24,14 +24,17 @@ from app.models import (
     Match,
     MatchScore,
     MatchStatus,
+    Payment,
     PaymentStatus,
     PlayFormat,
     Ranking,
+    RankingHistory,
     Registration,
     Sponsor,
     Team,
     TeamPlayer,
     Tournament,
+    TournamentAdmin,
     TournamentStatus,
     University,
     User,
@@ -41,6 +44,7 @@ from app.services.rating import INITIAL_RATING, rate_match
 from app.schemas import (
     AnnouncementCreate,
     AnnouncementOut,
+    AnnouncementUpdate,
     CheckInRequest,
     CheckoutResponse,
     GenerateRequest,
@@ -53,6 +57,8 @@ from app.schemas import (
     SponsorOut,
     StandingOut,
     TeamOut,
+    TournamentAdminCreate,
+    TournamentAdminOut,
     TournamentCreate,
     TournamentOut,
     TournamentUpdate,
@@ -233,7 +239,12 @@ def _apply_tournament_match_ratings(db: Session, m: Match, t: Tournament | None)
     m.ratings_applied = True
 
 
-def _tournament_out(db: Session, t: Tournament) -> TournamentOut:
+def _tournament_out(
+    db: Session,
+    t: Tournament,
+    *,
+    viewer: User | None = None,
+) -> TournamentOut:
     _ensure_invite_code(db, t)
     courts = (
         db.query(Court)
@@ -241,6 +252,7 @@ def _tournament_out(db: Session, t: Tournament) -> TournamentOut:
         .order_by(Court.court_number)
         .all()
     )
+    can_manage = bool(viewer and user_can_manage_tournament(viewer, t, db))
     # Always build plain data — never pass ORM Court objects into the response model
     return TournamentOut(
         id=t.id,
@@ -269,6 +281,7 @@ def _tournament_out(db: Session, t: Tournament) -> TournamentOut:
         courts=[
             {"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts
         ],
+        can_manage=can_manage,
     )
 
 
@@ -531,11 +544,52 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
     return filled
 
 
-def _assert_organiser(user: User, tournament: Tournament) -> None:
-    if user.role == Role.ADMIN.value:
+def _assert_organiser(user: User, tournament: Tournament, db: Session) -> None:
+    """Allow platform ADMIN, primary organiser, or tournament co-admin."""
+    if user_can_manage_tournament(user, tournament, db):
         return
-    if tournament.organiser_id != user.id:
-        raise HTTPException(403, "Not the tournament organiser")
+    raise HTTPException(403, "Not a tournament organiser")
+
+
+def _assert_owner(user: User, tournament: Tournament) -> None:
+    """Delete, transfer ownership, and manage admin list — owner or platform ADMIN only."""
+    if not user_owns_tournament(user, tournament):
+        raise HTTPException(403, "Only the tournament owner can do this")
+
+
+def _purge_tournament(db: Session, t: Tournament) -> None:
+    """Delete a tournament and all dependent rows (handles non-cascade FKs)."""
+    tid = t.id
+    match_ids = [row[0] for row in db.query(Match.id).filter(Match.tournament_id == tid).all()]
+    if match_ids:
+        db.query(MatchScore).filter(MatchScore.match_id.in_(match_ids)).delete(synchronize_session=False)
+        db.query(Match).filter(Match.tournament_id == tid).update(
+            {Match.next_match_id: None}, synchronize_session=False
+        )
+        db.query(Match).filter(Match.tournament_id == tid).delete(synchronize_session=False)
+
+    group_ids = [row[0] for row in db.query(Group.id).filter(Group.tournament_id == tid).all()]
+    if group_ids:
+        db.query(GroupTeam).filter(GroupTeam.group_id.in_(group_ids)).delete(synchronize_session=False)
+        db.query(Group).filter(Group.tournament_id == tid).delete(synchronize_session=False)
+
+    team_ids = [row[0] for row in db.query(Team.id).filter(Team.tournament_id == tid).all()]
+    reg_ids = [row[0] for row in db.query(Registration.id).filter(Registration.tournament_id == tid).all()]
+    if reg_ids:
+        db.query(Payment).filter(Payment.registration_id.in_(reg_ids)).delete(synchronize_session=False)
+    db.query(Payment).filter(Payment.tournament_id == tid).delete(synchronize_session=False)
+    db.query(Registration).filter(Registration.tournament_id == tid).delete(synchronize_session=False)
+    if team_ids:
+        db.query(TeamPlayer).filter(TeamPlayer.team_id.in_(team_ids)).delete(synchronize_session=False)
+        db.query(Team).filter(Team.tournament_id == tid).delete(synchronize_session=False)
+
+    db.query(Announcement).filter(Announcement.tournament_id == tid).delete(synchronize_session=False)
+    db.query(Sponsor).filter(Sponsor.tournament_id == tid).delete(synchronize_session=False)
+    db.query(Court).filter(Court.tournament_id == tid).delete(synchronize_session=False)
+    db.query(TournamentAdmin).filter(TournamentAdmin.tournament_id == tid).delete(synchronize_session=False)
+    # Drop history rows rather than nulling FK (works even if column is still NOT NULL)
+    db.query(RankingHistory).filter(RankingHistory.tournament_id == tid).delete(synchronize_session=False)
+    db.delete(t)
 
 
 # ── Universities ──────────────────────────────────────────────
@@ -571,9 +625,13 @@ def list_tournaments(
 
 
 @router.get("/tournaments/{slug_or_id}", response_model=TournamentOut)
-def get_tournament(slug_or_id: str, db: Session = Depends(get_db)):
+def get_tournament(
+    slug_or_id: str,
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
     t = _resolve_tournament(db, slug_or_id)
-    return _tournament_out(db, t)
+    return _tournament_out(db, t, viewer=user)
 
 
 def _resolve_tournament(db: Session, slug_or_id: str) -> Tournament:
@@ -622,7 +680,7 @@ def create_tournament(
     _sync_courts(db, t.id, body.number_of_courts, body.court_names)
     db.commit()
     db.refresh(t)
-    return _tournament_out(db, t)
+    return _tournament_out(db, t, viewer=user)
 
 
 @router.patch("/tournaments/{tournament_id}", response_model=TournamentOut)
@@ -635,9 +693,41 @@ def update_tournament(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
     data = body.model_dump(exclude_unset=True)
     court_names = data.pop("court_names", None)
+    new_organiser_id = data.pop("organiser_id", None)
+    if new_organiser_id is not None:
+        _assert_owner(user, t)
+        new_owner = db.get(User, new_organiser_id)
+        if not new_owner or not new_owner.is_active:
+            raise HTTPException(400, "New organiser user not found")
+        old_owner_id = t.organiser_id
+        t.organiser_id = new_organiser_id
+        # Keep previous owner as a co-admin so they aren't locked out abruptly
+        if old_owner_id != new_organiser_id:
+            existing = (
+                db.query(TournamentAdmin)
+                .filter(
+                    TournamentAdmin.tournament_id == t.id,
+                    TournamentAdmin.user_id == old_owner_id,
+                )
+                .first()
+            )
+            if not existing:
+                db.add(
+                    TournamentAdmin(
+                        tournament_id=t.id,
+                        user_id=old_owner_id,
+                        role="MANAGER",
+                        added_by_id=user.id,
+                    )
+                )
+            # New owner doesn't need a co-admin row
+            db.query(TournamentAdmin).filter(
+                TournamentAdmin.tournament_id == t.id,
+                TournamentAdmin.user_id == new_organiser_id,
+            ).delete(synchronize_session=False)
     for field, value in data.items():
         if hasattr(value, "value"):
             value = value.value
@@ -651,7 +741,23 @@ def update_tournament(
         )
     db.commit()
     db.refresh(t)
-    return _tournament_out(db, t)
+    return _tournament_out(db, t, viewer=user)
+
+
+@router.delete("/tournaments/{tournament_id}")
+def delete_tournament(
+    tournament_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_owner(user, t)
+    name = t.name
+    _purge_tournament(db, t)
+    db.commit()
+    return {"ok": True, "deleted": name}
 
 
 # ── Registration / Teams ──────────────────────────────────────
@@ -844,7 +950,7 @@ def organiser_add_team(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
     if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
         raise HTTPException(400, "Cannot add teams to a finished tournament")
     if _paid_team_count(db, t.id) >= t.max_teams:
@@ -1005,11 +1111,11 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
     )
     t = db.get(Tournament, reg.tournament_id)
     member_ids = {m.user_id for m in members}
-    if (
-        user.id not in member_ids
-        and user.role != Role.ADMIN.value
-        and (not t or t.organiser_id != user.id)
-    ):
+    can_view = (
+        user.id in member_ids
+        or (t is not None and user_can_manage_tournament(user, t, db))
+    )
+    if not can_view:
         raise HTTPException(403, "Not allowed to view this registration")
     return {
         "registration_id": str(reg.id),
@@ -1090,7 +1196,7 @@ def check_in_team(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
     team = db.get(Team, team_id)
     if not team or team.tournament_id != tournament_id:
         raise HTTPException(404, "Team not found")
@@ -1126,7 +1232,7 @@ def withdraw_team(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
     team = db.get(Team, team_id)
     if not team or team.tournament_id != tournament_id or team.withdrawn:
         raise HTTPException(404, "Team not found")
@@ -1186,7 +1292,7 @@ def generate(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
 
     if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
         raise HTTPException(400, "Cannot regenerate a finished tournament")
@@ -1345,7 +1451,7 @@ def update_score(
     t = db.get(Tournament, m.tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
 
     if getattr(m, "ratings_applied", False):
         if not body.force:
@@ -1433,7 +1539,7 @@ def move_match(
     t = db.get(Tournament, m.tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
     data = body.model_dump(exclude_unset=True)
     if "status" in data and data["status"] is not None:
         data["status"] = data["status"].value
@@ -1531,7 +1637,7 @@ def create_announcement(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
     a = Announcement(
         tournament_id=t.id,
         title=body.title,
@@ -1543,6 +1649,177 @@ def create_announcement(
     db.commit()
     db.refresh(a)
     return a
+
+
+@router.patch("/tournaments/{tournament_id}/announcements/{announcement_id}", response_model=AnnouncementOut)
+def update_announcement(
+    tournament_id: UUID,
+    announcement_id: UUID,
+    body: AnnouncementUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    a = db.get(Announcement, announcement_id)
+    if not a or a.tournament_id != t.id:
+        raise HTTPException(404, "Announcement not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(a, field, value)
+    db.commit()
+    db.refresh(a)
+    return a
+
+
+@router.delete("/tournaments/{tournament_id}/announcements/{announcement_id}")
+def delete_announcement(
+    tournament_id: UUID,
+    announcement_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    a = db.get(Announcement, announcement_id)
+    if not a or a.tournament_id != t.id:
+        raise HTTPException(404, "Announcement not found")
+    db.delete(a)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Tournament admins ─────────────────────────────────────────
+
+@router.get("/tournaments/{tournament_id}/admins", response_model=list[TournamentAdminOut])
+def list_tournament_admins(
+    tournament_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    out: list[TournamentAdminOut] = []
+    owner = db.get(User, t.organiser_id)
+    if owner:
+        out.append(
+            TournamentAdminOut(
+                id=t.id,  # synthetic — owner has no tournament_admins row
+                tournament_id=t.id,
+                user_id=owner.id,
+                full_name=owner.full_name,
+                email=owner.email,
+                role="OWNER",
+                is_owner=True,
+                created_at=t.created_at,
+            )
+        )
+    rows = (
+        db.query(TournamentAdmin)
+        .filter(
+            TournamentAdmin.tournament_id == t.id,
+            TournamentAdmin.user_id != t.organiser_id,
+        )
+        .order_by(TournamentAdmin.created_at.asc())
+        .all()
+    )
+    for row in rows:
+        u = db.get(User, row.user_id)
+        if not u or not u.is_active:
+            continue
+        out.append(
+            TournamentAdminOut(
+                id=row.id,
+                tournament_id=row.tournament_id,
+                user_id=u.id,
+                full_name=u.full_name,
+                email=u.email,
+                role=row.role,
+                is_owner=False,
+                created_at=row.created_at,
+            )
+        )
+    return out
+
+
+@router.post("/tournaments/{tournament_id}/admins", response_model=TournamentAdminOut)
+def add_tournament_admin(
+    tournament_id: UUID,
+    body: TournamentAdminCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_owner(user, t)
+    if body.user_id == t.organiser_id:
+        raise HTTPException(400, "That user is already the tournament owner")
+    target = db.get(User, body.user_id)
+    if not target or not target.is_active:
+        raise HTTPException(404, "User not found")
+    existing = (
+        db.query(TournamentAdmin)
+        .filter(
+            TournamentAdmin.tournament_id == t.id,
+            TournamentAdmin.user_id == body.user_id,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(400, "User is already an admin of this tournament")
+    row = TournamentAdmin(
+        tournament_id=t.id,
+        user_id=body.user_id,
+        role=body.role,
+        added_by_id=user.id,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return TournamentAdminOut(
+        id=row.id,
+        tournament_id=row.tournament_id,
+        user_id=target.id,
+        full_name=target.full_name,
+        email=target.email,
+        role=row.role,
+        is_owner=False,
+        created_at=row.created_at,
+    )
+
+
+@router.delete("/tournaments/{tournament_id}/admins/{admin_user_id}")
+def remove_tournament_admin(
+    tournament_id: UUID,
+    admin_user_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_owner(user, t)
+    if admin_user_id == t.organiser_id:
+        raise HTTPException(400, "Cannot remove the tournament owner — transfer ownership first")
+    row = (
+        db.query(TournamentAdmin)
+        .filter(
+            TournamentAdmin.tournament_id == t.id,
+            TournamentAdmin.user_id == admin_user_id,
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(404, "Admin not found")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/tournaments/{slug_or_id}/sponsors", response_model=list[SponsorOut])
@@ -1698,7 +1975,7 @@ def seed_knockout(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t)
+    _assert_organiser(user, t, db)
     filled = _seed_knockout_from_standings(db, t)
     if filled == 0:
         unfinished = (
@@ -1780,10 +2057,24 @@ def player_profile(
 
 @router.get("/organiser/dashboard")
 def organiser_dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    q = db.query(Tournament)
-    if user.role != Role.ADMIN.value:
-        q = q.filter(Tournament.organiser_id == user.id)
-    tournaments = q.order_by(Tournament.event_date.desc()).all()
+    if user.role == Role.ADMIN.value:
+        tournaments = db.query(Tournament).order_by(Tournament.event_date.desc()).all()
+    else:
+        admin_ids = [
+            row[0]
+            for row in db.query(TournamentAdmin.tournament_id)
+            .filter(TournamentAdmin.user_id == user.id)
+            .all()
+        ]
+        filters = [Tournament.organiser_id == user.id]
+        if admin_ids:
+            filters.append(Tournament.id.in_(admin_ids))
+        tournaments = (
+            db.query(Tournament)
+            .filter(or_(*filters))
+            .order_by(Tournament.event_date.desc())
+            .all()
+        )
     stats = []
     for t in tournaments:
         teams = _team_count(db, t.id)
@@ -1819,6 +2110,7 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
             .count()
         )
         per_team = 1 if _is_singles(t) else 2
+        is_owner = t.organiser_id == user.id or user.role == Role.ADMIN.value
         stats.append(
             {
                 "tournament": _tournament_out(db, t),
@@ -1829,6 +2121,8 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
                 "live_matches": live,
                 "completed_matches": completed,
                 "checked_in": checked,
+                "is_owner": is_owner,
+                "can_manage_admins": is_owner,
             }
         )
     return {"tournaments": stats}

@@ -86,6 +86,27 @@ export type Tournament = {
   registered_teams: number
   invite_code?: string | null
   courts?: Array<{ number: number; name: string; id: string }>
+  can_manage?: boolean
+}
+
+export type TournamentAdmin = {
+  id: string
+  tournament_id: string
+  user_id: string
+  full_name: string
+  email: string
+  role: string
+  is_owner: boolean
+  created_at?: string | null
+}
+
+export type TournamentAnnouncement = {
+  id: string
+  tournament_id: string
+  title: string
+  body: string
+  is_pinned: boolean
+  created_at: string
 }
 
 export type Match = {
@@ -292,6 +313,7 @@ export const tournamentApi = {
   create: (data: Record<string, unknown>) => api.post<Tournament>('/api/tournaments', data),
   update: (id: string, data: Record<string, unknown>) =>
     api.patch<Tournament>(`/api/tournaments/${id}`, data),
+  delete: (id: string) => api.delete<{ ok: boolean; deleted: string }>(`/api/tournaments/${id}`),
   register: (tournamentId: string, data: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/register`, data),
   organiserAddTeam: (tournamentId: string, data: Record<string, unknown>) =>
@@ -305,9 +327,23 @@ export const tournamentApi = {
   standings: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/standings`),
   playerView: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/player-view`),
   display: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/display`),
-  announcements: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/announcements`),
+  announcements: (slugOrId: string) =>
+    api.get<TournamentAnnouncement[]>(`/api/tournaments/${slugOrId}/announcements`),
   createAnnouncement: (id: string, data: Record<string, unknown>) =>
-    api.post(`/api/tournaments/${id}/announcements`, data),
+    api.post<TournamentAnnouncement>(`/api/tournaments/${id}/announcements`, data),
+  updateAnnouncement: (tournamentId: string, announcementId: string, data: Record<string, unknown>) =>
+    api.patch<TournamentAnnouncement>(
+      `/api/tournaments/${tournamentId}/announcements/${announcementId}`,
+      data,
+    ),
+  deleteAnnouncement: (tournamentId: string, announcementId: string) =>
+    api.delete(`/api/tournaments/${tournamentId}/announcements/${announcementId}`),
+  admins: (tournamentId: string) =>
+    api.get<TournamentAdmin[]>(`/api/tournaments/${tournamentId}/admins`),
+  addAdmin: (tournamentId: string, data: { user_id: string; role?: string }) =>
+    api.post<TournamentAdmin>(`/api/tournaments/${tournamentId}/admins`, data),
+  removeAdmin: (tournamentId: string, adminUserId: string) =>
+    api.delete(`/api/tournaments/${tournamentId}/admins/${adminUserId}`),
   updateScore: (matchId: string, data: Record<string, unknown>) =>
     api.patch(`/api/matches/${matchId}/score`, data),
   moveMatch: (matchId: string, data: Record<string, unknown>) =>
