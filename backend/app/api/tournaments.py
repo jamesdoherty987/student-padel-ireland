@@ -234,7 +234,6 @@ def _apply_tournament_match_ratings(db: Session, m: Match, t: Tournament | None)
 
 
 def _tournament_out(db: Session, t: Tournament) -> TournamentOut:
-    # Flush only — never commit inside a serializer (avoids expire/list races)
     _ensure_invite_code(db, t)
     courts = (
         db.query(Court)
@@ -242,35 +241,34 @@ def _tournament_out(db: Session, t: Tournament) -> TournamentOut:
         .order_by(Court.court_number)
         .all()
     )
-    court_payload = [{"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts]
-    # Build from columns + courts payload — do not validate ORM Court objects via relationship
-    return TournamentOut.model_validate(
-        {
-            "id": t.id,
-            "name": t.name,
-            "slug": t.slug,
-            "location": t.location,
-            "venue": t.venue,
-            "event_date": t.event_date,
-            "start_time": t.start_time,
-            "number_of_courts": t.number_of_courts,
-            "entry_fee_cents": t.entry_fee_cents,
-            "currency": t.currency or "EUR",
-            "max_teams": t.max_teams,
-            "registration_deadline": t.registration_deadline,
-            "format": t.format,
-            "play_format": getattr(t, "play_format", None) or PlayFormat.DOUBLES.value,
-            "rules": t.rules,
-            "description": t.description,
-            "status": t.status,
-            "organiser_id": t.organiser_id,
-            "match_duration_minutes": t.match_duration_minutes,
-            "group_size": t.group_size,
-            "teams_advance_per_group": t.teams_advance_per_group,
-            "registered_teams": _team_count(db, t.id),
-            "invite_code": t.invite_code,
-            "courts": court_payload,
-        }
+    # Always build plain data — never pass ORM Court objects into the response model
+    return TournamentOut(
+        id=t.id,
+        name=t.name,
+        slug=t.slug,
+        location=t.location,
+        venue=t.venue,
+        event_date=t.event_date,
+        start_time=t.start_time,
+        number_of_courts=t.number_of_courts,
+        entry_fee_cents=t.entry_fee_cents,
+        currency=t.currency or "EUR",
+        max_teams=t.max_teams,
+        registration_deadline=t.registration_deadline,
+        format=t.format,
+        play_format=getattr(t, "play_format", None) or PlayFormat.DOUBLES.value,
+        rules=t.rules,
+        description=t.description,
+        status=t.status,
+        organiser_id=t.organiser_id,
+        match_duration_minutes=t.match_duration_minutes,
+        group_size=t.group_size,
+        teams_advance_per_group=t.teams_advance_per_group,
+        registered_teams=_team_count(db, t.id),
+        invite_code=t.invite_code,
+        courts=[
+            {"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts
+        ],
     )
 
 

@@ -155,6 +155,12 @@ class TournamentUpdate(BaseModel):
     tie_break_order: Optional[str] = None
 
 
+class CourtOut(BaseModel):
+    number: int
+    name: str
+    id: Optional[str] = None
+
+
 class TournamentOut(BaseModel):
     id: UUID
     name: str
@@ -179,7 +185,7 @@ class TournamentOut(BaseModel):
     teams_advance_per_group: int
     registered_teams: int = 0
     invite_code: Optional[str] = None
-    courts: list[dict] = []
+    courts: list[CourtOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 

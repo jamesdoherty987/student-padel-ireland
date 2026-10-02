@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -61,7 +62,13 @@ def on_startup():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "student-padel-ireland"}
+    # RENDER_GIT_COMMIT is set automatically on Render deploys
+    sha = (os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or "").strip()
+    return {
+        "status": "ok",
+        "service": "student-padel-ireland",
+        "git_sha": sha[:12] if sha else "unknown",
+    }
 
 
 @app.get("/api/config/public")
