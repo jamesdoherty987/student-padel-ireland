@@ -13,7 +13,7 @@ export function formatMoney(cents: number, currency = 'EUR') {
   }
 }
 
-/** e.g. "12/48 teams · €50/team" — works for singles & doubles */
+/** e.g. "12/48 teams · €35/player" — works for singles & doubles (always per player) */
 export function formatEntrySummary(
   registered: number,
   maxTeams: number,
@@ -21,7 +21,7 @@ export function formatEntrySummary(
   currency = 'EUR',
   playFormat: string = 'DOUBLES',
 ) {
-  const unit = playFormat === 'SINGLES' ? 'player' : 'team'
+  const unit = 'player'
   const spots = playFormat === 'SINGLES' ? 'singles spots' : 'doubles spots'
   const fee = `${formatMoney(entryFeeCents, currency)}/${unit}`
   if (registered <= 0) {

@@ -158,7 +158,7 @@ export default function TournamentDetailPage() {
           </div>
           <div>
             <strong>{formatMoney(tournament.entry_fee_cents, tournament.currency)}</strong>
-            <span>{singles ? 'Per player' : 'Per doubles team'}</span>
+            <span>Per player</span>
           </div>
           <div>
             <strong>{spots === 'Full' ? 'Full' : tournament.max_teams - tournament.registered_teams}</strong>

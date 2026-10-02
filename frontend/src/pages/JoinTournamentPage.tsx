@@ -460,9 +460,8 @@ export default function JoinTournamentPage() {
         <h1 className="page-title">Join {tournament.name}</h1>
         <p className="page-sub">
           {singles ? 'Singles' : 'Doubles'} · Entry{' '}
-          {formatMoney(tournament.entry_fee_cents, tournament.currency)} per{' '}
-          {singles ? 'player' : 'doubles team'} · {tournament.registered_teams}/{tournament.max_teams}{' '}
-          {singles ? 'players' : 'doubles'} registered
+          {formatMoney(tournament.entry_fee_cents, tournament.currency)} per player ·{' '}
+          {tournament.registered_teams}/{tournament.max_teams} {singles ? 'players' : 'doubles'} registered
         </p>
         {paymentNote && <p className="auth-error" style={{ marginBottom: '1rem' }}>{paymentNote}</p>}
         <form className="join-form" onSubmit={onSubmit}>
