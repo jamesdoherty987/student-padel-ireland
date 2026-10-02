@@ -68,7 +68,7 @@ export default function TermsPage() {
 
           <h2>Contact</h2>
           <p>
-            Questions: <a href="mailto:hello@studentpadelireland.ie">hello@studentpadelireland.ie</a>
+            Questions: <a href="mailto:jkdoherty123@gmail.com">jkdoherty123@gmail.com</a>
           </p>
         </div>
       </main>

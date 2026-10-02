@@ -21,7 +21,7 @@ export default function PrivacyPage() {
 
           <h2>Who we are</h2>
           <p>
-            Contact: <a href="mailto:hello@studentpadelireland.ie">hello@studentpadelireland.ie</a>
+            Contact: <a href="mailto:jkdoherty123@gmail.com">jkdoherty123@gmail.com</a>
           </p>
 
           <h2>Data we collect</h2>

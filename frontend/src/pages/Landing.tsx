@@ -433,7 +433,7 @@ export default function Landing() {
             <a href="#upcoming">Upcoming</a>
             <Link to="/privacy">Privacy</Link>
             <Link to="/terms">Terms</Link>
-            <a href="mailto:hello@studentpadelireland.ie">Contact</a>
+            <a href="mailto:jkdoherty123@gmail.com">Contact</a>
           </div>
         </div>
         <div className="lp-wrap lp-footer-copy">© {new Date().getFullYear()} Student Padel Ireland</div>
