@@ -16,10 +16,10 @@ type Props = {
 }
 
 const SIZE_PX: Record<Size, { w: number; h: number }> = {
-  sm: { w: 14, h: 18 },
-  md: { w: 18, h: 24 },
-  lg: { w: 24, h: 32 },
-  xl: { w: 36, h: 48 },
+  sm: { w: 20, h: 26 },
+  md: { w: 26, h: 35 },
+  lg: { w: 36, h: 48 },
+  xl: { w: 54, h: 73 },
 }
 
 export default function BrandLogo({
