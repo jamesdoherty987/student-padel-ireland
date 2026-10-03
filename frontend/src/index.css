@@ -76,20 +76,19 @@ html.native-app [contenteditable] {
   user-select: text;
 }
 
-html.native-app .app-nav.is-native .app-nav-menu-btn {
-  display: none;
+/* No zoom or sideways panning in the native shell - vertical scroll only */
+html.native-app,
+html.native-app body {
+  overflow-x: hidden;
+  max-width: 100%;
+  touch-action: pan-y;
 }
 
-html.native-app .app-nav-native-link {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--court-mid);
-  padding: 0.35rem 0.45rem;
-}
-
-html.native-app .app-nav-native-logout {
-  font-size: 0.8rem;
-  padding: 0.35rem 0.5rem;
+/* iOS zooms the page when focusing inputs under 16px */
+html.native-app input,
+html.native-app select,
+html.native-app textarea {
+  font-size: 16px;
 }
 
 html.native-app a,
@@ -98,8 +97,7 @@ html.native-app button {
 }
 
 html.native-app .btn,
-html.native-app .native-tab,
-html.native-app .app-nav-native-link {
+html.native-app .native-tab {
   touch-action: manipulation;
 }
 
@@ -926,11 +924,13 @@ img {
 
   .app-nav-brand {
     font-size: 0.88rem;
-    max-width: calc(100% - 7rem);
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .app-nav-end {
     gap: 0.4rem;
+    flex-shrink: 0;
   }
 
   .notif-panel {
@@ -1040,3 +1040,21 @@ img {
   }
 }
 
+
+@media (max-width: 400px) {
+  .app-nav-brand {
+    font-size: 0.8rem;
+    gap: 0.4rem;
+  }
+}
+
+/* Popups must never be wider than the screen or pan sideways */
+.modal,
+.score-modal,
+.join-modal,
+.lightbox-inner,
+[role='dialog'] {
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}

@@ -129,6 +129,12 @@ export async function initNativeShell(): Promise<void> {
   nativeReady = true
 
   document.documentElement.classList.add('native-app')
+  document
+    .querySelector('meta[name="viewport"]')
+    ?.setAttribute(
+      'content',
+      'width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
+    )
   document.documentElement.classList.add(`native-${nativePlatform()}`)
 
   // Safety: never leave the splash up if plugins hang or React is slow

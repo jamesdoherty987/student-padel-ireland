@@ -13,7 +13,7 @@ const config: CapacitorConfig = {
   plugins: {
     SplashScreen: {
       launchAutoHide: false,
-      backgroundColor: '#0b3d2e',
+      backgroundColor: '#0d623e',
       showSpinner: false,
       splashFullScreen: true,
       splashImmersive: true,
@@ -30,12 +30,12 @@ const config: CapacitorConfig = {
   ios: {
     contentInset: 'never',
     preferredContentMode: 'mobile',
-    backgroundColor: '#0b3d2e',
+    backgroundColor: '#0d623e',
     scheme: 'Student Padel Ireland',
   },
   android: {
     allowMixedContent: false,
-    backgroundColor: '#0b3d2e',
+    backgroundColor: '#0d623e',
   },
 }
 

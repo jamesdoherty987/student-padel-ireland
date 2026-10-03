@@ -47,83 +47,83 @@ export default function NavBar() {
     <header className={`app-nav ${open ? 'is-menu-open' : ''} ${native ? 'is-native' : ''}`}>
       <BrandLogo to={brandTo} className="app-nav-brand" size="sm" onClick={close} />
       <div className="app-nav-end">
-        {!native && (
-          <nav className={`app-nav-links ${open ? 'is-open' : ''}`}>
-            <NavLink to="/tournaments" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-              Tournaments
-            </NavLink>
-            <NavLink to="/community" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-              Community
-            </NavLink>
-            <NavLink to="/rankings" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-              Rankings
-            </NavLink>
-            {user ? (
-              <>
-                {user.role === 'ADMIN' && (
-                  <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-                    Admin
-                  </NavLink>
-                )}
-                <NavLink to="/organiser" className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-                  My events
+        <nav className={`app-nav-links ${open ? 'is-open' : ''}`}>
+          <NavLink
+            to="/tournaments"
+            className={({ isActive }) => (isActive ? 'active' : '')}
+            onClick={close}
+          >
+            Tournaments
+          </NavLink>
+          <NavLink
+            to="/community"
+            className={({ isActive }) => (isActive ? 'active' : '')}
+            onClick={close}
+          >
+            Community
+          </NavLink>
+          <NavLink
+            to="/rankings"
+            className={({ isActive }) => (isActive ? 'active' : '')}
+            onClick={close}
+          >
+            Rankings
+          </NavLink>
+          {user ? (
+            <>
+              {user.role === 'ADMIN' && (
+                <NavLink
+                  to="/admin"
+                  className={({ isActive }) => (isActive ? 'active' : '')}
+                  onClick={close}
+                >
+                  Admin
                 </NavLink>
-                <NavLink to={`/players/${user.id}`} className={({ isActive }) => (isActive ? 'active' : '')} onClick={close}>
-                  Profile
-                </NavLink>
-                <span className="app-nav-user">{user.full_name.split(' ')[0]}</span>
-                <button type="button" className="btn btn-ghost app-nav-logout" onClick={onLogout}>
-                  Log out
-                </button>
-              </>
-            ) : (
-              <>
-                <NavLink to="/login" onClick={close}>
-                  Log in
-                </NavLink>
-                <Link to="/signup" className="btn btn-primary app-nav-join" onClick={close}>
-                  Sign up
-                </Link>
-              </>
-            )}
-          </nav>
-        )}
-        {native && user && (
-          <Link to="/organiser" className="app-nav-native-link" onClick={close}>
-            My events
-          </Link>
-        )}
-        {native && user?.role === 'ADMIN' && (
-          <Link to="/admin" className="app-nav-native-link" onClick={close}>
-            Admin
-          </Link>
-        )}
+              )}
+              <NavLink
+                to="/organiser"
+                className={({ isActive }) => (isActive ? 'active' : '')}
+                onClick={close}
+              >
+                My events
+              </NavLink>
+              <NavLink
+                to={`/players/${user.id}`}
+                className={({ isActive }) => (isActive ? 'active' : '')}
+                onClick={close}
+              >
+                Profile
+              </NavLink>
+              <span className="app-nav-user">{user.full_name.split(' ')[0]}</span>
+              <button type="button" className="btn btn-ghost app-nav-logout" onClick={onLogout}>
+                Log out
+              </button>
+            </>
+          ) : (
+            <>
+              <NavLink to="/login" onClick={close}>
+                Log in
+              </NavLink>
+              <Link to="/signup" className="btn btn-primary app-nav-join" onClick={close}>
+                Sign up
+              </Link>
+            </>
+          )}
+        </nav>
         {user && (
           <div className="app-nav-bell-slot">
             <NotificationsBell />
           </div>
         )}
-        {native && user && (
-          <button type="button" className="btn btn-ghost app-nav-logout app-nav-native-logout" onClick={onLogout}>
-            Log out
-          </button>
-        )}
-        {native && !user && (
-          <Link to="/login" className="btn btn-primary btn-sm" onClick={close}>
-            Log in
-          </Link>
-        )}
-        {!native && (
-          <button
-            type="button"
-            className="app-nav-menu-btn"
-            aria-label={open ? 'Close menu' : 'Open menu'}
-            aria-expanded={open}
-            onClick={() => setOpen((v) => !v)}
-          >
-            <i className={`fas ${open ? 'fa-times' : 'fa-bars'}`} />
-          </button>
-        )}
+        <button
+          type="button"
+          className="app-nav-menu-btn"
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <i className={`fas ${open ? 'fa-times' : 'fa-bars'}`} />
+        </button>
       </div>
     </header>
   )
