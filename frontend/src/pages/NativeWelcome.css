@@ -29,14 +29,21 @@
 .native-welcome-brand {
   color: #fff;
   margin-bottom: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  max-width: 100%;
 }
 
 .native-welcome-brand .brand-logo-text {
   color: var(--ball);
-  font-size: 0.95rem;
+  font-size: clamp(0.8rem, 4.2vw, 0.95rem);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-weight: 800;
+  white-space: normal;
+  overflow: visible;
+  max-width: 100%;
 }
 
 .native-welcome h1 {

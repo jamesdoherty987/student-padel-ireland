@@ -807,7 +807,8 @@ export default function PlayerProfilePage() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 16,
+              padding:
+                'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
             }}
           >
             <div className="card" style={{ maxWidth: 420, width: '100%', padding: 20 }}>

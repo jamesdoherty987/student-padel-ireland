@@ -73,16 +73,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }
 
+  // Guards against a non-JSON reply (e.g. a hosting "waking up" page) that would otherwise crash
+  const readSession = (data: unknown): { access_token: string; user: User } => {
+    const d = data as { access_token?: string; user?: User } | null
+    if (!d || typeof d !== 'object' || !d.access_token || !d.user) {
+      throw new Error('The server is starting up. Please try again in a few seconds.')
+    }
+    return { access_token: d.access_token, user: d.user }
+  }
+
   const login = async (email: string, password: string, remember = true) => {
     const { data } = await authApi.login({ email, password })
-    persist(data.access_token, data.user, remember)
-    return data.user as User
+    const session = readSession(data)
+    persist(session.access_token, session.user, remember)
+    return session.user
   }
 
   const register = async (payload: Record<string, unknown>, remember = true) => {
     const { data } = await authApi.register(payload)
-    persist(data.access_token, data.user, remember)
-    return data.user as User
+    const session = readSession(data)
+    persist(session.access_token, session.user, remember)
+    return session.user
   }
 
   const logout = () => {
