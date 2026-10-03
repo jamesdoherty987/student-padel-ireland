@@ -24,6 +24,7 @@ def test_cors_includes_capacitor_origin():
     origins = Settings().cors_origins()
     assert "https://app.studentpadel.ie" in origins
     assert "capacitor://localhost" in origins
+    assert "capacitor://app.studentpadel.ie" in origins
     assert "https://studentpadel.ie" in origins
     assert "https://www.studentpadel.ie" in origins
     assert "https://studentpadel.ie" in origins

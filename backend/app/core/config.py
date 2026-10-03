@@ -90,6 +90,7 @@ class Settings(BaseSettings):
             "https://www.studentpadel.ie",
             # Capacitor WebView (see capacitor.config.ts server.hostname)
             "https://app.studentpadel.ie",
+            "capacitor://app.studentpadel.ie",
             "capacitor://localhost",
             "ionic://localhost",
             "http://localhost",
