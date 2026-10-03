@@ -13,6 +13,16 @@ export function formatMoney(cents: number, currency = 'EUR') {
   }
 }
 
+/** Entry fee is stored per entry (player for singles, team for doubles); returns the per-player amount in cents. */
+export function perPlayerFeeCents(entryFeeCents: number, playFormat: string = 'DOUBLES') {
+  return playFormat === 'SINGLES' ? entryFeeCents : entryFeeCents / 2
+}
+
+/** e.g. "€25/player" */
+export function formatPerPlayerFee(entryFeeCents: number, currency = 'EUR', playFormat: string = 'DOUBLES') {
+  return `${formatMoney(Math.round(perPlayerFeeCents(entryFeeCents, playFormat)), currency)}/player`
+}
+
 /** e.g. "12/48 teams · €35/player" — works for singles & doubles (always per player) */
 export function formatEntrySummary(
   registered: number,
@@ -21,9 +31,8 @@ export function formatEntrySummary(
   currency = 'EUR',
   playFormat: string = 'DOUBLES',
 ) {
-  const unit = 'player'
   const spots = playFormat === 'SINGLES' ? 'singles spots' : 'doubles spots'
-  const fee = `${formatMoney(entryFeeCents, currency)}/${unit}`
+  const fee = formatPerPlayerFee(entryFeeCents, currency, playFormat)
   if (registered <= 0) {
     return `${fee} · ${maxTeams} ${spots}`
   }

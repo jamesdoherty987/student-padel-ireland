@@ -1943,6 +1943,9 @@ function CreateTournamentModal({
               value={form.entry_fee_euros}
               onValueChange={(n) => setForm({ ...form, entry_fee_euros: n })}
             />
+            {!singles && (
+              <small className="form-hint">= €{(form.entry_fee_euros / 2).toFixed(2).replace(/\.00$/, '')} per player</small>
+            )}
           </div>
 
           <div className="form-group">

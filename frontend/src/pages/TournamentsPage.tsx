@@ -6,7 +6,7 @@ import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
 import { apiErrorMessage, communityApi, tournamentApi } from '../services/api'
 import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
-import { formatDate, statusBadgeClass, statusLabel } from '../utils/format'
+import { formatDate, formatPerPlayerFee, statusBadgeClass, statusLabel } from '../utils/format'
 import './Tournament.css'
 import './Community.css'
 
@@ -117,7 +117,7 @@ export default function TournamentsPage() {
         href: `/t/${t.slug}`,
         status: t.status,
         line: `${t.location} · ${t.venue}`,
-        meta: `${formatDate(t.event_date, { weekday: 'short', day: 'numeric', month: 'short' })} · €${(t.entry_fee_cents / 100).toFixed(0)}/player`,
+        meta: `${formatDate(t.event_date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatPerPlayerFee(t.entry_fee_cents, t.currency, t.play_format)}`,
         sortDate: t.event_date,
       })
     }

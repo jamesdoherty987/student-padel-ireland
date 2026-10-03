@@ -10,6 +10,7 @@ import {
   currentSetScores,
   formatDate,
   formatMoney,
+  perPlayerFeeCents,
   formatTime,
   isPastCalendarDate,
   spotsLeftLabel,
@@ -159,7 +160,7 @@ export default function TournamentDetailPage() {
             <span>Courts</span>
           </div>
           <div>
-            <strong>{formatMoney(tournament.entry_fee_cents, tournament.currency)}</strong>
+            <strong>{formatMoney(Math.round(perPlayerFeeCents(tournament.entry_fee_cents, tournament.play_format)), tournament.currency)}</strong>
             <span>Per player</span>
           </div>
           {isOps && (

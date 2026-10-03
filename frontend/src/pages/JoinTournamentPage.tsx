@@ -15,7 +15,7 @@ import {
   tournamentApi,
   type RegistrationConfirm,
 } from '../services/api'
-import { formatMoney, isPastCalendarDate } from '../utils/format'
+import { formatMoney, formatPerPlayerFee, isPastCalendarDate } from '../utils/format'
 import './Tournament.css'
 import './Community.css'
 
@@ -460,7 +460,7 @@ export default function JoinTournamentPage() {
         <h1 className="page-title">Join {tournament.name}</h1>
         <p className="page-sub">
           {singles ? 'Singles' : 'Doubles'} · Entry{' '}
-          {formatMoney(tournament.entry_fee_cents, tournament.currency)} per player
+          {formatPerPlayerFee(tournament.entry_fee_cents, tournament.currency, tournament.play_format).replace('/', ' per ')}{!singles && ` (${formatMoney(tournament.entry_fee_cents, tournament.currency)} per team)`}
         </p>
         {paymentNote && <p className="auth-error" style={{ marginBottom: '1rem' }}>{paymentNote}</p>}
         <form className="join-form" onSubmit={onSubmit}>

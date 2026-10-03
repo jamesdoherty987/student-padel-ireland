@@ -169,7 +169,7 @@ export default function EditTournamentModal({ tournament, onClose, onSaved }: Pr
           </div>
 
           <div className="form-group">
-            <label className="form-label">Entry fee (€ / {singles ? 'player' : 'team'})</label>
+            <label className="form-label">Entry fee (€ per {singles ? 'player' : 'doubles team'})</label>
             <NumberInput
               className="form-input"
               min={0}
@@ -178,6 +178,9 @@ export default function EditTournamentModal({ tournament, onClose, onSaved }: Pr
               value={form.entry_fee_euros}
               onValueChange={(n) => setForm({ ...form, entry_fee_euros: n })}
             />
+            {!singles && (
+              <small className="form-hint">= €{(form.entry_fee_euros / 2).toFixed(2).replace(/\.00$/, '')} per player</small>
+            )}
           </div>
 
           <div className="form-group">

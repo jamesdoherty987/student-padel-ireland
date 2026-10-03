@@ -700,6 +700,9 @@ function TournamentModal({
                 onValueChange={(n) => set('entry_fee_euros', n)}
                 disabled={saving}
               />
+              {form.play_format !== 'SINGLES' && (
+                <small className="form-hint">= €{(form.entry_fee_euros / 2).toFixed(2).replace(/\.00$/, '')} per player</small>
+              )}
             </div>
           </div>
           <div className="form-group">
