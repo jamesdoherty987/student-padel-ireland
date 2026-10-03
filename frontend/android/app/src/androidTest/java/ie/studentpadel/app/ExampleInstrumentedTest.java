@@ -1,4 +1,4 @@
-package ie.studentpadelireland.app;
+package ie.studentpadel.app;
 
 import static org.junit.Assert.*;
 
@@ -19,6 +19,6 @@ public class ExampleInstrumentedTest {
     @Test
     public void useAppContext() throws Exception {
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        assertEquals("ie.studentpadelireland.app", appContext.getPackageName());
+        assertEquals("ie.studentpadel.app", appContext.getPackageName());
     }
 }

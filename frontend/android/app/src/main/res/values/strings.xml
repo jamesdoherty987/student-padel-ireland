@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">Student Padel Ireland</string>
     <string name="title_activity_main">Student Padel Ireland</string>
-    <string name="package_name">ie.studentpadelireland.app</string>
+    <string name="package_name">ie.studentpadel.app</string>
     <string name="custom_url_scheme">studentpadel</string>
 </resources>

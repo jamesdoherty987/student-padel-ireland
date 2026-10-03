@@ -1,4 +1,4 @@
-package ie.studentpadelireland.app;
+package ie.studentpadel.app;
 
 import com.getcapacitor.BridgeActivity;
 

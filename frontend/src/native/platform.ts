@@ -25,7 +25,7 @@ export function publicWebOrigin(): string {
   }
   const fromEnv = (import.meta.env.VITE_WEB_ORIGIN as string | undefined)?.replace(/\/$/, '')
   if (fromEnv) return fromEnv
-  return 'https://studentpadelireland.ie'
+  return 'https://studentpadel.ie'
 }
 
 export function publicPathUrl(path: string): string {

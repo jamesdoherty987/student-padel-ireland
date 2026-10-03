@@ -39,4 +39,6 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
-        value: Student Padel Ireland <noreply@studentpadelireland.ie>
+        value: Student Padel Ireland <noreply@studentpadel.ie>
+      - key: REPORT_EMAIL
+        value: jkdoherty123@gmail.com

@@ -11,7 +11,7 @@ if (!api) {
 The iOS/Android WebView cannot use the Vite dev proxy. Set an absolute API URL, then rebuild:
 
   export VITE_API_URL=https://your-api.onrender.com
-  export VITE_WEB_ORIGIN=https://studentpadelireland.ie
+  export VITE_WEB_ORIGIN=https://studentpadel.ie
   npm run build:native
 
 `)
@@ -27,5 +27,5 @@ console.log(`[native] VITE_API_URL=${api.replace(/\/$/, '')}`)
 if (process.env.VITE_WEB_ORIGIN) {
   console.log(`[native] VITE_WEB_ORIGIN=${process.env.VITE_WEB_ORIGIN.replace(/\/$/, '')}`)
 } else {
-  console.warn('[native] VITE_WEB_ORIGIN unset - QR/invite links default to https://studentpadelireland.ie')
+  console.warn('[native] VITE_WEB_ORIGIN unset - QR/invite links default to https://studentpadel.ie')
 }

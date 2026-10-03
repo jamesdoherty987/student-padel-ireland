@@ -4,7 +4,7 @@ export function pathFromAppUrl(url: string): string | null {
   if (!raw) return null
 
   try {
-    // Universal links: https://studentpadelireland.ie/t/foo/...
+    // Universal links: https://studentpadel.ie/t/foo/...
     // Custom scheme: studentpadel://t/foo/...  or studentpadel:///t/foo
     const parsed = new URL(raw)
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {

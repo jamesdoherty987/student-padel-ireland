@@ -22,9 +22,9 @@ def test_strip_trailing_slash_on_urls():
 
 def test_cors_includes_capacitor_origin():
     origins = Settings().cors_origins()
-    assert "https://app.studentpadelireland.ie" in origins
+    assert "https://app.studentpadel.ie" in origins
     assert "capacitor://localhost" in origins
-    assert "https://studentpadelireland.ie" in origins
-    assert "https://www.studentpadelireland.ie" in origins
+    assert "https://studentpadel.ie" in origins
+    assert "https://www.studentpadel.ie" in origins
     assert "https://studentpadel.ie" in origins
     assert "https://www.studentpadel.ie" in origins

@@ -3,12 +3,12 @@
     "apps": [],
     "details": [
       {
-        "appID": "TEAMID.ie.studentpadelireland.app",
+        "appID": "TEAMID.ie.studentpadel.app",
         "paths": ["*", "/t/*", "/community/*", "/tournaments", "/rankings", "/players/*"]
       }
     ]
   },
   "webcredentials": {
-    "apps": ["TEAMID.ie.studentpadelireland.app"]
+    "apps": ["TEAMID.ie.studentpadel.app"]
   }
 }

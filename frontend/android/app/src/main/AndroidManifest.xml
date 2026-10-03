@@ -37,8 +37,8 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="studentpadelireland.ie" />
-                <data android:scheme="https" android:host="www.studentpadelireland.ie" />
+                <data android:scheme="https" android:host="studentpadel.ie" />
+                <data android:scheme="https" android:host="www.studentpadel.ie" />
             </intent-filter>
 
         </activity>

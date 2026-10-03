@@ -97,11 +97,11 @@ See [frontend/MOBILE.md](frontend/MOBILE.md). Short version:
 ```bash
 cd frontend
 export VITE_API_URL=https://your-api.onrender.com
-export VITE_WEB_ORIGIN=https://studentpadelireland.ie
+export VITE_WEB_ORIGIN=https://studentpadel.ie
 npm run cap:ios    # Xcode → Archive → TestFlight
 ```
 
-Bundle ID: `ie.studentpadelireland.app`
+Bundle ID: `ie.studentpadel.app`
 
 ### Phases shipped in this MVP
 

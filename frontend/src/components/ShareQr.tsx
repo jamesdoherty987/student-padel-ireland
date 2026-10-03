@@ -38,7 +38,7 @@ export function ShareQr({
     try {
       if (url.startsWith('/')) return url
       const parsed = new URL(url)
-      if (parsed.origin === origin || parsed.hostname.endsWith('studentpadelireland.ie')) {
+      if (parsed.origin === origin || parsed.hostname.endsWith('studentpadel.ie')) {
         return `${parsed.pathname}${parsed.search}${parsed.hash}`
       }
     } catch {

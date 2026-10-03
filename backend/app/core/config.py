@@ -42,7 +42,9 @@ class Settings(BaseSettings):
     stripe_publishable_key: str = ""
 
     resend_api_key: str = ""
-    email_from: str = "Student Padel Ireland <noreply@studentpadelireland.ie>"
+    email_from: str = "Student Padel Ireland <noreply@studentpadel.ie>"
+    # Where user reports of objectionable content are emailed
+    report_email: str = "jkdoherty123@gmail.com"
 
     # Comma-separated extra CORS origins (Capacitor, preview deploys, custom domains)
     cors_extra_origins: str = ""
@@ -81,13 +83,13 @@ class Settings(BaseSettings):
             "http://localhost:3000",
             "http://127.0.0.1:5173",
             # Production web (canonical domain)
-            "https://studentpadelireland.ie",
-            "https://www.studentpadelireland.ie",
+            "https://studentpadel.ie",
+            "https://www.studentpadel.ie",
             # Legacy short domain (keep until DNS fully cut over)
             "https://studentpadel.ie",
             "https://www.studentpadel.ie",
             # Capacitor WebView (see capacitor.config.ts server.hostname)
-            "https://app.studentpadelireland.ie",
+            "https://app.studentpadel.ie",
             "capacitor://localhost",
             "ionic://localhost",
             "http://localhost",

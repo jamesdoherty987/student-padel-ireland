@@ -386,6 +386,11 @@ export const platformApi = {
   organiserDashboard: () => api.get('/api/organiser/dashboard'),
 }
 
+export const reportApi = {
+  create: (target_type: 'user' | 'media', target_id: string, reason: string) =>
+    api.post<{ ok: boolean }>('/api/reports', { target_type, target_id, reason }),
+}
+
 export const communityApi = {
   home: () => api.get<CommunityHome>('/api/community/home'),
   notifications: () => api.get<NotificationsFeed>('/api/notifications'),

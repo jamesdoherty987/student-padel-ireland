@@ -4,8 +4,8 @@
 <dict>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>applinks:studentpadelireland.ie</string>
-		<string>applinks:www.studentpadelireland.ie</string>
+		<string>applinks:studentpadel.ie</string>
+		<string>applinks:www.studentpadel.ie</string>
 	</array>
 </dict>
 </plist>

@@ -8,6 +8,7 @@ import {
   authApi,
   communityApi,
   platformApi,
+  reportApi,
   type ProfileMedia,
 } from '../services/api'
 import { mediaUrl } from '../utils/media'
@@ -57,6 +58,23 @@ export default function PlayerProfilePage() {
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState('')
+  const [reportTarget, setReportTarget] = useState<{ type: 'user' | 'media'; id: string } | null>(null)
+  const [reportReason, setReportReason] = useState('')
+  const [reportMsg, setReportMsg] = useState('')
+
+  const reportMut = useMutation({
+    mutationFn: () => reportApi.create(reportTarget!.type, reportTarget!.id, reportReason.trim()),
+    onSuccess: () => {
+      setReportMsg('Thanks — your report has been sent. We will review it promptly.')
+      setReportReason('')
+    },
+    onError: (e) => setReportMsg(apiErrorMessage(e)),
+  })
+  const openReport = (type: 'user' | 'media', targetId: string) => {
+    setReportMsg('')
+    setReportReason('')
+    setReportTarget({ type, id: targetId })
+  }
 
   const { data: player, isLoading, isError, refetch } = useQuery({
     queryKey: ['player', id],
@@ -257,6 +275,15 @@ export default function PlayerProfilePage() {
                     {player.university_short || player.university_name || 'Student padel'}
                   </p>
                   {isOwn && <span className="profile-you-tag">Your profile</span>}
+                  {user && !isOwn && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => openReport('user', player.id)}
+                    >
+                      Report
+                    </button>
+                  )}
 
                   {user && !isOwn && (
                     <div className="profile-friend-action">
@@ -751,10 +778,71 @@ export default function PlayerProfilePage() {
                       Delete
                     </button>
                   )}
+                  {user && !isOwn && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => openReport('media', lightbox.id)}
+                    >
+                      Report
+                    </button>
+                  )}
                   <button type="button" className="btn btn-dark btn-sm" onClick={() => setLightbox(null)}>
                     Close
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {reportTarget && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 2000,
+              background: 'rgba(0,0,0,0.6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 16,
+            }}
+          >
+            <div className="card" style={{ maxWidth: 420, width: '100%', padding: 20 }}>
+              <h2 style={{ marginTop: 0 }}>
+                Report {reportTarget.type === 'user' ? 'this player' : 'this content'}
+              </h2>
+              {reportMsg && !reportMut.isError ? (
+                <p>{reportMsg}</p>
+              ) : (
+                <>
+                  <p>Tell us what is wrong (e.g. offensive, harassment, spam, inappropriate).</p>
+                  <textarea
+                    value={reportReason}
+                    onChange={(e) => setReportReason(e.target.value)}
+                    maxLength={1000}
+                    rows={4}
+                    style={{ width: '100%' }}
+                  />
+                  {reportMsg && <p className="error-text">{reportMsg}</p>}
+                </>
+              )}
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+                {!(reportMsg && !reportMut.isError) && (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={reportReason.trim().length < 3 || reportMut.isPending}
+                    onClick={() => reportMut.mutate()}
+                  >
+                    {reportMut.isPending ? 'Sending…' : 'Send report'}
+                  </button>
+                )}
+                <button type="button" className="btn btn-dark btn-sm" onClick={() => setReportTarget(null)}>
+                  {reportMsg && !reportMut.isError ? 'Done' : 'Cancel'}
+                </button>
               </div>
             </div>
           </div>

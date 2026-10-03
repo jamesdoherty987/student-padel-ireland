@@ -1,14 +1,14 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
-  appId: 'ie.studentpadelireland.app',
+  appId: 'ie.studentpadel.app',
   appName: 'Student Padel Ireland',
   webDir: 'dist',
   // Keep the WebView on https so cookies / secure APIs behave like production web
   server: {
     androidScheme: 'https',
     iosScheme: 'https',
-    hostname: 'app.studentpadelireland.ie',
+    hostname: 'app.studentpadel.ie',
   },
   plugins: {
     SplashScreen: {
