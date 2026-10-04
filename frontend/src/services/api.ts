@@ -296,6 +296,8 @@ export type RegistrationConfirm = {
   tournament: Tournament | null
   team_name: string
   players: string[]
+  slot?: number | null
+  can_leave?: boolean
 }
 
 export const authApi = {
@@ -352,6 +354,8 @@ export const tournamentApi = {
     api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/check-in`, data),
   withdrawTeam: (tournamentId: string, teamId: string) =>
     api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
+  leaveTournament: (tournamentId: string) =>
+    api.post(`/api/tournaments/${tournamentId}/leave`),
   getRegistration: (id: string) => api.get<RegistrationConfirm>(`/api/registrations/${id}`),
   confirmPaymentSession: (sessionId: string) =>
     api.get<RegistrationConfirm>('/api/payments/confirm', { params: { session_id: sessionId } }),

@@ -1,10 +1,12 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
+import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import { tournamentApi, type Match } from '../services/api'
 import { formatLiveBoardScore, formatMatchScore, formatTime, courtLabel } from '../utils/format'
 import './PlayerLive.css'
+import './Tournament.css'
 
 type LiveAnnouncement = {
   id: string
@@ -103,10 +105,20 @@ export default function PlayerLivePage() {
 
   const t = data.tournament
   const next = data.next_match as Match | null
-  const myTeam = data.my_team as { id: string; name: string; payment_status?: string } | null
+  const myTeam = data.my_team as {
+    id: string
+    name: string
+    payment_status?: string
+    slot?: number | null
+    can_leave?: boolean
+  } | null
   const myPayment = myTeam?.payment_status
+  const mySlot = myTeam?.slot ?? null
   const hasPaidEntry = !!myTeam && myPayment === 'PAID'
-  const hasPendingEntry = !!myTeam && myPayment === 'PENDING'
+  const hasPendingCaptain = !!myTeam && myPayment === 'PENDING' && mySlot === 1
+  const isListedPartner = !!myTeam && myPayment === 'PENDING' && mySlot !== 1
+  const canLeave = !!myTeam?.can_leave
+  const singles = t.play_format === 'SINGLES'
   const myTeamId = hasPaidEntry ? myTeam?.id : undefined
   const liveMatches = (data.live_matches || []) as Match[]
   const calledMatches = (data.called_matches || []) as Match[]
@@ -197,7 +209,7 @@ export default function PlayerLivePage() {
 
         <section className="pl-next">
           <h2>Your next match</h2>
-          {hasPendingEntry ? (
+          {hasPendingCaptain ? (
             <div className="pl-next-card">
               <p className="pl-empty" style={{ marginBottom: 12 }}>
                 Your registration is waiting for payment.
@@ -205,9 +217,53 @@ export default function PlayerLivePage() {
               <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block">
                 Complete payment
               </Link>
+              {canLeave && (
+                <LeaveTournamentButton
+                  tournamentId={t.id}
+                  slug={slug}
+                  paymentStatus={myPayment}
+                  teamName={myTeam?.name}
+                  singles={singles}
+                  className="btn btn-ghost btn-block"
+                />
+              )}
+            </div>
+          ) : isListedPartner ? (
+            <div className="pl-next-card">
+              <p className="pl-empty" style={{ marginBottom: 12 }}>
+                You’re listed as a partner on <strong>{myTeam?.name}</strong>. Your teammate needs to
+                finish payment — you can’t pay separately.
+              </p>
+              <Link to={`/t/${slug}`} className="btn btn-primary btn-block">
+                View tournament
+              </Link>
+              {canLeave && (
+                <LeaveTournamentButton
+                  tournamentId={t.id}
+                  slug={slug}
+                  paymentStatus={myPayment}
+                  teamName={myTeam?.name}
+                  singles={singles}
+                  className="btn btn-ghost btn-block"
+                />
+              )}
             </div>
           ) : next && hasPaidEntry ? (
-            <NextMatchCard next={next} slug={slug} />
+            <>
+              <NextMatchCard next={next} slug={slug} />
+              {canLeave && (
+                <div style={{ marginTop: 12 }}>
+                  <LeaveTournamentButton
+                    tournamentId={t.id}
+                    slug={slug}
+                    paymentStatus={myPayment}
+                    teamName={myTeam?.name}
+                    singles={singles}
+                    className="btn btn-ghost btn-block"
+                  />
+                </div>
+              )}
+            </>
           ) : (
             <div className="pl-next-card pl-next-card--quiet">
               <p className="pl-empty">
@@ -215,10 +271,20 @@ export default function PlayerLivePage() {
                   ? 'No upcoming matches scheduled yet.'
                   : 'Register for this tournament to see your next match here.'}
               </p>
-              {!hasPaidEntry && !hasPendingEntry && t.status === 'REGISTRATION_OPEN' && (
+              {!hasPaidEntry && !hasPendingCaptain && !isListedPartner && t.status === 'REGISTRATION_OPEN' && (
                 <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block" style={{ marginTop: 12 }}>
                   Join tournament
                 </Link>
+              )}
+              {canLeave && (
+                <LeaveTournamentButton
+                  tournamentId={t.id}
+                  slug={slug}
+                  paymentStatus={myPayment}
+                  teamName={myTeam?.name}
+                  singles={singles}
+                  className="btn btn-ghost btn-block"
+                />
               )}
               <Link to={`/t/${slug}`} className="pl-details-link">
                 Full tournament page

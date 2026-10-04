@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
 import { useAuth } from '../context/AuthContext'
@@ -87,18 +88,40 @@ export default function TournamentDetailPage() {
   const joinUrl = tournament.invite_code
     ? publicPathUrl(`/join/${tournament.invite_code}`)
     : publicPathUrl(`/t/${tournament.slug}/join`)
-  const myPayment = (playerView?.my_team as { payment_status?: string } | null)?.payment_status
-  const hasPaidEntry = !!playerView?.my_team && myPayment === 'PAID'
-  const hasPendingEntry = !!playerView?.my_team && myPayment === 'PENDING'
+  const myTeamInfo = playerView?.my_team as
+    | {
+        id?: string
+        payment_status?: string
+        slot?: number | null
+        name?: string
+        players?: string[]
+        can_leave?: boolean
+      }
+    | null
+  const myPayment = myTeamInfo?.payment_status
+  const mySlot = myTeamInfo?.slot ?? null
+  const hasPaidEntry = !!myTeamInfo && myPayment === 'PAID'
+  const hasPendingCaptain = !!myTeamInfo && myPayment === 'PENDING' && mySlot === 1
+  const isListedPartner = !!myTeamInfo && myPayment === 'PENDING' && mySlot !== 1
+  const canLeave = !!myTeamInfo?.can_leave
 
   const singles = tournament.play_format === 'SINGLES'
   const spots = spotsLeftLabel(tournament.registered_teams, tournament.max_teams, tournament.play_format)
+  const registrationOpen =
+    tournament.status === 'REGISTRATION_OPEN' && !isPastCalendarDate(tournament.registration_deadline)
+  const hasSpot = tournament.registered_teams < tournament.max_teams
+  const eventStarted =
+    tournament.status === 'LIVE' ||
+    tournament.status === 'COMPLETED' ||
+    tournament.status === 'CANCELLED'
+  const canResumePayment = hasPendingCaptain && !eventStarted
   const canJoin =
-    tournament.status === 'REGISTRATION_OPEN' &&
-    tournament.registered_teams < tournament.max_teams &&
-    !isPastCalendarDate(tournament.registration_deadline) &&
-    !hasPaidEntry
-  const showInvite = !!tournament.invite_code && (canJoin || isOps)
+    registrationOpen &&
+    !hasPaidEntry &&
+    !isListedPartner &&
+    !hasPendingCaptain &&
+    hasSpot
+  const showInvite = !!tournament.invite_code && (canJoin || isOps || hasPendingCaptain)
 
   return (
     <div className="app-shell">
@@ -111,31 +134,71 @@ export default function TournamentDetailPage() {
           {formatTime(tournament.start_time)}
         </p>
 
-        <div className="tour-actions">
-          {canJoin && (
-              <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
-                {hasPendingEntry ? 'Complete payment' : 'Join tournament'}
-              </Link>
-            )}
-          {tournament.status === 'REGISTRATION_OPEN' &&
+        {(isListedPartner ||
+          hasPendingCaptain ||
+          (tournament.status === 'REGISTRATION_OPEN' &&
             !hasPaidEntry &&
-            (tournament.registered_teams >= tournament.max_teams ||
-              isPastCalendarDate(tournament.registration_deadline)) && (
-              <p className="muted-note tour-closed-note">
-                {isPastCalendarDate(tournament.registration_deadline)
-                  ? 'Registration closed'
-                  : `Tournament is full. Check back if a ${singles ? 'player' : 'team'} withdraws.`}
+            !isListedPartner &&
+            !hasPendingCaptain &&
+            (!hasSpot || isPastCalendarDate(tournament.registration_deadline)))) && (
+          <div className="tour-entry-notes">
+            {isListedPartner && (
+              <p className="muted-note">
+                You’re listed as a partner on <strong>{myTeamInfo?.name}</strong>
+                {myTeamInfo?.players?.length ? ` (${myTeamInfo.players.join(' / ')})` : ''}. Your
+                teammate needs to finish payment — or cancel the team entry below if you want out.
               </p>
             )}
+            {hasPendingCaptain && (
+              <p className="muted-note">
+                You’ve started an entry for <strong>{myTeamInfo?.name}</strong>. Finish payment, or
+                cancel the entry below if you’ve changed your mind.
+              </p>
+            )}
+            {tournament.status === 'REGISTRATION_OPEN' &&
+              !hasPaidEntry &&
+              !isListedPartner &&
+              !hasPendingCaptain &&
+              (!hasSpot || isPastCalendarDate(tournament.registration_deadline)) && (
+                <p className="muted-note">
+                  {isPastCalendarDate(tournament.registration_deadline)
+                    ? 'Registration closed'
+                    : `Tournament is full. Check back if a ${singles ? 'player' : 'team'} withdraws.`}
+                </p>
+              )}
+          </div>
+        )}
+
+        <div className="tour-actions">
+          {canJoin && (
+            <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
+              Join tournament
+            </Link>
+          )}
+          {canResumePayment && (
+            <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
+              Complete payment
+            </Link>
+          )}
           {hasPaidEntry && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
-              My matches · {playerView?.my_team?.name}
+              My matches · {myTeamInfo?.name}
             </Link>
           )}
           {!hasPaidEntry && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-ghost">
               Live scores
             </Link>
+          )}
+          {canLeave && (
+            <LeaveTournamentButton
+              tournamentId={tournament.id}
+              slug={tournament.slug}
+              paymentStatus={myPayment}
+              teamName={myTeamInfo?.name}
+              singles={singles}
+              className="btn btn-ghost"
+            />
           )}
           {isOps && (
             <>

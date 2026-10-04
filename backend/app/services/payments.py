@@ -3,12 +3,30 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models import Payment, PaymentStatus, Registration, Team, Tournament
+from app.models import Payment, PaymentStatus, Registration, Team, TeamPlayer, Tournament
+
+
+def expire_checkout_session(session_id: str | None) -> None:
+    """Best-effort expire of an open Stripe Checkout session after leave/cancel."""
+    if not session_id:
+        return
+    settings = get_settings()
+    if not settings.stripe_secret_key:
+        return
+    try:
+        import stripe
+
+        stripe.api_key = settings.stripe_secret_key
+        stripe.checkout.Session.expire(session_id)
+    except Exception:
+        # Session may already be expired/paid — ignore
+        pass
 
 
 def mark_registration_paid(
@@ -21,7 +39,27 @@ def mark_registration_paid(
     if reg.status == PaymentStatus.PAID.value:
         return reg
 
-    t = db.get(Tournament, reg.tournament_id)
+    if reg.status != PaymentStatus.PENDING.value:
+        raise HTTPException(
+            400,
+            "This registration was cancelled or is no longer awaiting payment. "
+            "Contact the organiser if you were charged.",
+        )
+
+    # Lock tournament row to reduce last-spot double-pay races
+    t = (
+        db.query(Tournament)
+        .filter(Tournament.id == reg.tournament_id)
+        .with_for_update()
+        .first()
+    )
+    team = db.get(Team, reg.team_id)
+    if not team or team.withdrawn:
+        raise HTTPException(
+            400,
+            "This entry was withdrawn. Contact the organiser if you were charged.",
+        )
+
     if t and t.max_teams:
         paid_count = (
             db.query(Registration)
@@ -38,6 +76,33 @@ def mark_registration_paid(
             raise HTTPException(
                 400,
                 "This event is full — payment cannot be completed. Contact the organiser for a refund if you were charged.",
+            )
+
+    # Prevent the same player ending up on two active teams (paid or pending)
+    player_ids = [
+        row[0]
+        for row in db.query(TeamPlayer.user_id).filter(TeamPlayer.team_id == reg.team_id).all()
+    ]
+    if player_ids:
+        conflict = (
+            db.query(TeamPlayer)
+            .join(Team, Team.id == TeamPlayer.team_id)
+            .join(Registration, Registration.team_id == Team.id)
+            .filter(
+                Team.tournament_id == reg.tournament_id,
+                Team.withdrawn.is_(False),
+                TeamPlayer.user_id.in_(player_ids),
+                Registration.status.in_(
+                    [PaymentStatus.PAID.value, PaymentStatus.PENDING.value]
+                ),
+                Registration.id != reg.id,
+            )
+            .first()
+        )
+        if conflict:
+            raise HTTPException(
+                400,
+                "A player on this entry is already entered on another team for this tournament.",
             )
 
     reg.status = PaymentStatus.PAID.value
@@ -69,7 +134,7 @@ def confirm_stripe_session(db: Session, session_id: str) -> Registration | None:
     import stripe
 
     stripe.api_key = settings.stripe_secret_key
-    session = stripe.checkout.Session.retrieve(session_id)
+    session: Any = stripe.checkout.Session.retrieve(session_id)
     if session.payment_status != "paid":
         return None
 

@@ -19,6 +19,8 @@ from app.models import (
     Announcement,
     CommunityCompetition,
     Court,
+    Friendship,
+    FriendshipStatus,
     Group,
     GroupTeam,
     Match,
@@ -152,8 +154,19 @@ def _team_out(team: Team) -> TeamOut:
     )
 
 
-def _players_already_registered(db: Session, tournament_id: UUID, user_ids: list[UUID]) -> bool:
-    return (
+def _active_entry_statuses() -> tuple[str, ...]:
+    """PENDING and PAID both occupy a tournament slot for a player."""
+    return (PaymentStatus.PENDING.value, PaymentStatus.PAID.value)
+
+
+def _players_already_registered(
+    db: Session,
+    tournament_id: UUID,
+    user_ids: list[UUID],
+    *,
+    exclude_registration_id: UUID | None = None,
+) -> bool:
+    q = (
         db.query(TeamPlayer)
         .join(Team)
         .join(Registration, Registration.team_id == Team.id)
@@ -161,10 +174,77 @@ def _players_already_registered(db: Session, tournament_id: UUID, user_ids: list
             Team.tournament_id == tournament_id,
             Team.withdrawn.is_(False),
             TeamPlayer.user_id.in_(user_ids),
-            Registration.status == PaymentStatus.PAID.value,
+            Registration.status.in_(_active_entry_statuses()),
+        )
+    )
+    if exclude_registration_id:
+        q = q.filter(Registration.id != exclude_registration_id)
+    return q.first() is not None
+
+
+def _membership_for_user(
+    db: Session, tournament_id: UUID, user_id: UUID
+) -> tuple[TeamPlayer, Team, Registration] | None:
+    status_rank = case(
+        (Registration.status == PaymentStatus.PAID.value, 0),
+        else_=1,
+    )
+    row = (
+        db.query(TeamPlayer, Team, Registration)
+        .join(Team, Team.id == TeamPlayer.team_id)
+        .join(Registration, Registration.team_id == Team.id)
+        .filter(
+            Team.tournament_id == tournament_id,
+            Team.withdrawn.is_(False),
+            TeamPlayer.user_id == user_id,
+            Registration.status.in_(_active_entry_statuses()),
+        )
+        .order_by(status_rank)
+        .first()
+    )
+    return row
+
+
+def _are_friends(db: Session, a: UUID, b: UUID) -> bool:
+    return (
+        db.query(Friendship)
+        .filter(
+            Friendship.status == FriendshipStatus.ACCEPTED.value,
+            or_(
+                (Friendship.requester_id == a) & (Friendship.addressee_id == b),
+                (Friendship.requester_id == b) & (Friendship.addressee_id == a),
+            ),
         )
         .first()
         is not None
+    )
+
+
+def _conflict_message(db: Session, tournament_id: UUID, you: UUID, partner: UUID | None, singles: bool) -> str:
+    your = _membership_for_user(db, tournament_id, you)
+    if your:
+        _tp, team, reg = your
+        if reg.status == PaymentStatus.PAID.value:
+            return "You are already registered for this tournament"
+        if _tp.slot != 1:
+            return (
+                f"You're already listed as a partner on “{team.name}”. "
+                "Leave that entry from the tournament page, or wait for your teammate to finish payment."
+            )
+        return (
+            f"You already started an entry (“{team.name}”). "
+            "Finish payment below, update your details, or leave the entry from the tournament page."
+        )
+    if partner:
+        theirs = _membership_for_user(db, tournament_id, partner)
+        if theirs:
+            _tp, team, reg = theirs
+            status = "registered" if reg.status == PaymentStatus.PAID.value else "already entered on a pending team"
+            return f"Your partner is {status} for this tournament (“{team.name}”)"
+    return (
+        "You are already registered for this tournament"
+        if singles
+        else "You or your partner are already entered in this tournament"
     )
 
 
@@ -831,14 +911,38 @@ def register_team(
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
-    if t.status != TournamentStatus.REGISTRATION_OPEN.value:
-        raise HTTPException(400, "Registration is not open")
-    if _deadline_passed(t):
-        raise HTTPException(400, "Registration deadline has passed")
-    if _paid_team_count(db, t.id) >= t.max_teams:
-        raise HTTPException(400, "Tournament is full")
 
     singles = _is_singles(t)
+
+    # Detect resume early so pending captains can finish payment after close/full
+    my_entry = _membership_for_user(db, t.id, user.id)
+    resume_reg: Registration | None = None
+    if my_entry:
+        my_tp, _my_team_row, my_reg = my_entry
+        if my_reg.status == PaymentStatus.PAID.value:
+            raise HTTPException(400, "You are already registered for this tournament")
+        if my_tp.slot != 1:
+            raise HTTPException(400, _conflict_message(db, t.id, user.id, None, singles))
+        resume_reg = my_reg
+
+    if resume_reg:
+        if t.status in (
+            TournamentStatus.LIVE.value,
+            TournamentStatus.COMPLETED.value,
+            TournamentStatus.CANCELLED.value,
+        ):
+            raise HTTPException(
+                400,
+                "This event has started — you can’t finish registration. Leave the entry instead.",
+            )
+    else:
+        if t.status != TournamentStatus.REGISTRATION_OPEN.value:
+            raise HTTPException(400, "Registration is not open")
+        if _deadline_passed(t):
+            raise HTTPException(400, "Registration deadline has passed")
+        if _paid_team_count(db, t.id) >= t.max_teams:
+            raise HTTPException(400, "Tournament is full")
+
     partner: User | None = None
 
     if singles:
@@ -849,6 +953,21 @@ def register_team(
             partner = db.get(User, body.partner_user_id)
             if not partner or not partner.is_active:
                 raise HTTPException(400, "Partner not found")
+            # Resume may keep an existing email-invited partner who isn't a friend yet
+            if not resume_reg and not _are_friends(db, user.id, partner.id):
+                raise HTTPException(400, "You can only pick partners from your friends list")
+            if resume_reg and not _are_friends(db, user.id, partner.id):
+                # Only allow if already on this pending team
+                on_team = (
+                    db.query(TeamPlayer)
+                    .filter(
+                        TeamPlayer.team_id == resume_reg.team_id,
+                        TeamPlayer.user_id == partner.id,
+                    )
+                    .first()
+                )
+                if not on_team:
+                    raise HTTPException(400, "You can only pick partners from your friends list")
         elif body.partner_email:
             partner = db.query(User).filter(User.email == body.partner_email.lower()).first()
             if not partner:
@@ -860,7 +979,7 @@ def register_team(
                     password_hash=hash_password(str(uuid4())),
                     full_name=name,
                     role="PLAYER",
-                    university_id=body.university_id,
+                    university_id=None,
                     must_set_password=True,
                 )
                 db.add(partner)
@@ -872,33 +991,26 @@ def register_team(
         if partner.id == user.id:
             raise HTTPException(400, "Partner must be a different player")
 
-    player_ids = [user.id] if singles else [user.id, partner.id]  # type: ignore[union-attr]
-    if _players_already_registered(db, t.id, player_ids):
-        raise HTTPException(
-            400,
-            "You are already registered for this tournament"
-            if singles
-            else "You or your partner are already registered for this tournament",
-        )
+    if partner:
+        partner_entry = _membership_for_user(db, t.id, partner.id)
+        if partner_entry:
+            _ptp, _pteam, preg = partner_entry
+            # Allow if partner is already on the team we're resuming
+            if not resume_reg or preg.team_id != resume_reg.team_id:
+                raise HTTPException(400, _conflict_message(db, t.id, user.id, partner.id, singles))
 
-    pending_mine = (
-        db.query(Registration)
-        .join(Team, Registration.team_id == Team.id)
-        .join(TeamPlayer, TeamPlayer.team_id == Team.id)
-        .filter(
-            Team.tournament_id == t.id,
-            Team.withdrawn.is_(False),
-            TeamPlayer.user_id == user.id,
-            Registration.status == PaymentStatus.PENDING.value,
-        )
-        .first()
-    )
-    if pending_mine:
-        team = db.get(Team, pending_mine.team_id)
+    if body.phone and not user.phone:
+        user.phone = body.phone
+    if body.student_number and not user.student_number:
+        user.student_number = body.student_number
+
+    if resume_reg:
+        team = db.get(Team, resume_reg.team_id)
         if team:
             team.name = body.team_name.strip()
+            if body.university_id:
+                team.university_id = body.university_id
             if not singles and partner:
-                # Refresh partner on slot 2
                 slot2 = (
                     db.query(TeamPlayer)
                     .filter(TeamPlayer.team_id == team.id, TeamPlayer.slot == 2)
@@ -906,20 +1018,26 @@ def register_team(
                 )
                 if slot2:
                     if slot2.user_id != partner.id:
-                        if _players_already_registered(db, t.id, [partner.id]):
-                            raise HTTPException(400, "That partner is already registered")
+                        if _players_already_registered(
+                            db, t.id, [partner.id], exclude_registration_id=resume_reg.id
+                        ):
+                            raise HTTPException(400, "That partner is already entered in this tournament")
                         slot2.user_id = partner.id
-                        slot2.invitation_accepted = bool(body.partner_user_id)
+                        slot2.invitation_accepted = bool(body.partner_user_id) or _are_friends(
+                            db, user.id, partner.id
+                        )
                 else:
                     db.add(
                         TeamPlayer(
                             team_id=team.id,
                             user_id=partner.id,
                             slot=2,
-                            invitation_accepted=bool(body.partner_user_id),
+                            invitation_accepted=bool(body.partner_user_id) or _are_friends(
+                                db, user.id, partner.id
+                            ),
                         )
                     )
-        return _issue_checkout(db, t, team, pending_mine)
+        return _issue_checkout(db, t, team, resume_reg)
 
     team = Team(
         tournament_id=t.id,
@@ -935,14 +1053,9 @@ def register_team(
                 team_id=team.id,
                 user_id=partner.id,
                 slot=2,
-                invitation_accepted=bool(body.partner_user_id),
+                invitation_accepted=bool(body.partner_user_id) or _are_friends(db, user.id, partner.id),
             )
         )
-
-    if body.phone and not user.phone:
-        user.phone = body.phone
-    if body.student_number and not user.student_number:
-        user.student_number = body.student_number
 
     reg = Registration(
         tournament_id=t.id,
@@ -1135,6 +1248,9 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
     )
     if not can_view:
         raise HTTPException(403, "Not allowed to view this registration")
+    my_slot = next((m.slot for m in members if m.user_id == user.id), None)
+    if team.registration is None:
+        team.registration = reg
     return {
         "registration_id": str(reg.id),
         "status": reg.status,
@@ -1144,6 +1260,8 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
         "tournament": _tournament_out(db, t) if t else None,
         "team_name": team.name,
         "players": [m.user.full_name for m in members if m.user],
+        "slot": my_slot,
+        "can_leave": bool(t and _player_can_leave_entry(t, team)),
     }
 
 
@@ -1172,7 +1290,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         session = event["data"]["object"]
         from app.services.payments import confirm_stripe_session
 
-        confirm_stripe_session(db, session["id"])
+        try:
+            confirm_stripe_session(db, session["id"])
+        except HTTPException:
+            # Cancelled/withdrawn/full — acknowledge webhook so Stripe stops retrying.
+            # Player was charged; organiser must handle refund manually.
+            db.rollback()
     return {"received": True}
 
 
@@ -1239,36 +1362,58 @@ def check_in_team(
     )
 
 
-@router.post("/tournaments/{tournament_id}/teams/{team_id}/withdraw", response_model=TeamOut)
-def withdraw_team(
-    tournament_id: UUID,
-    team_id: UUID,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Withdraw a team. Unpaid/pending entries can always be removed; paid only before LIVE."""
-    t = db.get(Tournament, tournament_id)
-    if not t:
-        raise HTTPException(404, "Tournament not found")
-    _assert_organiser(user, t, db)
-    team = db.get(Team, team_id)
-    if not team or team.tournament_id != tournament_id or team.withdrawn:
-        raise HTTPException(404, "Team not found")
+def _entry_is_paid(team: Team) -> bool:
+    return bool(team.registration and team.registration.status == PaymentStatus.PAID.value)
 
-    paid = team.registration and team.registration.status == PaymentStatus.PAID.value
-    if paid and t.status in (TournamentStatus.LIVE.value, TournamentStatus.COMPLETED.value):
-        raise HTTPException(400, "Cannot withdraw a paid team after the event is live")
+
+def _tournament_blocks_paid_withdraw(t: Tournament) -> bool:
+    return t.status in (
+        TournamentStatus.LIVE.value,
+        TournamentStatus.COMPLETED.value,
+        TournamentStatus.CANCELLED.value,
+    )
+
+
+def _player_can_leave_entry(t: Tournament, team: Team) -> bool:
+    if team.withdrawn or not team.registration:
+        return False
+    status = team.registration.status
+    if status == PaymentStatus.PENDING.value:
+        return t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value)
+    if status == PaymentStatus.PAID.value:
+        return not _tournament_blocks_paid_withdraw(t)
+    return False
+
+
+def _apply_team_withdraw(db: Session, t: Tournament, team: Team, *, as_organiser: bool) -> TeamOut:
+    paid = _entry_is_paid(team)
+    if paid and _tournament_blocks_paid_withdraw(t):
+        raise HTTPException(
+            400,
+            "Cannot withdraw a paid entry after the event has started"
+            if not as_organiser
+            else "Cannot withdraw a paid team after the event is live",
+        )
+    if not as_organiser and not _player_can_leave_entry(t, team):
+        raise HTTPException(400, "You can no longer leave this tournament")
 
     # Allowed before LIVE even if already in a draft draw — regenerate to rebuild fixtures
     team.withdrawn = True
     team.checked_in = False
+    old_session_id = team.registration.stripe_session_id if team.registration else None
     if team.registration and team.registration.status in (
         PaymentStatus.PENDING.value,
         PaymentStatus.FAILED.value,
         PaymentStatus.CANCELLED.value,
     ):
         team.registration.status = PaymentStatus.CANCELLED.value
+        # Drop session link so a late webhook/confirm can't revive this entry
+        team.registration.stripe_session_id = None
     db.commit()
+    if not paid and old_session_id:
+        from app.services.payments import expire_checkout_session
+
+        expire_checkout_session(old_session_id)
     return TeamOut(
         id=team.id,
         tournament_id=team.tournament_id,
@@ -1280,6 +1425,57 @@ def withdraw_team(
         player_names=[],
         payment_status=team.registration.status if team.registration else None,
     )
+
+
+@router.post("/tournaments/{tournament_id}/teams/{team_id}/withdraw", response_model=TeamOut)
+def withdraw_team(
+    tournament_id: UUID,
+    team_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organiser withdraw. Unpaid/pending can always be removed; paid only before LIVE."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    team = (
+        db.query(Team)
+        .options(joinedload(Team.registration))
+        .filter(Team.id == team_id, Team.tournament_id == tournament_id)
+        .first()
+    )
+    if not team or team.withdrawn:
+        raise HTTPException(404, "Team not found")
+    return _apply_team_withdraw(db, t, team, as_organiser=True)
+
+
+@router.post("/tournaments/{tournament_id}/leave", response_model=TeamOut)
+def leave_tournament(
+    tournament_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Player self-withdraw: cancel a pending entry, or leave a paid entry before the event starts."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+
+    membership = _membership_for_user(db, t.id, user.id)
+    if not membership:
+        raise HTTPException(400, "You are not entered in this tournament")
+    _tp, team, reg = membership
+    # Ensure registration is loaded on team for helper
+    if team.registration is None:
+        team.registration = reg
+
+    if not _player_can_leave_entry(t, team):
+        if _entry_is_paid(team) and _tournament_blocks_paid_withdraw(t):
+            raise HTTPException(400, "You can’t leave after the event has started — contact the organiser")
+        raise HTTPException(400, "You can no longer leave this tournament")
+
+    # Doubles: any member leaving cancels the whole team entry
+    return _apply_team_withdraw(db, t, team, as_organiser=False)
 
 
 # ── Generate ──────────────────────────────────────────────────
@@ -1888,33 +2084,55 @@ def player_view(
     t = _resolve_tournament(db, slug_or_id)
     my_team = None
     my_payment_status = None
+    my_slot: int | None = None
+    my_teammates: list[str] = []
+    partner_user_id: UUID | None = None
+    partner_name: str | None = None
+    partner_email: str | None = None
+    entered_user_ids: list[UUID] = []
     next_match = None
     my_results = []
     my_upcoming: list = []
     if user:
-        memberships = (
-            db.query(TeamPlayer)
-            .join(Team)
-            .filter(Team.tournament_id == t.id, TeamPlayer.user_id == user.id, Team.withdrawn.is_(False))
-            .all()
-        )
-        membership = None
-        for mp in memberships:
-            team = db.get(Team, mp.team_id)
-            if team and team.registration and team.registration.status == PaymentStatus.PAID.value:
-                membership = mp
-                break
-        if membership is None and memberships:
-            membership = memberships[0]
+        entered_user_ids = [
+            row[0]
+            for row in (
+                db.query(TeamPlayer.user_id)
+                .join(Team, Team.id == TeamPlayer.team_id)
+                .join(Registration, Registration.team_id == Team.id)
+                .filter(
+                    Team.tournament_id == t.id,
+                    Team.withdrawn.is_(False),
+                    Registration.status.in_(_active_entry_statuses()),
+                )
+                .distinct()
+                .all()
+            )
+        ]
+        membership_row = _membership_for_user(db, t.id, user.id)
+        membership = membership_row[0] if membership_row else None
         if membership:
+            my_slot = membership.slot
             my_team = (
                 db.query(Team)
-                .options(joinedload(Team.registration))
+                .options(joinedload(Team.registration), joinedload(Team.members).joinedload(TeamPlayer.user))
                 .filter(Team.id == membership.team_id)
                 .first()
             )
             if my_team and my_team.registration:
                 my_payment_status = my_team.registration.status
+            if my_team:
+                my_teammates = [
+                    m.user.full_name
+                    for m in sorted(my_team.members, key=lambda x: x.slot)
+                    if m.user
+                ]
+                for m in sorted(my_team.members, key=lambda x: x.slot):
+                    if m.user and m.user_id != user.id:
+                        partner_user_id = m.user_id
+                        partner_name = m.user.full_name
+                        partner_email = m.user.email
+                        break
             # Only expose fixtures for paid entries
             if my_team and my_payment_status == PaymentStatus.PAID.value:
                 status_rank = case(
@@ -1981,10 +2199,21 @@ def player_view(
     return {
         "tournament": _tournament_out(db, t),
         "my_team": (
-            {"id": my_team.id, "name": my_team.name, "payment_status": my_payment_status}
+            {
+                "id": my_team.id,
+                "name": my_team.name,
+                "payment_status": my_payment_status,
+                "slot": my_slot,
+                "players": my_teammates,
+                "partner_user_id": partner_user_id,
+                "partner_name": partner_name,
+                "partner_email": partner_email,
+                "can_leave": _player_can_leave_entry(t, my_team),
+            }
             if my_team
             else None
         ),
+        "entered_user_ids": entered_user_ids,
         "next_match": next_match,
         "my_upcoming": my_upcoming,
         "my_results": my_results,

@@ -939,9 +939,10 @@ export default function OrganiserDashboard() {
                                 className="btn btn-ghost btn-sm"
                                 disabled={withdrawMut.isPending}
                                 onClick={() => {
-                                  const msg = fixturesExist
+                                  const base = fixturesExist
                                     ? `Withdraw ${team.name}? Regenerate the draw afterwards so fixtures stay correct.`
                                     : `Withdraw ${team.name}?`
+                                  const msg = `${base} Entry fees are not refunded automatically.`
                                   if (window.confirm(msg)) {
                                     withdrawMut.mutate(team.id)
                                   }

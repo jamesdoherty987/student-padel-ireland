@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
+import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { hapticSuccess } from '../native/haptics'
@@ -17,12 +18,22 @@ import {
 } from '../services/api'
 import { formatMoney, formatPerPlayerFee, isPastCalendarDate } from '../utils/format'
 import './Tournament.css'
-import './Community.css'
+
+function paymentLabel(status: string) {
+  if (status === 'PAID') return 'Paid'
+  if (status === 'PENDING') return 'Awaiting payment'
+  return status.replace(/_/g, ' ')
+}
 
 function ConfirmView({ data }: { data: RegistrationConfirm }) {
+  const navigate = useNavigate()
   const slug = data.tournament?.slug
+  const tournamentId = data.tournament?.id
   const paid = data.status === 'PAID'
+  const pending = data.status === 'PENDING'
+  const isCaptain = data.slot == null || data.slot === 1
   const singles = data.tournament?.play_format === 'SINGLES'
+  const canLeave = !!data.can_leave
 
   useEffect(() => {
     if (paid) void hapticSuccess()
@@ -53,23 +64,57 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
           <div>
             <span>Payment</span>
             <strong className={paid ? 'paid' : ''}>
-              {formatMoney(data.amount_cents, data.currency)} · {data.status}
+              {formatMoney(data.amount_cents, data.currency)} · {paymentLabel(data.status)}
             </strong>
           </div>
         </div>
         {slug && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Link to={`/t/${slug}/live`} className="btn btn-primary btn-block">
-              Go to my matches
-            </Link>
+            {paid ? (
+              <Link to={`/t/${slug}/live`} className="btn btn-primary btn-block">
+                Go to my matches
+              </Link>
+            ) : isCaptain ? (
+              <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block">
+                Complete payment
+              </Link>
+            ) : (
+              <p className="muted-note">
+                You’re listed as a partner. Your teammate needs to finish payment — or cancel the team
+                entry below if you want out.
+              </p>
+            )}
             <Link to={`/t/${slug}`} className="btn btn-ghost btn-block">
               Tournament page
             </Link>
+            {pending && canLeave && tournamentId && (
+              <LeaveTournamentButton
+                tournamentId={tournamentId}
+                slug={slug}
+                paymentStatus={data.status}
+                teamName={data.team_name}
+                singles={singles}
+                className="btn btn-ghost btn-block"
+                onLeft={() => navigate(`/t/${slug}`, { replace: true })}
+              />
+            )}
           </div>
         )}
       </main>
     </div>
   )
+}
+
+type MyTeamInfo = {
+  id: string
+  name: string
+  payment_status?: string | null
+  slot?: number | null
+  players?: string[]
+  partner_user_id?: string | null
+  partner_name?: string | null
+  partner_email?: string | null
+  can_leave?: boolean
 }
 
 export default function JoinTournamentPage() {
@@ -93,6 +138,12 @@ export default function JoinTournamentPage() {
     enabled: !!slug && !isConfirmRoute,
   })
 
+  const { data: playerView, isLoading: pvLoading } = useQuery({
+    queryKey: ['player-view', slug],
+    queryFn: async () => (await tournamentApi.playerView(slug)).data,
+    enabled: !!slug && !!user && !isConfirmRoute,
+  })
+
   const { data: universities = [] } = useQuery({
     queryKey: ['universities'],
     queryFn: async () => (await platformApi.universities()).data,
@@ -104,15 +155,11 @@ export default function JoinTournamentPage() {
     enabled: !isConfirmRoute,
     staleTime: 60_000,
   })
-  const { data: friends = [] } = useQuery({
+  const { data: friends = [], isFetched: friendsFetched } = useQuery({
     queryKey: ['friends'],
     queryFn: async () => (await communityApi.friends()).data,
     enabled: !!user && !isConfirmRoute,
   })
-  const friendPartners = useMemo(
-    () => friends.filter((f) => f.direction === 'friend'),
-    [friends],
-  )
 
   const {
     data: stripeConfirm,
@@ -160,14 +207,84 @@ export default function JoinTournamentPage() {
       phone: f.phone || user.phone || '',
       university_id: f.university_id || user.university_id || '',
       student_number: f.student_number || user.student_number || '',
+      team_name: f.team_name || user.full_name || '',
     }))
   }, [user])
 
+  const myTeamEarly = (playerView?.my_team || null) as MyTeamInfo | null
+  const resumePartnerId = myTeamEarly?.partner_user_id || ''
+  const enteredUserIds = useMemo(() => {
+    const raw = (playerView as { entered_user_ids?: string[] } | undefined)?.entered_user_ids
+    return new Set(raw || [])
+  }, [playerView])
+
+  const friendPartners = useMemo(() => {
+    const base = friends.filter((f) => {
+      if (f.direction !== 'friend') return false
+      // Allow the partner already on your pending team when resuming checkout
+      if (resumePartnerId && f.user_id === resumePartnerId) return true
+      return !enteredUserIds.has(f.user_id)
+    })
+    // Email-invited partner on a pending team may not be in friends yet
+    if (
+      resumePartnerId &&
+      myTeamEarly?.partner_name &&
+      !base.some((f) => f.user_id === resumePartnerId)
+    ) {
+      return [
+        {
+          id: `resume-${resumePartnerId}`,
+          user_id: resumePartnerId,
+          full_name: myTeamEarly.partner_name,
+          university_short: null,
+          points: 0,
+          status: 'ACCEPTED',
+          direction: 'friend' as const,
+          created_at: '',
+        },
+        ...base,
+      ]
+    }
+    return base
+  }, [friends, enteredUserIds, resumePartnerId, myTeamEarly?.partner_name])
+
+  const friendsBusyElsewhere = useMemo(() => {
+    return friends.filter(
+      (f) =>
+        f.direction === 'friend' &&
+        enteredUserIds.has(f.user_id) &&
+        f.user_id !== resumePartnerId,
+    )
+  }, [friends, enteredUserIds, resumePartnerId])
+
+  const resumeDefaultsApplied = useRef(false)
   useEffect(() => {
+    if (!myTeamEarly || myTeamEarly.payment_status !== 'PENDING' || myTeamEarly.slot !== 1) return
+    if (resumeDefaultsApplied.current) return
+    resumeDefaultsApplied.current = true
+    const partnerOnFriends = !!myTeamEarly.partner_user_id && friendPartners.some((f) => f.user_id === myTeamEarly.partner_user_id)
+    setForm((f) => ({
+      ...f,
+      team_name: myTeamEarly.name || f.team_name,
+      partner_user_id: myTeamEarly.partner_user_id || f.partner_user_id,
+      partner_name: myTeamEarly.partner_name || f.partner_name,
+      partner_email: myTeamEarly.partner_email || f.partner_email,
+    }))
+    if (myTeamEarly.partner_user_id && (partnerOnFriends || !friendsFetched)) {
+      setPartnerMode('friend')
+    } else if (myTeamEarly.partner_email || myTeamEarly.partner_name) {
+      setPartnerMode('email')
+    }
+  }, [myTeamEarly, friendPartners, friendsFetched])
+
+  useEffect(() => {
+    if (!friendsFetched) return
+    // Keep friend mode while resuming with a saved partner id
+    if (form.partner_user_id) return
     if (friendPartners.length === 0 && partnerMode === 'friend') {
       setPartnerMode('email')
     }
-  }, [friendPartners.length, partnerMode])
+  }, [friendsFetched, friendPartners.length, partnerMode, form.partner_user_id])
 
   if (authLoading || (isConfirmRoute && hasConfirmParams && confirming)) {
     return (
@@ -261,7 +378,7 @@ export default function JoinTournamentPage() {
         <NavBar />
         <main className="page empty-state">
           <h1 className="page-title">Join tournament</h1>
-          <p className="page-sub">Create an account or log in to register your team.</p>
+          <p className="page-sub">Create an account or log in to register.</p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
             <Link to={`/signup?next=${next}`} className="btn btn-primary">
               Sign up
@@ -275,7 +392,7 @@ export default function JoinTournamentPage() {
     )
   }
 
-  if (tLoading) {
+  if (tLoading || pvLoading) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -300,7 +417,93 @@ export default function JoinTournamentPage() {
     )
   }
 
-  if (tournament.status !== 'REGISTRATION_OPEN') {
+  const myTeam = (playerView?.my_team || null) as MyTeamInfo | null
+  const myPayment = myTeam?.payment_status
+  const mySlot = myTeam?.slot ?? null
+  const singles = tournament.play_format === 'SINGLES'
+
+  if (myTeam && myPayment === 'PAID') {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page empty-state">
+          <h1 className="page-title">You’re already in</h1>
+          <p className="page-sub">
+            {myTeam.name}
+            {myTeam.players?.length ? ` · ${myTeam.players.join(' / ')}` : ''}
+          </p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
+              My matches
+            </Link>
+            <Link to={`/t/${tournament.slug}`} className="btn btn-ghost">
+              Tournament page
+            </Link>
+          </div>
+          {myTeam.can_leave && (
+            <>
+              <p className="muted-note entry-leave-note">
+                Need to pull out before the event starts? You can leave below. Fees aren’t refunded
+                automatically — message the organiser if you need one.
+              </p>
+              <LeaveTournamentButton
+                tournamentId={tournament.id}
+                slug={tournament.slug}
+                paymentStatus={myPayment}
+                teamName={myTeam.name}
+                singles={singles}
+                className="btn btn-ghost"
+                onLeft={() => navigate(`/t/${tournament.slug}`, { replace: true })}
+              />
+            </>
+          )}
+        </main>
+      </div>
+    )
+  }
+
+  if (myTeam && myPayment === 'PENDING' && mySlot !== 1) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page empty-state">
+          <h1 className="page-title">You’re listed as a partner</h1>
+          <p className="page-sub">
+            You’re already on <strong>{myTeam.name}</strong>
+            {myTeam.players?.length ? ` (${myTeam.players.join(' / ')})` : ''}. Your teammate needs to finish
+            payment — you can’t enter this event again separately unless you leave first.
+          </p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+              View tournament
+            </Link>
+            {myTeam.can_leave && (
+              <LeaveTournamentButton
+                tournamentId={tournament.id}
+                slug={tournament.slug}
+                paymentStatus={myPayment}
+                teamName={myTeam.name}
+                singles={singles}
+                className="btn btn-ghost"
+                onLeft={() => navigate(`/t/${tournament.slug}`, { replace: true })}
+              />
+            )}
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  const resumingPending = !!(myTeam && myPayment === 'PENDING' && mySlot === 1)
+  const deadlineGone = isPastCalendarDate(tournament.registration_deadline)
+  const isFull = tournament.registered_teams >= tournament.max_teams
+  const entryNoun = singles ? 'players' : 'doubles teams'
+  const eventStarted =
+    tournament.status === 'LIVE' ||
+    tournament.status === 'COMPLETED' ||
+    tournament.status === 'CANCELLED'
+
+  if (!resumingPending && tournament.status !== 'REGISTRATION_OPEN') {
     return (
       <div className="app-shell">
         <NavBar />
@@ -315,9 +518,7 @@ export default function JoinTournamentPage() {
     )
   }
 
-  const deadlineGone = isPastCalendarDate(tournament.registration_deadline)
-
-  if (deadlineGone) {
+  if (!resumingPending && deadlineGone) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -332,12 +533,7 @@ export default function JoinTournamentPage() {
     )
   }
 
-  const isFull = tournament.registered_teams >= tournament.max_teams
-
-  const singles = tournament.play_format === 'SINGLES'
-  const entryNoun = singles ? 'players' : 'doubles teams'
-
-  if (isFull) {
+  if (!resumingPending && isFull) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -353,6 +549,42 @@ export default function JoinTournamentPage() {
       </div>
     )
   }
+
+  if (resumingPending && eventStarted) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page empty-state">
+          <h1 className="page-title">Can’t finish payment</h1>
+          <p className="page-sub">
+            This event has already started. Cancel your pending entry below if you still need to clear it.
+          </p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+              View tournament
+            </Link>
+            {myTeam?.can_leave && (
+              <LeaveTournamentButton
+                tournamentId={tournament.id}
+                slug={tournament.slug}
+                paymentStatus={myPayment}
+                teamName={myTeam.name}
+                singles={singles}
+                className="btn btn-ghost"
+                onLeft={() => navigate(`/t/${tournament.slug}`, { replace: true })}
+              />
+            )}
+          </div>
+        </main>
+      </div>
+    )
+  }
+  const teamFee = formatMoney(tournament.entry_fee_cents, tournament.currency)
+  const perPlayer = formatPerPlayerFee(
+    tournament.entry_fee_cents,
+    tournament.currency,
+    tournament.play_format,
+  ).replace('/', ' per ')
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -373,7 +605,7 @@ export default function JoinTournamentPage() {
 
       if (partnerMode === 'email') {
         if (!form.partner_email.trim() || form.partner_name.trim().length < 2) {
-          setError('Enter your partner name and email')
+          setError('Enter your partner’s name and email')
           setLoading(false)
           return
         }
@@ -409,7 +641,6 @@ export default function JoinTournamentPage() {
       const { data } = await tournamentApi.register(tournament.id, payload)
       if (data.checkout_url) {
         if (isNativeApp()) {
-          // Stripe leaves the WebView. On browser close, verify payment — do not assume success.
           const regId = data.registration_id
           holdLoadingForCheckout = true
           checkoutDisposeRef.current?.()
@@ -459,10 +690,32 @@ export default function JoinTournamentPage() {
       <main className="page">
         <h1 className="page-title">Join {tournament.name}</h1>
         <p className="page-sub">
-          {singles ? 'Singles' : 'Doubles'} · Entry{' '}
-          {formatPerPlayerFee(tournament.entry_fee_cents, tournament.currency, tournament.play_format).replace('/', ' per ')}{!singles && ` (${formatMoney(tournament.entry_fee_cents, tournament.currency)} per team)`}
+          {singles ? 'Singles' : 'Doubles'} · {perPlayer}
+          {!singles ? ` · team fee ${teamFee}` : ''}
         </p>
-        {paymentNote && <p className="auth-error" style={{ marginBottom: '1rem' }}>{paymentNote}</p>}
+
+        {resumingPending && (
+          <p className="form-success" style={{ marginBottom: '1rem' }}>
+            You already started <strong>{myTeam?.name}</strong>. Update details if needed and finish
+            payment
+            {tournament.status !== 'REGISTRATION_OPEN' || deadlineGone || isFull
+              ? ' — registration may be closed or full for new entries, but you can still complete yours if a spot remains.'
+              : '.'}
+          </p>
+        )}
+
+        {!singles && (
+          <p className="muted-note join-pay-note">
+            You pay the full team entry of <strong>{teamFee}</strong>. Your partner is not charged separately.
+          </p>
+        )}
+
+        {paymentNote && (
+          <p className="auth-error" style={{ marginBottom: '1rem' }}>
+            {paymentNote}
+          </p>
+        )}
+
         <form className="join-form" onSubmit={onSubmit}>
           <div className="form-group">
             <label className="form-label" htmlFor="join-name">
@@ -485,84 +738,100 @@ export default function JoinTournamentPage() {
               className="form-input"
               value={form.team_name}
               onChange={(e) => setForm({ ...form, team_name: e.target.value })}
-              placeholder={singles ? user.full_name : 'UL Padel 1'}
+              placeholder={singles ? user.full_name : 'e.g. UL Smash'}
               required
               minLength={2}
             />
           </div>
           {!singles && (
-          <div className="form-group">
-            <label className="form-label" id="join-partner-label">
-              Partner
-            </label>
-            <div className="partner-mode-row">
-              <button
-                type="button"
-                className={`filter-chip ${partnerMode === 'friend' ? 'on' : ''}`}
-                onClick={() => setPartnerMode('friend')}
-                disabled={friendPartners.length === 0}
-              >
-                Friend
-              </button>
-              <button
-                type="button"
-                className={`filter-chip ${partnerMode === 'email' ? 'on' : ''}`}
-                onClick={() => setPartnerMode('email')}
-              >
-                Email
-              </button>
-            </div>
-            {partnerMode === 'friend' ? (
-              <>
-                <select
-                  id="join-partner-friend"
-                  className="form-select"
-                  aria-labelledby="join-partner-label"
-                  value={form.partner_user_id}
-                  onChange={(e) => setForm({ ...form, partner_user_id: e.target.value })}
-                  required
+            <div className="form-group">
+              <label className="form-label" id="join-partner-label">
+                Partner
+              </label>
+              <div className="partner-mode-row">
+                <button
+                  type="button"
+                  className={`filter-chip ${partnerMode === 'friend' ? 'on' : ''}`}
+                  onClick={() => setPartnerMode('friend')}
+                  disabled={friendPartners.length === 0}
+                  title={friendPartners.length === 0 ? 'Add friends in Community first' : undefined}
                 >
-                  <option value="">Select a friend</option>
-                  {friendPartners.map((f) => (
-                    <option key={f.user_id} value={f.user_id}>
-                      {f.full_name}
-                      {f.university_short ? ` (${f.university_short})` : ''}
-                    </option>
-                  ))}
-                </select>
-                {friendPartners.length === 0 && (
+                  Friend
+                </button>
+                <button
+                  type="button"
+                  className={`filter-chip ${partnerMode === 'email' ? 'on' : ''}`}
+                  onClick={() => setPartnerMode('email')}
+                >
+                  Email
+                </button>
+              </div>
+              {partnerMode === 'friend' ? (
+                <>
+                  <select
+                    id="join-partner-friend"
+                    className="form-select"
+                    aria-labelledby="join-partner-label"
+                    value={form.partner_user_id}
+                    onChange={(e) => setForm({ ...form, partner_user_id: e.target.value })}
+                    required
+                  >
+                    <option value="">Select a friend</option>
+                    {friendPartners.map((f) => (
+                      <option key={f.user_id} value={f.user_id}>
+                        {f.full_name}
+                        {f.university_short ? ` (${f.university_short})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {friendPartners.length === 0 && (
+                    <p className="muted-note">
+                      {friendsBusyElsewhere.length > 0
+                        ? 'Your friends are already entered in this event. Switch to email for someone else, or ask the organiser to free a spot.'
+                        : (
+                          <>
+                            No friends yet.{' '}
+                            <Link to="/community">Add friends in Community</Link>, or use email.
+                          </>
+                        )}
+                    </p>
+                  )}
+                  {friendsBusyElsewhere.length > 0 && friendPartners.length > 0 && (
+                    <p className="muted-note">
+                      Hidden {friendsBusyElsewhere.length} friend
+                      {friendsBusyElsewhere.length === 1 ? '' : 's'} already entered in this event.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <input
+                    id="join-partner-name"
+                    className="form-input"
+                    aria-label="Partner name"
+                    value={form.partner_name}
+                    onChange={(e) => setForm({ ...form, partner_name: e.target.value })}
+                    placeholder="Partner’s full name"
+                    required
+                    minLength={2}
+                    style={{ marginBottom: 8 }}
+                  />
+                  <input
+                    id="join-partner-email"
+                    className="form-input"
+                    type="email"
+                    aria-label="Partner email"
+                    value={form.partner_email}
+                    onChange={(e) => setForm({ ...form, partner_email: e.target.value })}
+                    placeholder="Partner’s email"
+                    required
+                  />
                   <p className="muted-note">
-                    No friends yet. Add friends in Community, or use email.
+                    Use the email they signed up with if they already have an account. They won’t be charged.
                   </p>
-                )}
-              </>
-            ) : (
-              <>
-                <input
-                  id="join-partner-name"
-                  className="form-input"
-                  aria-label="Partner name"
-                  value={form.partner_name}
-                  onChange={(e) => setForm({ ...form, partner_name: e.target.value })}
-                  placeholder="Partner name"
-                  required
-                  minLength={2}
-                  style={{ marginBottom: 8 }}
-                />
-                <input
-                  id="join-partner-email"
-                  className="form-input"
-                  type="email"
-                  aria-label="Partner email"
-                  value={form.partner_email}
-                  onChange={(e) => setForm({ ...form, partner_email: e.target.value })}
-                  placeholder="Partner email"
-                  required
-                />
-                <p className="muted-note">Use the email they signed up with if they already have an account.</p>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
           )}
           <div className="form-group">
             <label className="form-label" htmlFor="join-phone">
@@ -612,18 +881,30 @@ export default function JoinTournamentPage() {
           )}
           <button className="btn btn-primary btn-block" disabled={loading || tLoading}>
             {loading
-              ? 'Processing...'
+              ? 'Processing…'
               : publicConfig?.demo_payments
-                ? `Confirm ${formatMoney(tournament.entry_fee_cents, tournament.currency)} (demo)`
-                : `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)}`}
+                ? `${resumingPending ? 'Finish' : 'Confirm'} ${teamFee} (demo)`
+                : `${resumingPending ? 'Pay' : 'Pay'} ${teamFee}`}
           </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-block"
-            onClick={() => navigate(`/t/${slug}`)}
-          >
-            Cancel
-          </button>
+          {resumingPending && myTeam?.can_leave ? (
+            <LeaveTournamentButton
+              tournamentId={tournament.id}
+              slug={tournament.slug}
+              paymentStatus={myPayment}
+              teamName={myTeam.name}
+              singles={singles}
+              className="btn btn-ghost btn-block"
+              onLeft={() => navigate(`/t/${tournament.slug}`, { replace: true })}
+            />
+          ) : (
+            <button
+              type="button"
+              className="btn btn-ghost btn-block"
+              onClick={() => navigate(`/t/${slug}`)}
+            >
+              Back
+            </button>
+          )}
         </form>
       </main>
     </div>
