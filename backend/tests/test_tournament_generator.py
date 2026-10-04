@@ -192,3 +192,52 @@ def test_advance_one_placeholders():
         labels.append(m.team_b_placeholder)
     assert any(l and l.startswith("1st") for l in labels)
     assert not any(l and l.startswith("2nd") for l in labels)
+
+
+def test_no_bye_vs_bye_when_padding_bracket():
+    """24 advance → R32 needs 8 single-side byes, never BYE vs BYE."""
+    result = generate_tournament(_config(48, courts=6, group_size=4, advance=2))
+    r32 = [m for m in result.matches if m.round == "ROUND_OF_32"]
+    assert len(r32) == 16
+    bye_sides = 0
+    for m in r32:
+        a_bye = (m.team_a_placeholder or "").upper() == "BYE"
+        b_bye = (m.team_b_placeholder or "").upper() == "BYE"
+        assert not (a_bye and b_bye), f"BYE vs BYE in {m.team_a_placeholder} vs {m.team_b_placeholder}"
+        if a_bye or b_bye:
+            bye_sides += 1
+            assert bool(a_bye) != bool(b_bye)
+    assert bye_sides == 8  # 32 - 24
+
+
+def test_knockout_rounds_do_not_overlap_in_time():
+    result = generate_tournament(_config(48, courts=6, group_size=4, advance=2))
+    ko = [m for m in result.matches if m.stage == "KNOCKOUT"]
+    by_round: dict[str, list] = defaultdict(list)
+    for m in ko:
+        assert m.scheduled_start is not None
+        by_round[m.round].append(m.scheduled_start)
+    # Preserve generator round order
+    order = result.knockout_rounds
+    for earlier, later in zip(order, order[1:]):
+        if earlier not in by_round or later not in by_round:
+            continue
+        earlier_endish = max(by_round[earlier])
+        later_start = min(by_round[later])
+        assert later_start > earlier_endish, f"{later} starts before {earlier} finishes"
+
+
+def test_twelve_teams_bye_padding():
+    result = generate_tournament(_config(12, courts=3, group_size=4, advance=2))
+    # 6 advance → bracket 8 → 2 single byes
+    first_round = result.knockout_rounds[0]
+    first = [m for m in result.matches if m.round == first_round]
+    assert len(first) == 4
+    bye_matches = 0
+    for m in first:
+        a_bye = (m.team_a_placeholder or "").upper() == "BYE"
+        b_bye = (m.team_b_placeholder or "").upper() == "BYE"
+        assert not (a_bye and b_bye)
+        if a_bye or b_bye:
+            bye_matches += 1
+    assert bye_matches == 2

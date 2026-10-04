@@ -427,15 +427,27 @@ def _group_standings_ranked(
                 str(m.team_a_id),
                 str(m.team_b_id),
                 sets,
-                walkover_winner_id=str(m.winner_id)
-                if m.status == MatchStatus.WALKOVER.value and m.winner_id
-                else None,
+                walkover_winner_id=_standings_walkover_winner(m, sets),
                 status=m.status,
             )
         )
     rows = accumulate_standings(team_ids, results)
     ranked = rank_standings(rows, tie_order or None)
     return [UUID(r.team_id) for r in ranked]
+
+
+def _standings_walkover_winner(m: Match, sets: list[tuple[int, int]]) -> str | None:
+    """Use explicit winner when sets don't decide (0-0 COMPLETED / walkover)."""
+    if not m.winner_id:
+        return None
+    if m.status == MatchStatus.WALKOVER.value:
+        return str(m.winner_id)
+    if m.status == MatchStatus.COMPLETED.value:
+        a_sets = sum(1 for a, b in sets if a > b)
+        b_sets = sum(1 for a, b in sets if b > a)
+        if a_sets == b_sets:
+            return str(m.winner_id)
+    return None
 
 
 def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
@@ -447,13 +459,13 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
     if not groups:
         return 0
 
-    # All group matches must be finished
+    # All group matches must have a real result (CANCELLED alone is not enough)
     unfinished = (
         db.query(Match)
         .filter(
             Match.tournament_id == t.id,
             Match.stage == "GROUP",
-            Match.status.notin_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value, MatchStatus.CANCELLED.value]),
+            Match.status.notin_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
         )
         .count()
     )
@@ -494,7 +506,6 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
         return None
 
     for m in first_matches:
-        # Skip if already has both teams
         changed = False
         if not m.team_a_id:
             tid = resolve_slot(m.team_a_placeholder)
@@ -503,8 +514,10 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
                 m.team_a_placeholder = None
                 changed = True
                 filled += 1
-            elif m.team_a_placeholder and m.team_a_placeholder.upper() == "BYE":
+            elif m.team_a_placeholder:
+                # Explicit BYE or unresolvable placeholder → BYE
                 m.team_a_placeholder = "BYE"
+                changed = True
         if not m.team_b_id:
             tid = resolve_slot(m.team_b_placeholder)
             if tid:
@@ -512,8 +525,9 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
                 m.team_b_placeholder = None
                 changed = True
                 filled += 1
-            elif m.team_b_placeholder and m.team_b_placeholder.upper() == "BYE":
+            elif m.team_b_placeholder:
                 m.team_b_placeholder = "BYE"
+                changed = True
 
         # Auto-advance bye: one team present, other is BYE
         a_bye = (m.team_a_placeholder or "").upper() == "BYE" and not m.team_a_id
@@ -525,6 +539,10 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
         elif m.team_b_id and a_bye and not m.team_a_id:
             winner = m.team_b_id
             m.team_a_placeholder = "BYE"
+        elif a_bye and b_bye and m.status not in (MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value):
+            # Should not happen with fixed generator; cancel so bracket doesn't hang
+            m.status = MatchStatus.CANCELLED.value
+            changed = True
         if winner and m.status not in (MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value):
             m.winner_id = winner
             m.status = MatchStatus.WALKOVER.value
@@ -1241,23 +1259,7 @@ def withdraw_team(
     if paid and t.status in (TournamentStatus.LIVE.value, TournamentStatus.COMPLETED.value):
         raise HTTPException(400, "Cannot withdraw a paid team after the event is live")
 
-    # Don't remove paid teams already placed in fixtures without regenerate
-    if paid:
-        in_draw = (
-            db.query(Match)
-            .filter(
-                Match.tournament_id == tournament_id,
-                ((Match.team_a_id == team.id) | (Match.team_b_id == team.id)),
-            )
-            .first()
-        )
-        if in_draw:
-            raise HTTPException(
-                400,
-                "This team is already in the draw. Regenerate the tournament after withdrawing, "
-                "or withdraw only unpaid entries.",
-            )
-
+    # Allowed before LIVE even if already in a draft draw — regenerate to rebuild fixtures
     team.withdrawn = True
     team.checked_in = False
     if team.registration and team.registration.status in (
@@ -1345,6 +1347,12 @@ def generate(
     group_size = body.group_size or t.group_size
     advance = body.teams_advance_per_group or t.teams_advance_per_group
 
+    if advance > group_size:
+        raise HTTPException(
+            400,
+            f"Teams advancing per group ({advance}) cannot exceed group size ({group_size})",
+        )
+
     # Persist overrides so regenerate stays consistent
     t.number_of_courts = courts
     t.match_duration_minutes = duration
@@ -1366,7 +1374,10 @@ def generate(
         teams_advance_per_group=advance,
         format=t.format,
     )
-    generated = generate_tournament(config)
+    try:
+        generated = generate_tournament(config)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
 
     court_by_num = {
         c.court_number: c
@@ -1499,14 +1510,43 @@ def update_score(
     if winner_id:
         if winner_id not in (m.team_a_id, m.team_b_id):
             raise HTTPException(400, "Winner must be one of the match teams")
+        previous_winner = m.winner_id
         m.winner_id = winner_id
         if m.next_match_id and m.next_match_slot:
             nxt = db.get(Match, m.next_match_id)
             if nxt:
+                if nxt.status in (
+                    MatchStatus.LIVE.value,
+                    MatchStatus.COMPLETED.value,
+                    MatchStatus.WALKOVER.value,
+                ):
+                    raise HTTPException(
+                        400,
+                        "Cannot change the winner — the next knockout match has already started or finished",
+                    )
                 if m.next_match_slot == "A":
+                    # Clear deeper bracket if the previous winner was already pushed further
+                    if previous_winner and previous_winner != winner_id and nxt.next_match_id:
+                        deeper = db.get(Match, nxt.next_match_id)
+                        if deeper and deeper.status == MatchStatus.SCHEDULED.value:
+                            if deeper.team_a_id == previous_winner:
+                                deeper.team_a_id = None
+                                deeper.team_a_placeholder = "TBD"
+                            if deeper.team_b_id == previous_winner:
+                                deeper.team_b_id = None
+                                deeper.team_b_placeholder = "TBD"
                     nxt.team_a_id = winner_id
                     nxt.team_a_placeholder = None
                 else:
+                    if previous_winner and previous_winner != winner_id and nxt.next_match_id:
+                        deeper = db.get(Match, nxt.next_match_id)
+                        if deeper and deeper.status == MatchStatus.SCHEDULED.value:
+                            if deeper.team_a_id == previous_winner:
+                                deeper.team_a_id = None
+                                deeper.team_a_placeholder = "TBD"
+                            if deeper.team_b_id == previous_winner:
+                                deeper.team_b_id = None
+                                deeper.team_b_placeholder = "TBD"
                     nxt.team_b_id = winner_id
                     nxt.team_b_placeholder = None
     elif body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
@@ -1596,7 +1636,7 @@ def get_standings(slug_or_id: str, db: Session = Depends(get_db)):
                     str(m.team_a_id),
                     str(m.team_b_id),
                     sets,
-                    walkover_winner_id=str(m.winner_id) if m.status == MatchStatus.WALKOVER.value and m.winner_id else None,
+                    walkover_winner_id=_standings_walkover_winner(m, sets),
                     status=m.status,
                 )
             )
@@ -1979,14 +2019,19 @@ def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
         .all()
     )
     by_court: dict[int, list] = {}
+    unassigned: list = []
     for m in matches:
         if m.court_number is None:
+            # Only surface active matches without a court — don't clutter with scheduled TBCs
+            if m.status in (MatchStatus.LIVE.value, MatchStatus.CALLED.value):
+                unassigned.append(_match_out(db, m, court_names))
             continue
         by_court.setdefault(m.court_number, []).append(_match_out(db, m, court_names))
     return {
         "tournament": _tournament_out(db, t),
         "courts": by_court,
         "court_names": {str(k): v for k, v in court_names.items()},
+        "unassigned": unassigned,
         "live_count": sum(1 for m in matches if m.status == MatchStatus.LIVE.value),
     }
 
@@ -2106,12 +2151,22 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
         teams = _team_count(db, t.id)
         paid = (
             db.query(Registration)
-            .filter(Registration.tournament_id == t.id, Registration.status == PaymentStatus.PAID.value)
+            .join(Team, Team.id == Registration.team_id)
+            .filter(
+                Registration.tournament_id == t.id,
+                Registration.status == PaymentStatus.PAID.value,
+                Team.withdrawn.is_(False),
+            )
             .count()
         )
         revenue = (
             db.query(Registration)
-            .filter(Registration.tournament_id == t.id, Registration.status == PaymentStatus.PAID.value)
+            .join(Team, Team.id == Registration.team_id)
+            .filter(
+                Registration.tournament_id == t.id,
+                Registration.status == PaymentStatus.PAID.value,
+                Team.withdrawn.is_(False),
+            )
             .all()
         )
         live = (

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models import Payment, PaymentStatus, Registration
+from app.models import Payment, PaymentStatus, Registration, Team, Tournament
 
 
 def mark_registration_paid(
@@ -19,6 +20,26 @@ def mark_registration_paid(
 ) -> Registration:
     if reg.status == PaymentStatus.PAID.value:
         return reg
+
+    t = db.get(Tournament, reg.tournament_id)
+    if t and t.max_teams:
+        paid_count = (
+            db.query(Registration)
+            .join(Team, Team.id == Registration.team_id)
+            .filter(
+                Registration.tournament_id == reg.tournament_id,
+                Registration.status == PaymentStatus.PAID.value,
+                Team.withdrawn.is_(False),
+            )
+            .count()
+        )
+        # This registration is still PENDING, so it is not in paid_count yet
+        if paid_count >= t.max_teams:
+            raise HTTPException(
+                400,
+                "This event is full — payment cannot be completed. Contact the organiser for a refund if you were charged.",
+            )
+
     reg.status = PaymentStatus.PAID.value
     reg.paid_at = datetime.now(timezone.utc)
     if stripe_session_id:

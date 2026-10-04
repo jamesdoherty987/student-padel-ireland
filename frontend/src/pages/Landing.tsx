@@ -265,7 +265,9 @@ export default function Landing() {
           <div className="lp-hero-content">
             <h1>Student Padel Ireland</h1>
             <p className="lp-lead">
-              Find a game in <FlipWords words={CITY_WORDS} duration={900} className="lp-flip" />
+              <span className="lp-lead-line">
+                Find a game in <FlipWords words={CITY_WORDS} duration={2400} className="lp-flip" />
+              </span>
             </p>
             <div className="lp-actions">
               <a href="#upcoming" className="lp-btn lp-btn-primary">

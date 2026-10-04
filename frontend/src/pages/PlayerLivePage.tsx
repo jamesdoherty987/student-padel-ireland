@@ -72,7 +72,8 @@ export default function PlayerLivePage() {
         <NavBar />
         <main className="pl-page">
           <div className="skeleton" style={{ height: 28, width: '70%', marginBottom: 16 }} />
-          <div className="skeleton" style={{ height: 200, marginBottom: 16 }} />
+          <div className="skeleton" style={{ height: 160, marginBottom: 12 }} />
+          <div className="skeleton" style={{ height: 120 }} />
         </main>
       </div>
     )
@@ -89,10 +90,10 @@ export default function PlayerLivePage() {
           </p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 16 }}>
             <button type="button" className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
-              {isFetching ? 'Retrying...' : 'Retry'}
+              {isFetching ? 'Retrying…' : 'Retry'}
             </button>
             <Link to="/tournaments" className="btn btn-ghost">
-              Tournaments
+              Events
             </Link>
           </div>
         </main>
@@ -116,6 +117,7 @@ export default function PlayerLivePage() {
   const announcements = (data.announcements || []) as LiveAnnouncement[]
   const myUpcoming = (data.my_upcoming || []) as Match[]
   const myResults = (data.my_results || []) as Match[]
+  const boardQuiet = liveMatches.length === 0 && calledMatches.length === 0
 
   return (
     <div className="app-shell">
@@ -125,11 +127,13 @@ export default function PlayerLivePage() {
           <BrandLogo to="/tournaments" className="pl-brand" size="sm" />
           <div className="pl-title-row">
             <h1>{t.name}</h1>
-            {liveMatches.length > 0 && (
+            {liveMatches.length > 0 ? (
               <span className="badge badge-live">
                 <span className="live-dot" /> LIVE
               </span>
-            )}
+            ) : calledMatches.length > 0 ? (
+              <span className="badge badge-official">Called</span>
+            ) : null}
           </div>
           <p className="pl-lead">Courts, calls, and scores — updates every few seconds.</p>
           {dataUpdatedAt > 0 && (
@@ -141,7 +145,7 @@ export default function PlayerLivePage() {
         </header>
 
         {liveMatches.length > 0 && (
-          <section className="pl-block">
+          <section className="pl-block pl-block--first">
             <h2>Live now</h2>
             <ul className="pl-live-list">
               {liveMatches.map((m) => {
@@ -184,17 +188,10 @@ export default function PlayerLivePage() {
           </section>
         )}
 
-        {announcements.length > 0 && (
-          <section className="pl-block pl-announce">
-            <h2>Announcements</h2>
-            <ul className="pl-announce-list">
-              {announcements.map((a) => (
-                <li key={a.id}>
-                  <strong>{a.title}</strong>
-                  <span>{a.body}</span>
-                </li>
-              ))}
-            </ul>
+        {boardQuiet && (
+          <section className="pl-block pl-block--first">
+            <h2>On court</h2>
+            <p className="pl-empty">No matches are live or called right now.</p>
           </section>
         )}
 
@@ -212,23 +209,37 @@ export default function PlayerLivePage() {
           ) : next && hasPaidEntry ? (
             <NextMatchCard next={next} slug={slug} />
           ) : (
-            <p className="pl-empty">
-              {hasPaidEntry
-                ? 'No upcoming matches scheduled yet.'
-                : 'Register for this tournament to see your next match here.'}
-            </p>
-          )}
-          {!hasPaidEntry && !hasPendingEntry && t.status === 'REGISTRATION_OPEN' && (
-            <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block" style={{ marginTop: 12 }}>
-              Join tournament
-            </Link>
-          )}
-          {(!next || !hasPaidEntry) && (
-            <Link to={`/t/${slug}`} className="pl-details-link pl-details-link--muted">
-              Full tournament page
-            </Link>
+            <div className="pl-next-card pl-next-card--quiet">
+              <p className="pl-empty">
+                {hasPaidEntry
+                  ? 'No upcoming matches scheduled yet.'
+                  : 'Register for this tournament to see your next match here.'}
+              </p>
+              {!hasPaidEntry && !hasPendingEntry && t.status === 'REGISTRATION_OPEN' && (
+                <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block" style={{ marginTop: 12 }}>
+                  Join tournament
+                </Link>
+              )}
+              <Link to={`/t/${slug}`} className="pl-details-link">
+                Full tournament page
+              </Link>
+            </div>
           )}
         </section>
+
+        {announcements.length > 0 && (
+          <section className="pl-block pl-announce">
+            <h2>Announcements</h2>
+            <ul className="pl-announce-list">
+              {announcements.map((a) => (
+                <li key={a.id}>
+                  <strong>{a.title}</strong>
+                  <span>{a.body}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {hasPaidEntry && myUpcoming.length > 1 && (
           <section className="pl-block">
@@ -253,33 +264,34 @@ export default function PlayerLivePage() {
           </section>
         )}
 
-        <section className="pl-block">
-          <h2>Your results</h2>
-          {(!hasPaidEntry || myResults.length === 0) && (
-            <p className="pl-empty">{hasPaidEntry ? 'No results yet.' : 'Results appear after you register and play.'}</p>
-          )}
-          {hasPaidEntry && myResults.length > 0 && (
-            <ul className="pl-results">
-              {myResults.map((m) => {
-                const won = m.winner_id ? m.winner_id === myTeamId : null
-                const mark = won === true ? '✓' : won === false ? '✗' : '·'
-                return (
-                  <li key={m.id} className={won === true ? 'win' : won === false ? 'loss' : ''}>
-                    <span className="pl-result-score">
-                      {mark} {formatMatchScore(m.score)}
-                    </span>
-                    <span className="pl-result-vs">
-                      vs{' '}
-                      {m.team_a_id === myTeamId
-                        ? m.team_b_name || 'Opponent'
-                        : m.team_a_name || 'Opponent'}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </section>
+        {hasPaidEntry && (
+          <section className="pl-block">
+            <h2>Your results</h2>
+            {myResults.length === 0 ? (
+              <p className="pl-empty">No results yet.</p>
+            ) : (
+              <ul className="pl-results">
+                {myResults.map((m) => {
+                  const won = m.winner_id ? m.winner_id === myTeamId : null
+                  const mark = won === true ? '✓' : won === false ? '✗' : '·'
+                  return (
+                    <li key={m.id} className={won === true ? 'win' : won === false ? 'loss' : ''}>
+                      <span className="pl-result-score">
+                        {mark} {formatMatchScore(m.score)}
+                      </span>
+                      <span className="pl-result-vs">
+                        vs{' '}
+                        {m.team_a_id === myTeamId
+                          ? m.team_b_name || 'Opponent'
+                          : m.team_a_name || 'Opponent'}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
+        )}
 
         {standings.map((g) => (
           <section key={g.group} className="pl-block">

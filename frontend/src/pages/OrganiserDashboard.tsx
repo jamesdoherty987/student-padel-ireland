@@ -932,7 +932,6 @@ export default function OrganiserDashboard() {
                             </button>
                           )}
                           {team.payment_status === 'PAID' &&
-                            !fixturesExist &&
                             active.tournament.status !== 'LIVE' &&
                             active.tournament.status !== 'COMPLETED' && (
                               <button
@@ -940,7 +939,10 @@ export default function OrganiserDashboard() {
                                 className="btn btn-ghost btn-sm"
                                 disabled={withdrawMut.isPending}
                                 onClick={() => {
-                                  if (window.confirm(`Withdraw ${team.name}?`)) {
+                                  const msg = fixturesExist
+                                    ? `Withdraw ${team.name}? Regenerate the draw afterwards so fixtures stay correct.`
+                                    : `Withdraw ${team.name}?`
+                                  if (window.confirm(msg)) {
                                     withdrawMut.mutate(team.id)
                                   }
                                 }}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 type FlipWordsProps = {
@@ -7,36 +7,44 @@ type FlipWordsProps = {
   className?: string
 }
 
+/**
+ * Rotating word slot. A hidden sizer locks width to the longest word so
+ * enter/exit never sit side-by-side (e.g. "LimerickBelfast").
+ */
 export function FlipWords({ words, duration = 2800, className = '' }: FlipWordsProps) {
-  const [currentWord, setCurrentWord] = useState(words[0] ?? '')
-  const [isAnimating, setIsAnimating] = useState(false)
-
-  const startAnimation = useCallback(() => {
-    const next = words[(words.indexOf(currentWord) + 1) % words.length] ?? words[0]
-    setCurrentWord(next)
-    setIsAnimating(true)
-  }, [currentWord, words])
+  const safeWords = useMemo(() => (words.length > 0 ? words : ['']), [words])
+  const [index, setIndex] = useState(0)
+  const currentWord = safeWords[index % safeWords.length] ?? ''
+  const longest = useMemo(
+    () => safeWords.reduce((a, b) => (a.length >= b.length ? a : b), ''),
+    [safeWords],
+  )
 
   useEffect(() => {
-    if (isAnimating) return
-    const t = window.setTimeout(startAnimation, duration)
-    return () => window.clearTimeout(t)
-  }, [isAnimating, duration, startAnimation])
+    setIndex(0)
+  }, [safeWords])
+
+  useEffect(() => {
+    if (safeWords.length <= 1) return
+    const t = window.setInterval(() => {
+      setIndex((i) => (i + 1) % safeWords.length)
+    }, duration)
+    return () => window.clearInterval(t)
+  }, [safeWords, duration])
 
   return (
-    <span className={`flip-words ${className}`.trim()}>
-      <AnimatePresence
-        onExitComplete={() => {
-          setIsAnimating(false)
-        }}
-      >
+    <span className={`flip-words ${className}`.trim()} aria-live="polite">
+      <span className="flip-words-sizer" aria-hidden>
+        {longest}
+      </span>
+      <AnimatePresence mode="wait" initial={false}>
         <motion.span
           key={currentWord}
           className="flip-words-inner"
-          initial={{ opacity: 0, y: 8 }}
+          initial={{ opacity: 0, y: '0.35em' }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8, position: 'absolute' }}
-          transition={{ type: 'spring', stiffness: 120, damping: 14 }}
+          exit={{ opacity: 0, y: '-0.35em' }}
+          transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         >
           {currentWord}
         </motion.span>
