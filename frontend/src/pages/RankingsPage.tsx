@@ -121,6 +121,11 @@ export default function RankingsPage() {
               </button>
             ))}
           </div>
+          {!user && (
+            <p className="muted-note" style={{ margin: 0 }}>
+              <Link to="/login?next=/rankings">Log in</Link> to filter by friends or your university.
+            </p>
+          )}
           {universities.length > 1 && scope === 'all' && (
             <select
               id="rank-uni"

@@ -182,7 +182,7 @@ export default function NotificationsBell() {
   }
 
   return (
-    <div className="notif-root" ref={rootRef}>
+    <div className={`notif-root ${open ? 'is-open' : ''}`} ref={rootRef}>
       <button
         type="button"
         className={`notif-bell ${open ? 'is-open' : ''}`}

@@ -13,6 +13,7 @@
 .native-welcome-bg {
   position: absolute;
   inset: 0;
+  z-index: 0;
   background:
     radial-gradient(ellipse 80% 50% at 20% 10%, rgba(200, 230, 0, 0.28), transparent 55%),
     linear-gradient(165deg, #0b3d2e 0%, #146644 45%, #0a2e24 100%);
@@ -20,6 +21,7 @@
 
 .native-welcome-inner {
   position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 24rem;
   margin: 0 auto;

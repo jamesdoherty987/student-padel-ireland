@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import or_
+from sqlalchemy import case, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user, get_optional_user, user_can_manage_tournament, user_owns_tournament
@@ -1515,11 +1515,15 @@ def update_score(
     if not correcting:
         _apply_tournament_match_ratings(db, m, t)
 
+    # Day-of: any live/completed scoring flips the event to LIVE (unless already finished)
+    if t and t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        if body.status in (MatchStatus.LIVE, MatchStatus.COMPLETED, MatchStatus.WALKOVER):
+            if t.status != TournamentStatus.LIVE.value:
+                t.status = TournamentStatus.LIVE.value
+
     # When group stage finishes, seed knockout placeholders → real teams
     if t and m.stage == "GROUP" and body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
         _seed_knockout_from_standings(db, t)
-        if t.status != TournamentStatus.LIVE.value:
-            t.status = TournamentStatus.LIVE.value
 
     db.commit()
     db.refresh(m)
@@ -1545,6 +1549,13 @@ def move_match(
         data["status"] = data["status"].value
     for k, v in data.items():
         setattr(m, k, v)
+    # Calling/starting a match is day-of activity — mark the tournament live
+    if (
+        t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value)
+        and getattr(m, "status", None) in (MatchStatus.LIVE.value, MatchStatus.CALLED.value)
+    ):
+        if t.status != TournamentStatus.LIVE.value:
+            t.status = TournamentStatus.LIVE.value
     _apply_tournament_match_ratings(db, m, t)
     db.commit()
     db.refresh(m)
@@ -1866,6 +1877,11 @@ def player_view(
                 my_payment_status = my_team.registration.status
             # Only expose fixtures for paid entries
             if my_team and my_payment_status == PaymentStatus.PAID.value:
+                status_rank = case(
+                    (Match.status == MatchStatus.LIVE.value, 0),
+                    (Match.status == MatchStatus.CALLED.value, 1),
+                    else_=2,
+                )
                 upcoming = (
                     db.query(Match)
                     .options(joinedload(Match.score))
@@ -1880,7 +1896,7 @@ def player_view(
                         ),
                         ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
                     )
-                    .order_by(Match.scheduled_start)
+                    .order_by(status_rank, Match.scheduled_start)
                     .all()
                 )
                 my_upcoming = [_match_out(db, m) for m in upcoming]
@@ -1893,16 +1909,25 @@ def player_view(
                         Match.status.in_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
                         ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
                     )
-                    .order_by(Match.scheduled_start)
+                    .order_by(Match.scheduled_start.desc())
                     .all()
                 )
                 for m in done:
                     my_results.append(_match_out(db, m))
 
+    court_rank = case((Match.court_number.is_(None), 1), else_=0)
     live = (
         db.query(Match)
         .options(joinedload(Match.score))
         .filter(Match.tournament_id == t.id, Match.status == MatchStatus.LIVE.value)
+        .order_by(court_rank, Match.court_number, Match.scheduled_start)
+        .all()
+    )
+    called = (
+        db.query(Match)
+        .options(joinedload(Match.score))
+        .filter(Match.tournament_id == t.id, Match.status == MatchStatus.CALLED.value)
+        .order_by(court_rank, Match.court_number, Match.scheduled_start)
         .all()
     )
     court_names = _court_label_map(db, t.id)
@@ -1924,6 +1949,7 @@ def player_view(
         "my_upcoming": my_upcoming,
         "my_results": my_results,
         "live_matches": [_match_out(db, m, court_names) for m in live],
+        "called_matches": [_match_out(db, m, court_names) for m in called],
         "standings": get_standings(slug_or_id, db),
         "announcements": [
             {

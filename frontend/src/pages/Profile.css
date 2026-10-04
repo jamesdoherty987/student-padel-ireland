@@ -17,7 +17,7 @@
   border-radius: var(--radius-lg);
 }
 
-/* Hero */
+/* Hero — banner is a fixed-height strip; copy always sits on white below it */
 .profile-hero {
   position: relative;
   margin: 0.35rem 0 1.15rem;
@@ -29,26 +29,34 @@
 
 .profile-hero-bg {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 0;
+  height: 5.5rem;
   background:
     radial-gradient(ellipse 80% 70% at 12% 20%, rgba(200, 230, 0, 0.22), transparent 55%),
     radial-gradient(ellipse 70% 80% at 90% 10%, rgba(26, 122, 82, 0.18), transparent 50%),
     linear-gradient(160deg, #0b3d2e 0%, #146644 48%, #0f4a36 100%);
-  opacity: 1;
-  height: 42%;
-  min-height: 72px;
 }
 
 .profile-hero-body {
   position: relative;
+  z-index: 1;
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 1.15rem;
-  padding: 3.25rem 1.25rem 1.25rem;
+  padding: 0 1.25rem 1.25rem;
+  /* Body starts below the banner strip so name/uni never sit on green */
+  margin-top: 5.5rem;
 }
 
 .profile-avatar-wrap {
+  position: relative;
+  z-index: 2;
   flex-shrink: 0;
+  /* Pull avatar up into the banner; text beside it stays on white */
+  margin-top: -3.25rem;
 }
 
 .profile-avatar-btn {
@@ -88,6 +96,7 @@
 .profile-hero-copy {
   flex: 1 1 auto;
   min-width: 0;
+  padding-top: 0.2rem;
   padding-bottom: 0.15rem;
 }
 
@@ -120,6 +129,10 @@
   background: var(--brand-soft);
   padding: 0.25rem 0.55rem;
   border-radius: 6px;
+}
+
+.profile-hero-copy > .btn {
+  margin-top: 0.55rem;
 }
 
 .profile-friend-action {
@@ -505,11 +518,25 @@
 }
 
 @media (max-width: 640px) {
+  .profile-hero-bg {
+    height: 4.75rem;
+  }
+
   .profile-hero-body {
     flex-direction: column;
     align-items: flex-start;
-    padding: 2.75rem 1rem 1.1rem;
-    gap: 0.85rem;
+    margin-top: 4.75rem;
+    padding: 0 1rem 1.1rem;
+    gap: 0.35rem;
+  }
+
+  .profile-avatar-wrap {
+    margin-top: -2.75rem;
+  }
+
+  .profile-hero-copy {
+    padding-top: 0.15rem;
+    width: 100%;
   }
 
   .profile-avatar {
@@ -547,6 +574,48 @@
   .lightbox-inner {
     width: 100%;
   }
+}
+
+.report-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(10, 22, 40, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+}
+
+.report-dialog {
+  width: min(420px, 100%);
+  background: var(--white);
+  color: var(--ink);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.report-dialog h2 {
+  margin: 0 0 0.65rem;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  color: var(--court-deep);
+}
+
+.report-dialog-body {
+  margin: 0 0 0.75rem;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.report-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.85rem;
 }
 
 .profile-account-danger {

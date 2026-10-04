@@ -303,7 +303,7 @@
   position: relative;
   min-width: 11ch;
   vertical-align: baseline;
-  overflow: visible;
+  overflow: hidden;
   min-height: 1.45em;
 }
 

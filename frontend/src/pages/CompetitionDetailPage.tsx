@@ -13,6 +13,7 @@ import {
   type CommunityMatch,
   type CompetitionMember,
 } from '../services/api'
+import { statusLabel } from '../utils/format'
 import './Tournament.css'
 import './Community.css'
 
@@ -329,7 +330,7 @@ export default function CompetitionDetailPage() {
           </div>
         </div>
         <p className="page-sub">
-          {labelFormat(c.format)} · {c.member_count} players · {courtCount} courts · {labelStatus(c.status)}
+          {labelFormat(c.format)} · {c.member_count} players · {courtCount} courts · {statusLabel(c.status)}
         </p>
 
         {showShare && c.invite_code && (
@@ -372,28 +373,30 @@ export default function CompetitionDetailPage() {
                 {myNext.player_b2_name ? ` / ${myNext.player_b2_name}` : ''}
               </span>
             </div>
-            {myNext.needs_my_confirm && (
-              <button
-                type="button"
-                className="btn btn-dark btn-sm"
-                style={{ marginTop: 10 }}
-                onClick={() => confirmMut.mutate(myNext.id)}
-              >
-                Confirm score
-              </button>
-            )}
-            {myNext.can_i_score && (
-              <button
-                type="button"
-                className="btn btn-dark btn-sm"
-                style={{ marginTop: 10 }}
-                onClick={() => {
-                  setSets(emptySets)
-                  setScoringMatch(myNext)
-                }}
-              >
-                Enter score
-              </button>
+            {(myNext.needs_my_confirm || myNext.can_i_score) && (
+              <div className="next-game-actions">
+                {myNext.needs_my_confirm && (
+                  <button
+                    type="button"
+                    className="btn btn-dark btn-sm"
+                    onClick={() => confirmMut.mutate(myNext.id)}
+                  >
+                    Confirm score
+                  </button>
+                )}
+                {myNext.can_i_score && (
+                  <button
+                    type="button"
+                    className="btn btn-dark btn-sm"
+                    onClick={() => {
+                      setSets(emptySets)
+                      setScoringMatch(myNext)
+                    }}
+                  >
+                    Enter score
+                  </button>
+                )}
+              </div>
             )}
           </section>
         )}
@@ -604,7 +607,7 @@ export default function CompetitionDetailPage() {
                   </div>
                 </div>
                 <p className="rank-meta">
-                  {labelFormat(m.format)} · {labelStatus(m.status)}
+                  {labelFormat(m.format)} · {statusLabel(m.status)}
                   {m.status === 'COMPLETED'
                     ? ` · ${m.set1_a}-${m.set1_b}, ${m.set2_a}-${m.set2_b}${
                         m.set3_a || m.set3_b ? `, ${m.set3_a}-${m.set3_b}` : ''
@@ -649,7 +652,11 @@ export default function CompetitionDetailPage() {
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
-                      onClick={() => cancelMatchMut.mutate(m.id)}
+                      onClick={() => {
+                        if (window.confirm('Cancel this match? The score will be discarded.')) {
+                          cancelMatchMut.mutate(m.id)
+                        }
+                      }}
                     >
                       Cancel
                     </button>
@@ -867,8 +874,4 @@ function labelFormat(f: string) {
   if (f === 'SINGLES') return 'Singles'
   if (f === 'MIXED') return 'Mixed'
   return 'Doubles'
-}
-
-function labelStatus(s: string) {
-  return s.charAt(0) + s.slice(1).toLowerCase()
 }

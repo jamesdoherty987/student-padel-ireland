@@ -412,7 +412,7 @@ export default function TournamentsPage() {
                   <div className="tour-card-top">
                     <h2>{e.name}</h2>
                     <span className="badge-row">
-                      <span className={`badge ${e.kind === 'official' ? 'badge-live' : 'badge-draft'}`}>
+                      <span className={`badge ${e.kind === 'official' ? 'badge-official' : 'badge-draft'}`}>
                         {e.kind === 'official' ? 'Official' : 'Community'}
                       </span>
                       <span className={`badge ${statusBadgeClass(e.status)}`}>

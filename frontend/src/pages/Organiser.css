@@ -13,7 +13,7 @@
 
 .org-toast {
   position: fixed;
-  bottom: max(1.5rem, env(safe-area-inset-bottom));
+  bottom: max(1.25rem, calc(1rem + env(safe-area-inset-bottom)));
   left: 50%;
   transform: translateX(-50%);
   z-index: 200;

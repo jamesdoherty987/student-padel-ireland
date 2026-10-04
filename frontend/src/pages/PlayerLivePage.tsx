@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import NavBar from '../components/NavBar'
 import { tournamentApi, type Match } from '../services/api'
-import { formatMatchScore, formatTime, courtLabel } from '../utils/format'
+import { formatLiveBoardScore, formatMatchScore, formatTime, courtLabel } from '../utils/format'
 import './PlayerLive.css'
 
 type LiveAnnouncement = {
@@ -11,6 +11,48 @@ type LiveAnnouncement = {
   title: string
   body: string
   is_pinned?: boolean
+}
+
+function MatchNames({ m }: { m: Match }) {
+  return (
+    <>
+      {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}
+    </>
+  )
+}
+
+function NextMatchCard({ next, slug }: { next: Match; slug: string }) {
+  const board = next.status === 'LIVE' ? formatLiveBoardScore(next.score) : null
+  return (
+    <div
+      className={`pl-next-card ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''}`}
+    >
+      {next.status === 'CALLED' && <p className="pl-go-now">Go to court now</p>}
+      {next.status === 'LIVE' && <p className="pl-go-now">Your match is live</p>}
+      <div className="pl-court">{courtLabel(next.court_name, next.court_number)}</div>
+      <div className="pl-time">
+        {next.status === 'CALLED'
+          ? 'Called to court'
+          : next.status === 'LIVE'
+            ? 'Playing now'
+            : formatTime(next.scheduled_start)}
+      </div>
+      <div className="pl-vs">
+        <div>{next.team_a_name || next.team_a_placeholder || 'TBD'}</div>
+        <span>VS</span>
+        <div>{next.team_b_name || next.team_b_placeholder || 'TBD'}</div>
+      </div>
+      {board && (
+        <p className="pl-next-score">
+          Set {board.set} · {board.games}
+          {board.sets ? ` · Sets ${board.sets}` : ''}
+        </p>
+      )}
+      <Link to={`/t/${slug}`} className="pl-details-link">
+        Full tournament page
+      </Link>
+    </div>
+  )
 }
 
 export default function PlayerLivePage() {
@@ -65,10 +107,15 @@ export default function PlayerLivePage() {
   const hasPaidEntry = !!myTeam && myPayment === 'PAID'
   const hasPendingEntry = !!myTeam && myPayment === 'PENDING'
   const myTeamId = hasPaidEntry ? myTeam?.id : undefined
+  const liveMatches = (data.live_matches || []) as Match[]
+  const calledMatches = (data.called_matches || []) as Match[]
   const standings = (data.standings || []) as Array<{
     group: string
     standings: Array<{ team_id: string; team_name: string; points: number }>
   }>
+  const announcements = (data.announcements || []) as LiveAnnouncement[]
+  const myUpcoming = (data.my_upcoming || []) as Match[]
+  const myResults = (data.my_results || []) as Match[]
 
   return (
     <div className="app-shell">
@@ -76,41 +123,72 @@ export default function PlayerLivePage() {
       <main className="pl-page">
         <header className="pl-header">
           <BrandLogo to="/tournaments" className="pl-brand" size="sm" />
-          <h1>{t.name}</h1>
-          {data.live_matches?.length > 0 && (
-            <span className="badge badge-live">
-              <span className="live-dot" /> LIVE
-            </span>
-          )}
+          <div className="pl-title-row">
+            <h1>{t.name}</h1>
+            {liveMatches.length > 0 && (
+              <span className="badge badge-live">
+                <span className="live-dot" /> LIVE
+              </span>
+            )}
+          </div>
+          <p className="pl-lead">Courts, calls, and scores — updates every few seconds.</p>
           {dataUpdatedAt > 0 && (
             <p className="pl-updated">
               Updated {new Date(dataUpdatedAt).toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' })}
+              {isFetching ? ' · refreshing…' : ''}
             </p>
           )}
         </header>
 
-        {(data.live_matches || []).length > 0 && (
+        {liveMatches.length > 0 && (
           <section className="pl-block">
             <h2>Live now</h2>
             <ul className="pl-live-list">
-              {(data.live_matches as Match[]).map((m) => (
+              {liveMatches.map((m) => {
+                const board = formatLiveBoardScore(m.score)
+                return (
+                  <li key={m.id}>
+                    <div className="pl-live-top">
+                      <strong>{courtLabel(m.court_name, m.court_number)}</strong>
+                      <span className="pl-live-games">
+                        Set {board.set} · {board.games}
+                      </span>
+                    </div>
+                    <span className="pl-live-names">
+                      <MatchNames m={m} />
+                    </span>
+                    {board.sets && <span className="pl-live-sets">Sets {board.sets}</span>}
+                  </li>
+                )
+              })}
+            </ul>
+          </section>
+        )}
+
+        {calledMatches.length > 0 && (
+          <section className="pl-block">
+            <h2>Called to court</h2>
+            <ul className="pl-live-list pl-called-list">
+              {calledMatches.map((m) => (
                 <li key={m.id}>
-                  <strong>{courtLabel(m.court_name, m.court_number)}</strong>
-                  <span>
-                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                  <div className="pl-live-top">
+                    <strong>{courtLabel(m.court_name, m.court_number)}</strong>
+                    <span className="pl-called-tag">Go now</span>
+                  </div>
+                  <span className="pl-live-names">
+                    <MatchNames m={m} />
                   </span>
-                  <span>{formatMatchScore(m.score)}</span>
                 </li>
               ))}
             </ul>
           </section>
         )}
 
-        {((data.announcements || []) as LiveAnnouncement[]).length > 0 && (
+        {announcements.length > 0 && (
           <section className="pl-block pl-announce">
             <h2>Announcements</h2>
             <ul className="pl-announce-list">
-              {((data.announcements || []) as LiveAnnouncement[]).map((a) => (
+              {announcements.map((a) => (
                 <li key={a.id}>
                   <strong>{a.title}</strong>
                   <span>{a.body}</span>
@@ -132,28 +210,7 @@ export default function PlayerLivePage() {
               </Link>
             </div>
           ) : next && hasPaidEntry ? (
-            <div
-              className={`pl-next-card ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''}`}
-            >
-              {next.status === 'CALLED' && <p className="pl-go-now">Go to court now</p>}
-              {next.status === 'LIVE' && <p className="pl-go-now">Your match is live</p>}
-              <div className="pl-court">{courtLabel(next.court_name, next.court_number)}</div>
-              <div className="pl-time">
-                {next.status === 'CALLED'
-                  ? 'Called to court'
-                  : next.status === 'LIVE'
-                    ? 'Playing now'
-                    : formatTime(next.scheduled_start)}
-              </div>
-              <div className="pl-vs">
-                <div>{next.team_a_name || next.team_a_placeholder || 'TBD'}</div>
-                <span>VS</span>
-                <div>{next.team_b_name || next.team_b_placeholder || 'TBD'}</div>
-              </div>
-              <Link to={`/t/${slug}`} className="pl-details-link">
-                Full tournament page
-              </Link>
-            </div>
+            <NextMatchCard next={next} slug={slug} />
           ) : (
             <p className="pl-empty">
               {hasPaidEntry
@@ -173,11 +230,11 @@ export default function PlayerLivePage() {
           )}
         </section>
 
-        {hasPaidEntry && ((data.my_upcoming || []) as Match[]).length > 1 && (
+        {hasPaidEntry && myUpcoming.length > 1 && (
           <section className="pl-block">
             <h2>Your schedule</h2>
             <ul className="pl-schedule">
-              {((data.my_upcoming || []) as Match[]).map((m, i) => (
+              {myUpcoming.map((m, i) => (
                 <li key={m.id} className={i === 0 ? 'is-next' : ''}>
                   <strong>{courtLabel(m.court_name, m.court_number)}</strong>
                   <span>
@@ -188,8 +245,7 @@ export default function PlayerLivePage() {
                         : formatTime(m.scheduled_start)}
                   </span>
                   <span>
-                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
-                    {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                    <MatchNames m={m} />
                   </span>
                 </li>
               ))}
@@ -199,20 +255,20 @@ export default function PlayerLivePage() {
 
         <section className="pl-block">
           <h2>Your results</h2>
-          {(!hasPaidEntry || (data.my_results || []).length === 0) && (
+          {(!hasPaidEntry || myResults.length === 0) && (
             <p className="pl-empty">{hasPaidEntry ? 'No results yet.' : 'Results appear after you register and play.'}</p>
           )}
-          {hasPaidEntry && (
+          {hasPaidEntry && myResults.length > 0 && (
             <ul className="pl-results">
-              {(data.my_results || []).map((m: Match) => {
+              {myResults.map((m) => {
                 const won = m.winner_id ? m.winner_id === myTeamId : null
                 const mark = won === true ? '✓' : won === false ? '✗' : '·'
                 return (
                   <li key={m.id} className={won === true ? 'win' : won === false ? 'loss' : ''}>
-                    <span>
+                    <span className="pl-result-score">
                       {mark} {formatMatchScore(m.score)}
                     </span>
-                    <span>
+                    <span className="pl-result-vs">
                       vs{' '}
                       {m.team_a_id === myTeamId
                         ? m.team_b_name || 'Opponent'

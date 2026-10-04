@@ -96,7 +96,7 @@ export default function EditTournamentModal({ tournament, onClose, onSaved }: Pr
   const singles = tournament.play_format === 'SINGLES'
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
       <div
         className="modal modal-wide"
         role="dialog"

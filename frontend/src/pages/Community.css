@@ -114,9 +114,16 @@
   border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
-.next-game-actions .btn-dark {
+.next-game-actions .btn-dark,
+.next-game-hero .btn-dark {
   background: var(--ball);
   color: var(--ink);
+}
+
+.next-game-hero .btn-ghost {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
 }
 
 @media (hover: hover) {
@@ -687,7 +694,7 @@
   background: var(--white);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 1.25rem;
-  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  padding-bottom: max(1.5rem, calc(1rem + env(safe-area-inset-bottom)));
   max-height: min(90vh, 90dvh);
   overflow: auto;
   -webkit-overflow-scrolling: touch;

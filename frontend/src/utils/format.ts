@@ -106,18 +106,22 @@ export function statusLabel(status: string) {
     COMPLETED: 'Past',
     CANCELLED: 'Cancelled',
     OPEN: 'Open',
+    SCHEDULED: 'Scheduled',
+    CALLED: 'Called',
+    AWAITING_CONFIRM: 'Awaiting confirm',
+    WALKOVER: 'Walkover',
   }
-  return labels[status] || status.replace(/_/g, ' ')
+  if (labels[status]) return labels[status]
+  return status
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 export function statusBadgeClass(status: string) {
   if (status === 'LIVE' || status === 'CALLED') return 'badge-live'
-  if (
-    status === 'REGISTRATION_OPEN' ||
-    status === 'OPEN' ||
-    status === 'PAID' ||
-    status === 'COMPLETED'
-  ) {
+  if (status === 'COMPLETED') return 'badge-past'
+  if (status === 'REGISTRATION_OPEN' || status === 'OPEN' || status === 'PAID') {
     return 'badge-open'
   }
   if (status === 'CANCELLED') return 'badge-draft'
@@ -153,4 +157,23 @@ export function formatMatchScore(score: {
   if (score.set2_a || score.set2_b) parts.push(`${score.set2_a}-${score.set2_b}`)
   if (score.set3_a || score.set3_b) parts.push(`${score.set3_a}-${score.set3_b}`)
   return parts.join('  ')
+}
+
+/** Live board line: current-set games first, full sets as secondary. */
+export function formatLiveBoardScore(score: {
+  set1_a: number
+  set1_b: number
+  set2_a: number
+  set2_b: number
+  set3_a: number
+  set3_b: number
+  current_set: number
+} | null | undefined) {
+  const cur = currentSetScores(score)
+  const sets = formatMatchScore(score)
+  return {
+    games: `${cur.a}-${cur.b}`,
+    set: cur.set,
+    sets: sets === '-' ? '' : sets,
+  }
 }

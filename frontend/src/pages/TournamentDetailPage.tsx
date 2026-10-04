@@ -44,6 +44,7 @@ export default function TournamentDetailPage() {
     queryKey: ['player-view', slug],
     queryFn: async () => (await tournamentApi.playerView(slug)).data,
     enabled: !!slug,
+    refetchInterval: 12000,
   })
 
   const isOps = !!user && !!tournament?.can_manage

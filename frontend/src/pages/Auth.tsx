@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import { useAuth } from '../context/AuthContext'
+import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { apiErrorMessage, platformApi } from '../services/api'
 import { safeNextPath } from '../utils/navigation'
@@ -65,7 +66,7 @@ export function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-panel">
-        <BrandLogo to="/" className="auth-brand" size="md" />
+        <BrandLogo to={isNativeApp() ? '/welcome' : '/'} className="auth-brand" size="md" />
         <h1>Welcome back</h1>
         <p className="auth-lead">Log in to join tournaments and see your next match.</p>
         <form onSubmit={onSubmit}>
@@ -184,7 +185,7 @@ export function SignupPage() {
   return (
     <div className="auth-page">
       <div className="auth-panel">
-        <BrandLogo to="/" className="auth-brand" size="md" />
+        <BrandLogo to={isNativeApp() ? '/welcome' : '/'} className="auth-brand" size="md" />
         <h1>Create account</h1>
         <p className="auth-lead">
           Sign up to play, join events, and host tournaments from My events.

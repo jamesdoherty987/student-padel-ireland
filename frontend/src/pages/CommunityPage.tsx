@@ -27,6 +27,7 @@ export default function CommunityPage() {
     queryKey: ['community-home'],
     queryFn: async () => (await communityApi.home()).data,
     enabled: !!user,
+    refetchInterval: 15000,
   })
   const friendsQ = useQuery({
     queryKey: ['friends'],
@@ -234,6 +235,11 @@ export default function CommunityPage() {
                 >
                   Confirm score
                 </button>
+              )}
+              {nextGame.can_i_score && (
+                <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-dark btn-sm">
+                  Enter score
+                </Link>
               )}
               <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-ghost btn-sm">
                 Open event

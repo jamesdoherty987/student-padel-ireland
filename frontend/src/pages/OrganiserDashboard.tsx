@@ -18,7 +18,8 @@ import {
 import { formatMoney, courtLabel, formatTime, formatMatchScore, statusBadgeClass } from '../utils/format'
 import './Organiser.css'
 
-function inferCurrentSet(form: {
+/** Respect organiser selection; only bump when a higher set already has games. */
+function resolveCurrentSet(form: {
   set1_a: number
   set1_b: number
   set2_a: number
@@ -27,9 +28,10 @@ function inferCurrentSet(form: {
   set3_b: number
   current_set: number
 }) {
+  const selected = Math.min(3, Math.max(1, form.current_set || 1))
   if (form.set3_a || form.set3_b) return 3
-  if (form.set2_a || form.set2_b) return 2
-  return Math.min(3, Math.max(1, form.current_set || 1))
+  if ((form.set2_a || form.set2_b) && selected < 2) return 2
+  return selected
 }
 
 export default function OrganiserDashboard() {
@@ -380,7 +382,7 @@ export default function OrganiserDashboard() {
 
   const scoreMut = useMutation({
     mutationFn: () => {
-      const current_set = inferCurrentSet(scoreForm)
+      const current_set = resolveCurrentSet(scoreForm)
       return tournamentApi.updateScore(scoreMatch!.id, {
         ...scoreForm,
         current_set,
@@ -507,14 +509,7 @@ export default function OrganiserDashboard() {
       set3_a: m.score?.set3_a ?? 0,
       set3_b: m.score?.set3_b ?? 0,
       current_set: m.score?.current_set ?? 1,
-      status:
-        m.status === 'COMPLETED' || m.status === 'WALKOVER'
-          ? m.status
-          : m.status === 'SCHEDULED' || m.status === 'CALLED'
-            ? 'LIVE'
-            : m.status === 'LIVE'
-              ? 'LIVE'
-              : 'LIVE',
+      status: m.status === 'COMPLETED' || m.status === 'WALKOVER' ? m.status : 'LIVE',
       winner_id: m.winner_id || '',
       force: !!m.ratings_applied,
     })
@@ -1363,9 +1358,14 @@ export default function OrganiserDashboard() {
                   emptyValue={0}
                   aria-label={`${set.replace('set', 'Set ')} team A`}
                   value={scoreForm[`${set}_a` as 'set1_a']}
-                  onValueChange={(n) =>
-                    setScoreForm({ ...scoreForm, [`${set}_a`]: Math.max(0, Math.trunc(n)) })
-                  }
+                  onValueChange={(n) => {
+                    const setNum = Number(set.replace('set', '')) || 1
+                    setScoreForm({
+                      ...scoreForm,
+                      [`${set}_a`]: Math.max(0, Math.trunc(n)),
+                      current_set: Math.max(scoreForm.current_set, setNum),
+                    })
+                  }}
                 />
                 <span>-</span>
                 <NumberInput
@@ -1375,9 +1375,14 @@ export default function OrganiserDashboard() {
                   emptyValue={0}
                   aria-label={`${set.replace('set', 'Set ')} team B`}
                   value={scoreForm[`${set}_b` as 'set1_b']}
-                  onValueChange={(n) =>
-                    setScoreForm({ ...scoreForm, [`${set}_b`]: Math.max(0, Math.trunc(n)) })
-                  }
+                  onValueChange={(n) => {
+                    const setNum = Number(set.replace('set', '')) || 1
+                    setScoreForm({
+                      ...scoreForm,
+                      [`${set}_b`]: Math.max(0, Math.trunc(n)),
+                      current_set: Math.max(scoreForm.current_set, setNum),
+                    })
+                  }}
                 />
               </div>
             ))}
@@ -1594,7 +1599,7 @@ function AddTeamModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
       <div
         className="modal"
         role="dialog"
@@ -1806,7 +1811,7 @@ function CreateTournamentModal({
   const entryUnit = singles ? 'player' : 'doubles team'
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
       <div
         className="modal modal-wide"
         role="dialog"
@@ -2008,7 +2013,7 @@ function CreateTournamentModal({
 
           {error && <p className="auth-error">{error}</p>}
           <div className="modal-actions">
-            <button type="button" className="btn btn-ghost" onClick={onClose}>
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
               Cancel
             </button>
             <button className="btn btn-primary" disabled={saving}>

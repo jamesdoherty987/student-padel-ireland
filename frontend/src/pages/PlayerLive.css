@@ -59,13 +59,28 @@
   color: var(--court-mid);
 }
 
+.pl-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
 .pl-header h1 {
   font-size: clamp(1.5rem, 3vw, 2.2rem);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.2;
-  margin-bottom: 0.5rem;
+  margin: 0;
   overflow-wrap: anywhere;
+}
+
+.pl-lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
 }
 
 .pl-updated {
@@ -83,16 +98,21 @@
 
 .pl-live-list li {
   display: grid;
-  gap: 0.15rem;
-  padding: 0.7rem 0.85rem;
+  gap: 0.2rem;
+  padding: 0.75rem 0.9rem;
   background: var(--surface);
   border-radius: var(--radius-sm);
   font-size: 0.92rem;
   min-width: 0;
+  border: 1px solid rgba(11, 61, 46, 0.08);
 }
 
-.pl-live-list li span {
-  overflow-wrap: anywhere;
+.pl-live-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
 }
 
 .pl-live-list strong {
@@ -100,6 +120,48 @@
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+}
+
+.pl-live-games {
+  font-family: var(--font-display);
+  font-weight: 750;
+  font-size: 1.05rem;
+  color: var(--court-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.pl-live-names {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.pl-live-sets {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pl-called-tag {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--court-deep);
+  background: var(--ball);
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+}
+
+.pl-called-list li {
+  border-color: rgba(200, 230, 0, 0.45);
+  background: rgba(200, 230, 0, 0.1);
+}
+
+.pl-next-score {
+  margin: 0 0 0.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .pl-next {
@@ -257,6 +319,10 @@
   font-size: 0.95rem;
 }
 
+.pl-next-card .pl-empty {
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .pl-block {
   padding: 1.25rem 0;
   border-top: 1px solid var(--line);
@@ -273,26 +339,28 @@
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
   font-weight: 600;
   min-width: 0;
 }
 
-.pl-results li.win {
+.pl-results li.win .pl-result-score {
   color: var(--success);
 }
 
-.pl-results li.loss {
+.pl-results li.loss .pl-result-score {
   color: var(--danger);
 }
 
-.pl-results li span {
+.pl-result-score {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.pl-result-vs {
   font-weight: 400;
   color: var(--muted);
   font-size: 0.9rem;
-}
-
-.pl-results li > span:last-child {
   min-width: 0;
   overflow-wrap: anywhere;
   text-align: right;

@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { isNativeApp } from '../native/platform'
 import BrandLogo from './BrandLogo'
+import { nativeTabsVisibleForPath } from './NativeTabBar'
 import NotificationsBell from './NotificationsBell'
 
 export default function NavBar() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const [open, setOpen] = useState(false)
   const native = isNativeApp()
+  const tabsVisible = nativeTabsVisibleForPath(pathname)
 
   useEffect(() => {
     document.body.classList.toggle('mobile-menu-open', open)
@@ -44,31 +47,37 @@ export default function NavBar() {
   const brandTo = native ? (user ? '/tournaments' : '/welcome') : '/'
 
   return (
-    <header className={`app-nav ${open ? 'is-menu-open' : ''} ${native ? 'is-native' : ''}`}>
+    <header
+      className={`app-nav ${open ? 'is-menu-open' : ''} ${native ? 'is-native' : ''} ${tabsVisible ? 'has-tabs' : ''}`}
+    >
       <BrandLogo to={brandTo} className="app-nav-brand" size="sm" onClick={close} />
       <div className="app-nav-end">
-        <nav className={`app-nav-links ${open ? 'is-open' : ''}`}>
-          <NavLink
-            to="/tournaments"
-            className={({ isActive }) => (isActive ? 'active' : '')}
-            onClick={close}
-          >
-            Tournaments
-          </NavLink>
-          <NavLink
-            to="/community"
-            className={({ isActive }) => (isActive ? 'active' : '')}
-            onClick={close}
-          >
-            Community
-          </NavLink>
-          <NavLink
-            to="/rankings"
-            className={({ isActive }) => (isActive ? 'active' : '')}
-            onClick={close}
-          >
-            Rankings
-          </NavLink>
+        <nav className={`app-nav-links ${open ? 'is-open' : ''}`} aria-label="Account and more">
+          {!tabsVisible && (
+            <>
+              <NavLink
+                to="/tournaments"
+                className={({ isActive }) => (isActive ? 'active' : '')}
+                onClick={close}
+              >
+                Tournaments
+              </NavLink>
+              <NavLink
+                to="/community"
+                className={({ isActive }) => (isActive ? 'active' : '')}
+                onClick={close}
+              >
+                Community
+              </NavLink>
+              <NavLink
+                to="/rankings"
+                className={({ isActive }) => (isActive ? 'active' : '')}
+                onClick={close}
+              >
+                Rankings
+              </NavLink>
+            </>
+          )}
           {user ? (
             <>
               {user.role === 'ADMIN' && (
@@ -87,13 +96,15 @@ export default function NavBar() {
               >
                 My events
               </NavLink>
-              <NavLink
-                to={`/players/${user.id}`}
-                className={({ isActive }) => (isActive ? 'active' : '')}
-                onClick={close}
-              >
-                Profile
-              </NavLink>
+              {!tabsVisible && (
+                <NavLink
+                  to={`/players/${user.id}`}
+                  className={({ isActive }) => (isActive ? 'active' : '')}
+                  onClick={close}
+                >
+                  Profile
+                </NavLink>
+              )}
               <span className="app-nav-user">{user.full_name.split(' ')[0]}</span>
               <button type="button" className="btn btn-ghost app-nav-logout" onClick={onLogout}>
                 Log out

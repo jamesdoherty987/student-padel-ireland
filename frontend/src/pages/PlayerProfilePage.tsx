@@ -98,18 +98,27 @@ export default function PlayerProfilePage() {
   const relation = friendsQ.data?.find((f) => f.user_id === player?.id)
 
   useEffect(() => {
-    document.body.classList.toggle('modal-open', !!lightbox)
+    const open = !!lightbox || !!reportTarget
+    document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [lightbox])
+  }, [lightbox, reportTarget])
 
   useEffect(() => {
     setLightboxError(false)
   }, [lightbox?.id])
 
   useEffect(() => {
-    if (!lightbox) return
+    if (!lightbox && !reportTarget) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setLightbox(null)
+      if (e.key === 'Escape') {
+        if (reportTarget) {
+          setReportTarget(null)
+          return
+        }
+        setLightbox(null)
+        return
+      }
+      if (reportTarget || !lightbox) return
       if (e.key === 'ArrowRight' && lightboxIndex >= 0 && lightboxIndex < media.length - 1) {
         setLightbox(media[lightboxIndex + 1])
       }
@@ -119,7 +128,7 @@ export default function PlayerProfilePage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightbox, lightboxIndex, media])
+  }, [lightbox, lightboxIndex, media, reportTarget])
 
   const markBroken = (id: string) => {
     setBrokenMedia((prev) => {
@@ -797,40 +806,34 @@ export default function PlayerProfilePage() {
         )}
         {reportTarget && (
           <div
+            className="report-backdrop"
             role="dialog"
             aria-modal="true"
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 2000,
-              background: 'rgba(0,0,0,0.6)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding:
-                'max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left))',
-            }}
+            aria-labelledby="report-dialog-title"
+            onClick={() => setReportTarget(null)}
           >
-            <div className="card" style={{ maxWidth: 420, width: '100%', padding: 20 }}>
-              <h2 style={{ marginTop: 0 }}>
+            <div className="report-dialog" onClick={(e) => e.stopPropagation()}>
+              <h2 id="report-dialog-title">
                 Report {reportTarget.type === 'user' ? 'this player' : 'this content'}
               </h2>
               {reportMsg && !reportMut.isError ? (
-                <p>{reportMsg}</p>
+                <p className="report-dialog-body">{reportMsg}</p>
               ) : (
                 <>
-                  <p>Tell us what is wrong (e.g. offensive, harassment, spam, inappropriate).</p>
+                  <p className="report-dialog-body">
+                    Tell us what is wrong (e.g. offensive, harassment, spam, inappropriate).
+                  </p>
                   <textarea
+                    className="form-textarea"
                     value={reportReason}
                     onChange={(e) => setReportReason(e.target.value)}
                     maxLength={1000}
                     rows={4}
-                    style={{ width: '100%' }}
                   />
-                  {reportMsg && <p className="error-text">{reportMsg}</p>}
+                  {reportMsg && <p className="form-error">{reportMsg}</p>}
                 </>
               )}
-              <div style={{ display: 'flex', gap: 8, marginTop: 12, justifyContent: 'flex-end' }}>
+              <div className="report-dialog-actions">
                 {!(reportMsg && !reportMut.isError) && (
                   <button
                     type="button"
@@ -841,7 +844,7 @@ export default function PlayerProfilePage() {
                     {reportMut.isPending ? 'Sending…' : 'Send report'}
                   </button>
                 )}
-                <button type="button" className="btn btn-dark btn-sm" onClick={() => setReportTarget(null)}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReportTarget(null)}>
                   {reportMsg && !reportMut.isError ? 'Done' : 'Cancel'}
                 </button>
               </div>

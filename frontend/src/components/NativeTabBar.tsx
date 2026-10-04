@@ -16,15 +16,19 @@ const HIDDEN_PREFIXES = [
   '/welcome',
 ]
 
-function shouldHide(pathname: string): boolean {
+export function nativeTabsHiddenForPath(pathname: string): boolean {
   if (pathname === '/') return true
   return HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))
+}
+
+export function nativeTabsVisibleForPath(pathname: string): boolean {
+  return isNativeApp() && !nativeTabsHiddenForPath(pathname)
 }
 
 export default function NativeTabBar() {
   const { user } = useAuth()
   const { pathname } = useLocation()
-  const visible = isNativeApp() && !shouldHide(pathname)
+  const visible = nativeTabsVisibleForPath(pathname)
 
   useEffect(() => {
     document.documentElement.classList.toggle('has-native-tabs', visible)
