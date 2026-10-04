@@ -1037,7 +1037,7 @@ def register_team(
                             ),
                         )
                     )
-        return _issue_checkout(db, t, team, resume_reg)
+        return _issue_checkout(db, t, team, resume_reg, customer_email=user.email)
 
     team = Team(
         tournament_id=t.id,
@@ -1067,7 +1067,7 @@ def register_team(
     db.add(reg)
     db.flush()
 
-    return _issue_checkout(db, t, team, reg)
+    return _issue_checkout(db, t, team, reg, customer_email=user.email)
 
 
 @router.post("/tournaments/{tournament_id}/organiser-add-team", response_model=TeamOut)
@@ -1142,7 +1142,14 @@ def organiser_add_team(
     return _team_out(team)
 
 
-def _issue_checkout(db: Session, t: Tournament, team: Team | None, reg: Registration) -> CheckoutResponse:
+def _issue_checkout(
+    db: Session,
+    t: Tournament,
+    team: Team | None,
+    reg: Registration,
+    *,
+    customer_email: str | None = None,
+) -> CheckoutResponse:
     if not team:
         raise HTTPException(404, "Team not found")
 
@@ -1161,26 +1168,28 @@ def _issue_checkout(db: Session, t: Tournament, team: Team | None, reg: Registra
 
     settings = get_settings()
     if settings.stripe_secret_key:
-        import stripe
+        from app.services.payments import create_checkout_session
 
-        stripe.api_key = settings.stripe_secret_key
-        session = stripe.checkout.Session.create(
-            mode="payment",
-            line_items=[
-                {
-                    "price_data": {
-                        "currency": t.currency.lower(),
-                        "product_data": {"name": f"{t.name} - {team.name}"},
-                        "unit_amount": t.entry_fee_cents,
-                    },
-                    "quantity": 1,
-                }
-            ],
-            success_url=f"{settings.frontend_url}/t/{t.slug}/confirmed?session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{settings.frontend_url}/t/{t.slug}/join?cancelled=1",
-            metadata={"registration_id": str(reg.id), "tournament_id": str(t.id)},
-        )
+        try:
+            session = create_checkout_session(
+                tournament_name=t.name,
+                team_name=team.name,
+                amount_cents=t.entry_fee_cents,
+                currency=t.currency,
+                success_url=f"{settings.frontend_url}/t/{t.slug}/confirmed?session_id={{CHECKOUT_SESSION_ID}}",
+                cancel_url=f"{settings.frontend_url}/t/{t.slug}/join?cancelled=1",
+                registration_id=reg.id,
+                tournament_id=t.id,
+                customer_email=customer_email,
+                previous_session_id=reg.stripe_session_id,
+            )
+        except Exception as exc:
+            raise HTTPException(502, f"Could not start Stripe Checkout: {exc}") from exc
+
         reg.stripe_session_id = session.id
+        # Keep amount in sync with what Checkout will charge
+        reg.amount_cents = t.entry_fee_cents
+        reg.currency = t.currency
         db.commit()
         return CheckoutResponse(
             checkout_url=session.url,
@@ -1219,12 +1228,23 @@ def confirm_payment_session(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    from app.services.payments import confirm_stripe_session
+    from app.services.payments import fulfill_checkout_session
 
-    reg = confirm_stripe_session(db, session_id)
+    if not session_id or not session_id.startswith("cs_"):
+        raise HTTPException(400, "Invalid checkout session id")
+
+    try:
+        reg = fulfill_checkout_session(db, session_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"Could not confirm payment: {exc}") from exc
+
     if not reg:
+        # Session exists locally but Stripe says not paid yet (redirect raced webhook)
         reg = db.query(Registration).filter(Registration.stripe_session_id == session_id).first()
-    if not reg:
+        if reg and reg.status == PaymentStatus.PENDING.value:
+            raise HTTPException(404, "Payment not completed yet — try again in a moment")
         raise HTTPException(404, "Payment session not found or not paid yet")
     return _registration_payload(db, reg, user)
 
@@ -1267,11 +1287,13 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
 
 @router.post("/webhooks/stripe")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
+    """Stripe webhook — signature verification required (see Stripe webhook docs)."""
     settings = get_settings()
     if not settings.stripe_secret_key:
         raise HTTPException(400, "Stripe not configured")
-
-    import json
+    if not settings.stripe_webhook_secret:
+        # Never accept unsigned webhook bodies — forged events could mark entries paid
+        raise HTTPException(500, "STRIPE_WEBHOOK_SECRET is not configured")
 
     import stripe
 
@@ -1279,23 +1301,27 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
     try:
-        if settings.stripe_webhook_secret:
-            event = stripe.Webhook.construct_event(payload, sig, settings.stripe_webhook_secret)
-        else:
-            event = stripe.Event.construct_from(json.loads(payload), stripe.api_key)
+        event = stripe.Webhook.construct_event(payload, sig, settings.stripe_webhook_secret)
     except Exception as exc:
-        raise HTTPException(400, f"Webhook error: {exc}") from exc
+        raise HTTPException(400, f"Webhook signature verification failed: {exc}") from exc
 
-    if event["type"] == "checkout.session.completed":
+    # Instant methods: checkout.session.completed with payment_status=paid
+    # Delayed methods (e.g. bank debit): async_payment_succeeded when funds clear
+    if event["type"] in (
+        "checkout.session.completed",
+        "checkout.session.async_payment_succeeded",
+    ):
         session = event["data"]["object"]
-        from app.services.payments import confirm_stripe_session
+        session_id = session.get("id") if isinstance(session, dict) else getattr(session, "id", None)
+        from app.services.payments import fulfill_checkout_session
 
-        try:
-            confirm_stripe_session(db, session["id"])
-        except HTTPException:
-            # Cancelled/withdrawn/full — acknowledge webhook so Stripe stops retrying.
-            # Player was charged; organiser must handle refund manually.
-            db.rollback()
+        if session_id:
+            try:
+                fulfill_checkout_session(db, session_id)
+            except HTTPException:
+                # Cancelled/withdrawn/full/mismatch — ack so Stripe stops retrying.
+                # Player may have been charged; organiser handles refund manually.
+                db.rollback()
     return {"received": True}
 
 
