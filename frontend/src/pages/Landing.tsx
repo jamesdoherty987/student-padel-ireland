@@ -7,7 +7,7 @@ import { tournamentApi, type Tournament } from '../services/api'
 import { formatPerPlayerFee, parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
 import { FlipWords } from '../components/ui/FlipWords'
 import { InfiniteMovingCards } from '../components/ui/InfiniteMovingCards'
-import { Globe } from '../components/ui/Globe'
+import { LazyGlobe } from '../components/ui/LazyGlobe'
 import { HERO_ROTATION, LANDING_VIDEO } from '../data/landingImages'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import './Landing.css'
@@ -106,9 +106,10 @@ export default function Landing() {
     }
 
     let visible = false
+    let mediaAttached = false
 
     const tryPlay = () => {
-      if (!visible || reduced) return
+      if (!visible || reduced || !mediaAttached) return
       const p = el.play()
       if (p !== undefined) {
         void p
@@ -120,6 +121,14 @@ export default function Landing() {
             setVideoPlaying(false)
           })
       }
+    }
+
+    const attachMedia = () => {
+      if (mediaAttached) return
+      mediaAttached = true
+      // Defer the ~3.7MB download until the section is near the viewport
+      el.src = LANDING_VIDEO.mp4
+      el.load()
     }
 
     const onPlaying = () => setVideoPlaying(true)
@@ -139,15 +148,16 @@ export default function Landing() {
       ([entry]) => {
         if (!entry) return
         visible = entry.isIntersecting
-        if (visible) tryPlay()
-        else el.pause()
+        if (visible) {
+          attachMedia()
+          tryPlay()
+        } else {
+          el.pause()
+        }
       },
-      { threshold: 0.25 },
+      { rootMargin: '200px 0px', threshold: 0.15 },
     )
     io.observe(el)
-
-    // Kick load in case the browser deferred it
-    el.load()
 
     return () => {
       io.disconnect()
@@ -258,6 +268,8 @@ export default function Landing() {
                 alt=""
                 className={i === heroIndex ? 'is-active' : undefined}
                 loading={i === 0 ? 'eager' : 'lazy'}
+                fetchPriority={i === 0 ? 'high' : 'low'}
+                decoding={i === 0 ? 'sync' : 'async'}
               />
             ))}
             <div className="lp-hero-scrim" />
@@ -368,12 +380,11 @@ export default function Landing() {
               <video
                 ref={featureVideoRef}
                 className="lp-feature-video"
-                src={LANDING_VIDEO.mp4}
                 poster={LANDING_VIDEO.poster}
                 muted
                 loop
                 playsInline
-                preload="auto"
+                preload="none"
                 aria-label="Padel match footage"
                 onClick={toggleFeatureVideo}
               />
@@ -413,7 +424,7 @@ export default function Landing() {
               </a>
             </div>
             <div className="lp-globe-stage">
-              <Globe />
+              <LazyGlobe />
             </div>
           </div>
         </section>

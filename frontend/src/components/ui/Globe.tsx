@@ -23,6 +23,7 @@ export function Globe({ className = '' }: GlobeProps) {
     let globe: ReturnType<typeof createGlobe> | null = null
 
     try {
+      const narrow = window.matchMedia('(max-width: 900px)').matches
       const onResize = () => {
         if (!globe) return
         width = canvas.offsetWidth || 280
@@ -37,7 +38,7 @@ export function Globe({ className = '' }: GlobeProps) {
         theta: 0.28,
         dark: 1,
         diffuse: 1.2,
-        mapSamples: 12000,
+        mapSamples: narrow ? 6000 : 12000,
         mapBrightness: 4.5,
         baseColor: [0.04, 0.18, 0.14],
         markerColor: [0.78, 0.9, 0],

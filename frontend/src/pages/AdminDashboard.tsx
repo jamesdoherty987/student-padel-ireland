@@ -100,7 +100,11 @@ function formFromTournament(t: Tournament): TournamentFormState {
   }
 }
 
-function payloadFromForm(form: TournamentFormState, previous?: Tournament) {
+function payloadFromForm(
+  form: TournamentFormState,
+  previous?: Tournament,
+  opts?: { omitFormat?: boolean },
+) {
   const payload: Record<string, unknown> = {
     name: form.name.trim(),
     location: form.location.trim(),
@@ -109,14 +113,16 @@ function payloadFromForm(form: TournamentFormState, previous?: Tournament) {
     start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
     entry_fee_cents: Math.round(Number(form.entry_fee_euros) * 100),
     max_teams: Number(form.max_teams),
-    format: form.format || 'GROUP_KNOCKOUT',
-    play_format: form.play_format || 'DOUBLES',
     match_duration_minutes: Number(form.match_duration_minutes) || 20,
     description: form.description.trim() || null,
     rules: form.rules.trim() || null,
     registration_deadline: form.registration_deadline
       ? `${form.registration_deadline}T23:59:00`
       : null,
+  }
+  if (!opts?.omitFormat) {
+    payload.format = form.format || 'GROUP_KNOCKOUT'
+    payload.play_format = form.play_format || 'DOUBLES'
   }
 
   const courts = Number(form.number_of_courts)
@@ -355,9 +361,20 @@ export default function AdminDashboard() {
           title="Edit tournament"
           initial={formFromTournament(editing)}
           submitLabel="Save changes"
+          formatLocked={
+            editing.status === 'LIVE' ||
+            editing.status === 'COMPLETED' ||
+            editing.status === 'CANCELLED' ||
+            editing.status === 'REGISTRATION_CLOSED'
+          }
           onClose={() => setEditing(null)}
           onSubmit={async (form) => {
-            await tournamentApi.update(editing.id, payloadFromForm(form, editing))
+            const locked =
+              editing.status === 'LIVE' ||
+              editing.status === 'COMPLETED' ||
+              editing.status === 'CANCELLED' ||
+              editing.status === 'REGISTRATION_CLOSED'
+            await tournamentApi.update(editing.id, payloadFromForm(form, editing, { omitFormat: locked }))
             await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
             await qc.invalidateQueries({ queryKey: ['tournaments'] })
             showToast('Tournament updated')
@@ -490,6 +507,7 @@ function TournamentModal({
   submitLabel,
   showOpenNow = false,
   showTemplate = false,
+  formatLocked = false,
   onClose,
   onSubmit,
 }: {
@@ -498,6 +516,7 @@ function TournamentModal({
   submitLabel: string
   showOpenNow?: boolean
   showTemplate?: boolean
+  formatLocked?: boolean
   onClose: () => void
   onSubmit: (form: TournamentFormState) => Promise<void>
 }) {
@@ -630,11 +649,14 @@ function TournamentModal({
               className="form-select"
               value={form.play_format}
               onChange={(e) => set('play_format', e.target.value)}
-              disabled={saving}
+              disabled={saving || formatLocked}
             >
               <option value="DOUBLES">Doubles</option>
               <option value="SINGLES">Singles</option>
             </select>
+            {formatLocked && (
+              <small className="form-hint">Format is locked after fixtures exist or the event is live.</small>
+            )}
           </div>
           <div className="form-group">
             <label className="form-label">Format</label>
@@ -642,7 +664,7 @@ function TournamentModal({
               className="form-select"
               value={form.format}
               onChange={(e) => set('format', e.target.value)}
-              disabled={saving}
+              disabled={saving || formatLocked}
             >
               <option value="GROUP_KNOCKOUT">Groups then knockout</option>
               <option value="ROUND_ROBIN">Round robin</option>

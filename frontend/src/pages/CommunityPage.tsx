@@ -120,6 +120,7 @@ export default function CommunityPage() {
       setError('')
       refresh()
       qc.invalidateQueries({ queryKey: ['rankings'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
@@ -231,9 +232,10 @@ export default function CommunityPage() {
                 <button
                   type="button"
                   className="btn btn-dark btn-sm"
+                  disabled={confirmMut.isPending}
                   onClick={() => confirmMut.mutate(nextGame.id)}
                 >
-                  Confirm score
+                  {confirmMut.isPending ? 'Confirming…' : 'Confirm score'}
                 </button>
               )}
               {nextGame.can_i_score && (
@@ -260,7 +262,8 @@ export default function CommunityPage() {
                   key={m.id}
                   title="Confirm score"
                   match={m}
-                  actionLabel="Confirm"
+                  actionLabel={confirmMut.isPending ? 'Confirming…' : 'Confirm'}
+                  disabled={confirmMut.isPending}
                   onAction={() => confirmMut.mutate(m.id)}
                 />
               ))}
@@ -432,11 +435,13 @@ function ActionCard({
   match,
   actionLabel,
   onAction,
+  disabled,
 }: {
   title: string
   match: CommunityMatch
   actionLabel: string
   onAction: () => void
+  disabled?: boolean
 }) {
   return (
     <div className="action-card">
@@ -450,7 +455,7 @@ function ActionCard({
         </strong>
         <div className="rank-meta">{match.competition_name}</div>
       </div>
-      <button type="button" className="btn btn-dark btn-sm" onClick={onAction}>
+      <button type="button" className="btn btn-dark btn-sm" onClick={onAction} disabled={disabled}>
         {actionLabel}
       </button>
     </div>

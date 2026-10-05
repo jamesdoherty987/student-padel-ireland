@@ -162,8 +162,9 @@ export default function CompetitionDetailPage() {
   const leaveMut = useMutation({
     mutationFn: () => communityApi.leaveCompetition(c!.id),
     onSuccess: () => {
-      navigate('/community')
+      qc.invalidateQueries({ queryKey: ['community-home'] })
       qc.invalidateQueries({ queryKey: ['competitions'] })
+      navigate('/community')
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
@@ -179,7 +180,10 @@ export default function CompetitionDetailPage() {
 
   const closeMut = useMutation({
     mutationFn: () => communityApi.setStatus(c!.id, 'COMPLETED'),
-    onSuccess: () => refresh(),
+    onSuccess: () => {
+      refresh()
+      qc.invalidateQueries({ queryKey: ['community-home'] })
+    },
     onError: (e) => setError(apiErrorMessage(e)),
   })
 
@@ -379,9 +383,10 @@ export default function CompetitionDetailPage() {
                   <button
                     type="button"
                     className="btn btn-dark btn-sm"
+                    disabled={confirmMut.isPending}
                     onClick={() => confirmMut.mutate(myNext.id)}
                   >
-                    Confirm score
+                    {confirmMut.isPending ? 'Confirming…' : 'Confirm score'}
                   </button>
                 )}
                 {myNext.can_i_score && (
@@ -522,6 +527,7 @@ export default function CompetitionDetailPage() {
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm standings-remove"
+                      disabled={removeMemberMut.isPending}
                       onClick={() => {
                         if (window.confirm(`Remove ${m.full_name} from this competition?`)) {
                           removeMemberMut.mutate(m.user_id)
@@ -627,9 +633,10 @@ export default function CompetitionDetailPage() {
                     <button
                       type="button"
                       className="btn btn-dark btn-sm"
+                      disabled={confirmMut.isPending}
                       onClick={() => confirmMut.mutate(m.id)}
                     >
-                      Confirm score
+                      {confirmMut.isPending ? 'Confirming…' : 'Confirm score'}
                     </button>
                   )}
                   {m.can_i_score && (
@@ -652,6 +659,7 @@ export default function CompetitionDetailPage() {
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
+                      disabled={cancelMatchMut.isPending}
                       onClick={() => {
                         if (window.confirm('Cancel this match? The score will be discarded.')) {
                           cancelMatchMut.mutate(m.id)
@@ -672,6 +680,7 @@ export default function CompetitionDetailPage() {
             <button
               type="button"
               className="btn btn-ghost btn-sm"
+              disabled={closeMut.isPending}
               onClick={() => {
                 if (pendingConfirms.length > 0) {
                   setError(
@@ -684,19 +693,20 @@ export default function CompetitionDetailPage() {
                 }
               }}
             >
-              Mark complete
+              {closeMut.isPending ? 'Saving…' : 'Mark complete'}
             </button>
           )}
           <button
             type="button"
             className="btn btn-ghost btn-sm"
+            disabled={leaveMut.isPending}
             onClick={() => {
               if (window.confirm(c.is_owner ? 'Leave as host? Only works if you are the only member.' : 'Leave this competition?')) {
                 leaveMut.mutate()
               }
             }}
           >
-            Leave
+            {leaveMut.isPending ? 'Leaving…' : 'Leave'}
           </button>
         </div>
 

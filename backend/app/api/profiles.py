@@ -297,7 +297,10 @@ async def upload_profile_media(
     except OSError:
         pass
 
-    want_avatar = set_as_avatar or (media_type == "image" and count == 0)
+    # Only auto-set avatar for the very first photo when the user has no avatar yet
+    want_avatar = set_as_avatar or (
+        media_type == "image" and count == 0 and not user.avatar_url
+    )
     if want_avatar:
         db.query(ProfileMedia).filter(
             ProfileMedia.user_id == user.id, ProfileMedia.is_avatar.is_(True)
@@ -348,6 +351,33 @@ def set_media_as_avatar(
     return _profile_out(db, user, user)
 
 
+@router.delete("/me/profile/avatar", response_model=UserProfilePublic)
+def clear_profile_avatar(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Clear the profile photo without deleting gallery media."""
+    db.query(ProfileMedia).filter(
+        ProfileMedia.user_id == user.id, ProfileMedia.is_avatar.is_(True)
+    ).update({"is_avatar": False})
+    user.avatar_url = None
+    db.commit()
+    db.refresh(user)
+    return _profile_out(db, user, user)
+
+
+def _avatar_refs_media(user: User, item: ProfileMedia) -> bool:
+    if item.is_avatar:
+        return True
+    path = _api_media_path(item.id)
+    refs = {item.url, path, _public_url(path), _public_url(item.url)}
+    if user.avatar_url and user.avatar_url in refs:
+        return True
+    if user.avatar_url and str(item.id) in user.avatar_url:
+        return True
+    return False
+
+
 @router.delete("/me/profile/media/{media_id}")
 def delete_profile_media(
     media_id: UUID,
@@ -372,19 +402,13 @@ def delete_profile_media(
     except OSError:
         pass
 
-    was_avatar = item.is_avatar
+    clear_avatar = _avatar_refs_media(user, item)
     db.delete(item)
-    if was_avatar:
-        next_img = (
-            db.query(ProfileMedia)
-            .filter(ProfileMedia.user_id == user.id, ProfileMedia.media_type == "image")
-            .order_by(ProfileMedia.sort_order)
-            .first()
-        )
-        if next_img:
-            next_img.is_avatar = True
-            user.avatar_url = _api_media_path(next_img.id)
-        else:
-            user.avatar_url = None
+    if clear_avatar:
+        # Do not auto-promote another gallery image — that made "Remove photo" look broken
+        db.query(ProfileMedia).filter(
+            ProfileMedia.user_id == user.id, ProfileMedia.is_avatar.is_(True)
+        ).update({"is_avatar": False})
+        user.avatar_url = None
     db.commit()
     return {"ok": True}

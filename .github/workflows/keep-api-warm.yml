@@ -1,0 +1,32 @@
+# Ping Render /health on a schedule so the free-tier API does not sleep after ~15 min idle.
+# Override with repository variable API_HEALTH_URL if the service URL changes.
+name: Keep API warm
+
+on:
+  schedule:
+    # Every 10 minutes (Render free sleeps after ~15 min)
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Wake Render API
+        env:
+          API_HEALTH_URL: ${{ vars.API_HEALTH_URL != '' && vars.API_HEALTH_URL || 'https://student-padel-ireland.onrender.com/health' }}
+        run: |
+          echo "Pinging $API_HEALTH_URL"
+          # Free tier cold starts can take 30–60s; retry a few times
+          for i in 1 2 3 4 5; do
+            if curl -fsS --max-time 55 "$API_HEALTH_URL"; then
+              echo
+              echo "OK (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i failed; retrying..."
+            sleep 8
+          done
+          echo "Health check failed after retries"
+          exit 1

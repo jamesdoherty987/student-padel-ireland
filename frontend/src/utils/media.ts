@@ -12,3 +12,10 @@ export function mediaUrl(url?: string | null): string | undefined {
   }
   return url
 }
+
+/** Extract ProfileMedia UUID from `/api/media/{uuid}` style URLs. */
+export function mediaIdFromUrl(url?: string | null): string | null {
+  if (!url) return null
+  const m = String(url).match(/\/media\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)
+  return m?.[1] ?? null
+}

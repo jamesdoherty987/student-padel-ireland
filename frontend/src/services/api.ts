@@ -383,10 +383,14 @@ export const platformApi = {
     form.append('file', file)
     if (opts?.caption) form.append('caption', opts.caption)
     if (opts?.set_as_avatar) form.append('set_as_avatar', 'true')
-    return api.post<ProfileMedia>('/api/me/profile/media', form)
+    // Videos can be up to 25MB — allow a longer timeout than the default 20s
+    return api.post<ProfileMedia>('/api/me/profile/media', form, { timeout: 120_000 })
   },
+  updateMediaCaption: (id: string, caption: string | null) =>
+    api.patch<ProfileMedia>(`/api/me/profile/media/${id}`, { caption }),
   deleteMedia: (id: string) => api.delete(`/api/me/profile/media/${id}`),
   setAvatar: (id: string) => api.post<RankingRow>(`/api/me/profile/media/${id}/avatar`),
+  clearAvatar: () => api.delete<RankingRow>('/api/me/profile/avatar'),
   organiserDashboard: () => api.get('/api/organiser/dashboard'),
 }
 

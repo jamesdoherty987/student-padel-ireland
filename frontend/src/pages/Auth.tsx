@@ -145,6 +145,7 @@ export function SignupPage() {
     university_id: '',
     student_number: '',
   })
+  const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -168,12 +169,15 @@ export function SignupPage() {
     setError('')
     setLoading(true)
     try {
-      const u = await register({
-        ...form,
-        university_id: form.university_id || null,
-        phone: form.phone || null,
-        student_number: form.student_number || null,
-      })
+      const u = await register(
+        {
+          ...form,
+          university_id: form.university_id || null,
+          phone: form.phone || null,
+          student_number: form.student_number || null,
+        },
+        remember,
+      )
       navigate(next || homeForRole(u.role))
     } catch (err) {
       setError(apiErrorMessage(err, 'Could not create account'))
@@ -275,6 +279,14 @@ export function SignupPage() {
               onChange={(e) => setForm({ ...form, student_number: e.target.value })}
             />
           </div>
+          <label className="auth-remember">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            <span>Stay signed in</span>
+          </label>
           {error && <p className="auth-error">{error}</p>}
           <button className="btn btn-primary btn-block" disabled={loading}>
             {loading ? 'Creating...' : 'Sign up'}

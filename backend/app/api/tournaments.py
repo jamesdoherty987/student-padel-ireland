@@ -268,7 +268,11 @@ def _team_count(db: Session, tournament_id: UUID) -> int:
 def _deadline_passed(t: Tournament) -> bool:
     if not t.registration_deadline:
         return False
-    return date.today() > t.registration_deadline.date()
+    deadline = t.registration_deadline
+    # Naive datetimes from the DB are treated as UTC (API stores ISO with Z)
+    if deadline.tzinfo is None:
+        deadline = deadline.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) > deadline.astimezone(timezone.utc)
 
 
 def _ensure_ranking(db: Session, user_id: UUID) -> None:
@@ -795,6 +799,24 @@ def update_tournament(
     data = body.model_dump(exclude_unset=True)
     court_names = data.pop("court_names", None)
     new_organiser_id = data.pop("organiser_id", None)
+
+    format_fields = {"format", "play_format"}
+    changing_format = any(f in data and getattr(t, f) != (
+        data[f].value if hasattr(data[f], "value") else data[f]
+    ) for f in format_fields)
+    if changing_format:
+        fixtures = db.query(Match).filter(Match.tournament_id == t.id).count()
+        if fixtures > 0 or t.status in (
+            TournamentStatus.LIVE.value,
+            TournamentStatus.COMPLETED.value,
+            TournamentStatus.CANCELLED.value,
+        ):
+            raise HTTPException(
+                400,
+                "Cannot change singles/doubles or bracket format after the draw exists "
+                "(or once the event is live). Restore to draft and regenerate if needed.",
+            )
+
     if new_organiser_id is not None:
         _assert_owner(user, t)
         new_owner = db.get(User, new_organiser_id)

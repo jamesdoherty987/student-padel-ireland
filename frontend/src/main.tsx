@@ -1,11 +1,22 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import '@fortawesome/fontawesome-free/css/all.min.css'
+// Solid icons only — avoid brands/regular webfonts on the critical path
+import '@fortawesome/fontawesome-free/css/fontawesome.min.css'
+import '@fortawesome/fontawesome-free/css/solid.min.css'
 import './index.css'
 import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary'
-import { isNativeApp } from './native/platform'
+import { apiBaseUrl, isNativeApp } from './native/platform'
 import { initNativeShell } from './native/shell'
+
+/** Wake a sleeping Render free instance as soon as the main module runs. */
+function wakeApi() {
+  const base = apiBaseUrl()
+  if (!base) return
+  void fetch(`${base}/health`, { method: 'GET', mode: 'cors', cache: 'no-store', keepalive: true }).catch(
+    () => {},
+  )
+}
 
 function mount() {
   const root = document.getElementById('root')
@@ -35,6 +46,7 @@ function registerServiceWorker() {
   })
 }
 
+wakeApi()
 // Mount React immediately — never block the UI on native plugin init
 mount()
 registerServiceWorker()

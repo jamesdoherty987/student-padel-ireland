@@ -152,19 +152,24 @@
   z-index: 100;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
     max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: none;
 }
 
 .join-modal {
   background: var(--white);
   width: min(420px, 100%);
+  max-width: 100%;
   max-height: min(90dvh, 90vh);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-radius: var(--radius-lg);
   padding: 1.35rem 1.25rem 1.25rem;
   margin: auto;
   touch-action: pan-y;
+  box-sizing: border-box;
 }
 
 .join-modal-head {
@@ -375,6 +380,20 @@
   gap: 0.5rem;
   align-items: center;
   margin-bottom: 1.25rem;
+}
+
+.tour-format-line {
+  margin: 0.35rem 0 0;
+  font-weight: 600;
+  color: var(--court-deep);
+  font-size: 0.98rem;
+}
+
+.tour-format-hint {
+  margin: 0.25rem 0 0.85rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  max-width: 36rem;
 }
 
 .tour-closed-note {

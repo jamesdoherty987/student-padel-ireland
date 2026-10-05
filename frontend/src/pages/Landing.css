@@ -323,6 +323,23 @@
   grid-area: 1 / 1;
   white-space: nowrap;
   display: block;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.flip-words-inner.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.flip-words-inner.is-out {
+  opacity: 0;
+  transform: translateY(-0.35em);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flip-words-inner {
+    transition: none;
+  }
 }
 
 .lp-actions {

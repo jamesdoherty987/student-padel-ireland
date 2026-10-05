@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { tournamentApi } from '../services/api'
 import { publicPathUrl } from '../native/platform'
 import {
+  bracketFormatHint,
   courtLabel,
   currentSetScores,
   formatDate,
@@ -17,6 +18,7 @@ import {
   spotsLeftLabel,
   statusBadgeClass,
   statusLabel,
+  tournamentFormatSummary,
 } from '../utils/format'
 import './Tournament.css'
 
@@ -133,6 +135,8 @@ export default function TournamentDetailPage() {
           {tournament.venue} · {formatDate(tournament.event_date, { day: 'numeric', month: 'long', year: 'numeric' })} ·{' '}
           {formatTime(tournament.start_time)}
         </p>
+        <p className="tour-format-line">{tournamentFormatSummary(tournament.play_format, tournament.format)}</p>
+        <p className="tour-format-hint muted">{bracketFormatHint(tournament.format)}</p>
 
         {(isListedPartner ||
           hasPendingCaptain ||

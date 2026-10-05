@@ -113,8 +113,27 @@
 
 .admin-modal {
   width: min(560px, 100%);
+  max-width: 100%;
   max-height: min(92dvh, 92vh, 900px);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.admin-form-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.admin-form-row-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-form-row .form-group,
+.admin-form-row-2 .form-group {
+  min-width: 0;
 }
 
 .admin-modal-head {
@@ -133,16 +152,6 @@
   color: var(--muted);
   font-size: 0.92rem;
   margin: 0 0 1rem;
-}
-
-.admin-form-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
-}
-
-.admin-form-row-2 {
-  grid-template-columns: 1fr 1fr;
 }
 
 .admin-check {

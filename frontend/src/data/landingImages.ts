@@ -3,17 +3,18 @@
  */
 export const LANDING_IMAGES = {
   /** First frame / fallback */
-  hero: '/images/heroes/hero-02.webp',
+  hero: '/images/heroes/hero-03.webp',
   /** Poster for feature video */
   feature: '/images/gallery-1.jpg',
 }
 
-/** Rotating hero backgrounds */
+/**
+ * Rotating hero backgrounds — lightest first so LCP is not a 500KB+ image.
+ * Heavier frames (hero-04/05) are omitted to keep mobile downloads smaller.
+ */
 export const HERO_ROTATION = [
-  '/images/heroes/hero-02.webp',
   '/images/heroes/hero-03.webp',
-  '/images/heroes/hero-04.jpg',
-  '/images/heroes/hero-05.webp',
+  '/images/heroes/hero-02.webp',
 ] as const
 
 /** How-it-works feature video */

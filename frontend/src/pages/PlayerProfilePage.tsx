@@ -11,7 +11,7 @@ import {
   reportApi,
   type ProfileMedia,
 } from '../services/api'
-import { mediaUrl } from '../utils/media'
+import { mediaIdFromUrl, mediaUrl } from '../utils/media'
 import './Tournament.css'
 import './Profile.css'
 
@@ -43,14 +43,17 @@ function winRate(wins: number, losses: number) {
 export default function PlayerProfilePage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user, logout, patchUser } = useAuth()
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
   const [bioDraft, setBioDraft] = useState<string | null>(null)
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
   const [caption, setCaption] = useState('')
+  const [captionDraft, setCaptionDraft] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<ProfileMedia | null>(null)
   const [showUpload, setShowUpload] = useState(false)
+  const [uploadIntent, setUploadIntent] = useState<'gallery' | 'avatar'>('gallery')
   const [error, setError] = useState('')
   const [asAvatar, setAsAvatar] = useState(false)
   const [brokenMedia, setBrokenMedia] = useState<Set<string>>(() => new Set())
@@ -58,6 +61,7 @@ export default function PlayerProfilePage() {
   const [showDeleteAccount, setShowDeleteAccount] = useState(false)
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteError, setDeleteError] = useState('')
+  const [confirmClearAvatar, setConfirmClearAvatar] = useState(false)
   const [reportTarget, setReportTarget] = useState<{ type: 'user' | 'media'; id: string } | null>(null)
   const [reportReason, setReportReason] = useState('')
   const [reportMsg, setReportMsg] = useState('')
@@ -85,10 +89,59 @@ export default function PlayerProfilePage() {
   const isOwn = Boolean(player?.is_own_profile || (user && player && user.id === player.id))
   const media = player?.media || []
 
+  const findAvatarMedia = (rows: ProfileMedia[], avatarUrl?: string | null) => {
+    const byFlag = rows.find((m) => m.is_avatar)
+    if (byFlag) return byFlag
+    const id = mediaIdFromUrl(avatarUrl)
+    if (id) {
+      const byId = rows.find((m) => m.id === id)
+      if (byId) return byId
+    }
+    return rows.find((m) => m.url === avatarUrl || mediaUrl(m.url) === mediaUrl(avatarUrl))
+  }
+
   const lightboxIndex = useMemo(
     () => (lightbox ? media.findIndex((m) => m.id === lightbox.id) : -1),
     [lightbox, media],
   )
+
+  // Keep lightbox in sync after avatar/caption/delete refreshes
+  useEffect(() => {
+    if (!lightbox) return
+    const fresh = media.find((m) => m.id === lightbox.id)
+    if (!fresh) {
+      setLightbox(null)
+      setCaptionDraft(null)
+      return
+    }
+    if (
+      fresh.caption !== lightbox.caption ||
+      fresh.is_avatar !== lightbox.is_avatar ||
+      fresh.url !== lightbox.url
+    ) {
+      setLightbox(fresh)
+    }
+  }, [media, lightbox])
+
+  useEffect(() => {
+    setBrokenMedia(new Set())
+  }, [id, player?.media?.length])
+
+  const openUpload = (intent: 'gallery' | 'avatar' = 'gallery') => {
+    setUploadIntent(intent)
+    setAsAvatar(intent === 'avatar')
+    setShowUpload(true)
+    setError('')
+  }
+
+  const closeUpload = () => {
+    setShowUpload(false)
+    setAsAvatar(false)
+    setUploadIntent('gallery')
+    setCaption('')
+    if (fileRef.current) fileRef.current.value = ''
+    if (cameraRef.current) cameraRef.current.value = ''
+  }
 
   const friendsQ = useQuery({
     queryKey: ['friends'],
@@ -98,19 +151,24 @@ export default function PlayerProfilePage() {
   const relation = friendsQ.data?.find((f) => f.user_id === player?.id)
 
   useEffect(() => {
-    const open = !!lightbox || !!reportTarget
+    const open = !!lightbox || !!reportTarget || confirmClearAvatar
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [lightbox, reportTarget])
+  }, [lightbox, reportTarget, confirmClearAvatar])
 
   useEffect(() => {
     setLightboxError(false)
+    setCaptionDraft(null)
   }, [lightbox?.id])
 
   useEffect(() => {
-    if (!lightbox && !reportTarget) return
+    if (!lightbox && !reportTarget && !confirmClearAvatar) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (confirmClearAvatar) {
+          setConfirmClearAvatar(false)
+          return
+        }
         if (reportTarget) {
           setReportTarget(null)
           return
@@ -118,7 +176,7 @@ export default function PlayerProfilePage() {
         setLightbox(null)
         return
       }
-      if (reportTarget || !lightbox) return
+      if (reportTarget || confirmClearAvatar || !lightbox) return
       if (e.key === 'ArrowRight' && lightboxIndex >= 0 && lightboxIndex < media.length - 1) {
         setLightbox(media[lightboxIndex + 1])
       }
@@ -128,7 +186,7 @@ export default function PlayerProfilePage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [lightbox, lightboxIndex, media, reportTarget])
+  }, [lightbox, lightboxIndex, media, reportTarget, confirmClearAvatar])
 
   const markBroken = (id: string) => {
     setBrokenMedia((prev) => {
@@ -145,7 +203,12 @@ export default function PlayerProfilePage() {
       setError(problem)
       return
     }
-    const setAvatar = asAvatar && file.type.startsWith('image/')
+    const setAvatar =
+      (asAvatar || uploadIntent === 'avatar') && file.type.startsWith('image/')
+    if ((asAvatar || uploadIntent === 'avatar') && !file.type.startsWith('image/')) {
+      setError('Profile photo must be an image (JPEG, PNG, WebP or GIF)')
+      return
+    }
     uploadMut.mutate({ file, setAvatar })
   }
 
@@ -159,6 +222,20 @@ export default function PlayerProfilePage() {
     onError: (e) => setError(apiErrorMessage(e)),
   })
 
+  const saveName = useMutation({
+    mutationFn: () => platformApi.updateProfile({ full_name: (nameDraft ?? '').trim() }),
+    onSuccess: (res) => {
+      setNameDraft(null)
+      setError('')
+      if (res.data?.full_name) {
+        patchUser({ full_name: res.data.full_name })
+      }
+      qc.invalidateQueries({ queryKey: ['player', id] })
+      qc.invalidateQueries({ queryKey: ['rankings'] })
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  })
+
   const uploadMut = useMutation({
     mutationFn: ({ file, setAvatar }: { file: File; setAvatar: boolean }) =>
       platformApi.uploadMedia(file, {
@@ -166,12 +243,8 @@ export default function PlayerProfilePage() {
         set_as_avatar: setAvatar,
       }),
     onSuccess: () => {
-      setCaption('')
-      setAsAvatar(false)
-      setShowUpload(false)
+      closeUpload()
       setError('')
-      if (fileRef.current) fileRef.current.value = ''
-      if (cameraRef.current) cameraRef.current.value = ''
       qc.invalidateQueries({ queryKey: ['player', id] })
       qc.invalidateQueries({ queryKey: ['rankings'] })
     },
@@ -182,6 +255,19 @@ export default function PlayerProfilePage() {
     mutationFn: (mediaId: string) => platformApi.deleteMedia(mediaId),
     onSuccess: () => {
       setLightbox(null)
+      setCaptionDraft(null)
+      setError('')
+      qc.invalidateQueries({ queryKey: ['player', id] })
+      qc.invalidateQueries({ queryKey: ['rankings'] })
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  })
+
+  const clearAvatarMut = useMutation({
+    mutationFn: () => platformApi.clearAvatar(),
+    onSuccess: () => {
+      setConfirmClearAvatar(false)
+      setError('')
       qc.invalidateQueries({ queryKey: ['player', id] })
       qc.invalidateQueries({ queryKey: ['rankings'] })
     },
@@ -191,8 +277,20 @@ export default function PlayerProfilePage() {
   const avatarMut = useMutation({
     mutationFn: (mediaId: string) => platformApi.setAvatar(mediaId),
     onSuccess: () => {
+      setError('')
       qc.invalidateQueries({ queryKey: ['player', id] })
       qc.invalidateQueries({ queryKey: ['rankings'] })
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  })
+
+  const captionMut = useMutation({
+    mutationFn: ({ mediaId, next }: { mediaId: string; next: string }) =>
+      platformApi.updateMediaCaption(mediaId, next.trim() || null),
+    onSuccess: () => {
+      setCaptionDraft(null)
+      setError('')
+      qc.invalidateQueries({ queryKey: ['player', id] })
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
@@ -202,6 +300,8 @@ export default function PlayerProfilePage() {
     onSuccess: () => {
       setError('')
       qc.invalidateQueries({ queryKey: ['friends'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+      qc.invalidateQueries({ queryKey: ['community-home'] })
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
@@ -210,6 +310,8 @@ export default function PlayerProfilePage() {
     onSuccess: () => {
       setError('')
       qc.invalidateQueries({ queryKey: ['friends'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+      qc.invalidateQueries({ queryKey: ['community-home'] })
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
@@ -266,7 +368,7 @@ export default function PlayerProfilePage() {
                       type="button"
                       className="profile-avatar-btn"
                       onClick={() => {
-                        const avatarMedia = media.find((m) => m.is_avatar) || media.find((m) => m.url === player.avatar_url)
+                        const avatarMedia = findAvatarMedia(media, player.avatar_url)
                         if (avatarMedia) setLightbox(avatarMedia)
                       }}
                       aria-label="View profile photo"
@@ -279,7 +381,44 @@ export default function PlayerProfilePage() {
                 </div>
 
                 <div className="profile-hero-copy">
-                  <h1 className="profile-name">{player.full_name}</h1>
+                  {isOwn && nameDraft !== null ? (
+                    <div className="profile-name-edit">
+                      <input
+                        className="form-input"
+                        value={nameDraft}
+                        onChange={(e) => setNameDraft(e.target.value.slice(0, 200))}
+                        maxLength={200}
+                        aria-label="Display name"
+                        autoFocus
+                      />
+                      <div className="profile-bio-actions">
+                        <button
+                          type="button"
+                          className="btn btn-dark btn-sm"
+                          disabled={saveName.isPending || nameDraft.trim().length < 2}
+                          onClick={() => saveName.mutate()}
+                        >
+                          Save
+                        </button>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNameDraft(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="profile-name-row">
+                      <h1 className="profile-name">{player.full_name}</h1>
+                      {isOwn && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setNameDraft(player.full_name)}
+                        >
+                          Edit name
+                        </button>
+                      )}
+                    </div>
+                  )}
                   <p className="profile-uni">
                     {player.university_short || player.university_name || 'Student padel'}
                   </p>
@@ -413,68 +552,70 @@ export default function PlayerProfilePage() {
             {isOwn && (
               <section className="profile-section">
                 <div className="profile-section-head">
-                  <h2>Profile Photo</h2>
+                  <h2>Profile photo</h2>
                 </div>
-                <p className="muted-note" style={{ marginBottom: '1rem' }}>
-                  Your profile photo is displayed at the top of your profile and in rankings. Choose a clear photo of yourself.
+                <p className="muted-note profile-photo-lead">
+                  Shown on your profile and in rankings. Removing it clears the photo but keeps gallery images.
                 </p>
-                {avatarSrc && (
-                  <div style={{ marginBottom: '1rem', textAlign: 'center' }}>
-                    <img src={avatarSrc} alt="Current profile photo" style={{ maxWidth: '120px', borderRadius: '8px' }} />
+                <div className="profile-photo-row">
+                  <div className="profile-photo-preview">
+                    {avatarSrc ? (
+                      <img src={avatarSrc} alt="" />
+                    ) : (
+                      <span className="profile-photo-empty">{initials(player.full_name)}</span>
+                    )}
                   </div>
-                )}
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => {
-                      setShowUpload(true)
-                      setAsAvatar(true)
-                    }}
-                  >
-                    {avatarSrc ? 'Change' : 'Upload'} Profile Photo
-                  </button>
-                  {avatarSrc && (
+                  <div className="profile-photo-actions">
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => {
-                        const confirmed = window.confirm('Remove your profile photo?')
-                        if (confirmed) {
-                          const avatarMedia = media.find((m) => m.is_avatar)
-                          if (avatarMedia) {
-                            deleteMut.mutate(avatarMedia.id)
-                          }
-                        }
-                      }}
+                      className="btn btn-primary btn-sm"
+                      onClick={() => openUpload('avatar')}
+                      disabled={uploadMut.isPending || clearAvatarMut.isPending}
                     >
-                      Remove
+                      {avatarSrc ? 'Change photo' : 'Upload photo'}
                     </button>
-                  )}
+                    {avatarSrc && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setConfirmClearAvatar(true)}
+                        disabled={clearAvatarMut.isPending}
+                      >
+                        Remove photo
+                      </button>
+                    )}
+                  </div>
                 </div>
               </section>
             )}
 
             <section className="profile-section">
               <div className="profile-section-head">
-                <h2>Photos & Videos</h2>
+                <h2>Photos & videos</h2>
                 {isOwn && (
                   <button
                     type="button"
                     className="btn btn-primary btn-sm"
-                    onClick={() => setShowUpload((v) => !v)}
+                    onClick={() => (showUpload && uploadIntent === 'gallery' ? closeUpload() : openUpload('gallery'))}
                   >
-                    {showUpload ? 'Close' : 'Add'}
+                    {showUpload && uploadIntent === 'gallery' ? 'Close' : 'Add'}
                   </button>
                 )}
               </div>
 
               {isOwn && showUpload && (
                 <div className="profile-upload">
+                  <p className="profile-upload-title">
+                    {uploadIntent === 'avatar' ? 'Upload a new profile photo' : 'Add to your gallery'}
+                  </p>
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mov"
+                    accept={
+                      uploadIntent === 'avatar'
+                        ? 'image/jpeg,image/png,image/webp,image/gif'
+                        : 'image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.mov'
+                    }
                     hidden
                     onChange={(e) => {
                       const file = e.target.files?.[0]
@@ -494,22 +635,22 @@ export default function PlayerProfilePage() {
                   />
                   <div className="profile-upload-opts">
                     <input
+                      className="form-input"
                       value={caption}
                       onChange={(e) => setCaption(e.target.value)}
                       placeholder="Optional caption"
                       maxLength={200}
                     />
-                    <p className="muted-note" style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-                      Check the box below to set this as your profile photo, or leave unchecked to add to your gallery.
-                    </p>
-                    <label className="avatar-check">
-                      <input
-                        type="checkbox"
-                        checked={asAvatar}
-                        onChange={(e) => setAsAvatar(e.target.checked)}
-                      />
-                      Set as profile photo
-                    </label>
+                    {uploadIntent === 'gallery' && (
+                      <label className="avatar-check">
+                        <input
+                          type="checkbox"
+                          checked={asAvatar}
+                          onChange={(e) => setAsAvatar(e.target.checked)}
+                        />
+                        Also set as profile photo
+                      </label>
+                    )}
                   </div>
                   <div className="profile-upload-actions">
                     <button
@@ -528,9 +669,16 @@ export default function PlayerProfilePage() {
                     >
                       Take photo
                     </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={closeUpload} disabled={uploadMut.isPending}>
+                      Cancel
+                    </button>
                   </div>
-                  {uploadMut.isPending && <p className="muted-note">Uploading...</p>}
-                  <p className="muted-note">Photos up to 5MB · short videos up to 25MB.</p>
+                  {uploadMut.isPending && <p className="muted-note">Uploading… this can take a moment for videos.</p>}
+                  <p className="muted-note">
+                    {uploadIntent === 'avatar'
+                      ? 'Photos up to 5MB.'
+                      : 'Photos up to 5MB · short videos up to 25MB.'}
+                  </p>
                 </div>
               )}
 
@@ -541,7 +689,7 @@ export default function PlayerProfilePage() {
                     <button
                       type="button"
                       className="btn btn-dark btn-sm"
-                      onClick={() => setShowUpload(true)}
+                      onClick={() => openUpload('gallery')}
                     >
                       Add a match photo
                     </button>
@@ -754,31 +902,79 @@ export default function PlayerProfilePage() {
                 )}
               </div>
               <div className="lightbox-meta">
-                {lightbox.caption ? (
-                  <p className="lightbox-caption">{lightbox.caption}</p>
+                {isOwn && captionDraft !== null ? (
+                  <div className="lightbox-caption-edit">
+                    <input
+                      className="form-input"
+                      value={captionDraft}
+                      onChange={(e) => setCaptionDraft(e.target.value.slice(0, 200))}
+                      maxLength={200}
+                      placeholder="Add a caption"
+                      autoFocus
+                    />
+                    <div className="lightbox-actions">
+                      <button
+                        type="button"
+                        className="btn btn-dark btn-sm"
+                        disabled={captionMut.isPending}
+                        onClick={() =>
+                          captionMut.mutate({ mediaId: lightbox.id, next: captionDraft })
+                        }
+                      >
+                        Save caption
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setCaptionDraft(null)}
+                        disabled={captionMut.isPending}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 ) : (
-                  <p className="lightbox-caption is-muted">
-                    {lightbox.media_type === 'video' ? 'Video (unmute in controls if needed)' : 'Photo'}
-                    {media.length > 1 ? ` · ${lightboxIndex + 1} of ${media.length}` : ''}
-                  </p>
+                  <>
+                    {lightbox.caption ? (
+                      <p className="lightbox-caption">{lightbox.caption}</p>
+                    ) : (
+                      <p className="lightbox-caption is-muted">
+                        {lightbox.media_type === 'video'
+                          ? 'Video — use controls to unmute'
+                          : 'Photo'}
+                        {media.length > 1 ? ` · ${lightboxIndex + 1} of ${media.length}` : ''}
+                      </p>
+                    )}
+                  </>
                 )}
                 <div className="lightbox-actions">
-                  {isOwn && lightbox.media_type === 'image' && !lightbox.is_avatar && (
+                  {isOwn && captionDraft === null && (
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
-                      onClick={() => avatarMut.mutate(lightbox.id)}
-                      disabled={avatarMut.isPending}
+                      onClick={() => setCaptionDraft(lightbox.caption || '')}
                     >
-                      Set as profile photo
+                      {lightbox.caption ? 'Edit caption' : 'Add caption'}
                     </button>
                   )}
+                  {isOwn &&
+                    lightbox.media_type === 'image' &&
+                    findAvatarMedia(media, player?.avatar_url)?.id !== lightbox.id && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => avatarMut.mutate(lightbox.id)}
+                        disabled={avatarMut.isPending}
+                      >
+                        Set as profile photo
+                      </button>
+                    )}
                   {isOwn && (
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
                       onClick={() => {
-                        if (window.confirm('Remove this from your profile?')) {
+                        if (window.confirm('Remove this from your gallery?')) {
                           deleteMut.mutate(lightbox.id)
                         }
                       }}
@@ -846,6 +1042,41 @@ export default function PlayerProfilePage() {
                 )}
                 <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReportTarget(null)}>
                   {reportMsg && !reportMut.isError ? 'Done' : 'Cancel'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {confirmClearAvatar && (
+          <div
+            className="report-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clear-avatar-title"
+            onClick={() => !clearAvatarMut.isPending && setConfirmClearAvatar(false)}
+          >
+            <div className="report-dialog" onClick={(e) => e.stopPropagation()}>
+              <h2 id="clear-avatar-title">Remove profile photo?</h2>
+              <p className="report-dialog-body">
+                Your profile and rankings will show initials instead. Photos in your gallery stay unless you
+                delete them separately.
+              </p>
+              <div className="report-dialog-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={clearAvatarMut.isPending}
+                  onClick={() => clearAvatarMut.mutate()}
+                >
+                  {clearAvatarMut.isPending ? 'Removing…' : 'Remove photo'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={clearAvatarMut.isPending}
+                  onClick={() => setConfirmClearAvatar(false)}
+                >
+                  Cancel
                 </button>
               </div>
             </div>

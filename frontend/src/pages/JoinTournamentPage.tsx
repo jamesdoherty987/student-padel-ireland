@@ -16,7 +16,7 @@ import {
   tournamentApi,
   type RegistrationConfirm,
 } from '../services/api'
-import { formatMoney, formatPerPlayerFee, isPastCalendarDate } from '../utils/format'
+import { formatMoney, formatPerPlayerFee, isPastCalendarDate, tournamentFormatSummary } from '../utils/format'
 import './Tournament.css'
 
 function paymentLabel(status: string) {
@@ -690,7 +690,7 @@ export default function JoinTournamentPage() {
       <main className="page">
         <h1 className="page-title">Join {tournament.name}</h1>
         <p className="page-sub">
-          {singles ? 'Singles' : 'Doubles'} · {perPlayer}
+          {tournamentFormatSummary(tournament.play_format, tournament.format)} · {perPlayer}
           {!singles ? ` · team fee ${teamFee}` : ''}
         </p>
 

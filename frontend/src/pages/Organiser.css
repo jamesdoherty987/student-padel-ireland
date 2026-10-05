@@ -530,28 +530,154 @@
   z-index: 100;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
     max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: none;
 }
 
 .modal {
   background: var(--white);
   width: min(440px, 100%);
+  max-width: 100%;
   max-height: min(90dvh, 90vh);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   margin: auto;
+  box-sizing: border-box;
 }
 
 .modal.modal-wide {
   width: min(560px, 100%);
 }
 
+/* Create / edit tournament form sections */
+.tf-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.tf-modal-head h2 {
+  margin: 0 0 0.25rem;
+}
+
+.tf-modal-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.tf-section {
+  margin-bottom: 1.35rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.tf-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.tf-section-title {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--court-deep);
+  letter-spacing: -0.01em;
+}
+
+.tf-section-lead {
+  margin: 0 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.tf-optional {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.tf-format-locked {
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.85rem;
+}
+
+.tf-format-locked strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--court-deep);
+}
+
+.tf-format-locked .muted {
+  margin: 0 0 0.45rem;
+  font-size: 0.88rem;
+}
+
+.tf-advanced {
+  margin-top: 0.35rem;
+  padding: 0.75rem 0.85rem;
+  background: rgba(11, 61, 46, 0.04);
+  border-radius: var(--radius-sm);
+}
+
+.tf-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 0.25rem 0 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--brand-soft, rgba(200, 230, 0, 0.18));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.tf-check input {
+  margin-top: 0.2rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.tf-check span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-weight: 600;
+  color: var(--court-deep);
+}
+
+.tf-check .form-hint {
+  font-weight: 500;
+  margin-top: 0;
+}
+
+.tf-edit-note {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+}
+
 .court-name-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr));
   gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.court-name-grid .form-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .modal h2 {

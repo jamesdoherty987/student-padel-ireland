@@ -111,6 +111,84 @@
   margin: 0 0 0.25rem;
 }
 
+.profile-name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem 0.75rem;
+}
+
+.profile-name-row .profile-name {
+  margin-bottom: 0;
+}
+
+.profile-name-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 28rem;
+}
+
+.profile-photo-lead {
+  margin: 0 0 1rem;
+}
+
+.profile-photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+
+.profile-photo-preview {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--surface);
+  border: 2px solid rgba(11, 61, 46, 0.12);
+  flex-shrink: 0;
+}
+
+.profile-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.profile-photo-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 750;
+  color: var(--court-deep);
+  background: linear-gradient(145deg, #e8f5ef, #d4ebe0);
+}
+
+.profile-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.profile-upload-title {
+  margin: 0 0 0.75rem;
+  font-weight: 600;
+  color: var(--court-deep);
+}
+
+.lightbox-caption-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 0.5rem;
+}
+
 .profile-uni {
   margin: 0;
   color: var(--muted);

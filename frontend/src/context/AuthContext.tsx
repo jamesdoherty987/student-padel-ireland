@@ -15,6 +15,8 @@ type AuthState = {
   login: (email: string, password: string, remember?: boolean) => Promise<User>
   register: (data: Record<string, unknown>, remember?: boolean) => Promise<User>
   logout: () => void
+  /** Patch fields on the in-memory + stored user (e.g. after profile name edit). */
+  patchUser: (patch: Partial<User>) => void
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -103,8 +105,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoading(false)
   }
 
+  const patchUser = (patch: Partial<User>) => {
+    setUser((prev) => {
+      if (!prev) return prev
+      const next = { ...prev, ...patch }
+      updateStoredUser(next)
+      return next
+    })
+  }
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, register, logout, patchUser }}>
       {children}
     </AuthContext.Provider>
   )

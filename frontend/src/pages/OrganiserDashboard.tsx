@@ -5,6 +5,7 @@ import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
 import EditTournamentModal from '../components/EditTournamentModal'
 import NumberInput from '../components/NumberInput'
+import TournamentFormFields, { type TournamentFormState } from '../components/TournamentFormFields'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl } from '../native/platform'
 import {
@@ -15,7 +16,15 @@ import {
   type Match,
   type PlayerSearch,
 } from '../services/api'
-import { formatMoney, courtLabel, formatTime, formatMatchScore, statusBadgeClass } from '../utils/format'
+import {
+  bracketFormatHint,
+  courtLabel,
+  formatMatchScore,
+  formatMoney,
+  formatTime,
+  statusBadgeClass,
+  tournamentFormatSummary,
+} from '../utils/format'
 import './Organiser.css'
 
 /** Respect organiser selection; only bump when a higher set already has games. */
@@ -39,7 +48,7 @@ export default function OrganiserDashboard() {
   const qc = useQueryClient()
   const [params] = useSearchParams()
   const canOrganise = !!user
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['organiser-dashboard'],
     queryFn: async () => (await platformApi.organiserDashboard()).data,
     enabled: canOrganise,
@@ -75,6 +84,7 @@ export default function OrganiserDashboard() {
     winner_id: '',
     force: false,
   })
+  const [scoreError, setScoreError] = useState('')
 
   useEffect(() => {
     const t = params.get('t')
@@ -110,6 +120,7 @@ export default function OrganiserDashboard() {
       status: string
       max_teams: number
       play_format?: string
+      format?: string
     }
     teams: number
     players: number
@@ -175,6 +186,10 @@ export default function OrganiserDashboard() {
   })
 
   const isSingles = (tournamentDetail?.play_format || active?.tournament.play_format) === 'SINGLES'
+  const activeFormat =
+    tournamentDetail?.format || active?.tournament.format || 'GROUP_KNOCKOUT'
+  const activePlayFormat =
+    tournamentDetail?.play_format || active?.tournament.play_format || 'DOUBLES'
 
   const { data: friends = [] } = useQuery({
     queryKey: ['friends'],
@@ -214,7 +229,13 @@ export default function OrganiserDashboard() {
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       invalidateTournamentPublic()
       const d = res.data as { matches?: number; groups?: number }
-      showToast(`Generated ${d.groups ?? '?'} groups · ${d.matches ?? '?'} matches`)
+      const matchesN = d.matches ?? 0
+      const groupsN = d.groups ?? 0
+      if (activeFormat === 'ROUND_ROBIN' || groupsN === 0) {
+        showToast(`Generated ${matchesN} round-robin match${matchesN === 1 ? '' : 'es'}`)
+      } else {
+        showToast(`Generated ${groupsN} groups · ${matchesN} matches`)
+      }
     },
     onError: (e: unknown) => {
       showToast(apiErrorMessage(e, 'Generate failed. You need at least 2 paid teams.'))
@@ -392,6 +413,7 @@ export default function OrganiserDashboard() {
     },
     onSuccess: () => {
       setScoreMatch(null)
+      setScoreError('')
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       qc.invalidateQueries({ queryKey: ['rankings'] })
       qc.invalidateQueries({ queryKey: ['player-view'] })
@@ -402,8 +424,28 @@ export default function OrganiserDashboard() {
       }
       showToast('Score saved')
     },
-    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not save score')),
+    onError: (e: unknown) => {
+      const msg = apiErrorMessage(e, 'Could not save score')
+      setScoreError(msg)
+      showToast(msg)
+    },
   })
+
+  const saveScore = () => {
+    setScoreError('')
+    if (scoreForm.status === 'COMPLETED' || scoreForm.status === 'WALKOVER') {
+      const hasWinner = !!scoreForm.winner_id
+      const setWon =
+        (scoreForm.set1_a !== scoreForm.set1_b ? 1 : 0) +
+        (scoreForm.set2_a !== scoreForm.set2_b ? 1 : 0) +
+        (scoreForm.set3_a !== scoreForm.set3_b && (scoreForm.set3_a > 0 || scoreForm.set3_b > 0) ? 1 : 0)
+      if (!hasWinner && setWon === 0) {
+        setScoreError('Pick a winner or enter set scores that decide the match before marking completed.')
+        return
+      }
+    }
+    scoreMut.mutate()
+  }
 
   const moveMut = useMutation({
     mutationFn: ({
@@ -500,6 +542,7 @@ export default function OrganiserDashboard() {
 
   const openScore = (m: Match) => {
     if (!m.team_a_id || !m.team_b_id) return
+    setScoreError('')
     setScoreMatch(m)
     setScoreForm({
       set1_a: m.score?.set1_a ?? 0,
@@ -648,7 +691,16 @@ export default function OrganiserDashboard() {
 
         <main className="org-main">
           {isLoading && <p>Loading...</p>}
-          {!active && !isLoading && (
+          {isError && !isLoading && (
+            <div className="org-empty">
+              <h1>Couldn’t load your events</h1>
+              <p>Check your connection and try again.</p>
+              <button className="btn btn-primary" onClick={() => void refetch()} disabled={isFetching}>
+                {isFetching ? 'Retrying…' : 'Retry'}
+              </button>
+            </div>
+          )}
+          {!active && !isLoading && !isError && (
             <div className="org-empty">
               <h1>Running an event?</h1>
               <p>
@@ -668,6 +720,7 @@ export default function OrganiserDashboard() {
                   <h1>{active.tournament.name}</h1>
                   <p>
                     {active.tournament.status.replace(/_/g, ' ')} ·{' '}
+                    {tournamentFormatSummary(activePlayFormat, activeFormat)} ·{' '}
                     <Link to={`/t/${active.tournament.slug}`}>Public page</Link> ·{' '}
                     <Link to={`/tournament/${active.tournament.slug}/display`}>TV display</Link>
                   </p>
@@ -1277,6 +1330,7 @@ export default function OrganiserDashboard() {
       {showEdit && tournamentDetail && (
         <EditTournamentModal
           tournament={tournamentDetail}
+          fixturesExist={fixturesExist}
           onClose={() => setShowEdit(false)}
           onSaved={(msg) => showToast(msg)}
         />
@@ -1308,8 +1362,17 @@ export default function OrganiserDashboard() {
           >
             <h2 id="generate-modal-title">Generate tournament?</h2>
             <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
-              This builds groups, fixtures, and the knockout bracket from <strong>paid</strong> teams.
-              Registration will close.
+              {activeFormat === 'ROUND_ROBIN' ? (
+                <>
+                  This builds the round-robin fixtures from <strong>paid</strong> entries so everyone plays
+                  everyone. Registration will close.
+                </>
+              ) : (
+                <>
+                  This builds groups, fixtures, and the knockout bracket from <strong>paid</strong> entries.
+                  Registration will close.
+                </>
+              )}
               {matches.length > 0 && (
                 <>
                   {' '}
@@ -1318,6 +1381,9 @@ export default function OrganiserDashboard() {
                   </strong>
                 </>
               )}
+            </p>
+            <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.92rem' }}>
+              {tournamentFormatSummary(activePlayFormat, activeFormat)}. {bracketFormatHint(activeFormat)}
             </p>
             <p style={{ marginBottom: '1rem' }}>
               Paid teams ready: <strong>{active?.paid_registrations ?? 0}</strong>
@@ -1435,11 +1501,24 @@ export default function OrganiserDashboard() {
                 This match already affected Ireland ratings. Saving corrects standings and the bracket only.
               </p>
             )}
+            {scoreError && <p className="auth-error">{scoreError}</p>}
             <div className="modal-actions">
-              <button className="btn btn-ghost" onClick={() => setScoreMatch(null)}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setScoreMatch(null)
+                  setScoreError('')
+                }}
+              >
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={() => scoreMut.mutate()} disabled={scoreMut.isPending}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={saveScore}
+                disabled={scoreMut.isPending}
+              >
                 {scoreMut.isPending ? 'Saving...' : scoreMatch.ratings_applied ? 'Correct score' : 'Save score'}
               </button>
             </div>
@@ -1730,24 +1809,24 @@ function CreateTournamentModal({
   onCreated: (msg: string, id?: string) => void
 }) {
   const qc = useQueryClient()
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [form, setForm] = useState({
+  const [openRegistration, setOpenRegistration] = useState(true)
+  const [form, setForm] = useState<TournamentFormState>({
     name: '',
     location: '',
     venue: '',
     event_date: '',
     start_time: '10:00',
-    number_of_courts: 6,
-    entry_fee_euros: 50,
-    max_teams: 48,
-    format: 'GROUP_KNOCKOUT',
-    play_format: 'DOUBLES',
-    match_duration_minutes: 20,
-    group_size: 4,
-    teams_advance_per_group: 2,
     registration_deadline: '',
+    play_format: 'DOUBLES',
+    format: 'GROUP_KNOCKOUT',
+    number_of_courts: 6,
+    match_duration_minutes: 20,
+    max_teams: 48,
+    entry_fee_euros: 50,
     description: '',
     rules: '',
+    group_size: 4,
+    teams_advance_per_group: 2,
   })
   const [courtNames, setCourtNames] = useState<string[]>(
     Array.from({ length: 6 }, (_, i) => `Court ${i + 1}`),
@@ -1763,9 +1842,13 @@ function CreateTournamentModal({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, saving])
 
+  const patchForm = (patch: Partial<TournamentFormState>) => {
+    setForm((f) => ({ ...f, ...patch }))
+  }
+
   const setCourtCount = (n: number) => {
     const count = Math.max(1, Math.min(32, Number.isFinite(n) ? Math.trunc(n) : 1))
-    setForm((f) => ({ ...f, number_of_courts: count }))
+    patchForm({ number_of_courts: count })
     setCourtNames((prev) => {
       const next = [...prev]
       while (next.length < count) next.push(`Court ${next.length + 1}`)
@@ -1779,9 +1862,9 @@ function CreateTournamentModal({
     setSaving(true)
     try {
       const { data } = await tournamentApi.create({
-        name: form.name,
-        location: form.location,
-        venue: form.venue,
+        name: form.name.trim(),
+        location: form.location.trim(),
+        venue: form.venue.trim(),
         event_date: form.event_date,
         start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
         number_of_courts: form.number_of_courts,
@@ -1799,9 +1882,23 @@ function CreateTournamentModal({
         description: form.description.trim() || null,
         rules: form.rules.trim() || null,
       })
+      if (openRegistration) {
+        try {
+          await tournamentApi.update(data.id, { status: 'REGISTRATION_OPEN' })
+        } catch {
+          await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+          await qc.invalidateQueries({ queryKey: ['tournaments'] })
+          onCreated('Tournament created, but registration could not be opened — open it from My events', data.id)
+          onClose()
+          return
+        }
+      }
       await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
       await qc.invalidateQueries({ queryKey: ['tournaments'] })
-      onCreated('Tournament created', data.id)
+      onCreated(
+        openRegistration ? 'Tournament created — registration is open' : 'Tournament created as draft',
+        data.id,
+      )
       onClose()
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Could not create tournament'))
@@ -1809,9 +1906,6 @@ function CreateTournamentModal({
       setSaving(false)
     }
   }
-
-  const singles = form.play_format === 'SINGLES'
-  const entryUnit = singles ? 'player' : 'doubles team'
 
   return (
     <div className="modal-backdrop" onClick={() => !saving && onClose()}>
@@ -1822,205 +1916,37 @@ function CreateTournamentModal({
         aria-labelledby="create-tournament-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="create-tournament-title">Create tournament</h2>
-        <form onSubmit={onSubmit}>
-          {(
-            [
-              ['name', 'Name'],
-              ['location', 'Location'],
-              ['venue', 'Venue'],
-              ['event_date', 'Date', 'date'],
-              ['start_time', 'Start time', 'time'],
-            ] as const
-          ).map(([key, label, type]) => (
-            <div className="form-group" key={key}>
-              <label className="form-label">{label}</label>
-              <input
-                className="form-input"
-                type={type || 'text'}
-                value={String(form[key as keyof typeof form])}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                required
-              />
-            </div>
-          ))}
-
-          <div className="form-group">
-            <label className="form-label">Registration deadline (optional)</label>
-            <input
-              className="form-input"
-              type="datetime-local"
-              value={form.registration_deadline}
-              onChange={(e) => setForm({ ...form, registration_deadline: e.target.value })}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Singles or doubles</label>
-            <select
-              className="form-select"
-              value={form.play_format}
-              onChange={(e) => setForm({ ...form, play_format: e.target.value })}
-            >
-              <option value="DOUBLES">Doubles (pairs)</option>
-              <option value="SINGLES">Singles (1v1)</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Bracket format</label>
-            <select
-              className="form-select"
-              value={form.format}
-              onChange={(e) => setForm({ ...form, format: e.target.value })}
-            >
-              <option value="GROUP_KNOCKOUT">Groups then knockout</option>
-              <option value="ROUND_ROBIN">Round robin</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Number of courts</label>
-            <NumberInput
-              className="form-input"
-              min={1}
-              max={32}
-              emptyValue={1}
-              value={form.number_of_courts}
-              onValueChange={setCourtCount}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Court names</label>
-            <p className="muted" style={{ marginBottom: 8, fontSize: '0.85rem' }}>
-              Shown to players and on the TV board — e.g. Glass Court, Court 3.
-            </p>
-            <div className="court-name-grid">
-              {courtNames.map((name, i) => (
-                <input
-                  key={i}
-                  className="form-input"
-                  value={name}
-                  onChange={(e) => {
-                    const next = [...courtNames]
-                    next[i] = e.target.value
-                    setCourtNames(next)
-                  }}
-                  placeholder={`Court ${i + 1}`}
-                  aria-label={`Court ${i + 1} name`}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Match length (minutes)</label>
-            <NumberInput
-              className="form-input"
-              min={5}
-              max={120}
-              emptyValue={20}
-              value={form.match_duration_minutes}
-              onValueChange={(n) => setForm({ ...form, match_duration_minutes: n })}
-            />
-            <p className="muted" style={{ marginTop: 6, fontSize: '0.85rem' }}>
-              Used to schedule start times across courts.
+        <header className="tf-modal-head">
+          <div>
+            <h2 id="create-tournament-title">Create tournament</h2>
+            <p className="tf-modal-sub">
+              Set the format, courts, and fee. Players will see a clear summary on the public page.
             </p>
           </div>
-
-          <div className="form-group">
-            <label className="form-label">Max {singles ? 'players' : 'doubles teams'}</label>
-            <NumberInput
-              className="form-input"
-              min={2}
-              max={256}
-              emptyValue={2}
-              value={form.max_teams}
-              onValueChange={(n) => setForm({ ...form, max_teams: n })}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Entry fee (€ per {entryUnit})</label>
-            <NumberInput
-              className="form-input"
-              min={0}
-              step={1}
-              emptyValue={0}
-              value={form.entry_fee_euros}
-              onValueChange={(n) => setForm({ ...form, entry_fee_euros: n })}
-            />
-            {!singles && (
-              <small className="form-hint">= €{(form.entry_fee_euros / 2).toFixed(2).replace(/\.00$/, '')} per player</small>
-            )}
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Description (optional)</label>
-            <textarea
-              className="form-textarea"
-              rows={2}
-              placeholder="Short note players see on the public page"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Rules (optional)</label>
-            <textarea
-              className="form-textarea"
-              rows={2}
-              placeholder="Scoring, check-in, or house rules"
-              value={form.rules}
-              onChange={(e) => setForm({ ...form, rules: e.target.value })}
-            />
-          </div>
-
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            style={{ marginBottom: '1rem' }}
-            onClick={() => setShowAdvanced((v) => !v)}
-          >
-            {showAdvanced ? 'Hide advanced' : 'Advanced options'}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>
+            Close
           </button>
+        </header>
 
-          {showAdvanced && form.format === 'GROUP_KNOCKOUT' && (
-            <>
-              <div className="form-group">
-                <label className="form-label">Teams per group</label>
-                <NumberInput
-                  className="form-input"
-                  min={2}
-                  max={8}
-                  emptyValue={4}
-                  value={form.group_size}
-                  onValueChange={(n) => setForm({ ...form, group_size: n })}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Advance to knockout per group</label>
-                <NumberInput
-                  className="form-input"
-                  min={1}
-                  max={4}
-                  emptyValue={2}
-                  value={form.teams_advance_per_group}
-                  onValueChange={(n) => setForm({ ...form, teams_advance_per_group: n })}
-                />
-              </div>
-            </>
-          )}
+        <form onSubmit={onSubmit}>
+          <TournamentFormFields
+            form={form}
+            onChange={patchForm}
+            courtNames={courtNames}
+            onCourtNamesChange={setCourtNames}
+            onCourtCountChange={setCourtCount}
+            mode="create"
+            openRegistration={openRegistration}
+            onOpenRegistrationChange={setOpenRegistration}
+          />
 
           {error && <p className="auth-error">{error}</p>}
           <div className="modal-actions">
             <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
               Cancel
             </button>
-            <button className="btn btn-primary" disabled={saving}>
-              {saving ? 'Creating...' : 'Create'}
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Creating…' : openRegistration ? 'Create & open registration' : 'Create draft'}
             </button>
           </div>
         </form>

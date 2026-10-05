@@ -271,6 +271,8 @@ img {
   flex-direction: column;
   gap: 0.4rem;
   margin-bottom: 1rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .form-label {
@@ -283,6 +285,9 @@ img {
 .form-select,
 .form-textarea {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   min-height: 48px;
   padding: 0.7rem 0.9rem;
   border: 1.5px solid var(--line);
@@ -291,6 +296,49 @@ img {
   color: var(--ink);
   font-size: 16px; /* avoid iOS zoom-on-focus */
   transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+/*
+ * date / time / datetime-local use large intrinsic widths on iOS/Android,
+ * which blow past modal padding and enable sideways swipe. Force them to
+ * match every other field.
+ */
+input.form-input[type='date'],
+input.form-input[type='time'],
+input.form-input[type='datetime-local'],
+.modal input[type='date'],
+.modal input[type='time'],
+.modal input[type='datetime-local'],
+.score-modal input[type='date'],
+.score-modal input[type='time'],
+.score-modal input[type='datetime-local'],
+.join-modal input[type='date'],
+.join-modal input[type='time'],
+.join-modal input[type='datetime-local'],
+[role='dialog'] input[type='date'],
+[role='dialog'] input[type='time'],
+[role='dialog'] input[type='datetime-local'] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  /* Kill WebKit’s oversized native control min-width */
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type='date']::-webkit-date-and-time-value,
+input[type='time']::-webkit-date-and-time-value,
+input[type='datetime-local']::-webkit-date-and-time-value,
+input[type='date']::-webkit-datetime-edit,
+input[type='time']::-webkit-datetime-edit,
+input[type='datetime-local']::-webkit-datetime-edit {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .form-input:disabled {
@@ -1089,6 +1137,13 @@ img {
 }
 
 /* Popups must never be wider than the screen or pan sideways */
+.modal-backdrop,
+.join-modal-backdrop,
+.score-modal-backdrop {
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
 .modal,
 .score-modal,
 .join-modal,
@@ -1096,6 +1151,22 @@ img {
 [role='dialog'] {
   max-width: 100%;
   overflow-x: hidden;
+  box-sizing: border-box;
+  overscroll-behavior-x: none;
+}
+
+.modal .form-input,
+.modal .form-select,
+.modal .form-textarea,
+.score-modal .form-input,
+.score-modal .form-select,
+.join-modal .form-input,
+[role='dialog'] .form-input,
+[role='dialog'] .form-select,
+[role='dialog'] .form-textarea {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 

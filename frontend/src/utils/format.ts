@@ -68,6 +68,39 @@ export function playFormatLabel(playFormat?: string | null) {
   return playFormat === 'SINGLES' ? 'Singles' : 'Doubles'
 }
 
+export function bracketFormatLabel(format?: string | null) {
+  switch (format) {
+    case 'ROUND_ROBIN':
+      return 'Round robin'
+    case 'STRAIGHT_KNOCKOUT':
+      return 'Knockout'
+    case 'SWISS':
+      return 'Swiss'
+    case 'GROUP_KNOCKOUT':
+    default:
+      return 'Groups then knockout'
+  }
+}
+
+/** Short line for players: "Doubles · Groups then knockout" */
+export function tournamentFormatSummary(playFormat?: string | null, format?: string | null) {
+  return `${playFormatLabel(playFormat)} · ${bracketFormatLabel(format)}`
+}
+
+export function playFormatHint(playFormat?: string | null) {
+  if (playFormat === 'SINGLES') {
+    return '1v1 entries. Each player registers and pays their own fee.'
+  }
+  return 'Register as a pair. One team fee covers both players.'
+}
+
+export function bracketFormatHint(format?: string | null) {
+  if (format === 'ROUND_ROBIN') {
+    return 'Everyone plays everyone in the draw. Standings decide the winner — no knockout stage.'
+  }
+  return 'Split into groups first. Top finishers from each group advance to a knockout bracket.'
+}
+
 export function parseCalendarDate(iso: string) {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (m) {
@@ -78,10 +111,27 @@ export function parseCalendarDate(iso: string) {
 
 export function isPastCalendarDate(iso: string | null | undefined) {
   if (!iso) return false
+  // Prefer full datetime when present (registration deadlines include time)
+  if (iso.includes('T') || /Z$|[+-]\d{2}:\d{2}$/.test(iso)) {
+    const d = new Date(iso)
+    if (!Number.isNaN(d.getTime())) return Date.now() > d.getTime()
+  }
   const d = parseCalendarDate(iso)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return today > d
+}
+
+/** Format an ISO datetime for `<input type="datetime-local">` in local time. */
+export function toDatetimeLocalValue(iso: string | null | undefined) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) {
+    // Already local-ish (YYYY-MM-DDTHH:mm)
+    return iso.slice(0, 16)
+  }
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions) {

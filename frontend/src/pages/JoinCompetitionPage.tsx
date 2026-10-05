@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
@@ -14,6 +14,7 @@ export default function JoinCompetitionPage() {
   const { code = '' } = useParams()
   const { user, loading } = useAuth()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [error, setError] = useState('')
   const [status, setStatus] = useState('Looking up invite…')
   const [attempt, setAttempt] = useState(0)
@@ -22,7 +23,11 @@ export default function JoinCompetitionPage() {
 
   const joinMut = useMutation({
     mutationFn: () => communityApi.joinByCode(clean),
-    onSuccess: (res) => navigate(`/community/${res.data.slug}`, { replace: true }),
+    onSuccess: (res) => {
+      void qc.invalidateQueries({ queryKey: ['community-home'] })
+      void qc.invalidateQueries({ queryKey: ['competitions'] })
+      navigate(`/community/${res.data.slug}`, { replace: true })
+    },
     onError: (e) => setError(apiErrorMessage(e)),
   })
 

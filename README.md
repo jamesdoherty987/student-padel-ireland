@@ -42,7 +42,6 @@ Open http://localhost:5173
 | Role | Email | Password |
 |------|--------|----------|
 | Player | james@ul.ie | player12345 |
-| Organiser | organiser@studentpadelireland.ie | organiser123 |
 | Admin | admin@studentpadelireland.ie | admin12345 |
 
 Seeded tournament: **Limerick Open** (`/t/limerick-open`)
@@ -69,6 +68,8 @@ Tournament generator tests cover 8–64 team fields, no self-matches, full group
 | **Stripe** | Free to set up; ~1.5% + €0.25 per EU card payment when you turn it on |
 
 You can launch for **€0/month** on free tiers. Expect cold starts on Render free + possible Supabase pause if the site sits idle.
+
+**Keep the API warm (recommended on free Render):** the workflow `.github/workflows/keep-api-warm.yml` pings `https://student-padel-ireland.onrender.com/health` every 10 minutes so the dyno does not sleep. Override with repo variable `API_HEALTH_URL` if needed. Or upgrade Render to Starter (~$7/mo) for always-on.
 
 ### Backend (Render)
 
