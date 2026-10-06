@@ -232,13 +232,15 @@ export default function CommunityPage() {
                 <button
                   type="button"
                   className="btn btn-dark btn-sm"
-                  disabled={confirmMut.isPending}
+                  disabled={confirmMut.isPending && confirmMut.variables === nextGame.id}
                   onClick={() => confirmMut.mutate(nextGame.id)}
                 >
-                  {confirmMut.isPending ? 'Confirming…' : 'Confirm score'}
+                  {confirmMut.isPending && confirmMut.variables === nextGame.id
+                    ? 'Confirming…'
+                    : 'Confirm score'}
                 </button>
               )}
-              {nextGame.can_i_score && (
+              {nextGame.can_i_score && !nextGame.needs_my_confirm && (
                 <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-dark btn-sm">
                   Enter score
                 </Link>
@@ -262,8 +264,10 @@ export default function CommunityPage() {
                   key={m.id}
                   title="Confirm score"
                   match={m}
-                  actionLabel={confirmMut.isPending ? 'Confirming…' : 'Confirm'}
-                  disabled={confirmMut.isPending}
+                  actionLabel={
+                    confirmMut.isPending && confirmMut.variables === m.id ? 'Confirming…' : 'Confirm score'
+                  }
+                  disabled={confirmMut.isPending && confirmMut.variables === m.id}
                   onAction={() => confirmMut.mutate(m.id)}
                 />
               ))}

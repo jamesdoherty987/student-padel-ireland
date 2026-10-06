@@ -1176,3 +1176,116 @@ input[type='datetime-local']::-webkit-datetime-edit {
   font-size: 0.8rem;
   opacity: 0.7;
 }
+
+/* Searchable select (universities, partners, etc.) */
+.searchable-select {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.searchable-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.searchable-select-trigger.is-placeholder {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.searchable-select-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchable-select-chevron {
+  flex-shrink: 0;
+  opacity: 0.55;
+  font-size: 0.85rem;
+}
+
+.searchable-select-panel {
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  overflow: hidden;
+}
+
+.searchable-select.is-open .searchable-select-panel {
+  border-color: var(--court-mid);
+  box-shadow: 0 0 0 3px rgba(20, 102, 68, 0.12);
+}
+
+.searchable-select-search-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.searchable-select-input {
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  flex: 1;
+  min-width: 0;
+}
+
+.searchable-select-clear {
+  border: none;
+  background: transparent;
+  color: var(--court-deep);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.searchable-select-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+  max-height: min(240px, 42vh);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.searchable-select-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0.7rem 0.9rem;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.searchable-select-option.is-active,
+.searchable-select-option:hover {
+  background: rgba(11, 61, 46, 0.06);
+}
+
+.searchable-select-option.is-selected {
+  font-weight: 650;
+  color: var(--court-deep);
+}
+
+.searchable-select-empty {
+  padding: 0.85rem 0.9rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}

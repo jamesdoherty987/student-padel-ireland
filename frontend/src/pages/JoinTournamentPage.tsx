@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
+import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
 import { hapticSuccess } from '../native/haptics'
 import { isNativeApp } from '../native/platform'
@@ -54,8 +55,8 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
           <div>
             <span>{singles ? 'Player' : 'Players'}</span>
             <strong>
-              {data.players.map((p) => (
-                <span key={p} style={{ display: 'block' }}>
+              {data.players.map((p, i) => (
+                <span key={`${p}-${i}`} style={{ display: 'block' }}>
                   {p}
                 </span>
               ))}
@@ -768,22 +769,24 @@ export default function JoinTournamentPage() {
               </div>
               {partnerMode === 'friend' ? (
                 <>
-                  <select
+                  <SearchableSelect
                     id="join-partner-friend"
-                    className="form-select"
                     aria-labelledby="join-partner-label"
                     value={form.partner_user_id}
-                    onChange={(e) => setForm({ ...form, partner_user_id: e.target.value })}
-                    required
-                  >
-                    <option value="">Select a friend</option>
-                    {friendPartners.map((f) => (
-                      <option key={f.user_id} value={f.user_id}>
-                        {f.full_name}
-                        {f.university_short ? ` (${f.university_short})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(partner_user_id) => setForm({ ...form, partner_user_id })}
+                    placeholder="Select a friend"
+                    searchPlaceholder="Search friends by name…"
+                    emptyLabel="No friends match that name"
+                    required={friendPartners.length > 0}
+                    disabled={friendPartners.length === 0}
+                    options={friendPartners.map((f) => ({
+                      value: f.user_id,
+                      label: f.university_short
+                        ? `${f.full_name} (${f.university_short})`
+                        : f.full_name,
+                      keywords: f.full_name,
+                    }))}
+                  />
                   {friendPartners.length === 0 && (
                     <p className="muted-note">
                       {friendsBusyElsewhere.length > 0
@@ -849,20 +852,20 @@ export default function JoinTournamentPage() {
             <label className="form-label" htmlFor="join-uni">
               University
             </label>
-            <select
+            <SearchableSelect
               id="join-uni"
-              className="form-select"
               value={form.university_id}
-              onChange={(e) => setForm({ ...form, university_id: e.target.value })}
+              onChange={(university_id) => setForm({ ...form, university_id })}
+              placeholder="Select university"
+              searchPlaceholder="Search universities…"
+              emptyLabel="No university matches that name"
               required
-            >
-              <option value="">Select university</option>
-              {universities.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+              options={universities.map((u) => ({
+                value: u.id,
+                label: u.name,
+                keywords: u.short_name || '',
+              }))}
+            />
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="join-student">

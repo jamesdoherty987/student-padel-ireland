@@ -531,7 +531,12 @@ export default function OrganiserDashboard() {
     return matches.filter((m) => {
       if (courtFilter !== 'all' && String(m.court_number) !== courtFilter) return false
       if (matchFilter === 'active') {
-        return m.status === 'SCHEDULED' || m.status === 'CALLED' || m.status === 'LIVE'
+        return (
+          m.status === 'SCHEDULED' ||
+          m.status === 'CALLED' ||
+          m.status === 'LIVE' ||
+          m.status === 'AWAITING_CONFIRM'
+        )
       }
       if (matchFilter === 'done') {
         return m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED'
@@ -544,6 +549,12 @@ export default function OrganiserDashboard() {
     if (!m.team_a_id || !m.team_b_id) return
     setScoreError('')
     setScoreMatch(m)
+    const defaultStatus =
+      m.status === 'COMPLETED' || m.status === 'WALKOVER'
+        ? m.status
+        : m.status === 'AWAITING_CONFIRM'
+          ? 'COMPLETED'
+          : 'LIVE'
     setScoreForm({
       set1_a: m.score?.set1_a ?? 0,
       set1_b: m.score?.set1_b ?? 0,
@@ -552,7 +563,7 @@ export default function OrganiserDashboard() {
       set3_a: m.score?.set3_a ?? 0,
       set3_b: m.score?.set3_b ?? 0,
       current_set: m.score?.current_set ?? 1,
-      status: m.status === 'COMPLETED' || m.status === 'WALKOVER' ? m.status : 'LIVE',
+      status: defaultStatus,
       winner_id: m.winner_id || '',
       force: !!m.ratings_applied,
     })
@@ -575,6 +586,7 @@ export default function OrganiserDashboard() {
     if (!canScore) return null
     const locked = !!m.ratings_applied
     const done = m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED'
+    const pending = m.status === 'AWAITING_CONFIRM'
     const onScore = () => {
       if (m.status === 'SCHEDULED') {
         moveMut.mutate(
@@ -589,7 +601,11 @@ export default function OrganiserDashboard() {
       <div className="org-match-actions">
         {!compact && (
           <span className={`badge ${statusBadgeClass(m.status)}`}>
-            {m.status === 'CALLED' ? 'Called' : m.status.replace(/_/g, ' ')}
+            {m.status === 'CALLED'
+              ? 'Called'
+              : m.status === 'AWAITING_CONFIRM'
+                ? 'Needs confirm'
+                : m.status.replace(/_/g, ' ')}
           </span>
         )}
         {m.status === 'SCHEDULED' && (
@@ -614,14 +630,15 @@ export default function OrganiserDashboard() {
             Start live
           </button>
         )}
-        {(m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'SCHEDULED') && (
+        {(m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'SCHEDULED' || pending) && (
           <button
             type="button"
             className="btn btn-dark btn-sm"
             disabled={moveMut.isPending}
             onClick={onScore}
+            title={pending ? 'Override and finalise as organiser' : 'Enter score'}
           >
-            Score
+            {pending ? 'Finalise' : 'Score'}
           </button>
         )}
         {done && (
@@ -1417,6 +1434,11 @@ export default function OrganiserDashboard() {
             <p>
               {scoreMatch.team_a_name || 'Team A'} vs {scoreMatch.team_b_name || 'Team B'}
             </p>
+            {scoreMatch.status === 'AWAITING_CONFIRM' && (
+              <p className="muted-note" style={{ marginTop: 0 }}>
+                Players haven’t confirmed yet. Saving as Completed finalises this match for them.
+              </p>
+            )}
             {(['set1', 'set2', 'set3'] as const).map((set) => (
               <div key={set} className="score-row">
                 <label>{set.replace('set', 'Set ')}</label>

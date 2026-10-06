@@ -126,6 +126,11 @@ export type Match = {
   status: string
   winner_id?: string | null
   ratings_applied?: boolean
+  entered_by_id?: string | null
+  confirmed_by_id?: string | null
+  can_i_score?: boolean
+  needs_my_confirm?: boolean
+  score_submitted_by_me?: boolean
   score?: {
     set1_a: number
     set1_b: number
@@ -348,6 +353,20 @@ export const tournamentApi = {
     api.delete(`/api/tournaments/${tournamentId}/admins/${adminUserId}`),
   updateScore: (matchId: string, data: Record<string, unknown>) =>
     api.patch(`/api/matches/${matchId}/score`, data),
+  playerSubmitScore: (
+    matchId: string,
+    data: {
+      set1_a: number
+      set1_b: number
+      set2_a?: number
+      set2_b?: number
+      set3_a?: number
+      set3_b?: number
+    },
+  ) => api.patch<Match>(`/api/matches/${matchId}/player-score`, data),
+  confirmScore: (matchId: string) => api.post<Match>(`/api/matches/${matchId}/confirm-score`),
+  cancelPendingScore: (matchId: string) =>
+    api.post<Match>(`/api/matches/${matchId}/cancel-pending-score`),
   moveMatch: (matchId: string, data: Record<string, unknown>) =>
     api.patch(`/api/matches/${matchId}`, data),
   checkIn: (tournamentId: string, teamId: string, data: Record<string, unknown>) =>

@@ -142,6 +142,8 @@ def init_db() -> None:
     _pg_add_column_if_missing("ranking_history", "community_match_id", "UUID")
     _sqlite_add_column_if_missing("community_matches", "confirmed_by_id", "CHAR(36)")
     _pg_add_column_if_missing("community_matches", "confirmed_by_id", "UUID")
+    _sqlite_add_column_if_missing("match_scores", "confirmed_by_id", "CHAR(36)")
+    _pg_add_column_if_missing("match_scores", "confirmed_by_id", "UUID")
     _sqlite_add_column_if_missing("community_matches", "court_number", "INTEGER")
     _pg_add_column_if_missing("community_matches", "court_number", "INTEGER")
     _sqlite_add_column_if_missing("community_competitions", "number_of_courts", "INTEGER DEFAULT 2")

@@ -257,6 +257,17 @@ class ScoreUpdate(BaseModel):
     force: bool = False
 
 
+class PlayerScoreSubmit(BaseModel):
+    """Final result proposed by a player — opponent (or organiser) must confirm."""
+
+    set1_a: int = Field(ge=0, le=20)
+    set1_b: int = Field(ge=0, le=20)
+    set2_a: int = Field(default=0, ge=0, le=20)
+    set2_b: int = Field(default=0, ge=0, le=20)
+    set3_a: int = Field(default=0, ge=0, le=20)
+    set3_b: int = Field(default=0, ge=0, le=20)
+
+
 class MatchOut(BaseModel):
     id: UUID
     tournament_id: UUID
@@ -275,6 +286,12 @@ class MatchOut(BaseModel):
     winner_id: Optional[UUID] = None
     score: Optional[dict] = None
     ratings_applied: bool = False
+    entered_by_id: Optional[UUID] = None
+    confirmed_by_id: Optional[UUID] = None
+    # Viewer-relative flags (player-view / player score endpoints)
+    can_i_score: bool = False
+    needs_my_confirm: bool = False
+    score_submitted_by_me: bool = False
 
     model_config = {"from_attributes": True}
 

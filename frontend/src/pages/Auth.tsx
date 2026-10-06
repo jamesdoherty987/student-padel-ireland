@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
+import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
@@ -242,19 +243,20 @@ export function SignupPage() {
             <label className="form-label" htmlFor="signup-uni">
               University
             </label>
-            <select
+            <SearchableSelect
               id="signup-uni"
-              className="form-select"
               value={form.university_id}
-              onChange={(e) => setForm({ ...form, university_id: e.target.value })}
-            >
-              <option value="">Select university</option>
-              {universities.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
+              onChange={(university_id) => setForm({ ...form, university_id })}
+              placeholder="Select university"
+              searchPlaceholder="Search universities…"
+              emptyLabel="No university matches that name"
+              required
+              options={universities.map((u) => ({
+                value: u.id,
+                label: u.name,
+                keywords: u.short_name || '',
+              }))}
+            />
           </div>
           <div className="form-group">
             <label className="form-label" htmlFor="signup-phone">

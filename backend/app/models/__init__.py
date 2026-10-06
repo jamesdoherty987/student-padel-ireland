@@ -69,6 +69,7 @@ class MatchStatus(StrEnum):
     SCHEDULED = "SCHEDULED"
     CALLED = "CALLED"
     LIVE = "LIVE"
+    AWAITING_CONFIRM = "AWAITING_CONFIRM"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
     WALKOVER = "WALKOVER"
@@ -338,6 +339,7 @@ class MatchScore(Base, TimestampMixin):
     set3_b: Mapped[int] = mapped_column(Integer, default=0)
     current_set: Mapped[int] = mapped_column(Integer, default=1)
     entered_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    confirmed_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
 
     match: Mapped[Match] = relationship(back_populates="score")
 

@@ -383,13 +383,15 @@ export default function CompetitionDetailPage() {
                   <button
                     type="button"
                     className="btn btn-dark btn-sm"
-                    disabled={confirmMut.isPending}
+                    disabled={confirmMut.isPending && confirmMut.variables === myNext.id}
                     onClick={() => confirmMut.mutate(myNext.id)}
                   >
-                    {confirmMut.isPending ? 'Confirming…' : 'Confirm score'}
+                    {confirmMut.isPending && confirmMut.variables === myNext.id
+                      ? 'Confirming…'
+                      : 'Confirm score'}
                   </button>
                 )}
-                {myNext.can_i_score && (
+                {myNext.can_i_score && !myNext.needs_my_confirm && (
                   <button
                     type="button"
                     className="btn btn-dark btn-sm"
@@ -633,13 +635,15 @@ export default function CompetitionDetailPage() {
                     <button
                       type="button"
                       className="btn btn-dark btn-sm"
-                      disabled={confirmMut.isPending}
+                      disabled={confirmMut.isPending && confirmMut.variables === m.id}
                       onClick={() => confirmMut.mutate(m.id)}
                     >
-                      {confirmMut.isPending ? 'Confirming…' : 'Confirm score'}
+                      {confirmMut.isPending && confirmMut.variables === m.id
+                        ? 'Confirming…'
+                        : 'Confirm score'}
                     </button>
                   )}
-                  {m.can_i_score && (
+                  {m.can_i_score && !m.needs_my_confirm && (
                     <button
                       type="button"
                       className="btn btn-dark btn-sm"
@@ -747,6 +751,9 @@ export default function CompetitionDetailPage() {
               }}
             >
               <h2 id="score-modal-title">Enter score</h2>
+              <p className="muted-note" style={{ marginTop: 0 }}>
+                Someone on the other side will confirm before ratings update.
+              </p>
               <div className="score-sides-label">
                 <div>
                   <span className="muted-note">Side A</span>

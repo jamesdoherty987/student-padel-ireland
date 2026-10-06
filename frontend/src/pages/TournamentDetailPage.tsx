@@ -11,6 +11,7 @@ import {
   courtLabel,
   currentSetScores,
   formatDate,
+  formatMatchScore,
   formatMoney,
   perPlayerFeeCents,
   formatTime,
@@ -85,7 +86,10 @@ export default function TournamentDetailPage() {
   }
 
   const live = matches.filter((m) => m.status === 'LIVE')
-  const upcoming = matches.filter((m) => m.status === 'SCHEDULED' || m.status === 'CALLED').slice(0, 8)
+  const pendingConfirm = matches.filter((m) => m.status === 'AWAITING_CONFIRM').slice(0, 6)
+  const upcoming = matches
+    .filter((m) => m.status === 'SCHEDULED' || m.status === 'CALLED')
+    .slice(0, 8)
   const liveUrl = publicPathUrl(`/t/${tournament.slug}/live`)
   const joinUrl = tournament.invite_code
     ? publicPathUrl(`/join/${tournament.invite_code}`)
@@ -272,6 +276,33 @@ export default function TournamentDetailPage() {
                 )
               })}
             </div>
+          </section>
+        )}
+
+        {pendingConfirm.length > 0 && (
+          <section className="block">
+            <h2>Waiting for confirm</h2>
+            <ul className="match-preview-list">
+              {pendingConfirm.map((m) => (
+                <li key={m.id}>
+                  <span className="match-preview-court">
+                    {courtLabel(m.court_name, m.court_number)}
+                  </span>
+                  <span>
+                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                    {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                  </span>
+                  <span className="match-preview-time">
+                    {m.score ? formatMatchScore(m.score) : 'Score logged'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {hasPaidEntry && (
+              <Link to={`/t/${tournament.slug}/live`} className="form-inline-link">
+                Open My matches to confirm
+              </Link>
+            )}
           </section>
         )}
 

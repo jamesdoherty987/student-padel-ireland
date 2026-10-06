@@ -54,6 +54,7 @@ from app.schemas import (
     MatchMove,
     MatchOut,
     OrganiserAddTeamRequest,
+    PlayerScoreSubmit,
     RegisterTeamRequest,
     ScoreUpdate,
     SponsorOut,
@@ -290,6 +291,87 @@ def _team_user_ids(db: Session, team_id: UUID | None) -> list[UUID]:
     ]
 
 
+def _user_team_on_match(db: Session, m: Match, user_id: UUID) -> UUID | None:
+    """Return the team_id the user belongs to on this match, or None."""
+    if m.team_a_id and user_id in _team_user_ids(db, m.team_a_id):
+        return m.team_a_id
+    if m.team_b_id and user_id in _team_user_ids(db, m.team_b_id):
+        return m.team_b_id
+    return None
+
+
+def _same_match_side(db: Session, m: Match, user_a: UUID, user_b: UUID) -> bool:
+    side_a = set(_team_user_ids(db, m.team_a_id))
+    side_b = set(_team_user_ids(db, m.team_b_id))
+    return (user_a in side_a and user_b in side_a) or (user_a in side_b and user_b in side_b)
+
+
+def _infer_winner_id_from_sets(
+    m: Match,
+    set1_a: int,
+    set1_b: int,
+    set2_a: int,
+    set2_b: int,
+    set3_a: int,
+    set3_b: int,
+) -> UUID | None:
+    sets = [(set1_a, set1_b), (set2_a, set2_b), (set3_a, set3_b)]
+    a_sets = sum(1 for a, b in sets if a > b and (a or b))
+    b_sets = sum(1 for a, b in sets if b > a and (a or b))
+    if a_sets > b_sets:
+        return m.team_a_id
+    if b_sets > a_sets:
+        return m.team_b_id
+    return None
+
+
+def _advance_winner_to_next(db: Session, m: Match, winner_id: UUID) -> None:
+    if not m.next_match_id or not m.next_match_slot:
+        return
+    nxt = db.get(Match, m.next_match_id)
+    if not nxt:
+        return
+    slot_team = nxt.team_a_id if m.next_match_slot == "A" else nxt.team_b_id
+    if nxt.status in (
+        MatchStatus.LIVE.value,
+        MatchStatus.COMPLETED.value,
+        MatchStatus.WALKOVER.value,
+        MatchStatus.AWAITING_CONFIRM.value,
+    ):
+        # Idempotent: already seated — don't block confirm of the prior match
+        if slot_team == winner_id:
+            return
+        raise HTTPException(
+            400,
+            "Cannot change the winner — the next knockout match has already started or finished",
+        )
+    previous_winner = m.winner_id
+    if m.next_match_slot == "A":
+        if previous_winner and previous_winner != winner_id and nxt.next_match_id:
+            deeper = db.get(Match, nxt.next_match_id)
+            if deeper and deeper.status == MatchStatus.SCHEDULED.value:
+                if deeper.team_a_id == previous_winner:
+                    deeper.team_a_id = None
+                    deeper.team_a_placeholder = "TBD"
+                if deeper.team_b_id == previous_winner:
+                    deeper.team_b_id = None
+                    deeper.team_b_placeholder = "TBD"
+        nxt.team_a_id = winner_id
+        nxt.team_a_placeholder = None
+    else:
+        if previous_winner and previous_winner != winner_id and nxt.next_match_id:
+            deeper = db.get(Match, nxt.next_match_id)
+            if deeper and deeper.status == MatchStatus.SCHEDULED.value:
+                if deeper.team_a_id == previous_winner:
+                    deeper.team_a_id = None
+                    deeper.team_a_placeholder = "TBD"
+                if deeper.team_b_id == previous_winner:
+                    deeper.team_b_id = None
+                    deeper.team_b_placeholder = "TBD"
+        nxt.team_b_id = winner_id
+        nxt.team_b_placeholder = None
+
+
 def _apply_tournament_match_ratings(db: Session, m: Match, t: Tournament | None) -> None:
     """Apply Ireland Elo for every completed tournament match, any event or stage."""
     if getattr(m, "ratings_applied", False):
@@ -376,10 +458,17 @@ def _court_label_map(db: Session, tournament_id: UUID) -> dict[int, str]:
     }
 
 
-def _match_out(db: Session, m: Match, court_names: dict[int, str] | None = None) -> MatchOut:
+def _match_out(
+    db: Session,
+    m: Match,
+    court_names: dict[int, str] | None = None,
+    viewer: User | None = None,
+) -> MatchOut:
     team_a = db.get(Team, m.team_a_id) if m.team_a_id else None
     team_b = db.get(Team, m.team_b_id) if m.team_b_id else None
     score = None
+    entered_by_id = None
+    confirmed_by_id = None
     if m.score:
         score = {
             "set1_a": m.score.set1_a,
@@ -390,10 +479,34 @@ def _match_out(db: Session, m: Match, court_names: dict[int, str] | None = None)
             "set3_b": m.score.set3_b,
             "current_set": m.score.current_set,
         }
+        entered_by_id = m.score.entered_by_id
+        confirmed_by_id = getattr(m.score, "confirmed_by_id", None)
     names = court_names if court_names is not None else _court_label_map(db, m.tournament_id)
     court_name = None
     if m.court_number is not None:
         court_name = names.get(m.court_number) or f"Court {m.court_number}"
+
+    can_i_score = False
+    needs_my_confirm = False
+    score_submitted_by_me = False
+    if viewer and not getattr(m, "ratings_applied", False):
+        on_team = _user_team_on_match(db, m, viewer.id)
+        if on_team:
+            if m.status == MatchStatus.AWAITING_CONFIRM.value:
+                score_submitted_by_me = bool(entered_by_id and entered_by_id == viewer.id)
+                needs_my_confirm = bool(
+                    entered_by_id
+                    and entered_by_id != viewer.id
+                    and not confirmed_by_id
+                    and not _same_match_side(db, m, viewer.id, entered_by_id)
+                )
+            elif m.status in (
+                MatchStatus.SCHEDULED.value,
+                MatchStatus.CALLED.value,
+                MatchStatus.LIVE.value,
+            ):
+                can_i_score = bool(m.team_a_id and m.team_b_id)
+
     return MatchOut(
         id=m.id,
         tournament_id=m.tournament_id,
@@ -412,6 +525,11 @@ def _match_out(db: Session, m: Match, court_names: dict[int, str] | None = None)
         winner_id=m.winner_id,
         score=score,
         ratings_applied=bool(getattr(m, "ratings_applied", False)),
+        entered_by_id=entered_by_id,
+        confirmed_by_id=confirmed_by_id,
+        can_i_score=can_i_score,
+        needs_my_confirm=needs_my_confirm,
+        score_submitted_by_me=score_submitted_by_me,
     )
 
 
@@ -1708,6 +1826,10 @@ def update_score(
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t, db)
 
+    # Organisers finalise results — never leave a player-confirm limbo
+    if body.status == MatchStatus.AWAITING_CONFIRM:
+        body = body.model_copy(update={"status": MatchStatus.COMPLETED})
+
     if getattr(m, "ratings_applied", False):
         if not body.force:
             raise HTTPException(
@@ -1719,7 +1841,12 @@ def update_score(
     else:
         correcting = False
 
-    if body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER, MatchStatus.LIVE):
+    if body.status in (
+        MatchStatus.COMPLETED,
+        MatchStatus.WALKOVER,
+        MatchStatus.LIVE,
+        MatchStatus.AWAITING_CONFIRM,
+    ):
         if not m.team_a_id or not m.team_b_id:
             raise HTTPException(400, "Both teams must be set before scoring this match")
 
@@ -1738,70 +1865,55 @@ def update_score(
 
     winner_id = body.winner_id
     if body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER) and not winner_id:
-        # Infer winner from sets when organiser marks completed without picking
-        sets = [
-            (body.set1_a, body.set1_b),
-            (body.set2_a, body.set2_b),
-            (body.set3_a, body.set3_b),
-        ]
-        a_sets = sum(1 for a, b in sets if a > b and (a or b))
-        b_sets = sum(1 for a, b in sets if b > a and (a or b))
-        if a_sets > b_sets:
-            winner_id = m.team_a_id
-        elif b_sets > a_sets:
-            winner_id = m.team_b_id
+        winner_id = _infer_winner_id_from_sets(
+            m,
+            body.set1_a,
+            body.set1_b,
+            body.set2_a,
+            body.set2_b,
+            body.set3_a,
+            body.set3_b,
+        )
 
-    if winner_id:
+    if body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
+        if not winner_id:
+            raise HTTPException(400, "Completed matches need a winner (or set scores that determine one)")
         if winner_id not in (m.team_a_id, m.team_b_id):
             raise HTTPException(400, "Winner must be one of the match teams")
-        previous_winner = m.winner_id
+        _advance_winner_to_next(db, m, winner_id)
         m.winner_id = winner_id
-        if m.next_match_id and m.next_match_slot:
-            nxt = db.get(Match, m.next_match_id)
-            if nxt:
-                if nxt.status in (
-                    MatchStatus.LIVE.value,
-                    MatchStatus.COMPLETED.value,
-                    MatchStatus.WALKOVER.value,
-                ):
-                    raise HTTPException(
-                        400,
-                        "Cannot change the winner — the next knockout match has already started or finished",
-                    )
-                if m.next_match_slot == "A":
-                    # Clear deeper bracket if the previous winner was already pushed further
-                    if previous_winner and previous_winner != winner_id and nxt.next_match_id:
-                        deeper = db.get(Match, nxt.next_match_id)
-                        if deeper and deeper.status == MatchStatus.SCHEDULED.value:
-                            if deeper.team_a_id == previous_winner:
-                                deeper.team_a_id = None
-                                deeper.team_a_placeholder = "TBD"
-                            if deeper.team_b_id == previous_winner:
-                                deeper.team_b_id = None
-                                deeper.team_b_placeholder = "TBD"
-                    nxt.team_a_id = winner_id
-                    nxt.team_a_placeholder = None
-                else:
-                    if previous_winner and previous_winner != winner_id and nxt.next_match_id:
-                        deeper = db.get(Match, nxt.next_match_id)
-                        if deeper and deeper.status == MatchStatus.SCHEDULED.value:
-                            if deeper.team_a_id == previous_winner:
-                                deeper.team_a_id = None
-                                deeper.team_a_placeholder = "TBD"
-                            if deeper.team_b_id == previous_winner:
-                                deeper.team_b_id = None
-                                deeper.team_b_placeholder = "TBD"
-                    nxt.team_b_id = winner_id
-                    nxt.team_b_placeholder = None
-    elif body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
-        raise HTTPException(400, "Completed matches need a winner (or set scores that determine one)")
+        m.score.confirmed_by_id = user.id
+    elif body.status == MatchStatus.AWAITING_CONFIRM:
+        winner_id = winner_id or _infer_winner_id_from_sets(
+            m,
+            body.set1_a,
+            body.set1_b,
+            body.set2_a,
+            body.set2_b,
+            body.set3_a,
+            body.set3_b,
+        )
+        if not winner_id:
+            raise HTTPException(400, "Enter set scores with a clear winner")
+        m.winner_id = winner_id
+        m.score.confirmed_by_id = None
+    else:
+        # Live / other — clear pending confirm markers
+        if body.status == MatchStatus.LIVE:
+            m.score.confirmed_by_id = None
+            m.winner_id = None
 
-    if not correcting:
+    if not correcting and body.status in (MatchStatus.COMPLETED, MatchStatus.WALKOVER):
         _apply_tournament_match_ratings(db, m, t)
 
     # Day-of: any live/completed scoring flips the event to LIVE (unless already finished)
     if t and t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
-        if body.status in (MatchStatus.LIVE, MatchStatus.COMPLETED, MatchStatus.WALKOVER):
+        if body.status in (
+            MatchStatus.LIVE,
+            MatchStatus.COMPLETED,
+            MatchStatus.WALKOVER,
+            MatchStatus.AWAITING_CONFIRM,
+        ):
             if t.status != TournamentStatus.LIVE.value:
                 t.status = TournamentStatus.LIVE.value
 
@@ -1811,7 +1923,173 @@ def update_score(
 
     db.commit()
     db.refresh(m)
-    return _match_out(db, m)
+    return _match_out(db, m, viewer=user)
+
+
+@router.patch("/matches/{match_id}/player-score", response_model=MatchOut)
+def player_submit_score(
+    match_id: UUID,
+    body: PlayerScoreSubmit,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Player proposes a final score — the other team must confirm before it counts."""
+    m = db.get(Match, match_id)
+    if not m:
+        raise HTTPException(404, "Match not found")
+    t = db.get(Tournament, m.tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        raise HTTPException(400, "Tournament is closed")
+    if getattr(m, "ratings_applied", False):
+        raise HTTPException(400, "This result is locked")
+    if not m.team_a_id or not m.team_b_id:
+        raise HTTPException(400, "Both teams must be set before scoring")
+    if not _user_team_on_match(db, m, user.id):
+        raise HTTPException(403, "Only players in this match can enter the score")
+    if m.status not in (
+        MatchStatus.SCHEDULED.value,
+        MatchStatus.CALLED.value,
+        MatchStatus.LIVE.value,
+        MatchStatus.AWAITING_CONFIRM.value,
+    ):
+        raise HTTPException(400, "This match can’t take a new score right now")
+
+    winner_id = _infer_winner_id_from_sets(
+        m,
+        body.set1_a,
+        body.set1_b,
+        body.set2_a,
+        body.set2_b,
+        body.set3_a,
+        body.set3_b,
+    )
+    if not winner_id:
+        raise HTTPException(400, "Enter set scores with a clear winner")
+
+    if not m.score:
+        m.score = MatchScore(match_id=m.id)
+        db.add(m.score)
+    m.score.set1_a = body.set1_a
+    m.score.set1_b = body.set1_b
+    m.score.set2_a = body.set2_a
+    m.score.set2_b = body.set2_b
+    m.score.set3_a = body.set3_a
+    m.score.set3_b = body.set3_b
+    m.score.current_set = 3 if (body.set3_a or body.set3_b) else (2 if (body.set2_a or body.set2_b) else 1)
+    m.score.entered_by_id = user.id
+    m.score.confirmed_by_id = None
+    m.winner_id = winner_id
+    m.status = MatchStatus.AWAITING_CONFIRM.value
+
+    if t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        if t.status != TournamentStatus.LIVE.value:
+            t.status = TournamentStatus.LIVE.value
+
+    db.commit()
+    db.refresh(m)
+    return _match_out(db, m, viewer=user)
+
+
+@router.post("/matches/{match_id}/confirm-score", response_model=MatchOut)
+def player_confirm_score(
+    match_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Other team confirms a proposed score → match completes and ratings apply."""
+    m = db.get(Match, match_id)
+    if not m:
+        raise HTTPException(404, "Match not found")
+    t = db.get(Tournament, m.tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        raise HTTPException(400, "Tournament is closed")
+    if getattr(m, "ratings_applied", False):
+        return _match_out(db, m, viewer=user)
+    if m.status != MatchStatus.AWAITING_CONFIRM.value:
+        raise HTTPException(400, "Nothing to confirm yet. Enter the score first.")
+    if not _user_team_on_match(db, m, user.id):
+        raise HTTPException(403, "Only players in this match can confirm")
+    if not m.score or not m.score.entered_by_id:
+        raise HTTPException(400, "No score has been submitted yet")
+    if m.score.entered_by_id == user.id:
+        raise HTTPException(400, "The other team needs to confirm your score")
+    if _same_match_side(db, m, user.id, m.score.entered_by_id):
+        raise HTTPException(400, "The other team needs to confirm this score")
+
+    winner_id = m.winner_id or _infer_winner_id_from_sets(
+        m,
+        m.score.set1_a,
+        m.score.set1_b,
+        m.score.set2_a,
+        m.score.set2_b,
+        m.score.set3_a,
+        m.score.set3_b,
+    )
+    if not winner_id:
+        raise HTTPException(400, "Pending score has no clear winner — ask them to re-enter it")
+
+    _advance_winner_to_next(db, m, winner_id)
+    m.winner_id = winner_id
+    m.score.confirmed_by_id = user.id
+    m.status = MatchStatus.COMPLETED.value
+    _apply_tournament_match_ratings(db, m, t)
+
+    if t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        if t.status != TournamentStatus.LIVE.value:
+            t.status = TournamentStatus.LIVE.value
+    if m.stage == "GROUP":
+        _seed_knockout_from_standings(db, t)
+
+    db.commit()
+    db.refresh(m)
+    return _match_out(db, m, viewer=user)
+
+
+@router.post("/matches/{match_id}/cancel-pending-score", response_model=MatchOut)
+def player_cancel_pending_score(
+    match_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Withdraw a score waiting for confirm (scorer, teammate, or organiser)."""
+    m = db.get(Match, match_id)
+    if not m:
+        raise HTTPException(404, "Match not found")
+    t = db.get(Tournament, m.tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    if m.status != MatchStatus.AWAITING_CONFIRM.value:
+        raise HTTPException(400, "No pending score to cancel")
+    if getattr(m, "ratings_applied", False):
+        raise HTTPException(400, "This result is locked")
+
+    is_organiser = user_can_manage_tournament(user, t, db)
+    on_team = _user_team_on_match(db, m, user.id)
+    entered_by = m.score.entered_by_id if m.score else None
+    same_side_as_scorer = bool(entered_by and on_team and _same_match_side(db, m, user.id, entered_by))
+    if not is_organiser and not same_side_as_scorer and entered_by != user.id:
+        raise HTTPException(403, "Only the team that logged the score (or an organiser) can cancel it")
+
+    m.status = MatchStatus.LIVE.value
+    m.winner_id = None
+    if m.score:
+        m.score.entered_by_id = None
+        m.score.confirmed_by_id = None
+        m.score.set1_a = 0
+        m.score.set1_b = 0
+        m.score.set2_a = 0
+        m.score.set2_b = 0
+        m.score.set3_a = 0
+        m.score.set3_b = 0
+        m.score.current_set = 1
+
+    db.commit()
+    db.refresh(m)
+    return _match_out(db, m, viewer=user)
 
 
 @router.patch("/matches/{match_id}", response_model=MatchOut)
@@ -2184,9 +2462,10 @@ def player_view(
             # Only expose fixtures for paid entries
             if my_team and my_payment_status == PaymentStatus.PAID.value:
                 status_rank = case(
-                    (Match.status == MatchStatus.LIVE.value, 0),
-                    (Match.status == MatchStatus.CALLED.value, 1),
-                    else_=2,
+                    (Match.status == MatchStatus.AWAITING_CONFIRM.value, 0),
+                    (Match.status == MatchStatus.LIVE.value, 1),
+                    (Match.status == MatchStatus.CALLED.value, 2),
+                    else_=3,
                 )
                 upcoming = (
                     db.query(Match)
@@ -2198,6 +2477,7 @@ def player_view(
                                 MatchStatus.SCHEDULED.value,
                                 MatchStatus.CALLED.value,
                                 MatchStatus.LIVE.value,
+                                MatchStatus.AWAITING_CONFIRM.value,
                             ]
                         ),
                         ((Match.team_a_id == my_team.id) | (Match.team_b_id == my_team.id)),
@@ -2205,7 +2485,7 @@ def player_view(
                     .order_by(status_rank, Match.scheduled_start)
                     .all()
                 )
-                my_upcoming = [_match_out(db, m) for m in upcoming]
+                my_upcoming = [_match_out(db, m, court_names=None, viewer=user) for m in upcoming]
                 next_match = my_upcoming[0] if my_upcoming else None
                 done = (
                     db.query(Match)
@@ -2219,7 +2499,7 @@ def player_view(
                     .all()
                 )
                 for m in done:
-                    my_results.append(_match_out(db, m))
+                    my_results.append(_match_out(db, m, viewer=user))
 
     court_rank = case((Match.court_number.is_(None), 1), else_=0)
     live = (
