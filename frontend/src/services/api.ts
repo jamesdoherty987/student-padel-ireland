@@ -128,6 +128,9 @@ export type Match = {
   ratings_applied?: boolean
   entered_by_id?: string | null
   confirmed_by_id?: string | null
+  sort_order?: number
+  next_match_id?: string | null
+  next_match_slot?: string | null
   can_i_score?: boolean
   needs_my_confirm?: boolean
   score_submitted_by_me?: boolean

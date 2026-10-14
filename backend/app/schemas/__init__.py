@@ -288,6 +288,9 @@ class MatchOut(BaseModel):
     ratings_applied: bool = False
     entered_by_id: Optional[UUID] = None
     confirmed_by_id: Optional[UUID] = None
+    sort_order: int = 0
+    next_match_id: Optional[UUID] = None
+    next_match_slot: Optional[str] = None
     # Viewer-relative flags (player-view / player score endpoints)
     can_i_score: bool = False
     needs_my_confirm: bool = False

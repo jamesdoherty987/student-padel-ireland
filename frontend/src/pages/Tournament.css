@@ -367,11 +367,38 @@
   font-variant-numeric: tabular-nums;
 }
 
+.tour-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.15rem;
+}
+
+.tour-title-row .eyebrow {
+  margin: 0;
+}
+
 .tour-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.tour-actions-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.tour-deadline {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .tour-status-row {
@@ -436,6 +463,16 @@
 
 .block {
   margin-bottom: 2rem;
+}
+
+.tour-bracket-block {
+  padding: 1.15rem 1.15rem 1.25rem;
+  background: linear-gradient(165deg, rgba(11, 61, 46, 0.04), rgba(200, 230, 0, 0.08));
+  border: 1px solid rgba(11, 61, 46, 0.1);
+  border-radius: var(--radius-md, 12px);
+  min-width: 0;
+  overflow: visible;
+  box-sizing: border-box;
 }
 
 .block h2 {
@@ -729,6 +766,14 @@
 
   .tour-actions .btn {
     width: 100%;
+  }
+
+  .tour-actions-secondary {
+    margin-bottom: 1rem;
+  }
+
+  .tour-actions-secondary .btn {
+    width: auto;
   }
 
   .tour-join-code,

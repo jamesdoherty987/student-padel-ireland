@@ -79,6 +79,42 @@
   margin-bottom: 1.5rem;
 }
 
+.auth-more {
+  margin: 0 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.35rem 0.85rem;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.auth-more summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--court-mid);
+  padding: 0.45rem 0;
+  list-style: none;
+}
+
+.auth-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.auth-more summary::after {
+  content: '+';
+  float: right;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.auth-more[open] summary::after {
+  content: '–';
+}
+
+.auth-more .form-group {
+  margin-top: 0.35rem;
+}
+
 .auth-remember {
   display: flex;
   align-items: center;

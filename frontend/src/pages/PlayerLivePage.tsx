@@ -1,12 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import BrandLogo from '../components/BrandLogo'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import NumberInput from '../components/NumberInput'
+import TournamentBracket from '../components/TournamentBracket'
 import { apiErrorMessage, tournamentApi, type Match } from '../services/api'
-import { formatLiveBoardScore, formatMatchScore, formatTime, courtLabel } from '../utils/format'
+import {
+  formatLiveBoardScore,
+  formatMatchScore,
+  formatTime,
+  courtLabel,
+  isKnockoutActive,
+  knockoutRoundLabel,
+} from '../utils/format'
 import './PlayerLive.css'
 import './Tournament.css'
 
@@ -24,19 +31,6 @@ type ScoreSets = {
   set2_b: number
   set3_a: number
   set3_b: number
-}
-
-function roundLabel(round: string, stage?: string) {
-  if (!round) return stage === 'KNOCKOUT' ? 'Knockout' : 'Match'
-  if (round.startsWith('GROUP_')) return `Group ${round.replace('GROUP_', '')}`
-  const map: Record<string, string> = {
-    R16: 'Round of 16',
-    QF: 'Quarter-final',
-    SF: 'Semi-final',
-    FINAL: 'Final',
-    BRONZE: '3rd place',
-  }
-  return map[round] || round.replace(/_/g, ' ')
 }
 
 function opponentName(m: Match, myTeamId?: string) {
@@ -113,7 +107,7 @@ function NextMatchCard({
         <p className="pl-go-now pl-go-now--soft">Waiting on opponent</p>
       )}
 
-      <p className="pl-round">{roundLabel(next.round, next.stage)}</p>
+      <p className="pl-round">{knockoutRoundLabel(next.round, next.stage)}</p>
       <div className="pl-court">{court}</div>
       <div className="pl-time">{when}</div>
 
@@ -209,8 +203,16 @@ export default function PlayerLivePage() {
     refetchInterval: (query) => (query.state.status === 'error' ? 5000 : 8000),
   })
 
+  const { data: allMatches = [] } = useQuery({
+    queryKey: ['matches', slug],
+    queryFn: async () => (await tournamentApi.matches(slug)).data,
+    enabled: !!slug,
+    refetchInterval: 12000,
+  })
+
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['player-view', slug] })
+    void qc.invalidateQueries({ queryKey: ['matches', slug] })
   }
 
   useEffect(() => {
@@ -344,6 +346,8 @@ export default function PlayerLivePage() {
   // Only hide venue board when you're actually on court — still show it while waiting to confirm
   const myOnCourt =
     hasPaidEntry && next && (next.status === 'LIVE' || next.status === 'CALLED')
+  const knockoutMatches = allMatches.filter((m) => m.stage === 'KNOCKOUT')
+  const knockoutActive = isKnockoutActive(allMatches)
 
   const nextActions: NextActions = {
     onLogScore: () => next && openScoreSheet(next),
@@ -369,7 +373,6 @@ export default function PlayerLivePage() {
       <NavBar />
       <main className="pl-page">
         <header className="pl-header">
-          <BrandLogo to="/tournaments" className="pl-brand" size="sm" />
           <div className="pl-title-row">
             <h1>{t.name}</h1>
             {liveMatches.length > 0 ? (
@@ -380,11 +383,13 @@ export default function PlayerLivePage() {
               <span className="badge badge-official">Called</span>
             ) : null}
           </div>
-          <p className="pl-lead">
-            {hasPaidEntry
-              ? 'Your next court, opponent, and score — updated live.'
-              : 'Courts, calls, and scores — updates every few seconds.'}
-          </p>
+          {!myOnCourt && (
+            <p className="pl-lead">
+              {hasPaidEntry
+                ? 'Your next court, opponent, and score — updated live.'
+                : 'Courts, calls, and scores — updates every few seconds.'}
+            </p>
+          )}
           {dataUpdatedAt > 0 && (
             <p className="pl-updated">
               Updated {new Date(dataUpdatedAt).toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' })}
@@ -507,89 +512,63 @@ export default function PlayerLivePage() {
           </section>
         )}
 
-        {hasPaidEntry && myUpcoming.length > 0 && (
-          <section className="pl-block">
-            <h2>Your schedule</h2>
-            <ul className="pl-schedule">
-              {myUpcoming.map((m, i) => {
-                const opp = opponentName(m, myTeamId)
-                return (
-                  <li key={m.id} className={i === 0 ? 'is-next' : ''}>
-                    <strong>{courtLabel(m.court_name, m.court_number)}</strong>
-                    <span>{scheduleWhen(m)}</span>
-                    <span>
-                      {opp ? (
-                        <>
-                          vs {opp}
-                          <span className="pl-sched-round"> · {roundLabel(m.round, m.stage)}</span>
-                        </>
-                      ) : (
-                        <MatchNames m={m} />
-                      )}
-                    </span>
-                    <div className="pl-sched-actions">
-                      {m.needs_my_confirm && (
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={confirmMut.isPending && confirmMut.variables === m.id}
-                          onClick={() => confirmMut.mutate(m.id)}
-                        >
-                          {confirmMut.isPending && confirmMut.variables === m.id
-                            ? 'Confirming…'
-                            : 'Confirm score'}
-                        </button>
-                      )}
-                      {m.can_i_score && (
-                        <button type="button" className="btn btn-dark btn-sm" onClick={() => openScoreSheet(m)}>
-                          Log score
-                        </button>
-                      )}
-                      {m.score_submitted_by_me && m.status === 'AWAITING_CONFIRM' && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          disabled={cancelMut.isPending && cancelMut.variables === m.id}
-                          onClick={() => cancelMut.mutate(m.id)}
-                        >
-                          Edit score
-                        </button>
-                      )}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-            {actionError && <p className="form-error">{actionError}</p>}
+        {knockoutActive && (
+          <section className="pl-block pl-bracket">
+            <TournamentBracket matches={knockoutMatches} myTeamId={myTeamId} />
           </section>
         )}
 
-        {hasPaidEntry && (
+        {hasPaidEntry && myUpcoming.filter((m) => m.id !== next?.id).length > 0 && (
           <section className="pl-block">
-            <h2>Your results</h2>
-            {myResults.length === 0 ? (
-              <p className="pl-empty">No results yet.</p>
-            ) : (
-              <ul className="pl-results">
-                {myResults.map((m) => {
-                  const won = m.winner_id ? m.winner_id === myTeamId : null
-                  const mark = won === true ? '✓' : won === false ? '✗' : '·'
+            <h2>Later today</h2>
+            <ul className="pl-schedule">
+              {myUpcoming
+                .filter((m) => m.id !== next?.id)
+                .map((m) => {
+                  const opp = opponentName(m, myTeamId)
                   return (
-                    <li key={m.id} className={won === true ? 'win' : won === false ? 'loss' : ''}>
-                      <span className="pl-result-score">
-                        {mark} {formatMatchScore(m.score)}
-                      </span>
-                      <span className="pl-result-vs">
-                        vs{' '}
-                        {m.team_a_id === myTeamId
-                          ? m.team_b_name || 'Opponent'
-                          : m.team_a_name || 'Opponent'}
+                    <li key={m.id}>
+                      <strong>{courtLabel(m.court_name, m.court_number)}</strong>
+                      <span>{scheduleWhen(m)}</span>
+                      <span>
+                        {opp ? (
+                          <>
+                            vs {opp}
+                            <span className="pl-sched-round"> · {knockoutRoundLabel(m.round, m.stage)}</span>
+                          </>
+                        ) : (
+                          <MatchNames m={m} />
+                        )}
                       </span>
                     </li>
                   )
                 })}
-              </ul>
-            )}
+            </ul>
+          </section>
+        )}
+
+        {hasPaidEntry && myResults.length > 0 && (
+          <section className="pl-block">
+            <h2>Your results</h2>
+            <ul className="pl-results">
+              {myResults.map((m) => {
+                const won = m.winner_id ? m.winner_id === myTeamId : null
+                const mark = won === true ? '✓' : won === false ? '✗' : '·'
+                return (
+                  <li key={m.id} className={won === true ? 'win' : won === false ? 'loss' : ''}>
+                    <span className="pl-result-score">
+                      {mark} {formatMatchScore(m.score)}
+                    </span>
+                    <span className="pl-result-vs">
+                      vs{' '}
+                      {m.team_a_id === myTeamId
+                        ? m.team_b_name || 'Opponent'
+                        : m.team_a_name || 'Opponent'}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
           </section>
         )}
 
@@ -607,13 +586,6 @@ export default function PlayerLivePage() {
             </ol>
           </section>
         ))}
-
-        {standings.length === 0 && (
-          <section className="pl-block">
-            <h2>Standings</h2>
-            <p className="pl-empty">Groups appear after the organiser generates the tournament.</p>
-          </section>
-        )}
       </main>
 
       {scoringMatch && (
@@ -654,7 +626,7 @@ export default function PlayerLivePage() {
           >
             <h2 id="pl-score-title">Log final score</h2>
             <p className="muted-note" style={{ marginTop: 0 }}>
-              The other team will confirm this before the match is finished.
+              Best of 3. Opponent confirms before it counts.
             </p>
             <div className="score-sides-label">
               <div>
@@ -675,7 +647,13 @@ export default function PlayerLivePage() {
                 [
                   ['set1_a', 'set1_b', 'Set 1'],
                   ['set2_a', 'set2_b', 'Set 2'],
-                  ['set3_a', 'set3_b', 'Set 3 (if needed)'],
+                  ...(sets.set3_a > 0 ||
+                  sets.set3_b > 0 ||
+                  (sets.set1_a !== sets.set1_b &&
+                    sets.set2_a !== sets.set2_b &&
+                    (sets.set1_a > sets.set1_b) !== (sets.set2_a > sets.set2_b))
+                    ? ([['set3_a', 'set3_b', 'Set 3']] as const)
+                    : []),
                 ] as const
               ).map(([ka, kb, label]) => (
                 <div key={label} className="form-group">

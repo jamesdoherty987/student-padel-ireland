@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
+import TournamentBracket from '../components/TournamentBracket'
 import { useAuth } from '../context/AuthContext'
 import { tournamentApi } from '../services/api'
 import { publicPathUrl } from '../native/platform'
@@ -15,6 +16,7 @@ import {
   formatMoney,
   perPlayerFeeCents,
   formatTime,
+  isKnockoutActive,
   isPastCalendarDate,
   spotsLeftLabel,
   statusBadgeClass,
@@ -90,6 +92,8 @@ export default function TournamentDetailPage() {
   const upcoming = matches
     .filter((m) => m.status === 'SCHEDULED' || m.status === 'CALLED')
     .slice(0, 8)
+  const knockoutMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
+  const knockoutActive = isKnockoutActive(matches)
   const liveUrl = publicPathUrl(`/t/${tournament.slug}/live`)
   const joinUrl = tournament.invite_code
     ? publicPathUrl(`/join/${tournament.invite_code}`)
@@ -110,6 +114,7 @@ export default function TournamentDetailPage() {
   const hasPendingCaptain = !!myTeamInfo && myPayment === 'PENDING' && mySlot === 1
   const isListedPartner = !!myTeamInfo && myPayment === 'PENDING' && mySlot !== 1
   const canLeave = !!myTeamInfo?.can_leave
+  const myTeamId = hasPaidEntry && myTeamInfo?.id ? myTeamInfo.id : undefined
 
   const singles = tournament.play_format === 'SINGLES'
   const spots = spotsLeftLabel(tournament.registered_teams, tournament.max_teams, tournament.play_format)
@@ -133,14 +138,19 @@ export default function TournamentDetailPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page tourney-detail">
-        <p className="eyebrow">{tournament.location}</p>
+        <div className="tour-title-row">
+          <p className="eyebrow">{tournament.location}</p>
+          <span className={`badge ${statusBadgeClass(tournament.status)}`}>{statusLabel(tournament.status)}</span>
+        </div>
         <h1 className="page-title">{tournament.name}</h1>
         <p className="page-sub">
           {tournament.venue} · {formatDate(tournament.event_date, { day: 'numeric', month: 'long', year: 'numeric' })} ·{' '}
           {formatTime(tournament.start_time)}
         </p>
         <p className="tour-format-line">{tournamentFormatSummary(tournament.play_format, tournament.format)}</p>
-        <p className="tour-format-hint muted">{bracketFormatHint(tournament.format)}</p>
+        {registrationOpen && (
+          <p className="tour-format-hint muted">{bracketFormatHint(tournament.format)}</p>
+        )}
 
         {(isListedPartner ||
           hasPendingCaptain ||
@@ -190,7 +200,7 @@ export default function TournamentDetailPage() {
           )}
           {hasPaidEntry && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
-              My matches · {myTeamInfo?.name}
+              My matches
             </Link>
           )}
           {!hasPaidEntry && (
@@ -198,27 +208,31 @@ export default function TournamentDetailPage() {
               Live scores
             </Link>
           )}
-          {canLeave && (
-            <LeaveTournamentButton
-              tournamentId={tournament.id}
-              slug={tournament.slug}
-              paymentStatus={myPayment}
-              teamName={myTeamInfo?.name}
-              singles={singles}
-              className="btn btn-ghost"
-            />
-          )}
           {isOps && (
-            <>
-              <Link to={`/organiser?t=${tournament.id}`} className="btn btn-dark">
-                Manage event
-              </Link>
-              <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost">
-                TV display
-              </Link>
-            </>
+            <Link to={`/organiser?t=${tournament.id}`} className="btn btn-dark">
+              Manage
+            </Link>
           )}
         </div>
+        {(canLeave || isOps) && (
+          <div className="tour-actions-secondary">
+            {canLeave && (
+              <LeaveTournamentButton
+                tournamentId={tournament.id}
+                slug={tournament.slug}
+                paymentStatus={myPayment}
+                teamName={myTeamInfo?.name}
+                singles={singles}
+                className="btn btn-ghost btn-sm"
+              />
+            )}
+            {isOps && (
+              <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost btn-sm">
+                TV display
+              </Link>
+            )}
+          </div>
+        )}
 
         <div className="tour-stats">
           {isOps && (
@@ -243,14 +257,11 @@ export default function TournamentDetailPage() {
           )}
         </div>
 
-        <div className="tour-status-row">
-          <span className={`badge ${statusBadgeClass(tournament.status)}`}>{statusLabel(tournament.status)}</span>
-          {tournament.registration_deadline && tournament.status === 'REGISTRATION_OPEN' && (
-            <span className="tour-deadline">
-              Register by {formatDate(tournament.registration_deadline, { day: 'numeric', month: 'short' })}
-            </span>
-          )}
-        </div>
+        {tournament.registration_deadline && tournament.status === 'REGISTRATION_OPEN' && (
+          <p className="tour-deadline">
+            Register by {formatDate(tournament.registration_deadline, { day: 'numeric', month: 'short' })}
+          </p>
+        )}
 
         {live.length > 0 && (
           <section className="block">
@@ -327,6 +338,12 @@ export default function TournamentDetailPage() {
             <Link to={`/t/${tournament.slug}/live`} className="tour-inline-link">
               Full live view
             </Link>
+          </section>
+        )}
+
+        {knockoutActive && (
+          <section className="block tour-bracket-block">
+            <TournamentBracket matches={knockoutMatches} myTeamId={myTeamId} />
           </section>
         )}
 

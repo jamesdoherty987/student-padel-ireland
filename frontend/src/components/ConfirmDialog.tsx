@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 
 type ConfirmDialogState = {
   isOpen: boolean
@@ -6,7 +6,8 @@ type ConfirmDialogState = {
   message: string
   confirmLabel: string
   cancelLabel: string
-  onConfirm: () => void | Promise<void>
+  danger: boolean
+  onConfirm: () => void
   onCancel: () => void
   isLoading: boolean
 }
@@ -17,33 +18,31 @@ const initialState: ConfirmDialogState = {
   message: '',
   confirmLabel: 'Confirm',
   cancelLabel: 'Cancel',
+  danger: false,
   onConfirm: () => {},
   onCancel: () => {},
   isLoading: false,
 }
 
 let dialogState = { ...initialState }
-let listeners: Set<() => void> = new Set()
-
-const subscribe = (listener: () => void) => {
-  listeners.add(listener)
-  return () => listeners.delete(listener)
-}
+const listeners = new Set<() => void>()
 
 const notify = () => {
   listeners.forEach((listener) => listener())
 }
 
-export const confirmDialog = async ({
+export const confirmDialog = ({
   title,
   message,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
+  danger = false,
 }: {
   title: string
   message: string
   confirmLabel?: string
   cancelLabel?: string
+  danger?: boolean
 }): Promise<boolean> => {
   return new Promise((resolve) => {
     dialogState = {
@@ -52,13 +51,10 @@ export const confirmDialog = async ({
       message,
       confirmLabel,
       cancelLabel,
+      danger,
       isLoading: false,
-      onConfirm: () => {
-        resolve(true)
-      },
-      onCancel: () => {
-        resolve(false)
-      },
+      onConfirm: () => resolve(true),
+      onCancel: () => resolve(false),
     }
     notify()
   })
@@ -67,57 +63,77 @@ export const confirmDialog = async ({
 export function ConfirmDialogProvider() {
   const [state, setState] = useState(dialogState)
 
-  const unsubscribe = useCallback(() => {
-    return subscribe(() => {
-      setState({ ...dialogState })
-    })
+  useEffect(() => {
+    const sync = () => setState({ ...dialogState })
+    listeners.add(sync)
+    return () => {
+      listeners.delete(sync)
+    }
   }, [])
 
-  // Subscribe on mount
-  unsubscribe()
-
-  const handleConfirm = async () => {
-    setState((s) => ({ ...s, isLoading: true }))
-    dialogState.isLoading = true
-    try {
-      await state.onConfirm()
-    } finally {
-      setState((s) => ({ ...s, isOpen: false, isLoading: false }))
-      dialogState = { ...initialState }
+  useEffect(() => {
+    if (!state.isOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    document.documentElement.classList.add('modal-open')
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !dialogState.isLoading) {
+        dialogState.onCancel()
+        dialogState = { ...initialState }
+        notify()
+      }
     }
-  }
-
-  const handleCancel = () => {
-    state.onCancel()
-    setState((s) => ({ ...s, isOpen: false }))
-    dialogState = { ...initialState }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape' && !state.isLoading) {
-      handleCancel()
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      document.documentElement.classList.remove('modal-open')
+      window.removeEventListener('keydown', onKey)
     }
-  }
+  }, [state.isOpen])
 
   if (!state.isOpen) return null
 
+  const closeWith = (fn: () => void) => {
+    fn()
+    dialogState = { ...initialState }
+    notify()
+  }
+
   return (
-    <div className="modal-backdrop" onClick={handleCancel} onKeyDown={handleKeyDown} role="presentation">
+    <div
+      className="modal-backdrop"
+      onClick={() => {
+        if (!state.isLoading) closeWith(state.onCancel)
+      }}
+      role="presentation"
+    >
       <div
-        className="modal"
+        className="modal confirm-dialog"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
+        aria-describedby="confirm-dialog-message"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="confirm-dialog-title">{state.title}</h2>
-        <p>{state.message}</p>
+        <p id="confirm-dialog-message">{state.message}</p>
         <div className="modal-actions">
-          <button className="btn btn-ghost" onClick={handleCancel} disabled={state.isLoading}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => closeWith(state.onCancel)}
+            disabled={state.isLoading}
+          >
             {state.cancelLabel}
           </button>
-          <button className="btn btn-primary" onClick={handleConfirm} disabled={state.isLoading}>
-            {state.isLoading ? 'Please wait…' : state.confirmLabel}
+          <button
+            type="button"
+            className={`btn ${state.danger ? 'btn-danger' : 'btn-primary'}`}
+            onClick={() => closeWith(state.onConfirm)}
+            disabled={state.isLoading}
+            autoFocus
+          >
+            {state.confirmLabel}
           </button>
         </div>
       </div>

@@ -229,5 +229,4 @@ create table if not exists platform_settings (
   updated_at timestamptz default now()
 );
 
--- RLS guidance: enable RLS in Supabase and only allow the FastAPI service role
--- for writes. Never expose SUPABASE_SERVICE_ROLE_KEY to the frontend.
+-- RLS: see 007_enable_rls.sql. Never expose SUPABASE_SERVICE_ROLE_KEY to the frontend.

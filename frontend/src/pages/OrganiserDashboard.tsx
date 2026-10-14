@@ -3,8 +3,10 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
+import { confirmDialog } from '../components/ConfirmDialog'
 import EditTournamentModal from '../components/EditTournamentModal'
 import NumberInput from '../components/NumberInput'
+import TournamentBracket from '../components/TournamentBracket'
 import TournamentFormFields, { type TournamentFormState } from '../components/TournamentFormFields'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl } from '../native/platform'
@@ -69,7 +71,7 @@ export default function OrganiserDashboard() {
   const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
   const [moveMatch, setMoveMatch] = useState<Match | null>(null)
   const [moveForm, setMoveForm] = useState({ court_number: 1, scheduled_time: '' })
-  const [matchView, setMatchView] = useState<'list' | 'courts'>('list')
+  const [matchView, setMatchView] = useState<'list' | 'courts' | 'bracket'>('list')
   const [courtFilter, setCourtFilter] = useState<string>('all')
   const [matchFilter, setMatchFilter] = useState<'active' | 'all' | 'done'>('active')
   const [scoreForm, setScoreForm] = useState({
@@ -545,6 +547,14 @@ export default function OrganiserDashboard() {
     })
   }, [matches, courtFilter, matchFilter])
 
+  const hasKnockoutMatches = matches.some((m) => m.stage === 'KNOCKOUT')
+
+  useEffect(() => {
+    if (matchView === 'bracket' && !hasKnockoutMatches) {
+      setMatchView('list')
+    }
+  }, [matchView, hasKnockoutMatches])
+
   const openScore = (m: Match) => {
     if (!m.team_a_id || !m.team_b_id) return
     setScoreError('')
@@ -828,7 +838,13 @@ export default function OrganiserDashboard() {
                     <button
                       className="btn btn-primary"
                       onClick={() => {
-                        if (window.confirm('Mark this tournament as completed?')) completeMut.mutate()
+                        void confirmDialog({
+                          title: 'Mark completed?',
+                          message: 'This ends the tournament for players on the live board.',
+                          confirmLabel: 'Mark completed',
+                        }).then((ok) => {
+                          if (ok) completeMut.mutate()
+                        })
                       }}
                       disabled={completeMut.isPending}
                     >
@@ -841,52 +857,65 @@ export default function OrganiserDashboard() {
                       className="btn btn-primary"
                       disabled={restoreMut.isPending}
                       onClick={() => {
-                        if (window.confirm('Restore this tournament as a draft?')) {
-                          restoreMut.mutate()
-                        }
+                        void confirmDialog({
+                          title: 'Restore as draft?',
+                          message: 'Players will not see this event until you open registration again.',
+                          confirmLabel: 'Restore',
+                        }).then((ok) => {
+                          if (ok) restoreMut.mutate()
+                        })
                       }}
                     >
                       {restoreMut.isPending ? 'Restoring…' : 'Restore as draft'}
                     </button>
                   )}
-                  {active.tournament.status !== 'CANCELLED' &&
-                    active.tournament.status !== 'COMPLETED' && (
+                </div>
+                {(active.tournament.status !== 'CANCELLED' &&
+                  active.tournament.status !== 'COMPLETED') ||
+                isOwner ? (
+                  <div className="org-header-danger">
+                    {active.tournament.status !== 'CANCELLED' &&
+                      active.tournament.status !== 'COMPLETED' && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={cancelMut.isPending}
+                          onClick={() => {
+                            void confirmDialog({
+                              title: 'Cancel event?',
+                              message:
+                                'Players will no longer be able to register or play. You can restore it later as a draft.',
+                              confirmLabel: 'Cancel event',
+                              danger: true,
+                            }).then((ok) => {
+                              if (ok) cancelMut.mutate()
+                            })
+                          }}
+                        >
+                          Cancel event
+                        </button>
+                      )}
+                    {isOwner && (
                       <button
                         type="button"
-                        className="btn btn-ghost"
-                        disabled={cancelMut.isPending}
+                        className="btn btn-danger btn-sm"
+                        disabled={deleteMut.isPending}
                         onClick={() => {
-                          if (
-                            window.confirm(
-                              'Cancel this tournament? Players will no longer be able to register or play.',
-                            )
-                          ) {
-                            cancelMut.mutate()
-                          }
+                          void confirmDialog({
+                            title: 'Delete forever?',
+                            message: `Permanently delete “${active.tournament.name}”? This removes teams, matches, and scores.`,
+                            confirmLabel: 'Delete',
+                            danger: true,
+                          }).then((ok) => {
+                            if (ok) deleteMut.mutate()
+                          })
                         }}
                       >
-                        Cancel event
+                        {deleteMut.isPending ? 'Deleting…' : 'Delete'}
                       </button>
                     )}
-                  {isOwner && (
-                    <button
-                      type="button"
-                      className="btn btn-danger"
-                      disabled={deleteMut.isPending}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Permanently delete "${active.tournament.name}"? This removes teams, matches, and scores. This cannot be undone.`,
-                          )
-                        ) {
-                          deleteMut.mutate()
-                        }
-                      }}
-                    >
-                      {deleteMut.isPending ? 'Deleting…' : 'Delete'}
-                    </button>
-                  )}
-                </div>
+                  </div>
+                ) : null}
               </header>
 
               <div className="org-stats">
@@ -993,9 +1022,14 @@ export default function OrganiserDashboard() {
                               className="btn btn-ghost btn-sm"
                               disabled={withdrawMut.isPending}
                               onClick={() => {
-                                if (window.confirm(`Remove unpaid entry ${team.name}?`)) {
-                                  withdrawMut.mutate(team.id)
-                                }
+                                void confirmDialog({
+                                  title: 'Remove entry?',
+                                  message: `Remove unpaid entry ${team.name}?`,
+                                  confirmLabel: 'Remove',
+                                  danger: true,
+                                }).then((ok) => {
+                                  if (ok) withdrawMut.mutate(team.id)
+                                })
                               }}
                             >
                               Remove
@@ -1013,9 +1047,14 @@ export default function OrganiserDashboard() {
                                     ? `Withdraw ${team.name}? Regenerate the draw afterwards so fixtures stay correct.`
                                     : `Withdraw ${team.name}?`
                                   const msg = `${base} Entry fees are not refunded automatically.`
-                                  if (window.confirm(msg)) {
-                                    withdrawMut.mutate(team.id)
-                                  }
+                                  void confirmDialog({
+                                    title: 'Withdraw team?',
+                                    message: msg,
+                                    confirmLabel: 'Withdraw',
+                                    danger: true,
+                                  }).then((ok) => {
+                                    if (ok) withdrawMut.mutate(team.id)
+                                  })
                                 }}
                               >
                                 Withdraw
@@ -1073,17 +1112,28 @@ export default function OrganiserDashboard() {
                       >
                         By court
                       </button>
+                      {hasKnockoutMatches && (
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${matchView === 'bracket' ? 'btn-dark' : 'btn-ghost'}`}
+                          onClick={() => setMatchView('bracket')}
+                        >
+                          Bracket
+                        </button>
+                      )}
                     </div>
-                    <select
-                      className="form-select"
-                      value={matchFilter}
-                      onChange={(e) => setMatchFilter(e.target.value as 'active' | 'all' | 'done')}
-                      aria-label="Filter matches by status"
-                    >
-                      <option value="active">Active (scheduled / called / live)</option>
-                      <option value="done">Completed</option>
-                      <option value="all">All matches</option>
-                    </select>
+                    {matchView !== 'bracket' && (
+                      <select
+                        className="form-select"
+                        value={matchFilter}
+                        onChange={(e) => setMatchFilter(e.target.value as 'active' | 'all' | 'done')}
+                        aria-label="Filter matches by status"
+                      >
+                        <option value="active">Active (scheduled / called / live)</option>
+                        <option value="done">Completed</option>
+                        <option value="all">All matches</option>
+                      </select>
+                    )}
                     {matchView === 'list' && (
                       <select
                         className="form-select"
@@ -1099,6 +1149,11 @@ export default function OrganiserDashboard() {
                         ))}
                       </select>
                     )}
+                  </div>
+                )}
+                {matchView === 'bracket' && hasKnockoutMatches && (
+                  <div className="org-bracket">
+                    <TournamentBracket matches={matches.filter((m) => m.stage === 'KNOCKOUT')} />
                   </div>
                 )}
                 {matchView === 'courts' && matches.length > 0 && (
@@ -1206,9 +1261,14 @@ export default function OrganiserDashboard() {
                           className="btn btn-ghost btn-sm"
                           disabled={deleteAnnounceMut.isPending}
                           onClick={() => {
-                            if (window.confirm(`Delete announcement “${a.title}”?`)) {
-                              deleteAnnounceMut.mutate(a.id)
-                            }
+                            void confirmDialog({
+                              title: 'Delete announcement?',
+                              message: `Delete “${a.title}”?`,
+                              confirmLabel: 'Delete',
+                              danger: true,
+                            }).then((ok) => {
+                              if (ok) deleteAnnounceMut.mutate(a.id)
+                            })
                           }}
                         >
                           Delete
@@ -1266,13 +1326,13 @@ export default function OrganiserDashboard() {
                             className="btn btn-ghost btn-sm"
                             disabled={transferOwnerMut.isPending}
                             onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Transfer ownership to ${a.full_name}? The previous owner stays as a co-admin.`,
-                                )
-                              ) {
-                                transferOwnerMut.mutate(a.user_id)
-                              }
+                              void confirmDialog({
+                                title: 'Transfer ownership?',
+                                message: `Make ${a.full_name} the owner? You stay as a co-admin.`,
+                                confirmLabel: 'Transfer',
+                              }).then((ok) => {
+                                if (ok) transferOwnerMut.mutate(a.user_id)
+                              })
                             }}
                           >
                             Make owner
@@ -1282,9 +1342,14 @@ export default function OrganiserDashboard() {
                             className="btn btn-ghost btn-sm"
                             disabled={removeAdminMut.isPending}
                             onClick={() => {
-                              if (window.confirm(`Remove ${a.full_name} as admin?`)) {
-                                removeAdminMut.mutate(a.user_id)
-                              }
+                              void confirmDialog({
+                                title: 'Remove admin?',
+                                message: `Remove ${a.full_name} as admin?`,
+                                confirmLabel: 'Remove',
+                                danger: true,
+                              }).then((ok) => {
+                                if (ok) removeAdminMut.mutate(a.user_id)
+                              })
                             }}
                           >
                             Remove

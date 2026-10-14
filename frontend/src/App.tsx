@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react'
 import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ConfirmDialogProvider } from './components/ConfirmDialog'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import NativeTabBar from './components/NativeTabBar'
 import OfflineBanner from './components/OfflineBanner'
@@ -139,19 +140,10 @@ function RootRoute() {
 
 function RouteFallback() {
   return (
-    <div
-      style={{
-        minHeight: '40vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: '#0b3d2e',
-        fontFamily: 'system-ui, sans-serif',
-        fontWeight: 600,
-      }}
-      aria-busy="true"
-    >
-      Loading…
+    <div className="route-fallback" aria-busy="true">
+      <div className="skeleton" style={{ width: 'min(16rem, 70%)', height: 22, marginBottom: 12 }} />
+      <div className="skeleton" style={{ width: 'min(22rem, 90%)', height: 14 }} />
+      <span className="visually-hidden">Loading</span>
     </div>
   )
 }
@@ -164,6 +156,7 @@ export default function App() {
           <AuthPersistBridge>
             <NativeDeepLinkRouter />
             <OfflineBanner />
+            <ConfirmDialogProvider />
             <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/" element={<RootRoute />} />

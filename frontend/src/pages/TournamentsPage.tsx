@@ -230,15 +230,10 @@ export default function TournamentsPage() {
                 Create
               </button>
             )}
-            {user && (
-              <Link to="/organiser" className="btn btn-ghost btn-sm">
-                My events
-              </Link>
-            )}
           </div>
         </div>
         <p className="page-sub">
-          Join official brackets or friend tournaments. Host your own from Create or My events.
+          Official brackets and friend open-play. Have a code? Use it above — or create your own.
         </p>
 
         {error && <p className="form-error">{error}</p>}
@@ -252,10 +247,10 @@ export default function TournamentsPage() {
               createMut.mutate()
             }}
           >
-            <h2>Create a tournament</h2>
+            <h2>Create friend open-play</h2>
             <p className="muted-note" style={{ marginBottom: 12 }}>
-              Friend open-play below, or{' '}
-              <Link to="/organiser?create=1">run a full bracket</Link> (groups, knockout, live scoring).
+              Quick games with friends. For groups, knockout, and paid entries,{' '}
+              <Link to="/organiser?create=1">set up a full bracket</Link>.
             </p>
             <div className="form-group">
               <label className="form-label" htmlFor="comp-name">

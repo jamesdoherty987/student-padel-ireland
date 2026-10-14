@@ -101,6 +101,68 @@ export function bracketFormatHint(format?: string | null) {
   return 'Split into groups first. Top finishers from each group advance to a knockout bracket.'
 }
 
+/** Display label for knockout / group round codes from the API. */
+export function knockoutRoundLabel(round: string, stage?: string) {
+  if (!round) return stage === 'KNOCKOUT' ? 'Knockout' : 'Match'
+  if (round.startsWith('GROUP_')) return `Group ${round.replace('GROUP_', '')}`
+  const map: Record<string, string> = {
+    ROUND_OF_64: 'Round of 64',
+    ROUND_OF_32: 'Round of 32',
+    ROUND_OF_16: 'Round of 16',
+    R16: 'Round of 16',
+    QUARTER_FINAL: 'Quarter-final',
+    QF: 'Quarter-final',
+    SEMI_FINAL: 'Semi-final',
+    SF: 'Semi-final',
+    FINAL: 'Final',
+    BRONZE: '3rd place',
+  }
+  return map[round] || round.replace(/_/g, ' ')
+}
+
+/** Sort key for knockout rounds (earlier rounds first). */
+export function knockoutRoundOrder(round: string) {
+  const order: Record<string, number> = {
+    ROUND_OF_64: 10,
+    ROUND_OF_32: 20,
+    ROUND_OF_16: 30,
+    R16: 30,
+    QUARTER_FINAL: 40,
+    QF: 40,
+    SEMI_FINAL: 50,
+    SF: 50,
+    FINAL: 60,
+    BRONZE: 70,
+  }
+  if (order[round] != null) return order[round]
+  const m = round.match(/^ROUND_OF_(\d+)$/)
+  if (m) return 1000 - Number(m[1])
+  return 500
+}
+
+/** True once knockout has real teams or results (not just empty placeholders). */
+export function isKnockoutActive(
+  matches: Array<{
+    stage: string
+    team_a_id?: string | null
+    team_b_id?: string | null
+    status: string
+  }>,
+) {
+  const ko = matches.filter((m) => m.stage === 'KNOCKOUT')
+  if (!ko.length) return false
+  return ko.some(
+    (m) =>
+      !!m.team_a_id ||
+      !!m.team_b_id ||
+      m.status === 'LIVE' ||
+      m.status === 'CALLED' ||
+      m.status === 'COMPLETED' ||
+      m.status === 'WALKOVER' ||
+      m.status === 'AWAITING_CONFIRM',
+  )
+}
+
 export function parseCalendarDate(iso: string) {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (m) {

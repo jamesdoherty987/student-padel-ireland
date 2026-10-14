@@ -258,29 +258,32 @@ export function SignupPage() {
               }))}
             />
           </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="signup-phone">
-              Phone (optional)
-            </label>
-            <input
-              id="signup-phone"
-              className="form-input"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              autoComplete="tel"
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="signup-student">
-              Student number (optional)
-            </label>
-            <input
-              id="signup-student"
-              className="form-input"
-              value={form.student_number}
-              onChange={(e) => setForm({ ...form, student_number: e.target.value })}
-            />
-          </div>
+          <details className="auth-more">
+            <summary>Optional details</summary>
+            <div className="form-group">
+              <label className="form-label" htmlFor="signup-phone">
+                Phone
+              </label>
+              <input
+                id="signup-phone"
+                className="form-input"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                autoComplete="tel"
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="signup-student">
+                Student number
+              </label>
+              <input
+                id="signup-student"
+                className="form-input"
+                value={form.student_number}
+                onChange={(e) => setForm({ ...form, student_number: e.target.value })}
+              />
+            </div>
+          </details>
           <label className="auth-remember">
             <input
               type="checkbox"

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { confirmDialog } from './ConfirmDialog'
 import { apiErrorMessage, tournamentApi } from '../services/api'
 
 type Props = {
@@ -62,7 +63,14 @@ export default function LeaveTournamentButton({
   const label = children || defaultLabel(paymentStatus, singles)
 
   const onClick = async () => {
-    if (!window.confirm(confirmMessage(paymentStatus, teamName, singles))) return
+    const ok = await confirmDialog({
+      title: paymentStatus === 'PAID' ? 'Withdraw?' : 'Cancel entry?',
+      message: confirmMessage(paymentStatus, teamName, singles),
+      confirmLabel: paymentStatus === 'PAID' ? 'Withdraw' : 'Cancel entry',
+      cancelLabel: 'Keep playing',
+      danger: true,
+    })
+    if (!ok) return
     setLoading(true)
     setError('')
     try {
