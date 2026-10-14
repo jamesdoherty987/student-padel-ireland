@@ -1,4 +1,4 @@
-# https://studentpadel.ie/robots.txt
+# https://www.studentpadel.ie/robots.txt
 User-agent: *
 Allow: /
 
@@ -10,7 +10,7 @@ Disallow: /login
 Disallow: /signup
 Disallow: /tournament/*/display
 
-Sitemap: https://studentpadel.ie/sitemap.xml
+Sitemap: https://www.studentpadel.ie/sitemap.xml
 
 # RSS for blog discovery
-# https://studentpadel.ie/feed.xml
+# https://www.studentpadel.ie/feed.xml

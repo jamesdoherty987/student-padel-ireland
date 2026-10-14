@@ -8,7 +8,7 @@ import { usePageSeo } from '../hooks/usePageSeo'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { apiErrorMessage, platformApi } from '../services/api'
-import { safeNextPath } from '../utils/navigation'
+import { homeForRole, safeNextPath } from '../utils/navigation'
 import './Auth.css'
 
 function useDarkStatusBar() {
@@ -18,10 +18,6 @@ function useDarkStatusBar() {
       void setStatusBarForLightScreen()
     }
   }, [])
-}
-
-function homeForRole(role: string) {
-  return role === 'ADMIN' ? '/admin' : '/tournaments'
 }
 
 function PasswordField({

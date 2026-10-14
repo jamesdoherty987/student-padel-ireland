@@ -1,10 +1,15 @@
 import { Link } from 'react-router-dom'
 import NavBar from '../components/NavBar'
+import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
+import { homeForRole } from '../utils/navigation'
 import './Blog.css'
 import './Legal.css'
 
 export default function AboutPage() {
+  const { user } = useAuth()
+  const backTo = user ? homeForRole(user.role) : '/'
+
   usePageSeo({
     title: 'About Student Padel Ireland',
     description:
@@ -17,7 +22,7 @@ export default function AboutPage() {
       <NavBar />
       <main className="page legal-page">
         <p className="eyebrow">
-          <Link to="/">← Home</Link>
+          <Link to={backTo}>← Home</Link>
         </p>
         <h1 className="page-title">About Student Padel Ireland</h1>
         <p className="page-sub">Ireland’s student padel competition platform</p>
@@ -44,13 +49,6 @@ export default function AboutPage() {
             same tools.
           </p>
 
-          <h2>Learn more</h2>
-          <p>
-            Read our guides on the <Link to="/blog">blog</Link>, browse{' '}
-            <Link to="/tournaments">upcoming tournaments</Link>, or check the{' '}
-            <Link to="/rankings">Ireland rankings</Link>.
-          </p>
-
           <h2>Contact</h2>
           <p>
             Questions or partnership ideas:{' '}
@@ -61,8 +59,8 @@ export default function AboutPage() {
             <Link to="/signup" className="btn btn-primary">
               Create an account
             </Link>
-            <Link to="/blog" className="btn btn-ghost">
-              Read the blog
+            <Link to="/tournaments" className="btn btn-ghost">
+              Browse tournaments
             </Link>
           </div>
         </div>

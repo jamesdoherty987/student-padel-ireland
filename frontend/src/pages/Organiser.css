@@ -6,7 +6,8 @@
   flex-direction: column;
 }
 
-.org-layout > .app-nav,
+.org-layout > .app-topbar,
+.org-layout > .app-sidebar,
 .org-layout > header {
   flex-shrink: 0;
 }

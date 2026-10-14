@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import BrandLogo from '../components/BrandLogo'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
+import { homeForRole } from '../utils/navigation'
 import { useEffect } from 'react'
 import './NativeWelcome.css'
 
@@ -21,8 +22,20 @@ export default function NativeWelcomePage() {
     return <Navigate to="/" replace />
   }
 
-  if (!loading && user) {
-    return <Navigate to="/tournaments" replace />
+  if (loading) {
+    return (
+      <div className="native-welcome" aria-busy="true">
+        <div className="native-welcome-bg" aria-hidden />
+        <div className="native-welcome-inner">
+          <BrandLogo to={null} className="native-welcome-brand" size="xl" />
+          <p className="native-welcome-sub">Loading…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (user) {
+    return <Navigate to={homeForRole(user.role)} replace />
   }
 
   return (

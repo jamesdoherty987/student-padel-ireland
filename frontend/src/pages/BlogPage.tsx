@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
-import NavBar from '../components/NavBar'
+import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { getAllPosts } from '../data/blogPosts'
+import { homeForRole } from '../utils/navigation'
 import './Blog.css'
 import './Legal.css'
 
@@ -13,28 +14,28 @@ function formatDate(iso: string) {
   })
 }
 
+/** Quiet SEO index — not linked from the main app UI. */
 export default function BlogPage() {
+  const { user } = useAuth()
+  const backTo = user ? homeForRole(user.role) : '/'
+
   usePageSeo({
-    title: 'Student Padel Ireland Blog',
+    title: 'Student Padel Ireland Guides',
     description:
-      'Guides to student padel in Ireland — tournaments, rankings, beginners tips, and how university clubs use Student Padel Ireland.',
+      'Guides to student padel in Ireland — tournaments, rankings, beginners tips, and campus clubs on Student Padel Ireland.',
     path: '/blog',
   })
 
   const posts = getAllPosts()
 
   return (
-    <div className="app-shell">
-      <NavBar />
+    <div className="app-shell blog-shell">
       <main className="page blog-page blog-page--index">
         <p className="eyebrow">
-          <Link to="/">← Home</Link>
+          <Link to={backTo}>← Student Padel Ireland</Link>
         </p>
-        <h1 className="page-title">Blog</h1>
-        <p className="blog-lead">
-          Guides and updates for student padel across Ireland — how to join tournaments, climb rankings, and
-          grow campus clubs on Student Padel Ireland.
-        </p>
+        <h1 className="page-title">Guides</h1>
+        <p className="blog-lead">Notes on student padel across Ireland.</p>
 
         <ul className="blog-grid">
           {posts.map((post) => (
@@ -42,17 +43,9 @@ export default function BlogPage() {
               <Link to={`/blog/${post.slug}`} className="blog-card">
                 <div className="blog-meta">
                   <time dateTime={post.publishedAt}>{formatDate(post.publishedAt)}</time>
-                  <span>{post.readingMinutes} min read</span>
                 </div>
                 <h2>{post.title}</h2>
                 <p>{post.description}</p>
-                <div className="blog-tags">
-                  {post.tags.slice(0, 3).map((tag) => (
-                    <span key={tag} className="blog-tag">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
               </Link>
             </li>
           ))}

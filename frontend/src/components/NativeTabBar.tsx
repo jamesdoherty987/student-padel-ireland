@@ -10,16 +10,21 @@ const HIDDEN_PREFIXES = [
   '/signup',
   '/privacy',
   '/terms',
+  '/about',
+  '/blog',
   '/admin',
   '/organiser',
   '/tournament/',
   '/welcome',
+  '/join',
+  '/404',
 ]
 
 export function nativeTabsHiddenForPath(pathname: string): boolean {
   if (pathname === '/') return true
   // Keep match-day focus — no bottom tabs over live scoring / join
   if (/^\/t\/[^/]+\/(live|join|confirmed)(\/|$)/.test(pathname)) return true
+  if (pathname.startsWith('/t/join/')) return true
   return HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))
 }
 

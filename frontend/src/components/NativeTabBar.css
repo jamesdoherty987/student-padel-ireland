@@ -47,7 +47,12 @@
 }
 
 html.native-app.has-native-tabs .app-shell {
-  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  /* Tab bar already includes home-indicator padding */
+  padding-bottom: 4.5rem;
+}
+
+html.native-app.has-native-tabs .page {
+  padding-bottom: 1.75rem;
 }
 
 .offline-banner {
@@ -65,7 +70,7 @@ html.native-app.has-native-tabs .app-shell {
 }
 
 /* Keep sticky/fixed headers below the offline strip */
-html:has(.offline-banner) .app-nav {
+html:has(.offline-banner) .app-topbar {
   top: 2.75rem;
 }
 

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react'
-import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmDialogProvider } from './components/ConfirmDialog'
@@ -11,6 +11,7 @@ import { NativeDeepLinkRouter } from './native/NativeDeepLinkRouter'
 import { apiBaseUrl, isNativeApp } from './native/platform'
 import { communityApi, tournamentApi } from './services/api'
 import { clearQueryCachePersist, restoreQueryCache, schedulePersistQueryCache } from './utils/queryPersist'
+import { homeForRole } from './utils/navigation'
 
 // Landing stays eager — first paint for web home. Everything else is code-split.
 import Landing from './pages/Landing'
@@ -138,7 +139,11 @@ function AuthPersistBridge({ children }: { children: ReactNode }) {
 }
 
 function RootRoute() {
+  const { user, loading } = useAuth()
   if (isNativeApp()) return <NativeWelcomePage />
+  // Marketing site for guests only — logged-in users go straight into the app
+  if (loading) return <RouteFallback />
+  if (user) return <Navigate to={homeForRole(user.role)} replace />
   return <Landing />
 }
 

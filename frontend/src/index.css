@@ -198,6 +198,9 @@ img {
 
 .btn:focus-visible,
 .filter-chip:focus-visible,
+.app-sidebar-link:focus-visible,
+.app-topbar-menu:focus-visible,
+.notif-bell:focus-visible,
 .app-nav-links a:focus-visible,
 .app-nav-menu-btn:focus-visible,
 .lp-nav a:focus-visible,
@@ -1030,7 +1033,7 @@ input[type='datetime-local']::-webkit-datetime-edit {
     flex-shrink: 0;
   }
 
-  .notif-panel {
+  .app-topbar .notif-panel {
     position: fixed;
     top: max(4.25rem, calc(3.5rem + env(safe-area-inset-top)));
     right: max(0.75rem, env(safe-area-inset-right));
@@ -1040,7 +1043,7 @@ input[type='datetime-local']::-webkit-datetime-edit {
     z-index: 95;
   }
 
-  html.has-native-tabs .notif-panel {
+  html.has-native-tabs .app-topbar .notif-panel {
     max-height: min(62vh, calc(100dvh - 9.5rem - env(safe-area-inset-bottom)));
     padding-bottom: 0.5rem;
   }

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const SITE = 'https://studentpadel.ie'
+const SITE = 'https://www.studentpadel.ie'
 const DEFAULT_TITLE = 'Student Padel Ireland | Student Padel Tournaments & Rankings'
 const DEFAULT_DESCRIPTION =
   'Student Padel Ireland — find student padel tournaments across Ireland, join with a code, play community games, and climb the national rankings. Dublin, Cork, Galway, Limerick, Belfast & Waterford.'

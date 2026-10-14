@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import NavBar from '../components/NavBar'
+import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { getPostBySlug, getRelatedPosts, type BlogBlock } from '../data/blogPosts'
+import { homeForRole } from '../utils/navigation'
 import './Blog.css'
 import './Legal.css'
 
-const SITE = 'https://studentpadel.ie'
+const SITE = 'https://www.studentpadel.ie'
 
 function formatDate(iso: string) {
   return new Date(`${iso}T12:00:00`).toLocaleDateString('en-IE', {
@@ -28,20 +29,21 @@ function Block({ block }: { block: BlogBlock }) {
       </ul>
     )
   }
+  // Quiet CTA — text link only, no promo card
   return (
-    <div className="blog-cta">
-      <p>{block.text}</p>
-      <Link to={block.to} className="btn btn-primary">
-        {block.label}
-      </Link>
-    </div>
+    <p className="blog-inline-cta">
+      <Link to={block.to}>{block.label}</Link>
+    </p>
   )
 }
 
+/** Quiet SEO article — not promoted in the main app UI. */
 export default function BlogPostPage() {
   const { slug = '' } = useParams()
+  const { user } = useAuth()
+  const backTo = user ? homeForRole(user.role) : '/'
   const post = getPostBySlug(slug)
-  const related = post ? getRelatedPosts(post.slug) : []
+  const related = post ? getRelatedPosts(post.slug, 2) : []
 
   usePageSeo(
     post
@@ -52,7 +54,7 @@ export default function BlogPostPage() {
           type: 'article',
           publishedTime: post.publishedAt,
           modifiedTime: post.updatedAt || post.publishedAt,
-          image: 'https://studentpadel.ie/images/student-padel-ireland-og.jpg',
+          image: 'https://www.studentpadel.ie/images/student-padel-ireland-og.jpg',
         }
       : {
           title: 'Article not found',
@@ -104,36 +106,26 @@ export default function BlogPostPage() {
   }
 
   return (
-    <div className="app-shell">
-      <NavBar />
+    <div className="app-shell blog-shell">
       <main className="page blog-page">
         <article className="blog-article">
           <p className="eyebrow">
-            <Link to="/blog">← Blog</Link>
+            <Link to={backTo}>← Student Padel Ireland</Link>
           </p>
           <h1 className="page-title">{post.title}</h1>
           <div className="blog-meta">
             <time dateTime={post.publishedAt}>{formatDate(post.publishedAt)}</time>
-            <span>{post.readingMinutes} min read</span>
-            <span>Student Padel Ireland</span>
           </div>
           <div className="blog-body">
             {post.body.map((block, i) => (
               <Block key={`${block.type}-${i}`} block={block} />
             ))}
           </div>
-          <div className="blog-tags" style={{ marginTop: '1.5rem' }}>
-            {post.tags.map((tag) => (
-              <span key={tag} className="blog-tag">
-                {tag}
-              </span>
-            ))}
-          </div>
         </article>
 
         {related.length > 0 && (
           <aside className="blog-related">
-            <h2>Related guides</h2>
+            <p className="blog-related-label">More</p>
             <ul className="blog-related-list">
               {related.map((r) => (
                 <li key={r.slug}>
