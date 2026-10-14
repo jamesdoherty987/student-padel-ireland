@@ -34,6 +34,7 @@ type TournamentFormState = {
   start_time: string
   number_of_courts: number
   entry_fee_euros: number
+  pay_on_arrival: boolean
   max_teams: number
   format: string
   play_format: string
@@ -52,6 +53,7 @@ const EMPTY_FORM: TournamentFormState = {
   start_time: '10:00',
   number_of_courts: 6,
   entry_fee_euros: 50,
+  pay_on_arrival: true,
   max_teams: 48,
   format: 'GROUP_KNOCKOUT',
   play_format: 'DOUBLES',
@@ -89,6 +91,7 @@ function formFromTournament(t: Tournament): TournamentFormState {
     start_time: t.start_time?.slice(0, 5) || '10:00',
     number_of_courts: t.number_of_courts,
     entry_fee_euros: Math.round(t.entry_fee_cents) / 100,
+    pay_on_arrival: t.pay_on_arrival !== false,
     max_teams: t.max_teams,
     format: t.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : 'GROUP_KNOCKOUT',
     play_format: t.play_format === 'SINGLES' ? 'SINGLES' : 'DOUBLES',
@@ -112,6 +115,7 @@ function payloadFromForm(
     event_date: form.event_date,
     start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
     entry_fee_cents: Math.round(Number(form.entry_fee_euros) * 100),
+    pay_on_arrival: form.pay_on_arrival,
     max_teams: Number(form.max_teams),
     match_duration_minutes: Number(form.match_duration_minutes) || 20,
     description: form.description.trim() || null,
@@ -719,7 +723,10 @@ function TournamentModal({
                 step={0.5}
                 emptyValue={0}
                 value={form.entry_fee_euros}
-                onValueChange={(n) => set('entry_fee_euros', n)}
+                onValueChange={(n) => {
+                  set('entry_fee_euros', n)
+                  if (n <= 0) set('pay_on_arrival', false)
+                }}
                 disabled={saving}
               />
               {form.play_format !== 'SINGLES' && (
@@ -727,6 +734,23 @@ function TournamentModal({
               )}
             </div>
           </div>
+          {form.entry_fee_euros > 0 && (
+            <label className="tf-check" style={{ marginBottom: '1rem' }}>
+              <input
+                type="checkbox"
+                checked={form.pay_on_arrival}
+                onChange={(e) => set('pay_on_arrival', e.target.checked)}
+                disabled={saving}
+              />
+              <span>
+                Pay on arrival
+                <small className="form-hint">
+                  Players confirm online; collect at the venue. They can still choose pay online for
+                  the full team fee.
+                </small>
+              </span>
+            </label>
+          )}
           <div className="form-group">
             <label className="form-label">Description</label>
             <textarea

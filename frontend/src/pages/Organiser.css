@@ -358,6 +358,60 @@
   gap: 0.4rem;
 }
 
+.org-pay-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0 0 0.85rem;
+}
+
+.org-pay-filters {
+  flex-wrap: wrap;
+}
+
+.org-pay-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.org-pay-hint strong {
+  color: var(--court-deep);
+  font-weight: 700;
+}
+
+.org-row.is-owing {
+  background: rgba(217, 119, 6, 0.06);
+  margin: 0 -0.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  border-radius: 8px;
+}
+
+.org-pay-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.org-pay-row > div:first-child .badge {
+  margin-top: 0.15rem;
+}
+
+.org-pay-actions {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+@media (min-width: 640px) {
+  .org-pay-actions {
+    width: auto;
+    justify-content: flex-end;
+  }
+}
+
 .org-row.is-called {
   background: rgba(200, 230, 0, 0.1);
   margin: 0 -0.5rem;
@@ -698,6 +752,90 @@
 
 .modal h2 {
   margin-bottom: 0.5rem;
+}
+
+.org-gen-lead {
+  color: var(--muted);
+  margin: 0 0 0.85rem;
+  line-height: 1.45;
+}
+
+.org-gen-meta {
+  color: var(--muted);
+  margin: 0 0 1rem;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.org-gen-warn {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: rgba(185, 28, 28, 0.06);
+  border: 1px solid rgba(185, 28, 28, 0.16);
+  color: var(--danger);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.org-gen-note {
+  margin: 0 0 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: rgba(11, 61, 46, 0.05);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.org-gen-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.65rem;
+  margin: 0 0 1rem;
+}
+
+.org-gen-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+}
+
+.org-gen-stats span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.org-gen-stats strong {
+  font-size: 1.05rem;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.org-gen-sub {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.org-gen-list {
+  margin: 0 0 1.15rem;
+  padding-left: 1.15rem;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.org-gen-list li + li {
+  margin-top: 0.35rem;
 }
 
 .modal-actions {

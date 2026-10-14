@@ -39,7 +39,7 @@ export default function NativeTabBar() {
 
   if (!visible) return null
 
-  const profileTo = user ? `/players/${user.id}` : '/login'
+  const profileTo = user ? `/players/${user.id}` : '/login?next=%2Ftournaments'
 
   return (
     <nav className="native-tab-bar" aria-label="Main">

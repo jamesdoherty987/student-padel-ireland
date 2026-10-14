@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import NumberInput from '../components/NumberInput'
 import TournamentBracket from '../components/TournamentBracket'
+import { useAuth } from '../context/AuthContext'
 import { apiErrorMessage, tournamentApi, type Match } from '../services/api'
 import {
   formatLiveBoardScore,
   formatMatchScore,
+  formatMoney,
   formatTime,
   courtLabel,
   isKnockoutActive,
@@ -181,8 +183,11 @@ function NextMatchCard({
 
 export default function PlayerLivePage() {
   const { slug = '' } = useParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { user } = useAuth()
   const qc = useQueryClient()
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
+  const [payNote, setPayNote] = useState('')
   const [sets, setSets] = useState<ScoreSets>({
     set1_a: 0,
     set1_b: 0,
@@ -214,6 +219,14 @@ export default function PlayerLivePage() {
     void qc.invalidateQueries({ queryKey: ['player-view', slug] })
     void qc.invalidateQueries({ queryKey: ['matches', slug] })
   }
+
+  useEffect(() => {
+    if (searchParams.get('pay_cancelled') !== '1') return
+    setPayNote('Online payment was cancelled. You can still pay at the venue, or try again below.')
+    const next = new URLSearchParams(searchParams)
+    next.delete('pay_cancelled')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     if (!scoringMatch) return
@@ -322,12 +335,15 @@ export default function PlayerLivePage() {
     id: string
     name: string
     payment_status?: string
+    payment_via?: string | null
     slot?: number | null
     can_leave?: boolean
   } | null
   const myPayment = myTeam?.payment_status
+  const myPaymentVia = myTeam?.payment_via
   const mySlot = myTeam?.slot ?? null
   const hasPaidEntry = !!myTeam && myPayment === 'PAID'
+  const owesAtVenue = hasPaidEntry && myPaymentVia === 'pay_on_arrival'
   const hasPendingCaptain = !!myTeam && myPayment === 'PENDING' && mySlot === 1
   const isListedPartner = !!myTeam && myPayment === 'PENDING' && mySlot !== 1
   const canLeave = !!myTeam?.can_leave
@@ -343,6 +359,8 @@ export default function PlayerLivePage() {
   const myUpcoming = (data.my_upcoming || []) as Match[]
   const myResults = (data.my_results || []) as Match[]
   const boardQuiet = liveMatches.length === 0 && calledMatches.length === 0
+  const drawReady = allMatches.length > 0
+  const waitingOnDraw = hasPaidEntry && !drawReady && t.status !== 'COMPLETED' && t.status !== 'CANCELLED'
   // Only hide venue board when you're actually on court — still show it while waiting to confirm
   const myOnCourt =
     hasPaidEntry && next && (next.status === 'LIVE' || next.status === 'CALLED')
@@ -362,6 +380,7 @@ export default function PlayerLivePage() {
       tournamentId={t.id}
       slug={slug}
       paymentStatus={myPayment}
+      paymentVia={myPaymentVia}
       teamName={myTeam?.name}
       singles={singles}
       className="btn btn-ghost btn-block"
@@ -385,9 +404,32 @@ export default function PlayerLivePage() {
           </div>
           {!myOnCourt && (
             <p className="pl-lead">
-              {hasPaidEntry
-                ? 'Your next court, opponent, and score — updated live.'
-                : 'Courts, calls, and scores — updates every few seconds.'}
+              {waitingOnDraw
+                ? 'You’re in. Fixtures will show here once the organiser publishes the draw.'
+                : hasPaidEntry
+                  ? 'Your next court, opponent, and score — updated live.'
+                  : 'Courts, calls, and scores — updates every few seconds.'}
+            </p>
+          )}
+          {payNote && (
+            <p className="pl-pay-venue" role="status">
+              {payNote}
+            </p>
+          )}
+          {owesAtVenue && (
+            <p className="pl-pay-venue" role="status">
+              Entry fee still due
+              {t.entry_fee_cents > 0
+                ? ` (${formatMoney(t.entry_fee_cents, t.currency)})`
+                : ''}{' '}
+              — pay the organiser at the venue
+              {(mySlot === 1 || mySlot == null) ? (
+                <>
+                  {' '}
+                  or <Link to={`/t/${slug}/join`}>pay online now</Link>
+                </>
+              ) : null}
+              .
             </p>
           )}
           {dataUpdatedAt > 0 && (
@@ -400,7 +442,11 @@ export default function PlayerLivePage() {
 
         <section className="pl-next">
           <h2>
-            {hasPaidEntry || hasPendingCaptain || isListedPartner ? 'Your next match' : 'Get on the board'}
+            {waitingOnDraw
+              ? 'Waiting for fixtures'
+              : hasPaidEntry || hasPendingCaptain || isListedPartner
+                ? 'Your next match'
+                : 'Get on the board'}
           </h2>
           {hasPendingCaptain ? (
             <div className="pl-next-card">
@@ -415,13 +461,33 @@ export default function PlayerLivePage() {
           ) : isListedPartner ? (
             <div className="pl-next-card">
               <p className="pl-empty" style={{ marginBottom: 12 }}>
-                You’re listed as a partner on <strong>{myTeam?.name}</strong>. Your teammate needs to
-                finish payment — you can’t pay separately.
+                You’re on <strong>{myTeam?.name}</strong> already — no invite to accept. Your teammate
+                needs to finish payment. If you can’t play, leave below.
               </p>
               <Link to={`/t/${slug}`} className="btn btn-primary btn-block">
                 View tournament
               </Link>
               {leaveBtn}
+            </div>
+          ) : waitingOnDraw ? (
+            <div className="pl-next-card">
+              <p className="pl-empty" style={{ marginBottom: 8 }}>
+                You’re registered
+                {myTeam?.name ? (
+                  <>
+                    {' '}
+                    as <strong>{myTeam.name}</strong>
+                  </>
+                ) : null}
+                . Matches haven’t been organised yet.
+              </p>
+              <p className="muted-note" style={{ marginBottom: 12 }}>
+                Check back here later — this page updates automatically when the draw goes live.
+              </p>
+              {leaveBtn}
+              <Link to={`/t/${slug}`} className="pl-details-link">
+                Full tournament page
+              </Link>
             </div>
           ) : next && hasPaidEntry ? (
             <>
@@ -433,14 +499,33 @@ export default function PlayerLivePage() {
             <div className="pl-next-card pl-next-card--quiet">
               <p className="pl-empty">
                 {hasPaidEntry
-                  ? 'No upcoming matches scheduled yet.'
-                  : 'Register for this tournament to see your next match here.'}
+                  ? t.status === 'COMPLETED'
+                    ? 'This tournament is finished. See your results below.'
+                    : 'No upcoming matches for you right now.'
+                  : !user
+                    ? 'Log in to see your matches and score here.'
+                    : 'Register for this tournament to see your next match here.'}
               </p>
-              {!hasPaidEntry && !hasPendingCaptain && !isListedPartner && t.status === 'REGISTRATION_OPEN' && (
+              {!user ? (
+                <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+                  <Link
+                    to={`/login?next=${encodeURIComponent(`/t/${slug}/live`)}`}
+                    className="btn btn-primary"
+                  >
+                    Log in
+                  </Link>
+                  <Link
+                    to={`/signup?next=${encodeURIComponent(`/t/${slug}/live`)}`}
+                    className="btn btn-ghost"
+                  >
+                    Sign up
+                  </Link>
+                </div>
+              ) : !hasPaidEntry && !hasPendingCaptain && !isListedPartner && t.status === 'REGISTRATION_OPEN' ? (
                 <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block" style={{ marginTop: 12 }}>
                   Join tournament
                 </Link>
-              )}
+              ) : null}
               {leaveBtn}
               <Link to={`/t/${slug}`} className="pl-details-link">
                 Full tournament page
@@ -493,10 +578,14 @@ export default function PlayerLivePage() {
           </section>
         )}
 
-        {boardQuiet && !hasPaidEntry && (
-          <section className="pl-block pl-block--first">
+        {boardQuiet && !waitingOnDraw && (
+          <section className={`pl-block${!hasPaidEntry || !next ? ' pl-block--first' : ''}`}>
             <h2>On court</h2>
-            <p className="pl-empty">No matches are live or called right now.</p>
+            <p className="pl-empty">
+              {drawReady
+                ? 'No matches are live or called right now.'
+                : 'Courts will show here once play starts.'}
+            </p>
           </section>
         )}
 

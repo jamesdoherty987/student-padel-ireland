@@ -27,6 +27,11 @@ import {
   statusBadgeClass,
   tournamentFormatSummary,
 } from '../utils/format'
+import {
+  formatGroupSizes,
+  knockoutRoundLabel,
+  previewDraw,
+} from '../utils/drawPreview'
 import './Organiser.css'
 
 /** Respect organiser selection; only bump when a higher set already has games. */
@@ -48,7 +53,7 @@ function resolveCurrentSet(form: {
 export default function OrganiserDashboard() {
   const { user, loading: authLoading } = useAuth()
   const qc = useQueryClient()
-  const [params] = useSearchParams()
+  const [params, setSearchParams] = useSearchParams()
   const canOrganise = !!user
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['organiser-dashboard'],
@@ -74,6 +79,7 @@ export default function OrganiserDashboard() {
   const [matchView, setMatchView] = useState<'list' | 'courts' | 'bracket'>('list')
   const [courtFilter, setCourtFilter] = useState<string>('all')
   const [matchFilter, setMatchFilter] = useState<'active' | 'all' | 'done'>('active')
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'owing'>('all')
   const [scoreForm, setScoreForm] = useState({
     set1_a: 0,
     set1_b: 0,
@@ -93,6 +99,10 @@ export default function OrganiserDashboard() {
     if (t) setSelectedId(t)
     if (params.get('create') === '1') setShowCreate(true)
   }, [params])
+
+  useEffect(() => {
+    setPaymentFilter('all')
+  }, [selectedId])
 
   useEffect(() => {
     const open = showCreate || showEdit || confirmGenerate || !!scoreMatch || showAddTeam || !!moveMatch
@@ -230,17 +240,26 @@ export default function OrganiserDashboard() {
       setConfirmGenerate(false)
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       invalidateTournamentPublic()
-      const d = res.data as { matches?: number; groups?: number }
+      const d = res.data as {
+        matches?: number
+        groups?: number
+        group_sizes?: number[]
+        bye_slots?: number
+        advance_adjusted?: boolean
+      }
       const matchesN = d.matches ?? 0
       const groupsN = d.groups ?? 0
+      const sizes = d.group_sizes?.length ? ` · groups ${formatGroupSizes(d.group_sizes)}` : ''
+      const byes = d.bye_slots ? ` · ${d.bye_slots} KO bye${d.bye_slots === 1 ? '' : 's'}` : ''
+      const adjusted = d.advance_adjusted ? ' · advance adjusted for group sizes' : ''
       if (activeFormat === 'ROUND_ROBIN' || groupsN === 0) {
         showToast(`Generated ${matchesN} round-robin match${matchesN === 1 ? '' : 'es'}`)
       } else {
-        showToast(`Generated ${groupsN} groups · ${matchesN} matches`)
+        showToast(`Generated ${groupsN} groups · ${matchesN} matches${sizes}${byes}${adjusted}`)
       }
     },
     onError: (e: unknown) => {
-      showToast(apiErrorMessage(e, 'Generate failed. You need at least 2 paid teams.'))
+      showToast(apiErrorMessage(e, 'Generate failed. You need at least 2 paid entries.'))
     },
   })
 
@@ -482,6 +501,16 @@ export default function OrganiserDashboard() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Check-in failed')),
   })
 
+  const collectFeeMut = useMutation({
+    mutationFn: (teamId: string) => tournamentApi.markFeeCollected(tid!, teamId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['org-teams'] })
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      showToast('Marked as paid')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not mark as paid')),
+  })
+
   const withdrawMut = useMutation({
     mutationFn: (teamId: string) => tournamentApi.withdrawTeam(tid!, teamId),
     onSuccess: () => {
@@ -505,6 +534,93 @@ export default function OrganiserDashboard() {
   }
 
   const fixturesExist = matches.length > 0
+  const paidCount = active?.paid_registrations ?? 0
+  const maxTeams = active?.tournament.max_teams ?? 0
+  type OrgTeam = {
+    id: string
+    name: string
+    player_names: string[]
+    checked_in: boolean
+    payment_status: string
+    payment_via?: string | null
+  }
+
+  const orgTeams = teams as OrgTeam[]
+
+  const paymentBucket = (team: OrgTeam): 'paid' | 'owing' | 'other' => {
+    if (team.payment_status === 'PENDING' || team.payment_status === 'FAILED') return 'owing'
+    if (team.payment_status === 'PAID' && team.payment_via === 'pay_on_arrival') return 'owing'
+    if (team.payment_status === 'PAID') return 'paid'
+    return 'other'
+  }
+
+  const paymentCounts = useMemo(() => {
+    const list = teams as OrgTeam[]
+    let paid = 0
+    let owing = 0
+    let collect = 0
+    let incomplete = 0
+    for (const t of list) {
+      if (t.payment_status === 'PENDING' || t.payment_status === 'FAILED') {
+        owing += 1
+        incomplete += 1
+      } else if (t.payment_status === 'PAID' && t.payment_via === 'pay_on_arrival') {
+        owing += 1
+        collect += 1
+      } else if (t.payment_status === 'PAID') {
+        paid += 1
+      }
+    }
+    return { paid, owing, collect, incomplete, total: list.length }
+  }, [teams])
+
+  const unpaidCount = paymentCounts.incomplete
+
+  const filteredTeams = useMemo(() => {
+    const list = [...(teams as OrgTeam[])]
+    list.sort((a, b) => {
+      const rank = (t: OrgTeam) => {
+        if (t.payment_status === 'PENDING' || t.payment_status === 'FAILED') return 0
+        if (t.payment_status === 'PAID' && t.payment_via === 'pay_on_arrival') return 1
+        if (t.payment_status === 'PAID') return 2
+        return 3
+      }
+      const d = rank(a) - rank(b)
+      if (d !== 0) return d
+      return a.name.localeCompare(b.name)
+    })
+    if (paymentFilter === 'all') return list
+    return list.filter((t) => paymentBucket(t) === paymentFilter)
+  }, [teams, paymentFilter])
+
+  const paymentLabel = (team: OrgTeam) => {
+    if (team.payment_via === 'pay_on_arrival') return 'Not paid · venue'
+    if (team.payment_via === 'collected_on_arrival') return 'Paid · in person'
+    if (team.payment_via === 'free_entry') return 'Free'
+    if (team.payment_via === 'online' || team.payment_via === 'demo_payment') return 'Paid · online'
+    if (team.payment_status === 'PENDING') return 'Not paid · checkout'
+    if (team.payment_status === 'PAID') return 'Paid'
+    if (team.payment_status === 'FAILED') return 'Payment failed'
+    if (team.payment_status === 'CANCELLED') return 'Cancelled'
+    return team.payment_status || '—'
+  }
+
+  const paymentBadgeClass = (team: OrgTeam) => {
+    const bucket = paymentBucket(team)
+    if (bucket === 'owing') return 'badge badge-warn'
+    if (bucket === 'paid') return 'badge badge-open'
+    return 'badge badge-draft'
+  }
+  const drawPreview = useMemo(() => {
+    if (!active) return null
+    return previewDraw({
+      teamCount: paidCount,
+      groupSize: tournamentDetail?.group_size ?? 4,
+      teamsAdvancePerGroup: tournamentDetail?.teams_advance_per_group ?? 2,
+      format: activeFormat,
+    })
+  }, [active, paidCount, tournamentDetail?.group_size, tournamentDetail?.teams_advance_per_group, activeFormat])
+  const canGenerate = paidCount >= 2 && !!drawPreview?.ok
   const canAddTeams =
     !!active &&
     active.tournament.status !== 'COMPLETED' &&
@@ -707,7 +823,10 @@ export default function OrganiserDashboard() {
             <button
               key={t.tournament.id}
               className={`org-nav-item ${active?.tournament.id === t.tournament.id ? 'active' : ''}`}
-              onClick={() => setSelectedId(t.tournament.id)}
+              onClick={() => {
+                setSelectedId(t.tournament.id)
+                setSearchParams({ t: t.tournament.id }, { replace: true })
+              }}
             >
               {t.tournament.name}
             </button>
@@ -780,7 +899,12 @@ export default function OrganiserDashboard() {
                       <button
                         className="btn btn-primary"
                         onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending}
+                        disabled={generateMut.isPending || !canGenerate}
+                        title={
+                          paidCount < 2
+                            ? 'Need at least 2 paid entries before generating'
+                            : undefined
+                        }
                       >
                         Generate draw
                       </button>
@@ -791,7 +915,12 @@ export default function OrganiserDashboard() {
                       <button
                         className="btn btn-ghost"
                         onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending}
+                        disabled={generateMut.isPending || !canGenerate}
+                        title={
+                          paidCount < 2
+                            ? 'Need at least 2 paid entries before generating'
+                            : undefined
+                        }
                       >
                         Re-generate
                       </button>
@@ -812,7 +941,12 @@ export default function OrganiserDashboard() {
                       <button
                         className="btn btn-primary"
                         onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending}
+                        disabled={generateMut.isPending || !canGenerate}
+                        title={
+                          paidCount < 2
+                            ? 'Need at least 2 paid entries before generating'
+                            : undefined
+                        }
                       >
                         Generate draw
                       </button>
@@ -830,7 +964,12 @@ export default function OrganiserDashboard() {
                       <button
                         className="btn btn-ghost"
                         onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending}
+                        disabled={generateMut.isPending || !canGenerate}
+                        title={
+                          paidCount < 2
+                            ? 'Need at least 2 paid entries before generating'
+                            : undefined
+                        }
                       >
                         Re-generate
                       </button>
@@ -936,7 +1075,7 @@ export default function OrganiserDashboard() {
                 )}
                 <div>
                   <strong>{formatMoney(active.revenue_cents)}</strong>
-                  <span>Revenue</span>
+                  <span>Collected</span>
                 </div>
                 <div>
                   <strong>
@@ -962,12 +1101,22 @@ export default function OrganiserDashboard() {
                   <p className="muted org-section-lead">
                     Open registration first — players can’t join while this event is still a draft.
                   </p>
-                ) : (
+                ) : active.tournament.status === 'REGISTRATION_OPEN' ? (
                   <p className="muted org-section-lead">
                     Share this code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
                   </p>
+                ) : fixturesExist ? (
+                  <p className="muted org-section-lead">
+                    Registration is closed and the draw is live — new players can’t join this code.
+                    Share the live board instead if people want scores.
+                  </p>
+                ) : (
+                  <p className="muted org-section-lead">
+                    Registration is closed. Re-open it if you still need more players before generating
+                    the draw.
+                  </p>
                 )}
-                {inviteCode && active.tournament.status !== 'DRAFT' ? (
+                {inviteCode && active.tournament.status === 'REGISTRATION_OPEN' ? (
                   <div className="org-invite">
                     <div className="org-invite-code">
                       <span className="org-invite-label">Join code</span>
@@ -980,6 +1129,13 @@ export default function OrganiserDashboard() {
                   </div>
                 ) : inviteCode && active.tournament.status === 'DRAFT' ? (
                   <p className="muted">Join code is ready and will appear here after you open registration.</p>
+                ) : inviteCode && fixturesExist ? (
+                  <p className="muted">
+                    Live board:{' '}
+                    <Link to={`/t/${active.tournament.slug}/live`}>/t/{active.tournament.slug}/live</Link>
+                  </p>
+                ) : inviteCode ? (
+                  <p className="muted">Join code stays available if you re-open registration.</p>
                 ) : (
                   <p className="muted">Invite code will appear once the tournament is saved.</p>
                 )}
@@ -987,7 +1143,7 @@ export default function OrganiserDashboard() {
 
               <section className="org-section">
                 <div className="org-section-head">
-                  <h2>{isSingles ? 'Players & check-in' : 'Teams & check-in'}</h2>
+                  <h2>Who’s paid</h2>
                   {canAddTeams && (
                     <button type="button" className="btn btn-dark btn-sm" onClick={() => setShowAddTeam(true)}>
                       {isSingles ? 'Add player' : 'Add team'}
@@ -999,29 +1155,117 @@ export default function OrganiserDashboard() {
                     Fixtures already generated — add players before generate, or regenerate (replaces the draw).
                   </p>
                 )}
+
+                {orgTeams.length > 0 && (
+                  <div className="org-pay-toolbar">
+                    <div className="org-view-toggle org-pay-filters" role="group" aria-label="Payment filter">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${paymentFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setPaymentFilter('all')}
+                      >
+                        All ({paymentCounts.total})
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${paymentFilter === 'paid' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setPaymentFilter('paid')}
+                      >
+                        Paid ({paymentCounts.paid})
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${paymentFilter === 'owing' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setPaymentFilter('owing')}
+                      >
+                        Not paid ({paymentCounts.owing})
+                      </button>
+                    </div>
+                    {paymentCounts.owing > 0 ? (
+                      <p className="org-pay-hint">
+                        {paymentCounts.collect > 0 && (
+                          <>
+                            <strong>{paymentCounts.collect}</strong> in the draw — tap{' '}
+                            <strong>Mark paid</strong> when you collect cash/card
+                            {paymentCounts.incomplete > 0 ? ' · ' : ''}
+                          </>
+                        )}
+                        {paymentCounts.incomplete > 0 && (
+                          <>
+                            <strong>{paymentCounts.incomplete}</strong> still finishing online checkout
+                            (not in the draw yet)
+                          </>
+                        )}
+                      </p>
+                    ) : (
+                      <p className="org-pay-hint">Everyone here is paid up.</p>
+                    )}
+                  </div>
+                )}
+
                 <div className="org-table">
-                  {(teams as Array<{ id: string; name: string; player_names: string[]; checked_in: boolean; payment_status: string }>).map(
-                    (team) => (
-                      <div key={team.id} className="org-row">
+                  {filteredTeams.map((team) => {
+                    const owing = paymentBucket(team) === 'owing'
+                    const canCollect = team.payment_via === 'pay_on_arrival'
+                    const unpaidEntry =
+                      team.payment_status === 'PENDING' ||
+                      team.payment_status === 'CANCELLED' ||
+                      team.payment_status === 'FAILED' ||
+                      team.payment_status === 'REFUNDED'
+                    return (
+                      <div key={team.id} className={`org-row org-pay-row${owing ? ' is-owing' : ''}`}>
                         <div>
                           <strong>{team.name}</strong>
                           <span>{team.player_names?.join(' / ')}</span>
+                          <span className={paymentBadgeClass(team)}>{paymentLabel(team)}</span>
                         </div>
-                        <div className="org-row-right">
-                          <span className={`badge ${team.payment_status === 'PAID' ? 'badge-open' : 'badge-draft'}`}>
-                            {team.payment_status || '-'}
-                          </span>
+                        <div className="org-row-right org-pay-actions">
+                          {canCollect && (
+                            <button
+                              type="button"
+                              className="btn btn-dark btn-sm"
+                              disabled={collectFeeMut.isPending}
+                              onClick={() => {
+                                void confirmDialog({
+                                  title: 'Mark as paid?',
+                                  message: `Mark ${team.name} as paid after collecting ${formatMoney(active.tournament.entry_fee_cents, active.tournament.currency)} in person.`,
+                                  confirmLabel: 'Mark paid',
+                                }).then((ok) => {
+                                  if (ok) collectFeeMut.mutate(team.id)
+                                })
+                              }}
+                            >
+                              Mark paid
+                            </button>
+                          )}
                           {team.checked_in ? (
-                            <span className="checked">✓ Checked in</span>
-                          ) : team.payment_status === 'PAID' ? (
-                            <button className="btn btn-ghost btn-sm" onClick={() => checkInMut.mutate(team.id)}>
+                            <span className="checked">✓ In</span>
+                          ) : team.payment_status === 'PAID' && !canCollect ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => checkInMut.mutate(team.id)}
+                            >
+                              Check in
+                            </button>
+                          ) : team.payment_status === 'PAID' && canCollect ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                void confirmDialog({
+                                  title: 'Check in before collecting?',
+                                  message: `${team.name} still owes at the venue. Check them in anyway?`,
+                                  confirmLabel: 'Check in',
+                                }).then((ok) => {
+                                  if (ok) checkInMut.mutate(team.id)
+                                })
+                              }}
+                            >
                               Check in
                             </button>
                           ) : null}
-                          {(team.payment_status === 'PENDING' ||
-                            team.payment_status === 'CANCELLED' ||
-                            team.payment_status === 'FAILED' ||
-                            team.payment_status === 'REFUNDED') && (
+                          {unpaidEntry && (
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm"
@@ -1051,10 +1295,13 @@ export default function OrganiserDashboard() {
                                   const base = fixturesExist
                                     ? `Withdraw ${team.name}? Regenerate the draw afterwards so fixtures stay correct.`
                                     : `Withdraw ${team.name}?`
-                                  const msg = `${base} Entry fees are not refunded automatically.`
+                                  const feeNote =
+                                    team.payment_via === 'pay_on_arrival'
+                                      ? ' They haven’t paid online — this just frees the spot.'
+                                      : ' Entry fees are not refunded automatically.'
                                   void confirmDialog({
-                                    title: 'Withdraw team?',
-                                    message: msg,
+                                    title: isSingles ? 'Withdraw player?' : 'Withdraw team?',
+                                    message: `${base}${feeNote}`,
                                     confirmLabel: 'Withdraw',
                                     danger: true,
                                   }).then((ok) => {
@@ -1067,13 +1314,22 @@ export default function OrganiserDashboard() {
                             )}
                         </div>
                       </div>
-                    ),
-                  )}
-                  {teams.length === 0 && (
+                    )
+                  })}
+                  {orgTeams.length === 0 && (
                     <p className="muted">
                       {isSingles
                         ? 'No players registered yet. Share the invite or add a player.'
                         : 'No teams registered yet. Share the invite or add a team.'}
+                    </p>
+                  )}
+                  {orgTeams.length > 0 && filteredTeams.length === 0 && (
+                    <p className="muted">
+                      {paymentFilter === 'paid'
+                        ? 'Nobody marked paid yet.'
+                        : paymentFilter === 'owing'
+                          ? 'Everyone here is paid.'
+                          : 'No entries to show.'}
                     </p>
                   )}
                 </div>
@@ -1439,52 +1695,131 @@ export default function OrganiserDashboard() {
       )}
 
       {confirmGenerate && (
-        <div className="modal-backdrop" onClick={() => setConfirmGenerate(false)}>
+        <div className="modal-backdrop" onClick={() => !generateMut.isPending && setConfirmGenerate(false)}>
           <div
-            className="modal"
+            className="modal modal-wide"
             role="dialog"
             aria-modal="true"
             aria-labelledby="generate-modal-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="generate-modal-title">Generate tournament?</h2>
-            <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
+            <h2 id="generate-modal-title">
+              {fixturesExist ? 'Re-generate draw?' : 'Generate draw?'}
+            </h2>
+            <p className="org-gen-lead">
               {activeFormat === 'ROUND_ROBIN' ? (
                 <>
-                  This builds the round-robin fixtures from <strong>paid</strong> entries so everyone plays
-                  everyone. Registration will close.
+                  Builds fixtures from <strong>paid</strong> entries only so everyone plays everyone.
+                  Registration will close.
                 </>
               ) : (
                 <>
-                  This builds groups, fixtures, and the knockout bracket from <strong>paid</strong> entries.
-                  Registration will close.
-                </>
-              )}
-              {matches.length > 0 && (
-                <>
-                  {' '}
-                  <strong style={{ color: 'var(--danger)' }}>
-                    Existing matches and groups will be replaced.
-                  </strong>
+                  Builds groups, fixtures, and the knockout from <strong>paid</strong> entries only.
+                  Empty spots are skipped — the draw fits whoever has paid. Registration will close.
                 </>
               )}
             </p>
-            <p style={{ color: 'var(--muted)', marginBottom: '1rem', fontSize: '0.92rem' }}>
+            {fixturesExist && (
+              <p className="org-gen-warn" role="alert">
+                Existing matches and groups will be replaced.
+              </p>
+            )}
+            <p className="org-gen-meta">
               {tournamentFormatSummary(activePlayFormat, activeFormat)}. {bracketFormatHint(activeFormat)}
             </p>
-            <p style={{ marginBottom: '1rem' }}>
-              Paid teams ready: <strong>{active?.paid_registrations ?? 0}</strong>
-            </p>
+
+            <div className="org-gen-stats">
+              <div>
+                <span>Paid entries</span>
+                <strong>
+                  {paidCount}
+                  {maxTeams > 0 ? ` / ${maxTeams}` : ''}
+                </strong>
+              </div>
+              {unpaidCount > 0 && (
+                <div>
+                  <span>Incomplete (excluded)</span>
+                  <strong>{unpaidCount}</strong>
+                </div>
+              )}
+              {paymentCounts.collect > 0 && (
+                <div>
+                  <span>Pay on arrival (in draw)</span>
+                  <strong>{paymentCounts.collect}</strong>
+                </div>
+              )}
+              {drawPreview?.ok && (
+                <>
+                  <div>
+                    <span>Groups</span>
+                    <strong>
+                      {drawPreview.groupCount}{' '}
+                      <span className="org-gen-sub">({formatGroupSizes(drawPreview.groupSizes)})</span>
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Matches</span>
+                    <strong>{drawPreview.totalMatches}</strong>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {paidCount > 0 && maxTeams > 0 && paidCount < maxTeams && (
+              <p className="org-gen-note">
+                Field isn’t full ({maxTeams - paidCount} spot
+                {maxTeams - paidCount === 1 ? '' : 's'} left). That’s fine — groups will be sized evenly
+                from the {paidCount} paid {isSingles ? 'player' : 'team'}
+                {paidCount === 1 ? '' : 's'}.
+              </p>
+            )}
+
+            {drawPreview?.ok && activeFormat !== 'ROUND_ROBIN' && (
+              <ul className="org-gen-list">
+                <li>
+                  Top {drawPreview.advancePerGroup} per group advance
+                  {drawPreview.advanceAdjusted
+                    ? ` (adjusted from ${drawPreview.requestedAdvance} to fit smaller groups)`
+                    : ''}
+                </li>
+                {drawPreview.knockoutRounds.length > 0 ? (
+                  <li>
+                    Knockout starts at {knockoutRoundLabel(drawPreview.knockoutRounds[0])}
+                    {drawPreview.byeSlots > 0
+                      ? ` · ${drawPreview.byeSlots} bye${drawPreview.byeSlots === 1 ? '' : 's'} for the bracket`
+                      : ''}
+                  </li>
+                ) : (
+                  <li>{drawPreview.note || 'Group stage only'}</li>
+                )}
+              </ul>
+            )}
+
+            {drawPreview && !drawPreview.ok && (
+              <p className="org-gen-warn" role="alert">
+                {drawPreview.error}
+              </p>
+            )}
+
             <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={() => setConfirmGenerate(false)}>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setConfirmGenerate(false)}
+                disabled={generateMut.isPending}
+              >
                 Cancel
               </button>
               <button
                 className="btn btn-primary"
-                disabled={generateMut.isPending || (active?.paid_registrations ?? 0) < 2}
+                disabled={generateMut.isPending || !canGenerate}
                 onClick={() => generateMut.mutate()}
               >
-                {generateMut.isPending ? 'Generating...' : 'Generate'}
+                {generateMut.isPending
+                  ? 'Generating…'
+                  : fixturesExist
+                    ? 'Replace draw'
+                    : 'Generate draw'}
               </button>
             </div>
           </div>
@@ -1915,6 +2250,7 @@ function CreateTournamentModal({
     match_duration_minutes: 20,
     max_teams: 48,
     entry_fee_euros: 50,
+    pay_on_arrival: true,
     description: '',
     rules: '',
     group_size: 4,
@@ -1962,6 +2298,7 @@ function CreateTournamentModal({
         number_of_courts: form.number_of_courts,
         court_names: courtNames.map((n, i) => n.trim() || `Court ${i + 1}`),
         entry_fee_cents: Math.round(form.entry_fee_euros * 100),
+        pay_on_arrival: form.pay_on_arrival,
         max_teams: form.max_teams,
         format: form.format,
         play_format: form.play_format,

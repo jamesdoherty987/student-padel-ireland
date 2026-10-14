@@ -63,6 +63,119 @@ class GeneratedTournament:
     groups: list[GeneratedGroup] = field(default_factory=list)
     matches: list[GeneratedMatch] = field(default_factory=list)
     knockout_rounds: list[str] = field(default_factory=list)
+    # Metadata for organisers (partial fields / auto-adjustments)
+    group_sizes: list[int] = field(default_factory=list)
+    advance_per_group: int | None = None
+    advance_adjusted: bool = False
+    bye_slots: int = 0
+
+
+def _balanced_group_sizes(n: int, preferred_size: int) -> list[int]:
+    """
+    Split n teams into groups as evenly as possible.
+
+    Prefers groups near ``preferred_size`` but never leaves a size-1 group when
+    n >= 2 (important when the event doesn't sell out).
+    """
+    if n <= 0:
+        return []
+    if n == 1:
+        return [1]
+    preferred = max(2, preferred_size)
+    group_count = max(1, math.ceil(n / preferred))
+    while group_count > 1 and n // group_count < 2:
+        group_count -= 1
+    base, rem = divmod(n, group_count)
+    sizes = [base + (1 if i < rem else 0) for i in range(group_count)]
+    # Safety: fold any accidental singleton into another group
+    while len(sizes) > 1 and min(sizes) < 2:
+        sizes.sort()
+        singleton = sizes.pop(0)
+        sizes[0] += singleton
+    return sizes
+
+
+def preview_draw(
+    *,
+    team_count: int,
+    group_size: int = 4,
+    teams_advance_per_group: int = 2,
+    format: str = "GROUP_KNOCKOUT",
+) -> dict:
+    """Dry-run summary for the generate confirm UI (no DB / no team list needed)."""
+    fmt = format or "GROUP_KNOCKOUT"
+    if team_count < 2:
+        return {
+            "ok": False,
+            "error": "Need at least 2 paid entries to generate",
+            "team_count": team_count,
+            "format": fmt,
+        }
+    if fmt == "ROUND_ROBIN":
+        group_matches = team_count * (team_count - 1) // 2
+        return {
+            "ok": True,
+            "format": fmt,
+            "team_count": team_count,
+            "group_count": 1,
+            "group_sizes": [team_count],
+            "group_matches": group_matches,
+            "advance_per_group": 0,
+            "advance_adjusted": False,
+            "advancing": 0,
+            "bracket_size": 0,
+            "bye_slots": 0,
+            "knockout_rounds": [],
+            "knockout_matches": 0,
+            "total_matches": group_matches,
+        }
+
+    sizes = _balanced_group_sizes(team_count, group_size)
+    min_size = min(sizes) if sizes else 0
+    requested_advance = max(1, teams_advance_per_group)
+    effective_advance = min(requested_advance, min_size) if min_size else 0
+    advance_adjusted = effective_advance != requested_advance
+    group_matches = sum(s * (s - 1) // 2 for s in sizes)
+    advancing = len(sizes) * effective_advance
+    if advancing < 2:
+        return {
+            "ok": True,
+            "format": fmt,
+            "team_count": team_count,
+            "group_count": len(sizes),
+            "group_sizes": sizes,
+            "group_matches": group_matches,
+            "advance_per_group": effective_advance,
+            "advance_adjusted": advance_adjusted,
+            "advancing": advancing,
+            "bracket_size": 0,
+            "bye_slots": 0,
+            "knockout_rounds": [],
+            "knockout_matches": 0,
+            "total_matches": group_matches,
+            "note": "Group stage only — not enough advancers for a knockout.",
+        }
+    bracket_size = _next_power_of_two(advancing)
+    bye_slots = bracket_size - advancing
+    rounds = _knockout_round_names(bracket_size)
+    knockout_matches = bracket_size - 1  # full single-elim tree
+    return {
+        "ok": True,
+        "format": fmt,
+        "team_count": team_count,
+        "group_count": len(sizes),
+        "group_sizes": sizes,
+        "group_matches": group_matches,
+        "advance_per_group": effective_advance,
+        "advance_adjusted": advance_adjusted,
+        "requested_advance": requested_advance,
+        "advancing": advancing,
+        "bracket_size": bracket_size,
+        "bye_slots": bye_slots,
+        "knockout_rounds": rounds,
+        "knockout_matches": knockout_matches,
+        "total_matches": group_matches + knockout_matches,
+    }
 
 
 class FormatGenerator(Protocol):
@@ -111,29 +224,44 @@ def _knockout_round_names(bracket_size: int) -> list[str]:
 
 def _seed_into_groups(teams: Sequence[TeamRef], group_count: int, group_size: int) -> list[list[TeamRef]]:
     """
-    Snake seeding across groups to balance strength:
-    Group assignment order for seeds 1..n:
-      A B C D D C B A A B C D ...
+    Snake seeding across evenly sized groups (partial fields OK).
+
+    Group capacities come from ``_balanced_group_sizes`` so unsold spots don't
+    leave a singleton group or dump leftovers into the last group.
     """
     ordered = sorted(
         teams,
         key=lambda t: (t.seed is None, t.seed if t.seed is not None else 10_000, t.name),
     )
+    sizes = _balanced_group_sizes(len(ordered), group_size)
+    if not sizes:
+        return []
+    # Prefer caller group_count only when it matches balanced plan length
+    if group_count != len(sizes):
+        sizes = _balanced_group_sizes(len(ordered), group_size)
+    group_count = len(sizes)
     groups: list[list[TeamRef]] = [[] for _ in range(group_count)]
     direction = 1
     g = 0
     for team in ordered:
-        # Find next group with room
         placed = False
-        for _ in range(group_count):
-            if len(groups[g]) < group_size:
+        for _ in range(group_count * 2):
+            if len(groups[g]) < sizes[g]:
                 groups[g].append(team)
                 placed = True
                 break
-            g = (g + direction) % group_count
+            if direction == 1 and g == group_count - 1:
+                direction = -1
+            elif direction == -1 and g == 0:
+                direction = 1
+            else:
+                g += direction
+                g = max(0, min(group_count - 1, g))
         if not placed:
-            # Overflow into last group (should not happen if totals match)
-            groups[-1].append(team)
+            # Fallback: fill the group with the most remaining capacity
+            idx = max(range(group_count), key=lambda i: sizes[i] - len(groups[i]))
+            groups[idx].append(team)
+            g = idx
 
         if direction == 1 and g == group_count - 1:
             direction = -1
@@ -143,7 +271,7 @@ def _seed_into_groups(teams: Sequence[TeamRef], group_count: int, group_size: in
             g += direction
             g = max(0, min(group_count - 1, g))
 
-    return groups
+    return [grp for grp in groups if grp]
 
 
 def _round_robin_pairs(team_ids: list[str]) -> list[tuple[str, str]]:
@@ -347,28 +475,29 @@ class GroupKnockoutGenerator:
         if config.match_duration_minutes < 1:
             raise ValueError("match_duration_minutes must be >= 1")
 
-        group_count = max(1, math.ceil(n / config.group_size))
-        # Prefer exact division when possible
-        if n % config.group_size == 0:
-            group_count = n // config.group_size
-
-        # Ensure we don't create empty groups
-        while group_count > 1 and math.ceil(n / group_count) < 2:
-            group_count -= 1
-
+        planned_sizes = _balanced_group_sizes(n, config.group_size)
+        group_count = len(planned_sizes)
         seeded_groups = _seed_into_groups(teams, group_count, config.group_size)
-        # Drop empty groups
         seeded_groups = [g for g in seeded_groups if g]
         group_count = len(seeded_groups)
+        if group_count < 1:
+            raise ValueError("Could not form groups from the paid entries")
 
         min_group_size = min(len(g) for g in seeded_groups)
-        if config.teams_advance_per_group > min_group_size:
+        requested_advance = config.teams_advance_per_group
+        effective_advance = min(requested_advance, min_group_size)
+        advance_adjusted = effective_advance != requested_advance
+        if effective_advance < 1:
             raise ValueError(
-                f"teams_advance_per_group ({config.teams_advance_per_group}) exceeds the smallest "
-                f"group size ({min_group_size}). Reduce advance or change group size."
+                f"Cannot advance teams: smallest group has only {min_group_size} "
+                f"{'entry' if min_group_size == 1 else 'entries'}."
             )
 
-        result = GeneratedTournament()
+        result = GeneratedTournament(
+            group_sizes=[len(g) for g in seeded_groups],
+            advance_per_group=effective_advance,
+            advance_adjusted=advance_adjusted,
+        )
         group_matches: list[GeneratedMatch] = []
         sort = 0
 
@@ -417,7 +546,7 @@ class GroupKnockoutGenerator:
         result.matches.extend(group_matches)
 
         # Knockout bracket size
-        advancing = group_count * config.teams_advance_per_group
+        advancing = group_count * effective_advance
         if advancing < 2:
             # No knockout - group stage only
             return result
@@ -425,6 +554,7 @@ class GroupKnockoutGenerator:
         bracket_size = _next_power_of_two(advancing)
         if bracket_size < advancing:
             raise ValueError("Internal error: bracket_size < advancing teams")
+        result.bye_slots = bracket_size - advancing
 
         round_names = _knockout_round_names(bracket_size)
         result.knockout_rounds = round_names
@@ -436,7 +566,7 @@ class GroupKnockoutGenerator:
 
         group_names = [_group_letter(i) for i in range(group_count)]
         placeholders = _knockout_first_round_placeholders(
-            group_names, config.teams_advance_per_group, first_round_count
+            group_names, effective_advance, first_round_count
         )
 
         for i in range(first_round_count):
@@ -515,7 +645,12 @@ class RoundRobinGenerator:
         teams = list(config.teams)
         if len(teams) < 2:
             raise ValueError("Need at least 2 teams")
-        result = GeneratedTournament()
+        result = GeneratedTournament(
+            group_sizes=[len(teams)],
+            advance_per_group=0,
+            advance_adjusted=False,
+            bye_slots=0,
+        )
         result.groups.append(GeneratedGroup(name="A", sort_order=0, team_ids=[t.id for t in teams]))
         pairs = _round_robin_pairs([t.id for t in teams])
         matches: list[GeneratedMatch] = []

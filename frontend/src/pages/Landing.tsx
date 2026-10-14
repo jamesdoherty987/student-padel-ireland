@@ -25,7 +25,7 @@ const CITY_CARDS = [
 
 const STEPS = [
   { n: '1', title: 'Find an event or use a code', body: 'Browse tournaments and tap to join, or use Have a code? / scan a QR if a friend invited you.' },
-  { n: '2', title: 'Register with your partner', body: 'Sign up as a doubles team and pay online if there is a fee.' },
+  { n: '2', title: 'Register with your partner', body: 'Sign up as a doubles team and pay online — or at the venue if the organiser collects on arrival.' },
   { n: '3', title: 'Play and climb rankings', body: 'Match results from tournaments and community games update Ireland rankings.' },
 ]
 

@@ -35,11 +35,13 @@ api.interceptors.response.use(
         const isTournamentJoin = /\/t\/[^/]+\/(join|confirmed)/.test(path)
         const isCommunityPrivate =
           path.startsWith('/community/') && !path.startsWith('/community/join/')
+        const isLiveBoard = /\/t\/[^/]+\/live/.test(path)
         const needsAuth =
           path.startsWith('/organiser') ||
           path.startsWith('/admin') ||
           isCommunityPrivate ||
-          isTournamentJoin
+          isTournamentJoin ||
+          isLiveBoard
         if (needsAuth && !path.startsWith('/login') && !path.startsWith('/signup')) {
           const next = encodeURIComponent(path + window.location.search)
           window.location.assign(`/login?next=${next}`)
@@ -72,6 +74,7 @@ export type Tournament = {
   number_of_courts: number
   entry_fee_cents: number
   currency: string
+  pay_on_arrival?: boolean
   max_teams: number
   registration_deadline?: string | null
   format: string
@@ -301,6 +304,7 @@ export type RegistrationConfirm = {
   amount_cents: number
   currency: string
   paid_at?: string | null
+  payment_via?: string | null
   tournament: Tournament | null
   team_name: string
   players: string[]
@@ -326,6 +330,13 @@ export const tournamentApi = {
   delete: (id: string) => api.delete<{ ok: boolean; deleted: string }>(`/api/tournaments/${id}`),
   register: (tournamentId: string, data: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/register`, data),
+  payOnlineNow: (tournamentId: string) =>
+    api.post<{
+      checkout_url?: string | null
+      registration_id: string
+      demo_mode?: boolean
+      message?: string
+    }>(`/api/tournaments/${tournamentId}/pay-online-now`),
   organiserAddTeam: (tournamentId: string, data: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/organiser-add-team`, data),
   teams: (tournamentId: string) => api.get(`/api/tournaments/${tournamentId}/teams`),
@@ -374,6 +385,8 @@ export const tournamentApi = {
     api.patch(`/api/matches/${matchId}`, data),
   checkIn: (tournamentId: string, teamId: string, data: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/check-in`, data),
+  markFeeCollected: (tournamentId: string, teamId: string) =>
+    api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/mark-fee-collected`),
   withdrawTeam: (tournamentId: string, teamId: string) =>
     api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
   leaveTournament: (tournamentId: string) =>

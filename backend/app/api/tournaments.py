@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import re
 import secrets
 from datetime import date, datetime, timezone
+from urllib.parse import quote
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -42,6 +44,7 @@ from app.models import (
     User,
 )
 
+from app.services.email import send_email
 from app.services.rating import INITIAL_RATING, rate_match
 from app.schemas import (
     AnnouncementCreate,
@@ -140,6 +143,19 @@ def _resolve_by_invite_code(db: Session, code: str) -> Tournament:
     return t
 
 
+def _payment_via(reg: Registration | None) -> str | None:
+    if not reg:
+        return None
+    if reg.status != PaymentStatus.PAID.value:
+        return None
+    pid = (reg.stripe_payment_intent_id or "").strip().lower()
+    if pid in {"pay_on_arrival", "collected_on_arrival", "free_entry", "demo_payment"}:
+        return pid
+    if pid or reg.stripe_session_id:
+        return "online"
+    return "online"
+
+
 def _team_out(team: Team) -> TeamOut:
     names = [m.user.full_name for m in sorted(team.members, key=lambda x: x.slot) if m.user]
     return TeamOut(
@@ -152,6 +168,7 @@ def _team_out(team: Team) -> TeamOut:
         withdrawn=team.withdrawn,
         player_names=names,
         payment_status=team.registration.status if team.registration else None,
+        payment_via=_payment_via(team.registration),
     )
 
 
@@ -219,6 +236,49 @@ def _are_friends(db: Session, a: UUID, b: UUID) -> bool:
         .first()
         is not None
     )
+
+
+logger = logging.getLogger(__name__)
+
+
+def _notify_email_partner(
+    *,
+    captain: User,
+    partner: User,
+    tournament: Tournament,
+    needs_signup: bool,
+) -> None:
+    """Tell an email-invited partner to claim their spot or open the event."""
+    settings = get_settings()
+    next_path = quote(f"/t/{tournament.slug}", safe="")
+    if needs_signup or getattr(partner, "must_set_password", False):
+        signup_url = f"{settings.frontend_url}/signup?next={next_path}"
+        subject = f"Join {captain.full_name} for {tournament.name}"
+        text = (
+            f"Hi {partner.full_name},\n\n"
+            f"{captain.full_name} added you as their doubles partner for "
+            f"{tournament.name} on Student Padel Ireland.\n\n"
+            f"You're already on the team — create your account with this same email "
+            f"({partner.email}) to see your matches:\n{signup_url}\n\n"
+            f"If you can't play, open the event and leave the team so your partner can re-enter.\n\n"
+            f"See you on court,\nStudent Padel Ireland\n"
+        )
+    else:
+        event_url = f"{settings.frontend_url}/t/{tournament.slug}"
+        subject = f"You're on a team for {tournament.name}"
+        text = (
+            f"Hi {partner.full_name},\n\n"
+            f"{captain.full_name} registered you as their partner for "
+            f"{tournament.name} on Student Padel Ireland.\n\n"
+            f"You're already on the team — no need to accept an invite.\n"
+            f"Open the tournament:\n{event_url}\n\n"
+            f"If you can't play, leave the team from that page so your partner can re-enter.\n\n"
+            f"Student Padel Ireland\n"
+        )
+    try:
+        send_email(to=partner.email, subject=subject, text=text, reply_to=captain.email)
+    except Exception:
+        logger.exception("Partner invite email failed for %s", partner.email)
 
 
 def _conflict_message(db: Session, tournament_id: UUID, you: UUID, partner: UUID | None, singles: bool) -> str:
@@ -431,6 +491,7 @@ def _tournament_out(
         number_of_courts=t.number_of_courts,
         entry_fee_cents=t.entry_fee_cents,
         currency=t.currency or "EUR",
+        pay_on_arrival=bool(getattr(t, "pay_on_arrival", False)),
         max_teams=t.max_teams,
         registration_deadline=t.registration_deadline,
         format=t.format,
@@ -883,6 +944,7 @@ def create_tournament(
         start_time=body.start_time,
         number_of_courts=body.number_of_courts,
         entry_fee_cents=body.entry_fee_cents,
+        pay_on_arrival=bool(body.pay_on_arrival),
         max_teams=body.max_teams,
         registration_deadline=body.registration_deadline,
         format=body.format.value,
@@ -1087,6 +1149,8 @@ def register_team(
             raise HTTPException(400, "Tournament is full")
 
     partner: User | None = None
+    notify_email_partner = False
+    partner_needs_signup = False
 
     if singles:
         if body.partner_user_id or body.partner_email:
@@ -1096,29 +1160,24 @@ def register_team(
             partner = db.get(User, body.partner_user_id)
             if not partner or not partner.is_active:
                 raise HTTPException(400, "Partner not found")
-            # Resume may keep an existing email-invited partner who isn't a friend yet
-            if not resume_reg and not _are_friends(db, user.id, partner.id):
-                raise HTTPException(400, "You can only pick partners from your friends list")
-            if resume_reg and not _are_friends(db, user.id, partner.id):
-                # Only allow if already on this pending team
-                on_team = (
-                    db.query(TeamPlayer)
-                    .filter(
-                        TeamPlayer.team_id == resume_reg.team_id,
-                        TeamPlayer.user_id == partner.id,
-                    )
-                    .first()
-                )
-                if not on_team:
-                    raise HTTPException(400, "You can only pick partners from your friends list")
+            # Any registered player can be named as tournament partner (friends not required)
         elif body.partner_email:
-            partner = db.query(User).filter(User.email == body.partner_email.lower()).first()
-            if not partner:
+            email = body.partner_email.lower().strip()
+            partner = db.query(User).filter(User.email == email).first()
+            if partner:
+                # Existing account (or prior invite stub) — link that user as partner
+                partner_needs_signup = bool(getattr(partner, "must_set_password", False))
+                if partner_needs_signup:
+                    name = (body.partner_name or "").strip()
+                    if len(name) >= 2:
+                        partner.full_name = name
+                notify_email_partner = True
+            else:
                 name = (body.partner_name or "").strip()
                 if len(name) < 2:
                     raise HTTPException(400, "Partner name is required for a new email")
                 partner = User(
-                    email=body.partner_email.lower(),
+                    email=email,
                     password_hash=hash_password(str(uuid4())),
                     full_name=name,
                     role="PLAYER",
@@ -1128,8 +1187,10 @@ def register_team(
                 db.add(partner)
                 db.flush()
                 _ensure_ranking(db, partner.id)
+                partner_needs_signup = True
+                notify_email_partner = True
         else:
-            raise HTTPException(400, "Pick a partner from your friends or enter their email")
+            raise HTTPException(400, "Pick a partner or enter their email")
 
         if partner.id == user.id:
             raise HTTPException(400, "Partner must be a different player")
@@ -1166,21 +1227,31 @@ def register_team(
                         ):
                             raise HTTPException(400, "That partner is already entered in this tournament")
                         slot2.user_id = partner.id
-                        slot2.invitation_accepted = bool(body.partner_user_id) or _are_friends(
-                            db, user.id, partner.id
-                        )
+                        slot2.invitation_accepted = True
                 else:
                     db.add(
                         TeamPlayer(
                             team_id=team.id,
                             user_id=partner.id,
                             slot=2,
-                            invitation_accepted=bool(body.partner_user_id) or _are_friends(
-                                db, user.id, partner.id
-                            ),
+                            invitation_accepted=True,
                         )
                     )
-        return _issue_checkout(db, t, team, resume_reg, customer_email=user.email)
+        if notify_email_partner and partner:
+            _notify_email_partner(
+                captain=user,
+                partner=partner,
+                tournament=t,
+                needs_signup=partner_needs_signup,
+            )
+        return _issue_checkout(
+            db,
+            t,
+            team,
+            resume_reg,
+            customer_email=user.email,
+            pay_online_now=bool(body.pay_online_now),
+        )
 
     team = Team(
         tournament_id=t.id,
@@ -1196,7 +1267,7 @@ def register_team(
                 team_id=team.id,
                 user_id=partner.id,
                 slot=2,
-                invitation_accepted=bool(body.partner_user_id) or _are_friends(db, user.id, partner.id),
+                invitation_accepted=True,
             )
         )
 
@@ -1210,7 +1281,22 @@ def register_team(
     db.add(reg)
     db.flush()
 
-    return _issue_checkout(db, t, team, reg, customer_email=user.email)
+    if notify_email_partner and partner:
+        _notify_email_partner(
+            captain=user,
+            partner=partner,
+            tournament=t,
+            needs_signup=partner_needs_signup,
+        )
+
+    return _issue_checkout(
+        db,
+        t,
+        team,
+        reg,
+        customer_email=user.email,
+        pay_online_now=bool(body.pay_online_now),
+    )
 
 
 @router.post("/tournaments/{tournament_id}/organiser-add-team", response_model=TeamOut)
@@ -1227,8 +1313,15 @@ def organiser_add_team(
     _assert_organiser(user, t, db)
     if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
         raise HTTPException(400, "Cannot add teams to a finished tournament")
+    if t.status == TournamentStatus.LIVE.value:
+        raise HTTPException(400, "Cannot add teams while the event is live")
     if _paid_team_count(db, t.id) >= t.max_teams:
         raise HTTPException(400, "Tournament is full")
+    if db.query(Match).filter(Match.tournament_id == t.id).count() > 0:
+        raise HTTPException(
+            400,
+            "Fixtures already exist — add players before generate, or regenerate the draw afterwards",
+        )
 
     singles = _is_singles(t)
     p1 = db.get(User, body.player1_id)
@@ -1272,6 +1365,7 @@ def organiser_add_team(
         amount_cents=0,
         currency=t.currency,
         paid_at=datetime.now(timezone.utc),
+        stripe_payment_intent_id="free_entry",
     )
     db.add(reg)
     db.commit()
@@ -1292,6 +1386,7 @@ def _issue_checkout(
     reg: Registration,
     *,
     customer_email: str | None = None,
+    pay_online_now: bool = False,
 ) -> CheckoutResponse:
     if not team:
         raise HTTPException(404, "Team not found")
@@ -1307,6 +1402,23 @@ def _issue_checkout(
             registration_id=reg.id,
             demo_mode=True,
             message="Registration confirmed — free entry.",
+        )
+
+    # Organiser collects cash/card at the venue — confirm the spot without Stripe
+    # (unless the captain chose optional pay-online-now for the full team fee)
+    if getattr(t, "pay_on_arrival", False) and not pay_online_now:
+        from app.services.payments import mark_registration_paid
+
+        reg.amount_cents = t.entry_fee_cents
+        reg.currency = t.currency
+        mark_registration_paid(db, reg, stripe_payment_id="pay_on_arrival")
+        db.commit()
+        fee = f"{(t.entry_fee_cents / 100):.2f} {t.currency}".replace(".00 ", " ")
+        return CheckoutResponse(
+            checkout_url=None,
+            registration_id=reg.id,
+            demo_mode=False,
+            message=f"You're in — pay {fee} at the venue.",
         )
 
     settings = get_settings()
@@ -1350,6 +1462,83 @@ def _issue_checkout(
         registration_id=reg.id,
         demo_mode=True,
         message="Registration confirmed (demo payment). Set STRIPE_SECRET_KEY for live payments.",
+    )
+
+
+@router.post("/tournaments/{tournament_id}/pay-online-now", response_model=CheckoutResponse)
+def pay_online_now(
+    tournament_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Captain (or singles player) with a pay-on-arrival spot pays the full team fee online."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    if t.entry_fee_cents <= 0:
+        raise HTTPException(400, "This event has no entry fee")
+    if t.status in (
+        TournamentStatus.COMPLETED.value,
+        TournamentStatus.CANCELLED.value,
+    ):
+        raise HTTPException(400, "This event is finished")
+
+    membership = _membership_for_user(db, t.id, user.id)
+    if not membership:
+        raise HTTPException(404, "You are not registered for this tournament")
+    tp, team, reg = membership
+    if tp.slot != 1:
+        raise HTTPException(400, "Only the team captain can pay online for the entry")
+    if team.withdrawn:
+        raise HTTPException(400, "This entry was withdrawn")
+    if reg.status != PaymentStatus.PAID.value:
+        # Pending captains should use register with pay_online_now
+        return _issue_checkout(db, t, team, reg, customer_email=user.email, pay_online_now=True)
+
+    via = (reg.stripe_payment_intent_id or "").strip().lower()
+    if via != "pay_on_arrival":
+        raise HTTPException(400, "This entry is already paid online")
+
+    reg.amount_cents = t.entry_fee_cents
+    reg.currency = t.currency
+    settings = get_settings()
+    if settings.stripe_secret_key:
+        from app.services.payments import create_checkout_session
+
+        try:
+            session = create_checkout_session(
+                tournament_name=t.name,
+                team_name=team.name,
+                amount_cents=t.entry_fee_cents,
+                currency=t.currency,
+                success_url=f"{settings.frontend_url}/t/{t.slug}/confirmed?session_id={{CHECKOUT_SESSION_ID}}",
+                cancel_url=f"{settings.frontend_url}/t/{t.slug}/live?pay_cancelled=1",
+                registration_id=reg.id,
+                tournament_id=t.id,
+                customer_email=user.email,
+                previous_session_id=reg.stripe_session_id,
+            )
+        except Exception as exc:
+            raise HTTPException(502, f"Could not start Stripe Checkout: {exc}") from exc
+        reg.stripe_session_id = session.id
+        db.commit()
+        return CheckoutResponse(
+            checkout_url=session.url,
+            registration_id=reg.id,
+            demo_mode=False,
+            message="Redirect to Stripe Checkout",
+        )
+
+    # Demo: treat as online paid immediately
+    reg.stripe_payment_intent_id = "demo_payment"
+    if not reg.paid_at:
+        reg.paid_at = datetime.now(timezone.utc)
+    db.commit()
+    return CheckoutResponse(
+        checkout_url=None,
+        registration_id=reg.id,
+        demo_mode=True,
+        message="Entry marked paid online (demo). Set STRIPE_SECRET_KEY for live payments.",
     )
 
 
@@ -1420,6 +1609,7 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
         "amount_cents": reg.amount_cents,
         "currency": reg.currency,
         "paid_at": reg.paid_at.isoformat() if reg.paid_at else None,
+        "payment_via": _payment_via(reg),
         "tournament": _tournament_out(db, t) if t else None,
         "team_name": team.name,
         "players": [m.user.full_name for m in members if m.user],
@@ -1474,25 +1664,10 @@ def list_teams(tournament_id: UUID, db: Session = Depends(get_db)):
         db.query(Team)
         .options(joinedload(Team.members).joinedload(TeamPlayer.user), joinedload(Team.registration))
         .filter(Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
+        .order_by(Team.name)
         .all()
     )
-    out = []
-    for team in teams:
-        names = [m.user.full_name for m in sorted(team.members, key=lambda x: x.slot)]
-        out.append(
-            TeamOut(
-                id=team.id,
-                tournament_id=team.tournament_id,
-                name=team.name,
-                university_id=team.university_id,
-                seed=team.seed,
-                checked_in=team.checked_in,
-                withdrawn=team.withdrawn,
-                player_names=names,
-                payment_status=team.registration.status if team.registration else None,
-            )
-        )
-    return out
+    return [_team_out(team) for team in teams]
 
 
 @router.post("/tournaments/{tournament_id}/teams/{team_id}/check-in", response_model=TeamOut)
@@ -1507,8 +1682,13 @@ def check_in_team(
     if not t:
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t, db)
-    team = db.get(Team, team_id)
-    if not team or team.tournament_id != tournament_id:
+    team = (
+        db.query(Team)
+        .options(joinedload(Team.members).joinedload(TeamPlayer.user), joinedload(Team.registration))
+        .filter(Team.id == team_id, Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
+        .first()
+    )
+    if not team:
         raise HTTPException(404, "Team not found")
     team.player1_present = body.player1_present
     if _is_singles(t):
@@ -1518,17 +1698,52 @@ def check_in_team(
         team.player2_present = body.player2_present
         team.checked_in = body.player1_present and body.player2_present
     db.commit()
-    return TeamOut(
-        id=team.id,
-        tournament_id=team.tournament_id,
-        name=team.name,
-        university_id=team.university_id,
-        seed=team.seed,
-        checked_in=team.checked_in,
-        withdrawn=team.withdrawn,
-        player_names=[],
-        payment_status=None,
+    db.refresh(team)
+    return _team_out(team)
+
+
+@router.post("/tournaments/{tournament_id}/teams/{team_id}/mark-fee-collected", response_model=TeamOut)
+def mark_fee_collected(
+    tournament_id: UUID,
+    team_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organiser marks a pay-on-arrival entry as fee collected at the venue."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    team = (
+        db.query(Team)
+        .options(joinedload(Team.members).joinedload(TeamPlayer.user), joinedload(Team.registration))
+        .filter(Team.id == team_id, Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
+        .first()
     )
+    if not team or not team.registration:
+        raise HTTPException(404, "Team not found")
+    reg = team.registration
+    if reg.status != PaymentStatus.PAID.value:
+        raise HTTPException(400, "Entry is not confirmed yet")
+    via = (reg.stripe_payment_intent_id or "").strip().lower()
+    if via not in {"pay_on_arrival", "collected_on_arrival"}:
+        raise HTTPException(400, "This entry was already paid online")
+    reg.stripe_payment_intent_id = "collected_on_arrival"
+    if not reg.paid_at:
+        reg.paid_at = datetime.now(timezone.utc)
+    payment_row = (
+        db.query(Payment)
+        .filter(
+            Payment.registration_id == reg.id,
+            Payment.status == PaymentStatus.PAID.value,
+        )
+        .first()
+    )
+    if payment_row:
+        payment_row.stripe_payment_id = "collected_on_arrival"
+    db.commit()
+    db.refresh(team)
+    return _team_out(team)
 
 
 def _entry_is_paid(team: Team) -> bool:
@@ -1576,24 +1791,15 @@ def _apply_team_withdraw(db: Session, t: Tournament, team: Team, *, as_organiser
         PaymentStatus.CANCELLED.value,
     ):
         team.registration.status = PaymentStatus.CANCELLED.value
-        # Drop session link so a late webhook/confirm can't revive this entry
+    if team.registration and old_session_id:
+        # Drop session link so a late webhook/confirm can't revive or upgrade a withdrawn entry
         team.registration.stripe_session_id = None
     db.commit()
-    if not paid and old_session_id:
+    if old_session_id:
         from app.services.payments import expire_checkout_session
 
         expire_checkout_session(old_session_id)
-    return TeamOut(
-        id=team.id,
-        tournament_id=team.tournament_id,
-        name=team.name,
-        university_id=team.university_id,
-        seed=team.seed,
-        checked_in=team.checked_in,
-        withdrawn=team.withdrawn,
-        player_names=[],
-        payment_status=team.registration.status if team.registration else None,
-    )
+    return _team_out(team)
 
 
 @router.post("/tournaments/{tournament_id}/teams/{team_id}/withdraw", response_model=TeamOut)
@@ -1744,6 +1950,10 @@ def generate(
     except ValueError as e:
         raise HTTPException(400, str(e)) from e
 
+    # Persist the advance actually used (may be clamped for uneven / small groups)
+    if generated.advance_per_group is not None and generated.advance_per_group > 0:
+        t.teams_advance_per_group = generated.advance_per_group
+
     court_by_num = {
         c.court_number: c
         for c in db.query(Court).filter(Court.tournament_id == t.id).all()
@@ -1796,6 +2006,12 @@ def generate(
         "groups": len(generated.groups),
         "matches": len(created_matches),
         "knockout_rounds": generated.knockout_rounds,
+        "group_sizes": generated.group_sizes,
+        "advance_per_group": generated.advance_per_group,
+        "advance_adjusted": generated.advance_adjusted,
+        "bye_slots": generated.bye_slots,
+        "paid_teams": len(paid_teams),
+        "max_teams": t.max_teams,
     }
 
 
@@ -2534,6 +2750,7 @@ def player_view(
                 "id": my_team.id,
                 "name": my_team.name,
                 "payment_status": my_payment_status,
+                "payment_via": _payment_via(my_team.registration) if my_team.registration else None,
                 "slot": my_slot,
                 "players": my_teammates,
                 "partner_user_id": partner_user_id,
@@ -2729,6 +2946,12 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
             )
             .all()
         )
+        # Count only fees actually collected (exclude pay-on-arrival still owing at venue)
+        collected_revenue = [
+            r
+            for r in revenue
+            if (r.stripe_payment_intent_id or "").strip().lower() != "pay_on_arrival"
+        ]
         live = (
             db.query(Match)
             .filter(Match.tournament_id == t.id, Match.status == MatchStatus.LIVE.value)
@@ -2758,7 +2981,7 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
                 "teams": teams,
                 "players": teams * per_team,
                 "paid_registrations": paid,
-                "revenue_cents": sum(r.amount_cents for r in revenue),
+                "revenue_cents": sum(r.amount_cents for r in collected_revenue),
                 "live_matches": live,
                 "completed_matches": completed,
                 "checked_in": checked,

@@ -154,6 +154,8 @@ def init_db() -> None:
     _pg_add_column_if_missing("users", "avatar_url", "VARCHAR(500)")
     _sqlite_add_column_if_missing("users", "must_set_password", "BOOLEAN DEFAULT 0")
     _pg_add_column_if_missing("users", "must_set_password", "BOOLEAN DEFAULT FALSE")
+    _sqlite_add_column_if_missing("tournaments", "pay_on_arrival", "BOOLEAN DEFAULT 1")
+    _pg_add_column_if_missing("tournaments", "pay_on_arrival", "BOOLEAN DEFAULT TRUE")
     _sqlite_add_column_if_missing("profile_media", "content_type", "VARCHAR(100)")
     _sqlite_add_column_if_missing("profile_media", "file_data", "BLOB")
     _pg_add_column_if_missing("profile_media", "content_type", "VARCHAR(100)")

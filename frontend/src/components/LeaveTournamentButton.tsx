@@ -7,6 +7,7 @@ type Props = {
   tournamentId: string
   slug: string
   paymentStatus?: string | null
+  paymentVia?: string | null
   teamName?: string | null
   singles?: boolean
   /** Extra class on the button */
@@ -18,25 +19,27 @@ type Props = {
 
 function confirmMessage(
   paymentStatus: string | null | undefined,
+  paymentVia: string | null | undefined,
   teamName: string | null | undefined,
   singles: boolean,
 ) {
   const label = teamName ? `“${teamName}”` : singles ? 'your entry' : 'your team'
+  const payOnArrival = paymentVia === 'pay_on_arrival'
+  const feeNote = payOnArrival
+    ? `You haven’t paid online — this just frees your spot.`
+    : `Entry fees are not refunded automatically — contact the organiser if you need a refund.`
   if (!singles) {
     if (paymentStatus === 'PAID') {
       return (
-        `Withdraw ${label}? This removes the whole doubles team (you and your partner). ` +
-        `Entry fees are not refunded automatically — contact the organiser if you need a refund. ` +
+        `Leave ${label}? This removes the whole doubles team (you and your partner) so either of you can re-enter. ` +
+        `${feeNote} ` +
         `If a draw already exists, the organiser may need to regenerate fixtures.`
       )
     }
-    return `Cancel ${label}? This cancels the whole doubles entry so you and your partner can join differently.`
+    return `Leave ${label}? This cancels the whole doubles entry so you and your partner can join differently.`
   }
   if (paymentStatus === 'PAID') {
-    return (
-      `Withdraw ${label}? You’ll free your spot before the event starts. ` +
-      `Entry fees are not refunded automatically — contact the organiser if you need a refund.`
-    )
+    return `Withdraw ${label}? You’ll free your spot before the event starts. ${feeNote}`
   }
   return `Cancel ${label}? You can join again later if spots are still open.`
 }
@@ -50,6 +53,7 @@ export default function LeaveTournamentButton({
   tournamentId,
   slug,
   paymentStatus,
+  paymentVia,
   teamName,
   singles = false,
   className = 'btn btn-ghost',
@@ -65,7 +69,7 @@ export default function LeaveTournamentButton({
   const onClick = async () => {
     const ok = await confirmDialog({
       title: paymentStatus === 'PAID' ? 'Withdraw?' : 'Cancel entry?',
-      message: confirmMessage(paymentStatus, teamName, singles),
+      message: confirmMessage(paymentStatus, paymentVia, teamName, singles),
       confirmLabel: paymentStatus === 'PAID' ? 'Withdraw' : 'Cancel entry',
       cancelLabel: 'Keep playing',
       danger: true,

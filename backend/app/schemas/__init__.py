@@ -115,6 +115,7 @@ class TournamentCreate(BaseModel):
     number_of_courts: int = Field(default=4, ge=1, le=32)
     court_names: Optional[list[str]] = None
     entry_fee_cents: int = Field(default=5000, ge=0)
+    pay_on_arrival: bool = True
     max_teams: int = Field(default=48, ge=2, le=256)
     registration_deadline: Optional[datetime] = None
     format: TournamentFormat = TournamentFormat.GROUP_KNOCKOUT
@@ -144,6 +145,7 @@ class TournamentUpdate(BaseModel):
     number_of_courts: Optional[int] = Field(default=None, ge=1, le=32)
     court_names: Optional[list[str]] = None
     entry_fee_cents: Optional[int] = Field(default=None, ge=0)
+    pay_on_arrival: Optional[bool] = None
     max_teams: Optional[int] = Field(default=None, ge=2, le=256)
     registration_deadline: Optional[datetime] = None
     format: Optional[TournamentFormat] = None
@@ -176,6 +178,7 @@ class TournamentOut(BaseModel):
     number_of_courts: int
     entry_fee_cents: int
     currency: str
+    pay_on_arrival: bool = True
     max_teams: int
     registration_deadline: Optional[datetime] = None
     format: str
@@ -205,6 +208,8 @@ class TeamOut(BaseModel):
     withdrawn: bool
     player_names: list[str] = []
     payment_status: Optional[str] = None
+    # free_entry | pay_on_arrival | demo_payment | online | None
+    payment_via: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -218,6 +223,8 @@ class RegisterTeamRequest(BaseModel):
     phone: Optional[str] = None
     university_id: Optional[UUID] = None
     student_number: Optional[str] = None
+    # When tournament is pay-on-arrival, captain can still choose Stripe checkout for the full team fee
+    pay_online_now: bool = False
 
 
 class OrganiserAddTeamRequest(BaseModel):

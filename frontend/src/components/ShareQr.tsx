@@ -14,11 +14,15 @@ function qrPixelSize() {
 export function ShareQr({
   url,
   openLabel = 'Open page',
+  /** When false, QR stays hidden until the user taps “Show QR code”. Invite flows keep the default. */
+  showQr = true,
 }: {
   url: string
   openLabel?: string
+  showQr?: boolean
 }) {
   const [copied, setCopied] = useState(false)
+  const [qrVisible, setQrVisible] = useState(showQr)
   const [size, setSize] = useState(qrPixelSize)
   const navigate = useNavigate()
   const display = url.replace(/^https?:\/\//, '')
@@ -85,23 +89,25 @@ export function ShareQr({
   }
 
   return (
-    <div className="qr-wrap">
-      <div className="qr-canvas" aria-label="QR code">
-        {url ? (
-          <QRCodeSVG
-            key={qrKey}
-            value={url}
-            size={size}
-            level="M"
-            marginSize={2}
-            bgColor="#ffffff"
-            fgColor="#0b3d2e"
-            title={url}
-          />
-        ) : (
-          <p className="qr-fallback muted">QR unavailable — use Copy link or Share instead.</p>
-        )}
-      </div>
+    <div className={`qr-wrap${qrVisible ? '' : ' qr-wrap--compact'}`}>
+      {qrVisible && (
+        <div className="qr-canvas" aria-label="QR code">
+          {url ? (
+            <QRCodeSVG
+              key={qrKey}
+              value={url}
+              size={size}
+              level="M"
+              marginSize={2}
+              bgColor="#ffffff"
+              fgColor="#0b3d2e"
+              title={url}
+            />
+          ) : (
+            <p className="qr-fallback muted">QR unavailable — use Copy link or Share instead.</p>
+          )}
+        </div>
+      )}
       <code className="qr-url">{display}</code>
       <div className="qr-actions">
         <button type="button" className="btn btn-dark btn-sm" onClick={() => void copy()}>
@@ -110,6 +116,16 @@ export function ShareQr({
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => void shareOrOpen()}>
           {isNativeApp() ? 'Share' : openLabel}
         </button>
+        {!showQr && (
+          <button
+            type="button"
+            className="qr-toggle"
+            onClick={() => setQrVisible((v) => !v)}
+            aria-expanded={qrVisible}
+          >
+            {qrVisible ? 'Hide QR code' : 'Show QR code'}
+          </button>
+        )}
       </div>
     </div>
   )

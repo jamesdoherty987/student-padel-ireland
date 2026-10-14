@@ -102,6 +102,7 @@ export default function TournamentDetailPage() {
     | {
         id?: string
         payment_status?: string
+        payment_via?: string | null
         slot?: number | null
         name?: string
         players?: string[]
@@ -109,8 +110,10 @@ export default function TournamentDetailPage() {
       }
     | null
   const myPayment = myTeamInfo?.payment_status
+  const myPaymentVia = myTeamInfo?.payment_via
   const mySlot = myTeamInfo?.slot ?? null
   const hasPaidEntry = !!myTeamInfo && myPayment === 'PAID'
+  const owesAtVenue = hasPaidEntry && myPaymentVia === 'pay_on_arrival'
   const hasPendingCaptain = !!myTeamInfo && myPayment === 'PENDING' && mySlot === 1
   const isListedPartner = !!myTeamInfo && myPayment === 'PENDING' && mySlot !== 1
   const canLeave = !!myTeamInfo?.can_leave
@@ -214,6 +217,23 @@ export default function TournamentDetailPage() {
             </Link>
           )}
         </div>
+        {owesAtVenue && (
+          <p className="tour-pay-venue" role="status">
+            Pay {formatMoney(tournament.entry_fee_cents, tournament.currency)} to the organiser at the
+            venue — your spot is already reserved.
+            {(mySlot === 1 || mySlot == null) && (
+              <>
+                {' '}
+                <Link to={`/t/${tournament.slug}/join`}>Pay online now</Link> if you prefer.
+              </>
+            )}
+          </p>
+        )}
+        {hasPaidEntry && matches.length === 0 && tournament.status !== 'COMPLETED' && tournament.status !== 'CANCELLED' && (
+          <p className="muted-note" style={{ marginTop: '-0.35rem', marginBottom: '1rem' }}>
+            Fixtures aren’t out yet — My matches will show your entry until the draw is published.
+          </p>
+        )}
         {(canLeave || isOps) && (
           <div className="tour-actions-secondary">
             {canLeave && (
@@ -221,6 +241,7 @@ export default function TournamentDetailPage() {
                 tournamentId={tournament.id}
                 slug={tournament.slug}
                 paymentStatus={myPayment}
+                paymentVia={myPaymentVia}
                 teamName={myTeamInfo?.name}
                 singles={singles}
                 className="btn btn-ghost btn-sm"
@@ -247,7 +268,7 @@ export default function TournamentDetailPage() {
           </div>
           <div>
             <strong>{formatMoney(Math.round(perPlayerFeeCents(tournament.entry_fee_cents, tournament.play_format)), tournament.currency)}</strong>
-            <span>Per player</span>
+            <span>{tournament.pay_on_arrival ? 'Per player · pay on arrival' : 'Per player'}</span>
           </div>
           {isOps && (
             <div>
@@ -390,8 +411,8 @@ export default function TournamentDetailPage() {
 
         <section className="block qr-block">
           <h2>Share live scores</h2>
-          <p>Scan this QR on your phone to open the live board. No login needed.</p>
-          <ShareQr url={liveUrl} openLabel="Open live board" />
+          <p>Share the live board link. No login needed.</p>
+          <ShareQr url={liveUrl} openLabel="Open live board" showQr={false} />
         </section>
       </main>
     </div>

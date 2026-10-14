@@ -12,6 +12,8 @@ from app.services.tournament_generator import (
     GeneratorConfig,
     TeamRef,
     generate_tournament,
+    preview_draw,
+    _balanced_group_sizes,
     _round_robin_pairs,
     _next_power_of_two,
     validate_generated,
@@ -241,3 +243,58 @@ def test_twelve_teams_bye_padding():
         if a_bye or b_bye:
             bye_matches += 1
     assert bye_matches == 2
+
+
+@pytest.mark.parametrize("n", [3, 5, 7, 9, 10, 11, 13, 14, 15, 17, 20, 22, 23])
+def test_partial_field_all_teams_assigned_even_groups(n):
+    """Unsould-out fields must still assign every paid team with no size-1 groups."""
+    result = generate_tournament(_config(n, courts=max(2, n // 4), group_size=4, advance=2))
+    assigned = [tid for g in result.groups for tid in g.team_ids]
+    assert len(assigned) == n
+    assert len(set(assigned)) == n
+    assert all(len(g.team_ids) >= 2 for g in result.groups)
+    sizes = sorted(len(g.team_ids) for g in result.groups)
+    assert max(sizes) - min(sizes) <= 1
+    validate_generated(result, {t.id for t in _teams(n)})
+
+
+def test_odd_teams_group_size_2_no_longer_fails():
+    """3 paid with group_size=2 used to create a singleton and fail; now one group of 3."""
+    result = generate_tournament(_config(3, courts=2, group_size=2, advance=2))
+    assert len(result.groups) == 1
+    assert len(result.groups[0].team_ids) == 3
+    assert result.advance_per_group == 2
+    assert result.advance_adjusted is False  # group of 3 can still advance 2
+    validate_generated(result, {t.id for t in _teams(3)})
+
+
+def test_advance_clamped_when_groups_smaller_than_requested():
+    """5 teams @ group_size 4 → groups [3,2]; advance 3 must clamp to 2."""
+    result = generate_tournament(_config(5, courts=2, group_size=4, advance=3))
+    assert sorted(len(g.team_ids) for g in result.groups) == [2, 3]
+    assert result.advance_adjusted is True
+    assert result.advance_per_group == 2
+    validate_generated(result, {t.id for t in _teams(5)})
+
+
+def test_seven_teams_group_size_2_no_singletons():
+    result = generate_tournament(_config(7, courts=2, group_size=2, advance=2))
+    assert all(len(g.team_ids) >= 2 for g in result.groups)
+    assert sum(len(g.team_ids) for g in result.groups) == 7
+    validate_generated(result, {t.id for t in _teams(7)})
+
+
+def test_balanced_group_sizes_helper():
+    assert sorted(_balanced_group_sizes(10, 4)) == [3, 3, 4]
+    assert sorted(_balanced_group_sizes(5, 4)) == [2, 3]
+    assert _balanced_group_sizes(3, 2) == [3]
+    assert min(_balanced_group_sizes(7, 2)) >= 2
+
+
+def test_preview_draw_partial_field():
+    preview = preview_draw(team_count=10, group_size=4, teams_advance_per_group=2)
+    assert preview["ok"] is True
+    assert preview["team_count"] == 10
+    assert sum(preview["group_sizes"]) == 10
+    assert min(preview["group_sizes"]) >= 2
+    assert preview["bye_slots"] >= 0

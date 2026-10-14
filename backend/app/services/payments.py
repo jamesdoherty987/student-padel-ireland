@@ -205,16 +205,53 @@ def fulfill_checkout_session(db: Session, session_id: str) -> Registration | Non
     if not reg:
         return None
 
-    # If already paid, still verify this session is the one on file (idempotent OK)
-    if reg.status == PaymentStatus.PAID.value:
-        return reg
+    team = db.get(Team, reg.team_id)
+    if team and team.withdrawn:
+        raise HTTPException(
+            400,
+            "This entry was withdrawn. Contact the organiser for a refund if you were charged.",
+        )
 
     _assert_session_matches_registration(session, reg)
+    pi = _payment_intent_id(session)
+
+    # Already confirmed pay-on-arrival — upgrade metadata when they pay online later
+    if reg.status == PaymentStatus.PAID.value:
+        via = (reg.stripe_payment_intent_id or "").strip().lower()
+        if via == "pay_on_arrival":
+            reg.stripe_session_id = session_id
+            if pi:
+                reg.stripe_payment_intent_id = pi
+            already_logged = (
+                db.query(Payment)
+                .filter(
+                    Payment.registration_id == reg.id,
+                    Payment.status == PaymentStatus.PAID.value,
+                )
+                .first()
+            )
+            if not already_logged:
+                db.add(
+                    Payment(
+                        registration_id=reg.id,
+                        tournament_id=reg.tournament_id,
+                        amount_cents=reg.amount_cents,
+                        currency=reg.currency,
+                        status=PaymentStatus.PAID.value,
+                        stripe_payment_id=pi or session_id or "paid",
+                    )
+                )
+            else:
+                # Replace sentinel pay_on_arrival id with the real Stripe payment
+                already_logged.stripe_payment_id = pi or session_id or already_logged.stripe_payment_id
+            db.commit()
+            db.refresh(reg)
+        return reg
 
     mark_registration_paid(
         db,
         reg,
-        stripe_payment_id=_payment_intent_id(session),
+        stripe_payment_id=pi,
         stripe_session_id=session_id,
     )
     db.commit()

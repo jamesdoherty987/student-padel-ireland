@@ -20,6 +20,7 @@ export type TournamentFormState = {
   match_duration_minutes: number
   max_teams: number
   entry_fee_euros: number
+  pay_on_arrival: boolean
   description: string
   rules: string
   group_size: number
@@ -283,15 +284,42 @@ export default function TournamentFormFields({
             step={0.5}
             emptyValue={0}
             value={form.entry_fee_euros}
-            onValueChange={(n) => onChange({ entry_fee_euros: n })}
+            onValueChange={(n) =>
+              onChange({
+                entry_fee_euros: n,
+                ...(n <= 0 ? { pay_on_arrival: false } : {}),
+              })
+            }
           />
           {!singles && (
             <small className="form-hint">
-              = €{(form.entry_fee_euros / 2).toFixed(2).replace(/\.00$/, '')} per player. Captain pays the full team fee.
+              = €{(form.entry_fee_euros / 2).toFixed(2).replace(/\.00$/, '')} per player. Captain pays the full team
+              fee{form.pay_on_arrival ? ' at the venue' : ' online'}.
             </small>
           )}
-          {singles && <small className="form-hint">Each player pays this amount when they join.</small>}
+          {singles && (
+            <small className="form-hint">
+              Each player pays this amount {form.pay_on_arrival ? 'at the venue' : 'when they join'}.
+            </small>
+          )}
         </div>
+
+        {form.entry_fee_euros > 0 && (
+          <label className="tf-check">
+            <input
+              type="checkbox"
+              checked={form.pay_on_arrival}
+              onChange={(e) => onChange({ pay_on_arrival: e.target.checked })}
+            />
+            <span>
+              Pay on arrival
+              <small className="form-hint">
+                Default for new events. Players confirm their spot without card payment; you collect at
+                the venue. They can still choose “Pay online now” for the full team fee if they prefer.
+              </small>
+            </span>
+          </label>
+        )}
       </section>
 
       <section className="tf-section">

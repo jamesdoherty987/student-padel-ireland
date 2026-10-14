@@ -151,6 +151,9 @@ class Tournament(Base, TimestampMixin):
     number_of_courts: Mapped[int] = mapped_column(Integer, default=4)
     entry_fee_cents: Mapped[int] = mapped_column(Integer, default=5000)
     currency: Mapped[str] = mapped_column(String(3), default="EUR")
+    # When True, players confirm entry without Stripe and pay cash/card at the venue
+    # (optional pay-online-now still available on join)
+    pay_on_arrival: Mapped[bool] = mapped_column(Boolean, default=True)
     max_teams: Mapped[int] = mapped_column(Integer, default=48)
     registration_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     format: Mapped[str] = mapped_column(String(40), default=TournamentFormat.GROUP_KNOCKOUT.value)

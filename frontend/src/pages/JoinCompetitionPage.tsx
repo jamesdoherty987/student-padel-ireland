@@ -49,11 +49,11 @@ export default function JoinCompetitionPage() {
           setStatus(`This is a tournament code. Opening ${invite.name}…`)
           const path = invite.join_path
           if (user) navigate(path, { replace: true })
-          else navigate(`/signup?next=${encodeURIComponent(path)}`, { replace: true })
+          else navigate(`/login?next=${encodeURIComponent(path)}`, { replace: true })
           return
         }
         if (!user) {
-          navigate(`/signup?next=${encodeURIComponent(`/community/join/${clean}`)}`, {
+          navigate(`/login?next=${encodeURIComponent(`/community/join/${clean}`)}`, {
             replace: true,
           })
           return
