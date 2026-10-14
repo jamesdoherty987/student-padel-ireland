@@ -80,14 +80,6 @@
       ]
     }
   ],
-  "redirects": [
-    {
-      "source": "/:path*",
-      "has": [{ "type": "host", "value": "www.studentpadel.ie" }],
-      "destination": "https://studentpadel.ie/:path*",
-      "permanent": true
-    }
-  ],
   "rewrites": [
     {
       "source": "/((?!\\.well-known/|videos/|images/|icons/|assets/|favicon\\.svg|apple-touch-icon\\.png|manifest\\.webmanifest|sw\\.js|robots\\.txt|sitemap\\.xml|feed\\.xml|spi-logo\\.png|icons\\.svg).*)",
