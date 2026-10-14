@@ -194,7 +194,11 @@ export default function CommunityPage() {
           <Link to="/tournaments">Tournaments</Link>.
         </p>
 
-        {error && <p className="form-error">{error}</p>}
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
 
         {homeQ.isLoading && (
           <>
@@ -308,8 +312,19 @@ export default function CommunityPage() {
                   key={f.id}
                   f={f}
                   actions={[
-                    { label: 'Accept', dark: true, onClick: () => acceptMut.mutate(f.id) },
-                    { label: 'Decline', onClick: () => removeMut.mutate(f.id) },
+                    {
+                      label:
+                        acceptMut.isPending && acceptMut.variables === f.id ? 'Accepting…' : 'Accept',
+                      dark: true,
+                      disabled: acceptMut.isPending || removeMut.isPending,
+                      onClick: () => acceptMut.mutate(f.id),
+                    },
+                    {
+                      label:
+                        removeMut.isPending && removeMut.variables === f.id ? 'Declining…' : 'Decline',
+                      disabled: acceptMut.isPending || removeMut.isPending,
+                      onClick: () => removeMut.mutate(f.id),
+                    },
                   ]}
                 />
               ))}
@@ -351,21 +366,23 @@ export default function CommunityPage() {
                         <button
                           type="button"
                           className="btn btn-dark btn-sm"
+                          disabled={requestMut.isPending && requestMut.variables === p.id}
                           onClick={() => requestMut.mutate(p.id)}
                         >
-                          Add
+                          {requestMut.isPending && requestMut.variables === p.id ? 'Sending…' : 'Add'}
                         </button>
                       )}
                       {p.friendship_status === 'pending_in' && (
                         <button
                           type="button"
                           className="btn btn-dark btn-sm"
+                          disabled={acceptMut.isPending}
                           onClick={() => {
                             const fr = incoming.find((f) => f.user_id === p.id)
                             if (fr) acceptMut.mutate(fr.id)
                           }}
                         >
-                          Accept
+                          {acceptMut.isPending ? 'Accepting…' : 'Accept'}
                         </button>
                       )}
                     </div>
@@ -383,14 +400,28 @@ export default function CommunityPage() {
               <FriendRow
                 key={f.id}
                 f={f}
-                actions={[{ label: 'Remove', onClick: () => removeMut.mutate(f.id) }]}
+                actions={[
+                  {
+                    label:
+                      removeMut.isPending && removeMut.variables === f.id ? 'Removing…' : 'Remove',
+                    disabled: removeMut.isPending && removeMut.variables === f.id,
+                    onClick: () => removeMut.mutate(f.id),
+                  },
+                ]}
               />
             ))}
             {outgoing.map((f) => (
               <FriendRow
                 key={f.id}
                 f={f}
-                actions={[{ label: 'Cancel', onClick: () => removeMut.mutate(f.id) }]}
+                actions={[
+                  {
+                    label:
+                      removeMut.isPending && removeMut.variables === f.id ? 'Cancelling…' : 'Cancel',
+                    disabled: removeMut.isPending && removeMut.variables === f.id,
+                    onClick: () => removeMut.mutate(f.id),
+                  },
+                ]}
               />
             ))}
             {accepted.length === 0 && outgoing.length === 0 && incoming.length === 0 && (
@@ -471,7 +502,7 @@ function FriendRow({
   actions,
 }: {
   f: Friendship
-  actions?: { label: string; dark?: boolean; onClick: () => void }[]
+  actions?: { label: string; dark?: boolean; disabled?: boolean; onClick: () => void }[]
 }) {
   return (
     <div className="friend-row">
@@ -490,11 +521,12 @@ function FriendRow({
       </div>
       {actions && actions.length > 0 && (
         <div className="friend-actions">
-          {actions.map((a) => (
+          {actions.map((a, i) => (
             <button
-              key={a.label}
+              key={i}
               type="button"
               className={`btn btn-sm ${a.dark ? 'btn-dark' : 'btn-ghost'}`}
+              disabled={a.disabled}
               onClick={a.onClick}
             >
               {a.label}

@@ -220,21 +220,29 @@ export default function RankingsPage() {
             <p>
               {scope === 'friends'
                 ? 'No ranked friends yet. Add friends in Community.'
-                : scope === 'university'
-                  ? 'No ranked players from your university yet.'
-                  : 'No ranked players from that university yet.'}
+                : scope === 'university' && !myUniShort && !myUniName
+                  ? 'Add your university on Profile to see college rankings.'
+                  : scope === 'university'
+                    ? 'No ranked players from your university yet.'
+                    : 'No ranked players from that university yet.'}
             </p>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{ marginTop: 12 }}
-              onClick={() => {
-                setScopeAndUrl('all')
-                setUni('all')
-              }}
-            >
-              Show all
-            </button>
+            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+              {scope === 'university' && !myUniShort && !myUniName && user && (
+                <Link to={`/players/${user.id}`} className="btn btn-primary">
+                  Edit profile
+                </Link>
+              )}
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setScopeAndUrl('all')
+                  setUni('all')
+                }}
+              >
+                Show all
+              </button>
+            </div>
           </div>
         )}
       </main>

@@ -170,23 +170,9 @@ export default function App() {
                 <Route path="/join/:code" element={<JoinByCodePage />} />
                 <Route path="/t/join/:code" element={<JoinTournamentByCodePage />} />
                 <Route path="/t/:slug" element={<TournamentDetailPage />} />
-                <Route
-                  path="/t/:slug/join"
-                  element={
-                    <ProtectedRoute>
-                      <JoinTournamentPage />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/t/:slug/join" element={<JoinTournamentPage />} />
                 <Route path="/t/:slug/live" element={<PlayerLivePage />} />
-                <Route
-                  path="/t/:slug/confirmed"
-                  element={
-                    <ProtectedRoute>
-                      <JoinTournamentPage />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/t/:slug/confirmed" element={<JoinTournamentPage />} />
                 <Route path="/tournament/:id/display" element={<TvDisplayPage />} />
                 <Route
                   path="/admin"
@@ -196,25 +182,11 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/organiser"
-                  element={
-                    <ProtectedRoute>
-                      <OrganiserDashboard />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/organiser" element={<OrganiserDashboard />} />
                 <Route path="/rankings" element={<RankingsPage />} />
                 <Route path="/community" element={<CommunityPage />} />
                 <Route path="/community/join/:code" element={<JoinCompetitionPage />} />
-                <Route
-                  path="/community/:slug"
-                  element={
-                    <ProtectedRoute>
-                      <CompetitionDetailPage />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/community/:slug" element={<CompetitionDetailPage />} />
                 <Route path="/players/:id" element={<PlayerProfilePage />} />
                 <Route path="/404" element={<NotFoundPage />} />
                 <Route path="*" element={<NotFoundPage />} />

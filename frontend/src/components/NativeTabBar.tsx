@@ -51,7 +51,7 @@ export default function NativeTabBar() {
         onClick={() => void hapticLight()}
       >
         <i className="fas fa-trophy" aria-hidden />
-        <span>Events</span>
+        <span>Tournaments</span>
       </NavLink>
       <NavLink
         to="/community"

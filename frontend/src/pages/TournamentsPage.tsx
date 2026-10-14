@@ -460,9 +460,14 @@ export default function TournamentsPage() {
               </button>
             )}
             {!user && events.length === 0 && !codeFromSearch && (
-              <Link to="/login?next=%2Ftournaments" className="btn btn-primary" style={{ marginTop: 12 }}>
-                Log in to create
-              </Link>
+              <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+                <Link to="/signup?next=%2Ftournaments" className="btn btn-primary">
+                  Sign up to create
+                </Link>
+                <Link to="/login?next=%2Ftournaments" className="btn btn-ghost">
+                  Log in
+                </Link>
+              </div>
             )}
           </div>
         )}

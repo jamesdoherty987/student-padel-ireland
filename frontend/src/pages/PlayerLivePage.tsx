@@ -399,7 +399,9 @@ export default function PlayerLivePage() {
         </header>
 
         <section className="pl-next">
-          <h2>Your next match</h2>
+          <h2>
+            {hasPaidEntry || hasPendingCaptain || isListedPartner ? 'Your next match' : 'Get on the board'}
+          </h2>
           {hasPendingCaptain ? (
             <div className="pl-next-card">
               <p className="pl-empty" style={{ marginBottom: 12 }}>

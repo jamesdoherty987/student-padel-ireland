@@ -49,7 +49,7 @@ export default function TournamentDetailPage() {
   const { data: playerView } = useQuery({
     queryKey: ['player-view', slug],
     queryFn: async () => (await tournamentApi.playerView(slug)).data,
-    enabled: !!slug,
+    enabled: !!slug && !!user,
     refetchInterval: 12000,
   })
 

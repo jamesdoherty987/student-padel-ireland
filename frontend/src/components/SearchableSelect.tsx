@@ -59,6 +59,7 @@ export default function SearchableSelect({
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [highlight, setHighlight] = useState(0)
+  const [requiredError, setRequiredError] = useState(false)
 
   const selected = options.find((o) => o.value === value) || null
   const orphanValue = Boolean(value && !selected)
@@ -76,14 +77,18 @@ export default function SearchableSelect({
 
   useEffect(() => {
     if (!open) return
-    const onDoc = (e: MouseEvent) => {
+    const onDoc = (e: MouseEvent | TouchEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) {
         setOpen(false)
         setQuery('')
       }
     }
     document.addEventListener('mousedown', onDoc)
-    return () => document.removeEventListener('mousedown', onDoc)
+    document.addEventListener('touchstart', onDoc, { passive: true })
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('touchstart', onDoc)
+    }
   }, [open])
 
   useEffect(() => {
@@ -92,6 +97,7 @@ export default function SearchableSelect({
 
   const pick = (next: string) => {
     onChange(next)
+    setRequiredError(false)
     setOpen(false)
     setQuery('')
   }
@@ -121,6 +127,10 @@ export default function SearchableSelect({
           required
           value={formValue}
           onChange={() => {}}
+          onInvalid={(e) => {
+            e.preventDefault()
+            setRequiredError(true)
+          }}
           style={{
             position: 'absolute',
             opacity: 0,
@@ -135,14 +145,18 @@ export default function SearchableSelect({
         <button
           type="button"
           id={triggerId}
-          className={`searchable-select-trigger form-input ${!selected ? 'is-placeholder' : ''}`}
+          className={`searchable-select-trigger form-input ${!selected ? 'is-placeholder' : ''} ${
+            requiredError ? 'is-invalid' : ''
+          }`}
           disabled={disabled}
           aria-haspopup="listbox"
           aria-expanded={false}
+          aria-invalid={requiredError || undefined}
           aria-labelledby={aria['aria-labelledby']}
           aria-label={aria['aria-label']}
           onClick={() => {
             if (disabled) return
+            setRequiredError(false)
             setOpen(true)
             window.setTimeout(() => inputRef.current?.focus(), 0)
           }}
@@ -172,6 +186,10 @@ export default function SearchableSelect({
               disabled={disabled}
               placeholder={searchPlaceholder}
               autoComplete="off"
+              autoCapitalize="words"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="search"
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') {
@@ -221,6 +239,11 @@ export default function SearchableSelect({
             )}
           </ul>
         </div>
+      )}
+      {requiredError && (
+        <p className="form-error searchable-select-error" role="alert">
+          Please select an option
+        </p>
       )}
     </div>
   )

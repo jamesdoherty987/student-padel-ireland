@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
@@ -18,6 +18,7 @@ export default function JoinCompetitionPage() {
   const [error, setError] = useState('')
   const [status, setStatus] = useState('Looking up invite…')
   const [attempt, setAttempt] = useState(0)
+  const joinStarted = useRef<string | null>(null)
   const clean = cleanInviteCode(code)
   const incomplete = !clean || clean.length < 6
 
@@ -28,12 +29,16 @@ export default function JoinCompetitionPage() {
       void qc.invalidateQueries({ queryKey: ['competitions'] })
       navigate(`/community/${res.data.slug}`, { replace: true })
     },
-    onError: (e) => setError(apiErrorMessage(e)),
+    onError: (e) => {
+      joinStarted.current = null
+      setError(apiErrorMessage(e))
+    },
   })
 
   useEffect(() => {
     if (loading || incomplete) return
     let cancelled = false
+    const joinKey = `${clean}:${user?.id || ''}:${attempt}`
     ;(async () => {
       setError('')
       setStatus('Looking up invite…')
@@ -44,17 +49,24 @@ export default function JoinCompetitionPage() {
           setStatus(`This is a tournament code. Opening ${invite.name}…`)
           const path = invite.join_path
           if (user) navigate(path, { replace: true })
-          else navigate(`/login?next=${encodeURIComponent(path)}`, { replace: true })
+          else navigate(`/signup?next=${encodeURIComponent(path)}`, { replace: true })
           return
         }
         if (!user) {
-          navigate(`/login?next=${encodeURIComponent(`/community/join/${clean}`)}`, { replace: true })
+          navigate(`/signup?next=${encodeURIComponent(`/community/join/${clean}`)}`, {
+            replace: true,
+          })
           return
         }
+        if (joinStarted.current === joinKey || joinMut.isPending) return
+        joinStarted.current = joinKey
         setStatus(`Joining ${invite.name}…`)
         joinMut.mutate()
       } catch (e) {
-        if (!cancelled) setError(apiErrorMessage(e, 'Invite code not found'))
+        if (!cancelled) {
+          joinStarted.current = null
+          setError(apiErrorMessage(e, 'Invite code not found'))
+        }
       }
     })()
     return () => {
@@ -87,7 +99,7 @@ export default function JoinCompetitionPage() {
                 Enter a code
               </HaveCodeButton>
               <Link to="/tournaments" className="btn btn-ghost">
-                Browse events
+                Browse tournaments
               </Link>
             </div>
           </div>

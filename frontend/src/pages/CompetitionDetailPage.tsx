@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext'
 import { isNativeApp, publicPathUrl } from '../native/platform'
 import {
   apiErrorMessage,
+  apiErrorStatus,
   communityApi,
   type CommunityMatch,
   type CompetitionMember,
@@ -264,6 +265,27 @@ export default function CompetitionDetailPage() {
     [matchesQ.data],
   )
 
+  if (!user) {
+    const next = encodeURIComponent(`/community/${slug}`)
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page empty-state">
+          <h1 className="page-title">Community event</h1>
+          <p className="page-sub">Sign up or log in to view this competition and join matches.</p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <Link to={`/signup?next=${next}`} className="btn btn-primary">
+              Sign up
+            </Link>
+            <Link to={`/login?next=${next}`} className="btn btn-ghost">
+              Log in
+            </Link>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   if (compQ.isLoading) {
     return (
       <div className="app-shell">
@@ -276,13 +298,19 @@ export default function CompetitionDetailPage() {
   }
 
   if (compQ.isError || !c) {
+    const status = apiErrorStatus(compQ.error)
+    const notMember = status === 403
     return (
       <div className="app-shell">
         <NavBar />
         <main className="page">
           <div className="empty-state">
-            <p>Competition not found or you are not a member.</p>
-            <Link to="/community" className="btn btn-ghost" style={{ marginTop: 12 }}>
+            <p>
+              {notMember
+                ? 'You’re not a member of this competition. Ask for an invite code to join.'
+                : 'Competition not found.'}
+            </p>
+            <Link to="/community" className="btn btn-primary" style={{ marginTop: 12 }}>
               Back to community
             </Link>
           </div>

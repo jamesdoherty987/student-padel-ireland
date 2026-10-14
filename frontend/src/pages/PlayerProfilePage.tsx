@@ -356,7 +356,13 @@ export default function PlayerProfilePage() {
         {player && (
           <>
             <p className="eyebrow profile-back">
-              <Link to="/rankings">← Rankings</Link>
+              <button type="button" className="profile-back-btn" onClick={() => navigate(-1)}>
+                ← Back
+              </button>
+              <span className="profile-back-sep" aria-hidden>
+                ·
+              </span>
+              <Link to="/rankings">Rankings</Link>
             </p>
 
             <header className="profile-hero">

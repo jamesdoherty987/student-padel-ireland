@@ -682,10 +682,15 @@ export default function OrganiserDashboard() {
         <NavBar />
         <main className="page empty-state">
           <h1 className="page-title">Host a tournament</h1>
-          <p className="page-sub">Log in to create and run your own events.</p>
-          <Link to="/login?next=/organiser" className="btn btn-primary">
-            Log in
-          </Link>
+          <p className="page-sub">Create an account or log in to run your own events.</p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <Link to="/signup?next=/organiser" className="btn btn-primary">
+              Sign up
+            </Link>
+            <Link to="/login?next=/organiser" className="btn btn-ghost">
+              Log in
+            </Link>
+          </div>
         </main>
       </div>
     )

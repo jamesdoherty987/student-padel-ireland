@@ -354,9 +354,14 @@ export default function JoinTournamentPage() {
           <main className="page empty-state">
             <h1 className="page-title">Confirm registration</h1>
             <p className="page-sub">Log in with the account used at checkout to see your confirmation.</p>
-            <Link to={`/login?next=${next}`} className="btn btn-primary">
-              Log in
-            </Link>
+            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+              <Link to={`/login?next=${next}`} className="btn btn-primary">
+                Log in
+              </Link>
+              <Link to={`/signup?next=${next}`} className="btn btn-ghost">
+                Sign up
+              </Link>
+            </div>
           </main>
         </div>
       )
@@ -812,11 +817,15 @@ export default function JoinTournamentPage() {
                     id="join-partner-name"
                     className="form-input"
                     aria-label="Partner name"
+                    name="partner-name"
                     value={form.partner_name}
                     onChange={(e) => setForm({ ...form, partner_name: e.target.value })}
                     placeholder="Partner’s full name"
                     required
                     minLength={2}
+                    autoComplete="name"
+                    autoCapitalize="words"
+                    enterKeyHint="next"
                     style={{ marginBottom: 8 }}
                   />
                   <input
@@ -824,10 +833,17 @@ export default function JoinTournamentPage() {
                     className="form-input"
                     type="email"
                     aria-label="Partner email"
+                    name="partner-email"
                     value={form.partner_email}
                     onChange={(e) => setForm({ ...form, partner_email: e.target.value })}
                     placeholder="Partner’s email"
                     required
+                    autoComplete="email"
+                    inputMode="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    enterKeyHint="next"
                   />
                   <p className="muted-note">
                     Use the email they signed up with if they already have an account. They won’t be charged.
@@ -843,9 +859,13 @@ export default function JoinTournamentPage() {
             <input
               id="join-phone"
               className="form-input"
+              type="tel"
+              name="tel"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               autoComplete="tel"
+              inputMode="tel"
+              enterKeyHint="next"
             />
           </div>
           <div className="form-group">
@@ -876,9 +896,18 @@ export default function JoinTournamentPage() {
               className="form-input"
               value={form.student_number}
               onChange={(e) => setForm({ ...form, student_number: e.target.value })}
+              autoComplete="off"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="done"
             />
           </div>
-          {error && <p className="auth-error">{error}</p>}
+          {error && (
+            <p className="auth-error" role="alert">
+              {error}
+            </p>
+          )}
           {publicConfig?.demo_payments && (
             <p className="muted-note">Demo checkout. No card will be charged.</p>
           )}
