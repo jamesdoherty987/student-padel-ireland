@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
+import { usePageSeo } from '../hooks/usePageSeo'
 import { communityApi, platformApi } from '../services/api'
 import { mediaUrl } from '../utils/media'
 import './Tournament.css'
@@ -14,6 +15,12 @@ const SCOPE_FILTERS = [
 ] as const
 
 export default function RankingsPage() {
+  usePageSeo({
+    title: 'Ireland Student Padel Rankings',
+    description:
+      'Live Ireland student padel rankings on Student Padel Ireland. See standings from tournaments and community matches nationwide.',
+    path: '/rankings',
+  })
   const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const scopeParam = searchParams.get('scope')

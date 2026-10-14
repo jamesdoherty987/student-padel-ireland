@@ -5,7 +5,13 @@ import NavBar from '../components/NavBar'
 import NumberInput from '../components/NumberInput'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl, publicWebOrigin } from '../native/platform'
-import { apiErrorMessage, platformApi, tournamentApi, type Tournament } from '../services/api'
+import {
+  apiErrorMessage,
+  platformApi,
+  tournamentApi,
+  type OrganiserDashRow,
+  type Tournament,
+} from '../services/api'
 import { formatDate, formatEntrySummary, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
 import './Organiser.css'
 import './Admin.css'
@@ -18,13 +24,6 @@ const STATUSES = [
   'COMPLETED',
   'CANCELLED',
 ] as const
-
-type DashRow = {
-  tournament: Tournament
-  teams: number
-  paid_registrations: number
-  revenue_cents: number
-}
 
 type TournamentFormState = {
   name: string
@@ -169,7 +168,7 @@ export default function AdminDashboard() {
     enabled: isAdmin,
   })
 
-  const rows = (data?.tournaments || []) as DashRow[]
+  const rows: OrganiserDashRow[] = data?.tournaments || []
 
   const openCount = rows.filter((r) => r.tournament.status === 'REGISTRATION_OPEN').length
   const liveCount = rows.filter((r) => r.tournament.status === 'LIVE').length
@@ -397,7 +396,7 @@ function AdminTournamentCard({
   onDelete,
   onCopied,
 }: {
-  row: DashRow
+  row: OrganiserDashRow
   busy: boolean
   onStatus: (status: string) => void
   onEdit: () => void

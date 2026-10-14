@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
@@ -223,7 +223,6 @@ export default function JoinTournamentPage() {
 
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
-  const qc = useQueryClient()
   const [paymentNote, setPaymentNote] = useState(
     paymentCancelled ? 'Payment was cancelled. You can try again when ready.' : '',
   )

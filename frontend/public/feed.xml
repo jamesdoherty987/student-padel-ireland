@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Student Padel Ireland Blog</title>
+    <link>https://studentpadel.ie/blog</link>
+    <description>Guides to student padel tournaments, rankings, and campus clubs across Ireland.</description>
+    <language>en-ie</language>
+    <atom:link href="https://studentpadel.ie/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>How to find a padel partner at college in Ireland</title>
+      <link>https://studentpadel.ie/blog/find-a-padel-partner-at-college</link>
+      <guid>https://studentpadel.ie/blog/find-a-padel-partner-at-college</guid>
+      <pubDate>Sat, 11 Oct 2026 12:00:00 GMT</pubDate>
+      <description>Practical ways Irish students find doubles partners for padel — campus clubs, invite codes, and Student Padel Ireland events.</description>
+    </item>
+    <item>
+      <title>Live scores and match day on Student Padel Ireland</title>
+      <link>https://studentpadel.ie/blog/live-scores-student-padel</link>
+      <guid>https://studentpadel.ie/blog/live-scores-student-padel</guid>
+      <pubDate>Fri, 10 Oct 2026 12:00:00 GMT</pubDate>
+      <description>How live scoring, player views, and TV displays work at student padel tournaments on Student Padel Ireland.</description>
+    </item>
+    <item>
+      <title>Student padel in Belfast and across Northern Ireland</title>
+      <link>https://studentpadel.ie/blog/student-padel-belfast</link>
+      <guid>https://studentpadel.ie/blog/student-padel-belfast</guid>
+      <pubDate>Thu, 09 Oct 2026 12:00:00 GMT</pubDate>
+      <description>Find student padel tournaments and community games in Belfast on Student Padel Ireland.</description>
+    </item>
+    <item>
+      <title>University padel clubs in Ireland: how SPI fits in</title>
+      <link>https://studentpadel.ie/blog/university-padel-clubs-ireland</link>
+      <guid>https://studentpadel.ie/blog/university-padel-clubs-ireland</guid>
+      <pubDate>Wed, 08 Oct 2026 12:00:00 GMT</pubDate>
+      <description>How campus padel clubs and societies across Ireland can use Student Padel Ireland.</description>
+    </item>
+    <item>
+      <title>Beginner’s guide to student padel in Ireland</title>
+      <link>https://studentpadel.ie/blog/beginners-guide-student-padel</link>
+      <guid>https://studentpadel.ie/blog/beginners-guide-student-padel</guid>
+      <pubDate>Tue, 07 Oct 2026 12:00:00 GMT</pubDate>
+      <description>New to padel at college? What to bring and how to find your first student padel game in Ireland.</description>
+    </item>
+    <item>
+      <title>How to organise a student padel tournament</title>
+      <link>https://studentpadel.ie/blog/organise-a-student-padel-tournament</link>
+      <guid>https://studentpadel.ie/blog/organise-a-student-padel-tournament</guid>
+      <pubDate>Mon, 06 Oct 2026 12:00:00 GMT</pubDate>
+      <description>Practical checklist for society organisers running a student padel tournament in Ireland.</description>
+    </item>
+    <item>
+      <title>How Student Padel Ireland rankings work</title>
+      <link>https://studentpadel.ie/blog/how-student-padel-rankings-work</link>
+      <guid>https://studentpadel.ie/blog/how-student-padel-rankings-work</guid>
+      <pubDate>Sun, 05 Oct 2026 12:00:00 GMT</pubDate>
+      <description>Learn how Ireland student padel rankings update from tournament and community match results.</description>
+    </item>
+    <item>
+      <title>Student padel outside Dublin: Cork, Galway, Limerick &amp; more</title>
+      <link>https://studentpadel.ie/blog/student-padel-cork-galway-limerick</link>
+      <guid>https://studentpadel.ie/blog/student-padel-cork-galway-limerick</guid>
+      <pubDate>Sat, 04 Oct 2026 12:00:00 GMT</pubDate>
+      <description>Student padel is growing in Cork, Galway, Limerick, Belfast and Waterford.</description>
+    </item>
+    <item>
+      <title>Student padel in Dublin: find games and tournaments</title>
+      <link>https://studentpadel.ie/blog/student-padel-dublin</link>
+      <guid>https://studentpadel.ie/blog/student-padel-dublin</guid>
+      <pubDate>Fri, 03 Oct 2026 12:00:00 GMT</pubDate>
+      <description>Looking for student padel in Dublin? Tournaments, community games, and rankings on Student Padel Ireland.</description>
+    </item>
+    <item>
+      <title>How to join a student padel tournament in Ireland</title>
+      <link>https://studentpadel.ie/blog/how-to-join-a-student-padel-tournament</link>
+      <guid>https://studentpadel.ie/blog/how-to-join-a-student-padel-tournament</guid>
+      <pubDate>Thu, 02 Oct 2026 12:00:00 GMT</pubDate>
+      <description>Step-by-step guide to finding and joining student padel tournaments on Student Padel Ireland.</description>
+    </item>
+    <item>
+      <title>What is Student Padel Ireland?</title>
+      <link>https://studentpadel.ie/blog/what-is-student-padel-ireland</link>
+      <guid>https://studentpadel.ie/blog/what-is-student-padel-ireland</guid>
+      <pubDate>Wed, 01 Oct 2026 12:00:00 GMT</pubDate>
+      <description>Student Padel Ireland is the platform for student padel tournaments, community games, live scores, and national rankings across Ireland.</description>
+    </item>
+  </channel>
+</rss>

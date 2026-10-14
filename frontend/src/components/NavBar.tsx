@@ -76,6 +76,13 @@ export default function NavBar() {
               >
                 Rankings
               </NavLink>
+              <NavLink
+                to="/blog"
+                className={({ isActive }) => (isActive ? 'active' : '')}
+                onClick={close}
+              >
+                Blog
+              </NavLink>
             </>
           )}
           {user ? (

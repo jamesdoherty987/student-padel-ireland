@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
+import { usePageSeo } from '../hooks/usePageSeo'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { apiErrorMessage, platformApi } from '../services/api'
@@ -97,6 +98,12 @@ function PasswordField({
 
 export function LoginPage() {
   useDarkStatusBar()
+  usePageSeo({
+    title: 'Log in',
+    description: 'Log in to Student Padel Ireland to join tournaments and track your matches.',
+    path: '/login',
+    noIndex: true,
+  })
   const { login, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
@@ -217,6 +224,12 @@ export function LoginPage() {
 
 export function SignupPage() {
   useDarkStatusBar()
+  usePageSeo({
+    title: 'Sign up',
+    description: 'Create a Student Padel Ireland account to join student padel tournaments across Ireland.',
+    path: '/signup',
+    noIndex: true,
+  })
   const { register, user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()

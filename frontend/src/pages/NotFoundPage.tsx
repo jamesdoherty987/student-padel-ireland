@@ -1,7 +1,15 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import NavBar from '../components/NavBar'
+import { usePageSeo } from '../hooks/usePageSeo'
 
 export default function NotFoundPage() {
+  const { pathname } = useLocation()
+  usePageSeo({
+    title: 'Page not found',
+    description: 'That page could not be found on Student Padel Ireland.',
+    path: pathname === '/404' ? '/404' : pathname,
+    noIndex: true,
+  })
   return (
     <div className="app-shell">
       <NavBar />

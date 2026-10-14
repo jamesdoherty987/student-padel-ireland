@@ -74,7 +74,7 @@ export type Tournament = {
   number_of_courts: number
   entry_fee_cents: number
   currency: string
-  pay_on_arrival?: boolean
+  pay_on_arrival: boolean
   max_teams: number
   registration_deadline?: string | null
   format: string
@@ -110,6 +110,34 @@ export type TournamentAnnouncement = {
   body: string
   is_pinned: boolean
   created_at: string
+}
+
+/** Team row returned by organiser team list / check-in / withdraw */
+export type TournamentTeam = {
+  id: string
+  tournament_id: string
+  name: string
+  university_id?: string | null
+  seed?: number | null
+  checked_in: boolean
+  withdrawn: boolean
+  player_names: string[]
+  payment_status?: string | null
+  payment_via?: string | null
+}
+
+/** Row from GET /api/organiser/dashboard */
+export type OrganiserDashRow = {
+  tournament: Tournament
+  teams: number
+  players: number
+  revenue_cents: number
+  paid_registrations: number
+  live_matches: number
+  completed_matches: number
+  checked_in: number
+  is_owner?: boolean
+  can_manage_admins?: boolean
 }
 
 export type Match = {
@@ -329,7 +357,12 @@ export const tournamentApi = {
     api.patch<Tournament>(`/api/tournaments/${id}`, data),
   delete: (id: string) => api.delete<{ ok: boolean; deleted: string }>(`/api/tournaments/${id}`),
   register: (tournamentId: string, data: Record<string, unknown>) =>
-    api.post(`/api/tournaments/${tournamentId}/register`, data),
+    api.post<{
+      checkout_url?: string | null
+      registration_id: string
+      demo_mode?: boolean
+      message?: string
+    }>(`/api/tournaments/${tournamentId}/register`, data),
   payOnlineNow: (tournamentId: string) =>
     api.post<{
       checkout_url?: string | null
@@ -338,8 +371,8 @@ export const tournamentApi = {
       message?: string
     }>(`/api/tournaments/${tournamentId}/pay-online-now`),
   organiserAddTeam: (tournamentId: string, data: Record<string, unknown>) =>
-    api.post(`/api/tournaments/${tournamentId}/organiser-add-team`, data),
-  teams: (tournamentId: string) => api.get(`/api/tournaments/${tournamentId}/teams`),
+    api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/organiser-add-team`, data),
+  teams: (tournamentId: string) => api.get<TournamentTeam[]>(`/api/tournaments/${tournamentId}/teams`),
   generate: (tournamentId: string, data?: Record<string, unknown>) =>
     api.post(`/api/tournaments/${tournamentId}/generate`, data || {}),
   seedKnockout: (tournamentId: string) =>
@@ -384,13 +417,13 @@ export const tournamentApi = {
   moveMatch: (matchId: string, data: Record<string, unknown>) =>
     api.patch(`/api/matches/${matchId}`, data),
   checkIn: (tournamentId: string, teamId: string, data: Record<string, unknown>) =>
-    api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/check-in`, data),
+    api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/check-in`, data),
   markFeeCollected: (tournamentId: string, teamId: string) =>
-    api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/mark-fee-collected`),
+    api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/mark-fee-collected`),
   withdrawTeam: (tournamentId: string, teamId: string) =>
-    api.post(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
+    api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
   leaveTournament: (tournamentId: string) =>
-    api.post(`/api/tournaments/${tournamentId}/leave`),
+    api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/leave`),
   getRegistration: (id: string) => api.get<RegistrationConfirm>(`/api/registrations/${id}`),
   confirmPaymentSession: (sessionId: string) =>
     api.get<RegistrationConfirm>('/api/payments/confirm', { params: { session_id: sessionId } }),
@@ -426,7 +459,7 @@ export const platformApi = {
   deleteMedia: (id: string) => api.delete(`/api/me/profile/media/${id}`),
   setAvatar: (id: string) => api.post<RankingRow>(`/api/me/profile/media/${id}/avatar`),
   clearAvatar: () => api.delete<RankingRow>('/api/me/profile/avatar'),
-  organiserDashboard: () => api.get('/api/organiser/dashboard'),
+  organiserDashboard: () => api.get<{ tournaments: OrganiserDashRow[] }>('/api/organiser/dashboard'),
 }
 
 export const reportApi = {

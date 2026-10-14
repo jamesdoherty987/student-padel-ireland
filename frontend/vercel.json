@@ -15,6 +15,27 @@
       ]
     },
     {
+      "source": "/robots.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/plain; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/sitemap.xml",
+      "headers": [
+        { "key": "Content-Type", "value": "application/xml; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/feed.xml",
+      "headers": [
+        { "key": "Content-Type", "value": "application/rss+xml; charset=utf-8" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
       "source": "/.well-known/apple-app-site-association",
       "headers": [
         { "key": "Content-Type", "value": "application/json" },
@@ -59,9 +80,17 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.studentpadel.ie" }],
+      "destination": "https://studentpadel.ie/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
-      "source": "/((?!\\.well-known/|videos/|images/|icons/|assets/|favicon\\.svg|apple-touch-icon\\.png|manifest\\.webmanifest|sw\\.js|robots\\.txt).*)",
+      "source": "/((?!\\.well-known/|videos/|images/|icons/|assets/|favicon\\.svg|apple-touch-icon\\.png|manifest\\.webmanifest|sw\\.js|robots\\.txt|sitemap\\.xml|feed\\.xml|spi-logo\\.png|icons\\.svg).*)",
       "destination": "/index.html"
     }
   ]

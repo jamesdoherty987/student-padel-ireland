@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
+import { usePageSeo } from '../hooks/usePageSeo'
 import { apiErrorMessage, communityApi, tournamentApi } from '../services/api'
 import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
 import { formatDate, formatPerPlayerFee, statusBadgeClass, statusLabel } from '../utils/format'
@@ -42,6 +43,12 @@ type UnifiedEvent = {
 }
 
 export default function TournamentsPage() {
+  usePageSeo({
+    title: 'Student Padel Tournaments in Ireland',
+    description:
+      'Browse upcoming student padel tournaments and community events across Ireland. Join with a code or register as a doubles team on Student Padel Ireland.',
+    path: '/tournaments',
+  })
   const { user } = useAuth()
   const navigate = useNavigate()
   const qc = useQueryClient()

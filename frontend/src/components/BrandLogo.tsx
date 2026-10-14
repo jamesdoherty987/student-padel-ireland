@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 
+/** In-app brand mark (landing, header, auth). Google/schema uses student-padel-ireland-logo.png. */
 const LOGO_SRC = '/images/spi-logo.png'
 
 type Size = 'sm' | 'md' | 'lg' | 'xl'

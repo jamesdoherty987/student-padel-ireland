@@ -1,0 +1,16 @@
+# https://studentpadel.ie/robots.txt
+User-agent: *
+Allow: /
+
+# Private / app surfaces — no value in search results
+Disallow: /admin
+Disallow: /organiser
+Disallow: /welcome
+Disallow: /login
+Disallow: /signup
+Disallow: /tournament/*/display
+
+Sitemap: https://studentpadel.ie/sitemap.xml
+
+# RSS for blog discovery
+# https://studentpadel.ie/feed.xml

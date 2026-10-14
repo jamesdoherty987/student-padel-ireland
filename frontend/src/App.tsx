@@ -6,6 +6,7 @@ import { ConfirmDialogProvider } from './components/ConfirmDialog'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import NativeTabBar from './components/NativeTabBar'
 import OfflineBanner from './components/OfflineBanner'
+import RouteSeoFallback from './components/RouteSeoFallback'
 import { NativeDeepLinkRouter } from './native/NativeDeepLinkRouter'
 import { apiBaseUrl, isNativeApp } from './native/platform'
 import { communityApi, tournamentApi } from './services/api'
@@ -34,6 +35,9 @@ const JoinCompetitionPage = lazy(() => import('./pages/JoinCompetitionPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
 const TermsPage = lazy(() => import('./pages/TermsPage'))
+const AboutPage = lazy(() => import('./pages/AboutPage'))
+const BlogPage = lazy(() => import('./pages/BlogPage'))
+const BlogPostPage = lazy(() => import('./pages/BlogPostPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -155,6 +159,7 @@ export default function App() {
         <BrowserRouter>
           <AuthPersistBridge>
             <NativeDeepLinkRouter />
+            <RouteSeoFallback />
             <OfflineBanner />
             <ConfirmDialogProvider />
             <Suspense fallback={<RouteFallback />}>
@@ -163,6 +168,9 @@ export default function App() {
                 <Route path="/welcome" element={<NativeWelcomePage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/terms" element={<TermsPage />} />
+                <Route path="/about" element={<AboutPage />} />
+                <Route path="/blog" element={<BlogPage />} />
+                <Route path="/blog/:slug" element={<BlogPostPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
                 <Route path="/tournaments" element={<TournamentsPage />} />

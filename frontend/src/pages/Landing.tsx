@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import { useAuth } from '../context/AuthContext'
+import { usePageSeo } from '../hooks/usePageSeo'
 import { tournamentApi, type Tournament } from '../services/api'
 import { formatPerPlayerFee, parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
 import { FlipWords } from '../components/ui/FlipWords'
 import { InfiniteMovingCards } from '../components/ui/InfiniteMovingCards'
 import { LazyGlobe } from '../components/ui/LazyGlobe'
+import { getAllPosts } from '../data/blogPosts'
 import { HERO_ROTATION, LANDING_VIDEO } from '../data/landingImages'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import './Landing.css'
@@ -29,6 +31,48 @@ const STEPS = [
   { n: '3', title: 'Play and climb rankings', body: 'Match results from tournaments and community games update Ireland rankings.' },
 ]
 
+const FAQS: { q: string; a: ReactNode }[] = [
+  {
+    q: 'What is Student Padel Ireland?',
+    a: (
+      <>
+        Student Padel Ireland is the platform for student padel in Ireland — browse tournaments, join with an invite
+        code, play community games with friends, and follow live scores and national rankings.{' '}
+        <Link to="/blog/what-is-student-padel-ireland">Read the full overview</Link>.
+      </>
+    ),
+  },
+  {
+    q: 'Where can I play student padel in Ireland?',
+    a: (
+      <>
+        Events run across Ireland including Dublin, Cork, Galway, Limerick, Belfast, and Waterford. Check Upcoming
+        events, or read our guides for <Link to="/blog/student-padel-dublin">Dublin</Link> and{' '}
+        <Link to="/blog/student-padel-cork-galway-limerick">Cork, Galway &amp; Limerick</Link>.
+      </>
+    ),
+  },
+  {
+    q: 'How do I join a tournament?',
+    a: (
+      <>
+        Open Tournaments on studentpadel.ie, pick an event, and register with your partner. If a friend invited you,
+        use Have a code? or scan their QR. See the{' '}
+        <Link to="/blog/how-to-join-a-student-padel-tournament">step-by-step join guide</Link>.
+      </>
+    ),
+  },
+  {
+    q: 'Is Student Padel Ireland only for university students?',
+    a: (
+      <>
+        It is built for the student padel community in Ireland. Individual events set their own entry rules — check
+        each tournament page for eligibility. More on the <Link to="/about">About</Link> page.
+      </>
+    ),
+  },
+]
+
 function eventDay(iso: string) {
   const d = parseCalendarDate(iso)
   return {
@@ -45,6 +89,48 @@ export default function Landing() {
   const featureVideoRef = useRef<HTMLVideoElement>(null)
   const [videoPlaying, setVideoPlaying] = useState(false)
   const [videoFailed, setVideoFailed] = useState(false)
+
+  usePageSeo({ path: '/' })
+
+  useEffect(() => {
+    const id = 'spi-faq-jsonld'
+    const existing = document.getElementById(id)
+    if (existing) existing.remove()
+    const script = document.createElement('script')
+    script.id = id
+    script.type = 'application/ld+json'
+    const faqPlain: { q: string; a: string }[] = [
+      {
+        q: 'What is Student Padel Ireland?',
+        a: 'Student Padel Ireland is the platform for student padel in Ireland — browse tournaments, join with an invite code, play community games with friends, and follow live scores and national rankings.',
+      },
+      {
+        q: 'Where can I play student padel in Ireland?',
+        a: 'Events run across Ireland including Dublin, Cork, Galway, Limerick, Belfast, and Waterford.',
+      },
+      {
+        q: 'How do I join a tournament?',
+        a: 'Open Tournaments on studentpadel.ie, pick an event, and register with your partner. If a friend invited you, use Have a code? or scan their QR.',
+      },
+      {
+        q: 'Is Student Padel Ireland only for university students?',
+        a: 'It is built for the student padel community in Ireland. Individual events set their own entry rules — check each tournament page for eligibility.',
+      },
+    ]
+    script.text = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: faqPlain.map((item) => ({
+        '@type': 'Question',
+        name: item.q,
+        acceptedAnswer: { '@type': 'Answer', text: item.a },
+      })),
+    })
+    document.head.appendChild(script)
+    return () => {
+      document.getElementById(id)?.remove()
+    }
+  }, [])
 
   useEffect(() => {
     if (menuOpen || scrolled) {
@@ -188,6 +274,7 @@ export default function Landing() {
   })
 
   const upcoming = tournaments.slice(0, 6)
+  const latestPosts = getAllPosts().slice(0, 3)
   const close = () => setMenuOpen(false)
   const primaryHref = user?.role === 'ADMIN' ? '/admin' : user ? '/tournaments' : '/signup'
   const primaryLabel = user?.role === 'ADMIN' ? 'Admin' : user ? 'Tournaments' : 'Sign up'
@@ -212,6 +299,9 @@ export default function Landing() {
             </a>
             <Link to="/rankings" onClick={close}>
               Rankings
+            </Link>
+            <Link to="/blog" onClick={close}>
+              Blog
             </Link>
             {user ? (
               <>
@@ -265,7 +355,7 @@ export default function Landing() {
               <img
                 key={src}
                 src={src}
-                alt=""
+                alt="Students playing padel in Ireland"
                 className={i === heroIndex ? 'is-active' : undefined}
                 loading={i === 0 ? 'eager' : 'lazy'}
                 fetchPriority={i === 0 ? 'high' : 'low'}
@@ -429,6 +519,54 @@ export default function Landing() {
           </div>
         </section>
 
+        <section id="faq" className="lp-section lp-section-muted" aria-labelledby="faq-heading">
+          <div className="lp-wrap">
+            <div className="lp-section-head">
+              <div>
+                <p className="lp-kicker">FAQ</p>
+                <h2 id="faq-heading">Student padel in Ireland</h2>
+              </div>
+            </div>
+            <div className="lp-faq">
+              {FAQS.map((item) => (
+                <details key={item.q} className="lp-faq-item">
+                  <summary>{item.q}</summary>
+                  <p className="lp-faq-answer">{item.a}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="guides" className="lp-section" aria-labelledby="guides-heading">
+          <div className="lp-wrap">
+            <div className="lp-section-head">
+              <div>
+                <p className="lp-kicker">Guides</p>
+                <h2 id="guides-heading">From the blog</h2>
+              </div>
+              <Link to="/blog" className="lp-link">
+                All posts
+              </Link>
+            </div>
+            <ul className="lp-stack">
+              {latestPosts.map((post) => (
+                <li key={post.slug}>
+                  <Link to={`/blog/${post.slug}`} className="lp-event">
+                    <div className="lp-event-body">
+                      <h3>{post.title}</h3>
+                      <p>{post.description}</p>
+                    </div>
+                    <div className="lp-event-side">
+                      <span className="lp-event-fee">{post.readingMinutes} min</span>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+
         <section className="lp-cta">
           <div className="lp-wrap lp-cta-inner">
             <h2>Ready to play?</h2>
@@ -443,13 +581,20 @@ export default function Landing() {
         <div className="lp-wrap lp-footer-row">
           <BrandLogo to="/" className="lp-footer-brand" size="sm" />
           <div className="lp-footer-links">
-            <a href="#upcoming">Upcoming</a>
+            <Link to="/tournaments">Tournaments</Link>
+            <Link to="/rankings">Rankings</Link>
+            <Link to="/community">Community</Link>
+            <Link to="/blog">Blog</Link>
+            <Link to="/about">About</Link>
+            <a href="#faq">FAQ</a>
             <Link to="/privacy">Privacy</Link>
             <Link to="/terms">Terms</Link>
             <a href="mailto:jkdoherty123@gmail.com">Contact</a>
           </div>
         </div>
-        <div className="lp-wrap lp-footer-copy">© {new Date().getFullYear()} Student Padel Ireland</div>
+        <div className="lp-wrap lp-footer-copy">
+          © {new Date().getFullYear()} Student Padel Ireland · studentpadel.ie
+        </div>
       </footer>
     </div>
   )

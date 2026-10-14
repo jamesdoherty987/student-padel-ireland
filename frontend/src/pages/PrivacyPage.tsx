@@ -1,8 +1,14 @@
 import { Link } from 'react-router-dom'
 import NavBar from '../components/NavBar'
+import { usePageSeo } from '../hooks/usePageSeo'
 import './Legal.css'
 
 export default function PrivacyPage() {
+  usePageSeo({
+    title: 'Privacy Policy',
+    description: 'Privacy policy for Student Padel Ireland — how we collect and use personal data.',
+    path: '/privacy',
+  })
   return (
     <div className="app-shell">
       <NavBar />

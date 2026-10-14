@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
+import { usePageSeo } from '../hooks/usePageSeo'
 import {
   apiErrorMessage,
   communityApi,
@@ -14,6 +15,12 @@ import './Tournament.css'
 import './Community.css'
 
 export default function CommunityPage() {
+  usePageSeo({
+    title: 'Student Padel Community Games',
+    description:
+      'Play private ladders and community padel games with friends on Student Padel Ireland. Log matches and climb the rankings together.',
+    path: '/community',
+  })
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()

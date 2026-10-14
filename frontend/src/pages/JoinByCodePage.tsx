@@ -4,6 +4,7 @@ import NavBar from '../components/NavBar'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { cleanInviteCode, resolveInviteCode } from '../utils/inviteCode'
 import { useAuth } from '../context/AuthContext'
+import { usePageSeo } from '../hooks/usePageSeo'
 import { apiErrorMessage } from '../services/api'
 import './Tournament.css'
 import './Community.css'
@@ -20,6 +21,13 @@ export default function JoinByCodePage() {
   const [autoStatus, setAutoStatus] = useState('')
   const clean = cleanInviteCode(code)
   const hasCodeParam = Boolean(code)
+
+  usePageSeo({
+    title: 'Join with a code',
+    description:
+      'Join a Student Padel Ireland tournament or community group with an invite code from a friend or organiser.',
+    path: clean ? `/join/${clean}` : '/join',
+  })
 
   useEffect(() => {
     if (!hasCodeParam || loading || !clean || clean.length < 6) return

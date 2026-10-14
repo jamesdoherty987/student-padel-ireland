@@ -16,7 +16,9 @@ import {
   platformApi,
   tournamentApi,
   type Match,
+  type OrganiserDashRow,
   type PlayerSearch,
+  type TournamentTeam,
 } from '../services/api'
 import {
   bracketFormatHint,
@@ -124,26 +126,7 @@ export default function OrganiserDashboard() {
     return () => window.removeEventListener('keydown', onKey)
   }, [confirmGenerate, scoreMatch, showAddTeam, moveMatch, showEdit])
 
-  const tournaments = (data?.tournaments || []) as Array<{
-    tournament: {
-      id: string
-      name: string
-      slug: string
-      status: string
-      max_teams: number
-      play_format?: string
-      format?: string
-    }
-    teams: number
-    players: number
-    revenue_cents: number
-    paid_registrations: number
-    live_matches: number
-    completed_matches: number
-    checked_in: number
-    is_owner?: boolean
-    can_manage_admins?: boolean
-  }>
+  const tournaments: OrganiserDashRow[] = data?.tournaments || []
 
   const active = selectedId
     ? tournaments.find((t) => t.tournament.id === selectedId) || null
@@ -536,18 +519,9 @@ export default function OrganiserDashboard() {
   const fixturesExist = matches.length > 0
   const paidCount = active?.paid_registrations ?? 0
   const maxTeams = active?.tournament.max_teams ?? 0
-  type OrgTeam = {
-    id: string
-    name: string
-    player_names: string[]
-    checked_in: boolean
-    payment_status: string
-    payment_via?: string | null
-  }
+  const orgTeams: TournamentTeam[] = teams
 
-  const orgTeams = teams as OrgTeam[]
-
-  const paymentBucket = (team: OrgTeam): 'paid' | 'owing' | 'other' => {
+  const paymentBucket = (team: TournamentTeam): 'paid' | 'owing' | 'other' => {
     if (team.payment_status === 'PENDING' || team.payment_status === 'FAILED') return 'owing'
     if (team.payment_status === 'PAID' && team.payment_via === 'pay_on_arrival') return 'owing'
     if (team.payment_status === 'PAID') return 'paid'
@@ -555,12 +529,11 @@ export default function OrganiserDashboard() {
   }
 
   const paymentCounts = useMemo(() => {
-    const list = teams as OrgTeam[]
     let paid = 0
     let owing = 0
     let collect = 0
     let incomplete = 0
-    for (const t of list) {
+    for (const t of orgTeams) {
       if (t.payment_status === 'PENDING' || t.payment_status === 'FAILED') {
         owing += 1
         incomplete += 1
@@ -571,15 +544,15 @@ export default function OrganiserDashboard() {
         paid += 1
       }
     }
-    return { paid, owing, collect, incomplete, total: list.length }
-  }, [teams])
+    return { paid, owing, collect, incomplete, total: orgTeams.length }
+  }, [orgTeams])
 
   const unpaidCount = paymentCounts.incomplete
 
   const filteredTeams = useMemo(() => {
-    const list = [...(teams as OrgTeam[])]
+    const list = [...orgTeams]
     list.sort((a, b) => {
-      const rank = (t: OrgTeam) => {
+      const rank = (t: TournamentTeam) => {
         if (t.payment_status === 'PENDING' || t.payment_status === 'FAILED') return 0
         if (t.payment_status === 'PAID' && t.payment_via === 'pay_on_arrival') return 1
         if (t.payment_status === 'PAID') return 2
@@ -591,9 +564,9 @@ export default function OrganiserDashboard() {
     })
     if (paymentFilter === 'all') return list
     return list.filter((t) => paymentBucket(t) === paymentFilter)
-  }, [teams, paymentFilter])
+  }, [orgTeams, paymentFilter])
 
-  const paymentLabel = (team: OrgTeam) => {
+  const paymentLabel = (team: TournamentTeam) => {
     if (team.payment_via === 'pay_on_arrival') return 'Not paid · venue'
     if (team.payment_via === 'collected_on_arrival') return 'Paid · in person'
     if (team.payment_via === 'free_entry') return 'Free'
@@ -605,7 +578,7 @@ export default function OrganiserDashboard() {
     return team.payment_status || '—'
   }
 
-  const paymentBadgeClass = (team: OrgTeam) => {
+  const paymentBadgeClass = (team: TournamentTeam) => {
     const bucket = paymentBucket(team)
     if (bucket === 'owing') return 'badge badge-warn'
     if (bucket === 'paid') return 'badge badge-open'

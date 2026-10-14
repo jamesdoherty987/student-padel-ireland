@@ -1,8 +1,14 @@
 import { Link } from 'react-router-dom'
 import NavBar from '../components/NavBar'
+import { usePageSeo } from '../hooks/usePageSeo'
 import './Legal.css'
 
 export default function TermsPage() {
+  usePageSeo({
+    title: 'Terms of Use',
+    description: 'Terms of use for the Student Padel Ireland website and mobile apps.',
+    path: '/terms',
+  })
   return (
     <div className="app-shell">
       <NavBar />

@@ -5,6 +5,7 @@ import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
 import TournamentBracket from '../components/TournamentBracket'
 import { useAuth } from '../context/AuthContext'
+import { usePageSeo } from '../hooks/usePageSeo'
 import { tournamentApi } from '../services/api'
 import { publicPathUrl } from '../native/platform'
 import {
@@ -52,6 +53,20 @@ export default function TournamentDetailPage() {
     enabled: !!slug && !!user,
     refetchInterval: 12000,
   })
+
+  usePageSeo(
+    tournament
+      ? {
+          title: `${tournament.name} — ${tournament.location}`,
+          description: `${tournament.name} student padel tournament in ${tournament.location} at ${tournament.venue}. Register, follow live scores, and climb the Ireland rankings on Student Padel Ireland.`,
+          path: `/t/${tournament.slug}`,
+        }
+      : {
+          title: 'Tournament',
+          description: 'Student padel tournament on Student Padel Ireland.',
+          path: slug ? `/t/${slug}` : '/tournaments',
+        },
+  )
 
   const isOps = !!user && !!tournament?.can_manage
 
