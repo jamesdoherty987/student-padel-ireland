@@ -21,19 +21,37 @@ export default function RankingsPage() {
       'Live Ireland student padel rankings on Student Padel Ireland. See standings from tournaments and community matches nationwide.',
     path: '/rankings',
   })
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const scopeParam = searchParams.get('scope')
   const initialScope =
-    scopeParam === 'friends' || scopeParam === 'university' || scopeParam === 'all' ? scopeParam : 'all'
+    scopeParam === 'friends' || scopeParam === 'university' || scopeParam === 'all'
+      ? scopeParam === 'all' || user
+        ? scopeParam
+        : 'all'
+      : 'all'
   const [scope, setScope] = useState<(typeof SCOPE_FILTERS)[number]['id']>(initialScope)
   const [uni, setUni] = useState('all')
 
   useEffect(() => {
+    if (authLoading) return
+    // Friends / my-university need an account — keep guests on the public board
+    if (!user && (scopeParam === 'friends' || scopeParam === 'university')) {
+      setScope('all')
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          params.delete('scope')
+          return params
+        },
+        { replace: true },
+      )
+      return
+    }
     if (scopeParam === 'friends' || scopeParam === 'university' || scopeParam === 'all') {
       setScope(scopeParam)
     }
-  }, [scopeParam])
+  }, [scopeParam, user, authLoading, setSearchParams])
 
   const { data: rankings = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['rankings'],
@@ -128,11 +146,6 @@ export default function RankingsPage() {
               </button>
             ))}
           </div>
-          {!user && (
-            <p className="muted-note" style={{ margin: 0 }}>
-              <Link to="/login?next=/rankings">Log in</Link> to filter by friends or your university.
-            </p>
-          )}
           {universities.length > 1 && scope === 'all' && (
             <select
               id="rank-uni"
@@ -148,6 +161,11 @@ export default function RankingsPage() {
                 </option>
               ))}
             </select>
+          )}
+          {!user && (
+            <p className="muted-note" style={{ margin: 0 }}>
+              <Link to="/login?next=/rankings">Log in</Link> to filter by friends or your university.
+            </p>
           )}
         </div>
 

@@ -33,13 +33,13 @@ function confirmMessage(
       return (
         `Leave ${label}? This removes the whole doubles team (you and your partner) so either of you can re-enter. ` +
         `${feeNote} ` +
-        `If a draw already exists, the organiser may need to regenerate fixtures.`
+        `You can only leave before the draw is published.`
       )
     }
     return `Leave ${label}? This cancels the whole doubles entry so you and your partner can join differently.`
   }
   if (paymentStatus === 'PAID') {
-    return `Withdraw ${label}? You’ll free your spot before the event starts. ${feeNote}`
+    return `Withdraw ${label}? You’ll free your spot before the draw is published. ${feeNote}`
   }
   return `Cancel ${label}? You can join again later if spots are still open.`
 }

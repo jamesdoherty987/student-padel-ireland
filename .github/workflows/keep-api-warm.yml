@@ -11,22 +11,40 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - name: Wake Render API
         env:
           API_HEALTH_URL: ${{ vars.API_HEALTH_URL != '' && vars.API_HEALTH_URL || 'https://student-padel-ireland.onrender.com/health' }}
         run: |
+          set +e
           echo "Pinging $API_HEALTH_URL"
-          # Free tier cold starts can take 30–60s; retry a few times
-          for i in 1 2 3 4 5; do
-            if curl -fsS --max-time 55 "$API_HEALTH_URL"; then
-              echo
+
+          # Free-tier cold starts often return 502/503 (or HTML) for 30–90s after the
+          # first request. Keep retrying until we see JSON {"status":"ok"}.
+          for i in $(seq 1 12); do
+            body_file="$(mktemp)"
+            code=$(curl -sS -o "$body_file" -w "%{http_code}" --max-time 90 "$API_HEALTH_URL" || echo "000")
+            body=$(cat "$body_file" 2>/dev/null || true)
+            rm -f "$body_file"
+
+            echo "Attempt $i → HTTP $code"
+            if [ "$code" = "200" ] && echo "$body" | grep -q '"status"[[:space:]]*:[[:space:]]*"ok"'; then
+              echo "$body"
               echo "OK (attempt $i)"
               exit 0
             fi
-            echo "Attempt $i failed; retrying..."
-            sleep 8
+
+            if [ "$i" -eq 12 ]; then
+              break
+            fi
+            # First hits wake the dyno; give Render time to finish booting
+            if [ "$i" -lt 3 ]; then
+              sleep 15
+            else
+              sleep 20
+            fi
           done
+
           echo "Health check failed after retries"
           exit 1

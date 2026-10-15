@@ -79,5 +79,17 @@
   color: rgba(255, 255, 255, 0.85);
   font-weight: 600;
   font-size: 0.92rem;
-  padding: 0.35rem;
+  padding: 0.5rem 0.35rem;
+  margin: 0;
+}
+
+.native-welcome-signup a {
+  color: rgba(255, 255, 255, 0.9);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  display: inline-block;
+  padding: 0.35rem 0.15rem;
+  min-height: 44px;
+  line-height: 1.4;
+  box-sizing: border-box;
 }

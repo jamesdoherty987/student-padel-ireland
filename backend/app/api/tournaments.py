@@ -385,6 +385,40 @@ def _infer_winner_id_from_sets(
     return None
 
 
+def _require_best_of_three_winner(
+    m: Match,
+    set1_a: int,
+    set1_b: int,
+    set2_a: int,
+    set2_b: int,
+    set3_a: int,
+    set3_b: int,
+) -> UUID:
+    """Best of 3: one side must win two sets; no tied sets; set 3 only if split."""
+    sets = [(set1_a, set1_b), (set2_a, set2_b), (set3_a, set3_b)]
+    played: list[tuple[int, int]] = []
+    for a, b in sets:
+        if a == 0 and b == 0:
+            continue
+        if a == b:
+            raise HTTPException(400, "Set scores can’t be tied")
+        played.append((a, b))
+    if len(played) < 2:
+        raise HTTPException(400, "Enter at least two sets (best of 3)")
+    a_sets = sum(1 for a, b in played if a > b)
+    b_sets = sum(1 for a, b in played if b > a)
+    if max(a_sets, b_sets) < 2:
+        raise HTTPException(400, "One side needs two sets to win")
+    if a_sets == 2 and b_sets == 0 and (set3_a or set3_b):
+        raise HTTPException(400, "Clear set 3 when the match finished 2–0")
+    if b_sets == 2 and a_sets == 0 and (set3_a or set3_b):
+        raise HTTPException(400, "Clear set 3 when the match finished 2–0")
+    winner_id = m.team_a_id if a_sets > b_sets else m.team_b_id
+    if not winner_id:
+        raise HTTPException(400, "Both teams must be set before scoring")
+    return winner_id
+
+
 def _advance_winner_to_next(db: Session, m: Match, winner_id: UUID) -> None:
     if not m.next_match_id or not m.next_match_slot:
         return
@@ -554,10 +588,12 @@ def _match_out(
         on_team = _user_team_on_match(db, m, viewer.id)
         if on_team:
             if m.status == MatchStatus.AWAITING_CONFIRM.value:
-                score_submitted_by_me = bool(entered_by_id and entered_by_id == viewer.id)
+                # Treat pending score as team-side so a doubles partner can edit/cancel
+                score_submitted_by_me = bool(
+                    entered_by_id and _same_match_side(db, m, viewer.id, entered_by_id)
+                )
                 needs_my_confirm = bool(
                     entered_by_id
-                    and entered_by_id != viewer.id
                     and not confirmed_by_id
                     and not _same_match_side(db, m, viewer.id, entered_by_id)
                 )
@@ -1614,7 +1650,7 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
         "team_name": team.name,
         "players": [m.user.full_name for m in members if m.user],
         "slot": my_slot,
-        "can_leave": bool(t and _player_can_leave_entry(t, team)),
+        "can_leave": bool(t and _player_can_leave_entry(db, t, team)),
     }
 
 
@@ -1758,14 +1794,23 @@ def _tournament_blocks_paid_withdraw(t: Tournament) -> bool:
     )
 
 
-def _player_can_leave_entry(t: Tournament, team: Team) -> bool:
+def _tournament_has_fixtures(db: Session, tournament_id: UUID) -> bool:
+    return (
+        db.query(Match.id).filter(Match.tournament_id == tournament_id).first() is not None
+    )
+
+
+def _player_can_leave_entry(db: Session, t: Tournament, team: Team) -> bool:
     if team.withdrawn or not team.registration:
         return False
     status = team.registration.status
     if status == PaymentStatus.PENDING.value:
         return t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value)
     if status == PaymentStatus.PAID.value:
-        return not _tournament_blocks_paid_withdraw(t)
+        # Once a draw exists, leaving would leave ghost teams in fixtures
+        if _tournament_blocks_paid_withdraw(t) or _tournament_has_fixtures(db, t.id):
+            return False
+        return True
     return False
 
 
@@ -1778,10 +1823,14 @@ def _apply_team_withdraw(db: Session, t: Tournament, team: Team, *, as_organiser
             if not as_organiser
             else "Cannot withdraw a paid team after the event is live",
         )
-    if not as_organiser and not _player_can_leave_entry(t, team):
+    if paid and not as_organiser and _tournament_has_fixtures(db, t.id):
+        raise HTTPException(
+            400,
+            "You can’t leave after the draw is published — contact the organiser",
+        )
+    if not as_organiser and not _player_can_leave_entry(db, t, team):
         raise HTTPException(400, "You can no longer leave this tournament")
 
-    # Allowed before LIVE even if already in a draft draw — regenerate to rebuild fixtures
     team.withdrawn = True
     team.checked_in = False
     old_session_id = team.registration.stripe_session_id if team.registration else None
@@ -1844,9 +1893,14 @@ def leave_tournament(
     if team.registration is None:
         team.registration = reg
 
-    if not _player_can_leave_entry(t, team):
-        if _entry_is_paid(team) and _tournament_blocks_paid_withdraw(t):
-            raise HTTPException(400, "You can’t leave after the event has started — contact the organiser")
+    if not _player_can_leave_entry(db, t, team):
+        if _entry_is_paid(team) and (
+            _tournament_blocks_paid_withdraw(t) or _tournament_has_fixtures(db, t.id)
+        ):
+            raise HTTPException(
+                400,
+                "You can’t leave after the draw is published or the event has started — contact the organiser",
+            )
         raise HTTPException(400, "You can no longer leave this tournament")
 
     # Doubles: any member leaving cancels the whole team entry
@@ -2167,15 +2221,19 @@ def player_submit_score(
         raise HTTPException(400, "Both teams must be set before scoring")
     if not _user_team_on_match(db, m, user.id):
         raise HTTPException(403, "Only players in this match can enter the score")
+    if m.status == MatchStatus.AWAITING_CONFIRM.value:
+        raise HTTPException(
+            400,
+            "A score is already waiting for confirm — cancel it first if you need to change it",
+        )
     if m.status not in (
         MatchStatus.SCHEDULED.value,
         MatchStatus.CALLED.value,
         MatchStatus.LIVE.value,
-        MatchStatus.AWAITING_CONFIRM.value,
     ):
         raise HTTPException(400, "This match can’t take a new score right now")
 
-    winner_id = _infer_winner_id_from_sets(
+    winner_id = _require_best_of_three_winner(
         m,
         body.set1_a,
         body.set1_b,
@@ -2184,8 +2242,6 @@ def player_submit_score(
         body.set3_a,
         body.set3_b,
     )
-    if not winner_id:
-        raise HTTPException(400, "Enter set scores with a clear winner")
 
     if not m.score:
         m.score = MatchScore(match_id=m.id)
@@ -2201,10 +2257,8 @@ def player_submit_score(
     m.score.confirmed_by_id = None
     m.winner_id = winner_id
     m.status = MatchStatus.AWAITING_CONFIRM.value
-
-    if t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
-        if t.status != TournamentStatus.LIVE.value:
-            t.status = TournamentStatus.LIVE.value
+    # Do not flip tournament → LIVE here. Confirm (or organiser call/start) does that,
+    # so proposing a score on a scheduled match can't block paid withdrawals early.
 
     db.commit()
     db.refresh(m)
@@ -2274,7 +2328,7 @@ def player_cancel_pending_score(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Withdraw a score waiting for confirm (scorer, teammate, or organiser)."""
+    """Withdraw or reject a score waiting for confirm (either side, or organiser)."""
     m = db.get(Match, match_id)
     if not m:
         raise HTTPException(404, "Match not found")
@@ -2290,21 +2344,25 @@ def player_cancel_pending_score(
     on_team = _user_team_on_match(db, m, user.id)
     entered_by = m.score.entered_by_id if m.score else None
     same_side_as_scorer = bool(entered_by and on_team and _same_match_side(db, m, user.id, entered_by))
-    if not is_organiser and not same_side_as_scorer and entered_by != user.id:
-        raise HTTPException(403, "Only the team that logged the score (or an organiser) can cancel it")
+    if not is_organiser and not on_team:
+        raise HTTPException(403, "Only players in this match (or an organiser) can cancel a pending score")
+
+    # Scoring side editing keeps the numbers; opponent reject / organiser wipe clears them
+    keep_sets = bool(same_side_as_scorer and not is_organiser)
 
     m.status = MatchStatus.LIVE.value
     m.winner_id = None
     if m.score:
         m.score.entered_by_id = None
         m.score.confirmed_by_id = None
-        m.score.set1_a = 0
-        m.score.set1_b = 0
-        m.score.set2_a = 0
-        m.score.set2_b = 0
-        m.score.set3_a = 0
-        m.score.set3_b = 0
-        m.score.current_set = 1
+        if not keep_sets:
+            m.score.set1_a = 0
+            m.score.set1_b = 0
+            m.score.set2_a = 0
+            m.score.set2_b = 0
+            m.score.set3_a = 0
+            m.score.set3_b = 0
+            m.score.current_set = 1
 
     db.commit()
     db.refresh(m)
@@ -2756,7 +2814,7 @@ def player_view(
                 "partner_user_id": partner_user_id,
                 "partner_name": partner_name,
                 "partner_email": partner_email,
-                "can_leave": _player_can_leave_entry(t, my_team),
+                "can_leave": _player_can_leave_entry(db, t, my_team),
             }
             if my_team
             else None

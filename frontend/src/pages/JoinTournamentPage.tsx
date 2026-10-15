@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
@@ -223,12 +223,14 @@ export default function JoinTournamentPage() {
 
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [paymentNote, setPaymentNote] = useState(
     paymentCancelled ? 'Payment was cancelled. You can try again when ready.' : '',
   )
   const [friendSearch, setFriendSearch] = useState('')
   const [friendFindOpen, setFriendFindOpen] = useState(false)
-  const [partnerMode, setPartnerMode] = useState<'friend' | 'email'>('friend')
+  const [partnerMode, setPartnerMode] = useState<'friend' | 'email'>('email')
+  const [friendActionError, setFriendActionError] = useState('')
 
   const { data: tournament, isLoading: tLoading, isError: tError } = useQuery({
     queryKey: ['tournament', slug],
@@ -258,17 +260,6 @@ export default function JoinTournamentPage() {
     queryFn: async () => (await communityApi.friends()).data,
     enabled: !!user && !isConfirmRoute,
   })
-  const playerSearchQ = useQuery({
-    queryKey: ['join-player-search', friendSearch],
-    queryFn: async () => (await communityApi.searchPlayers(friendSearch)).data,
-    enabled:
-      !!user &&
-      !isConfirmRoute &&
-      partnerMode === 'friend' &&
-      friendFindOpen &&
-      friendSearch.trim().length >= 2,
-  })
-
   const {
     data: stripeConfirm,
     isLoading: confirming,
@@ -354,6 +345,15 @@ export default function JoinTournamentPage() {
     return base
   }, [friends, enteredUserIds, resumePartnerId, myTeamEarly?.partner_name])
 
+  const showFriendSearch =
+    partnerMode === 'friend' && (friendFindOpen || friendPartners.length === 0)
+  const playerSearchQ = useQuery({
+    queryKey: ['join-player-search', friendSearch],
+    queryFn: async () => (await communityApi.searchPlayers(friendSearch)).data,
+    enabled:
+      !!user && !isConfirmRoute && showFriendSearch && friendSearch.trim().length >= 2,
+  })
+
   const friendsBusyElsewhere = useMemo(() => {
     return friends.filter(
       (f) =>
@@ -362,6 +362,44 @@ export default function JoinTournamentPage() {
         f.user_id !== resumePartnerId,
     )
   }, [friends, enteredUserIds, resumePartnerId])
+
+  const incomingFriends = useMemo(
+    () => friends.filter((f) => f.direction === 'incoming'),
+    [friends],
+  )
+
+  const refreshFriends = () => {
+    qc.invalidateQueries({ queryKey: ['friends'] })
+    qc.invalidateQueries({ queryKey: ['join-player-search'] })
+  }
+
+  const requestFriendMut = useMutation({
+    mutationFn: (userId: string) => communityApi.requestFriend(userId),
+    onSuccess: () => {
+      setFriendActionError('')
+      refreshFriends()
+    },
+    onError: (e) => setFriendActionError(apiErrorMessage(e, 'Could not send friend request')),
+  })
+
+  const acceptFriendMut = useMutation({
+    mutationFn: (id: string) => communityApi.acceptFriend(id),
+    onSuccess: (res) => {
+      setFriendActionError('')
+      refreshFriends()
+      const friend = res.data
+      if (!friend?.user_id) return
+      setForm((f) => ({
+        ...f,
+        partner_user_id: friend.user_id,
+        partner_name: friend.full_name || f.partner_name,
+        partner_email: '',
+      }))
+      setFriendFindOpen(false)
+      setFriendSearch('')
+    },
+    onError: (e) => setFriendActionError(apiErrorMessage(e, 'Could not accept friend request')),
+  })
 
   const resumeDefaultsApplied = useRef(false)
   useEffect(() => {
@@ -384,14 +422,11 @@ export default function JoinTournamentPage() {
   }, [myTeamEarly, friendPartners, friendsFetched])
 
   useEffect(() => {
-    if (!friendsFetched) return
-    // Keep friend mode while resuming with a saved partner id
+    if (partnerMode !== 'friend') return
     if (form.partner_user_id) return
-    // Prefer staying on Friend with search open when they have no friends yet
-    if (friendPartners.length === 0 && partnerMode === 'friend') {
-      setFriendFindOpen(true)
-    }
-  }, [friendsFetched, friendPartners.length, partnerMode, form.partner_user_id])
+    // Only auto-open search when they have nobody to pick from the list yet
+    if (friendPartners.length === 0) setFriendFindOpen(true)
+  }, [partnerMode, form.partner_user_id, friendPartners.length])
 
   if (authLoading || (isConfirmRoute && hasConfirmParams && confirming)) {
     return (
@@ -915,65 +950,67 @@ export default function JoinTournamentPage() {
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={partnerMode === 'friend'}
-                  className={`filter-chip ${partnerMode === 'friend' ? 'on' : ''}`}
-                  onClick={() => {
-                    setPartnerMode('friend')
-                    setForm((f) => ({ ...f, partner_name: '', partner_email: '' }))
-                  }}
-                >
-                  Friend
-                </button>
-                <button
-                  type="button"
-                  role="tab"
                   aria-selected={partnerMode === 'email'}
                   className={`filter-chip ${partnerMode === 'email' ? 'on' : ''}`}
                   onClick={() => {
                     setPartnerMode('email')
                     setForm((f) => ({ ...f, partner_user_id: '' }))
                     setFriendFindOpen(false)
+                    setFriendActionError('')
                   }}
                 >
                   Email
                 </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={partnerMode === 'friend'}
+                  className={`filter-chip ${partnerMode === 'friend' ? 'on' : ''}`}
+                  onClick={() => {
+                    setPartnerMode('friend')
+                    setForm((f) => ({ ...f, partner_name: '', partner_email: '' }))
+                    setFriendFindOpen(friendPartners.length === 0)
+                    setFriendActionError('')
+                  }}
+                >
+                  Friend
+                </button>
               </div>
               {partnerMode === 'friend' ? (
                 <>
-                  <SearchableSelect
-                    id="join-partner-friend"
-                    aria-labelledby="join-partner-label"
-                    value={form.partner_user_id}
-                    onChange={(partner_user_id) =>
-                      setForm({ ...form, partner_user_id, partner_name: '', partner_email: '' })
-                    }
-                    placeholder={
-                      friendPartners.length === 0 ? 'Search below or use email' : 'Select a friend'
-                    }
-                    searchPlaceholder="Search friends by name…"
-                    emptyLabel="No friends match that name"
-                    required={!form.partner_user_id && !friendFindOpen}
-                    disabled={friendPartners.length === 0 && !form.partner_user_id}
-                    options={[
-                      ...(form.partner_user_id &&
-                      !friendPartners.some((f) => f.user_id === form.partner_user_id)
-                        ? [
-                            {
-                              value: form.partner_user_id,
-                              label: form.partner_name || 'Selected partner',
-                              keywords: form.partner_name || 'selected',
-                            },
-                          ]
-                        : []),
-                      ...friendPartners.map((f) => ({
-                        value: f.user_id,
-                        label: f.university_short
-                          ? `${f.full_name} (${f.university_short})`
-                          : f.full_name,
-                        keywords: f.full_name,
-                      })),
-                    ]}
-                  />
+                  {(friendPartners.length > 0 || form.partner_user_id) && (
+                    <SearchableSelect
+                      id="join-partner-friend"
+                      aria-labelledby="join-partner-label"
+                      value={form.partner_user_id}
+                      onChange={(partner_user_id) =>
+                        setForm({ ...form, partner_user_id, partner_name: '', partner_email: '' })
+                      }
+                      placeholder="Select a friend"
+                      searchPlaceholder="Search friends by name…"
+                      emptyLabel="No friends match that name"
+                      required={!form.partner_user_id}
+                      options={[
+                        ...(form.partner_user_id &&
+                        !friendPartners.some((f) => f.user_id === form.partner_user_id)
+                          ? [
+                              {
+                                value: form.partner_user_id,
+                                label: form.partner_name || 'Selected partner',
+                                keywords: form.partner_name || 'selected',
+                              },
+                            ]
+                          : []),
+                        ...friendPartners.map((f) => ({
+                          value: f.user_id,
+                          label: f.university_short
+                            ? `${f.full_name} (${f.university_short})`
+                            : f.full_name,
+                          keywords: f.full_name,
+                        })),
+                      ]}
+                    />
+                  )}
                   {friendsBusyElsewhere.length > 0 && (
                     <p className="muted-note">
                       {friendsBusyElsewhere.length} friend
@@ -982,20 +1019,24 @@ export default function JoinTournamentPage() {
                     </p>
                   )}
                   <div className="partner-find">
-                    <button
-                      type="button"
-                      className="partner-find-toggle"
-                      aria-expanded={friendFindOpen}
-                      onClick={() => {
-                        setFriendFindOpen((v) => !v)
-                      }}
-                    >
-                      {friendFindOpen ? 'Hide player search' : 'Find a player'}
-                    </button>
-                    {friendFindOpen && (
+                    {friendPartners.length > 0 && (
+                      <button
+                        type="button"
+                        className="partner-find-toggle"
+                        aria-expanded={friendFindOpen}
+                        onClick={() => {
+                          setFriendFindOpen((v) => !v)
+                        }}
+                      >
+                        {friendFindOpen ? 'Hide friend search' : 'Find & add a friend'}
+                      </button>
+                    )}
+                    {showFriendSearch && (
                       <div className="partner-find-panel">
                         <label className="form-label" htmlFor="join-friend-search">
-                          Search by name
+                          {friendPartners.length === 0
+                            ? 'Find a friend to partner with'
+                            : 'Search players by name'}
                         </label>
                         <input
                           id="join-friend-search"
@@ -1007,25 +1048,51 @@ export default function JoinTournamentPage() {
                           autoCapitalize="words"
                           enterKeyHint="search"
                         />
+                        {friendActionError && (
+                          <p className="form-error" role="alert">
+                            {friendActionError}
+                          </p>
+                        )}
                         {friendSearch.trim().length >= 2 && (
                           <div className="partner-find-results">
                             {(playerSearchQ.data || []).map((p: PlayerSearch) => {
                               const busy =
                                 enteredUserIds.has(p.id) && p.id !== resumePartnerId
                               const selected = form.partner_user_id === p.id
+                              const isFriend =
+                                p.friendship_status === 'friends' ||
+                                friendPartners.some((f) => f.user_id === p.id)
+                              const pendingOut = p.friendship_status === 'pending_out'
+                              const pendingIn = p.friendship_status === 'pending_in'
+                              const requesting =
+                                requestFriendMut.isPending && requestFriendMut.variables === p.id
+                              const accepting =
+                                acceptFriendMut.isPending &&
+                                incomingFriends.some(
+                                  (f) =>
+                                    f.user_id === p.id && acceptFriendMut.variables === f.id,
+                                )
                               return (
                                 <div key={p.id} className="partner-find-row">
                                   <div className="partner-find-meta">
                                     <strong>{p.full_name}</strong>
                                     <span className="rank-meta">
                                       {p.university_short || '—'}
-                                      {busy ? ' · already entered' : ''}
+                                      {busy
+                                        ? ' · already entered'
+                                        : isFriend
+                                          ? ' · friends'
+                                          : pendingOut
+                                            ? ' · request sent'
+                                            : pendingIn
+                                              ? ' · requested you'
+                                              : ''}
                                     </span>
                                   </div>
                                   <div className="partner-find-actions">
                                     {busy ? (
                                       <span className="muted-note">Unavailable</span>
-                                    ) : (
+                                    ) : isFriend ? (
                                       <button
                                         type="button"
                                         className={`btn btn-sm ${selected ? 'btn-dark' : 'btn-primary'}`}
@@ -1041,6 +1108,29 @@ export default function JoinTournamentPage() {
                                         }}
                                       >
                                         {selected ? 'Selected' : 'Select'}
+                                      </button>
+                                    ) : pendingIn ? (
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-dark"
+                                        disabled={accepting}
+                                        onClick={() => {
+                                          const fr = incomingFriends.find((f) => f.user_id === p.id)
+                                          if (fr) acceptFriendMut.mutate(fr.id)
+                                        }}
+                                      >
+                                        {accepting ? 'Accepting…' : 'Accept'}
+                                      </button>
+                                    ) : pendingOut ? (
+                                      <span className="muted-note">Waiting</span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-dark"
+                                        disabled={requesting}
+                                        onClick={() => requestFriendMut.mutate(p.id)}
+                                      >
+                                        {requesting ? 'Sending…' : 'Add'}
                                       </button>
                                     )}
                                   </div>
@@ -1060,17 +1150,12 @@ export default function JoinTournamentPage() {
                           </div>
                         )}
                         <p className="muted-note">
-                          Pick anyone with an account. New to the app? Use Email instead.
+                          Add them as a friend, then select as partner. Or use Email if they’re new
+                          to the app.
                         </p>
                       </div>
                     )}
                   </div>
-                  {friendPartners.length === 0 && !friendFindOpen && (
-                    <p className="muted-note">
-                      No friends listed yet. Use <strong>Find &amp; add a friend</strong> to search
-                      players, or switch to email.
-                    </p>
-                  )}
                 </>
               ) : (
                 <>

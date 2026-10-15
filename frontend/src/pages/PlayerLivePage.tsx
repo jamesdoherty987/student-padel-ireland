@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { confirmDialog } from '../components/ConfirmDialog'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import NumberInput from '../components/NumberInput'
@@ -67,7 +68,8 @@ function scheduleWhen(m: Match) {
 type NextActions = {
   onLogScore: () => void
   onConfirm: () => void
-  onCancelPending: () => void
+  onEditPending: () => void
+  onRejectPending: () => void
   confirming: boolean
   cancelling: boolean
 }
@@ -76,11 +78,13 @@ function NextMatchCard({
   next,
   slug,
   myTeamId,
+  partnerLabel,
   actions,
 }: {
   next: Match
   slug: string
   myTeamId?: string
+  partnerLabel?: string | null
   actions: NextActions
 }) {
   const board = next.status === 'LIVE' ? formatLiveBoardScore(next.score) : null
@@ -116,7 +120,7 @@ function NextMatchCard({
       {opp ? (
         <div className="pl-vs pl-vs--you">
           <div className="pl-side">
-            <span className="pl-side-label">You</span>
+            <span className="pl-side-label">You{partnerLabel ? ` + ${partnerLabel}` : ''}</span>
             <strong>{mine}</strong>
           </div>
           <span className="pl-vs-sep">VS</span>
@@ -146,14 +150,24 @@ function NextMatchCard({
 
       <div className="pl-next-actions">
         {next.needs_my_confirm ? (
-          <button
-            type="button"
-            className="btn btn-primary btn-block"
-            disabled={actions.confirming}
-            onClick={actions.onConfirm}
-          >
-            {actions.confirming ? 'Confirming…' : 'Confirm score'}
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn btn-primary btn-block"
+              disabled={actions.confirming || actions.cancelling}
+              onClick={actions.onConfirm}
+            >
+              {actions.confirming ? 'Confirming…' : 'Confirm score'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-block pl-btn-on-dark"
+              disabled={actions.cancelling || actions.confirming}
+              onClick={actions.onRejectPending}
+            >
+              {actions.cancelling ? 'Rejecting…' : 'Reject score'}
+            </button>
+          </>
         ) : next.can_i_score ? (
           <button type="button" className="btn btn-primary btn-block" onClick={actions.onLogScore}>
             Log final score
@@ -166,9 +180,9 @@ function NextMatchCard({
               type="button"
               className="btn btn-ghost btn-block pl-btn-on-dark"
               disabled={actions.cancelling}
-              onClick={actions.onCancelPending}
+              onClick={actions.onEditPending}
             >
-              {actions.cancelling ? 'Cancelling…' : 'Edit / cancel score'}
+              {actions.cancelling ? 'Opening…' : 'Edit score'}
             </button>
           </>
         )}
@@ -271,11 +285,14 @@ export default function PlayerLivePage() {
   })
 
   const cancelMut = useMutation({
-    mutationFn: async (matchId: string) => (await tournamentApi.cancelPendingScore(matchId)).data,
-    onSuccess: (m) => {
+    mutationFn: async ({ matchId, reopen }: { matchId: string; reopen: boolean }) => {
+      const m = (await tournamentApi.cancelPendingScore(matchId)).data
+      return { m, reopen }
+    },
+    onSuccess: ({ m, reopen }) => {
       setActionError('')
       invalidate()
-      openScoreSheet(m)
+      if (reopen) openScoreSheet(m)
     },
     onError: (err) => setActionError(apiErrorMessage(err)),
   })
@@ -338,6 +355,8 @@ export default function PlayerLivePage() {
     payment_via?: string | null
     slot?: number | null
     can_leave?: boolean
+    players?: string[]
+    partner_name?: string | null
   } | null
   const myPayment = myTeam?.payment_status
   const myPaymentVia = myTeam?.payment_via
@@ -349,6 +368,16 @@ export default function PlayerLivePage() {
   const canLeave = !!myTeam?.can_leave
   const singles = t.play_format === 'SINGLES'
   const myTeamId = hasPaidEntry ? myTeam?.id : undefined
+  const partnerLabel = (() => {
+    if (singles || !hasPaidEntry) return null
+    const full =
+      myTeam?.partner_name ||
+      (myTeam?.players || []).find((n) => n && n !== user?.full_name) ||
+      null
+    if (!full) return null
+    // First name only — keeps the next-match card readable on narrow phones
+    return full.trim().split(/\s+/)[0] || full
+  })()
   const liveMatches = (data.live_matches || []) as Match[]
   const calledMatches = (data.called_matches || []) as Match[]
   const standings = (data.standings || []) as Array<{
@@ -370,9 +399,21 @@ export default function PlayerLivePage() {
   const nextActions: NextActions = {
     onLogScore: () => next && openScoreSheet(next),
     onConfirm: () => next && confirmMut.mutate(next.id),
-    onCancelPending: () => next && cancelMut.mutate(next.id),
+    onEditPending: () => next && cancelMut.mutate({ matchId: next.id, reopen: true }),
+    onRejectPending: () => {
+      if (!next) return
+      void confirmDialog({
+        title: 'Reject this score?',
+        message: 'The proposed result will be cleared so either team can enter the score again.',
+        confirmLabel: 'Reject score',
+        cancelLabel: 'Keep it',
+        danger: true,
+      }).then((ok) => {
+        if (ok) cancelMut.mutate({ matchId: next.id, reopen: false })
+      })
+    },
     confirming: confirmMut.isPending && confirmMut.variables === next?.id,
-    cancelling: cancelMut.isPending && cancelMut.variables === next?.id,
+    cancelling: cancelMut.isPending && cancelMut.variables?.matchId === next?.id,
   }
 
   const leaveBtn = canLeave ? (
@@ -446,7 +487,9 @@ export default function PlayerLivePage() {
               ? 'Waiting for fixtures'
               : hasPaidEntry || hasPendingCaptain || isListedPartner
                 ? 'Your next match'
-                : 'Get on the board'}
+                : !user
+                  ? 'Live board'
+                  : 'Get on the board'}
           </h2>
           {hasPendingCaptain ? (
             <div className="pl-next-card">
@@ -491,7 +534,13 @@ export default function PlayerLivePage() {
             </div>
           ) : next && hasPaidEntry ? (
             <>
-              <NextMatchCard next={next} slug={slug} myTeamId={myTeamId} actions={nextActions} />
+              <NextMatchCard
+                next={next}
+                slug={slug}
+                myTeamId={myTeamId}
+                partnerLabel={partnerLabel}
+                actions={nextActions}
+              />
               {actionError && <p className="form-error pl-action-error">{actionError}</p>}
               {leaveBtn && <div style={{ marginTop: 12 }}>{leaveBtn}</div>}
             </>
@@ -503,24 +552,18 @@ export default function PlayerLivePage() {
                     ? 'This tournament is finished. See your results below.'
                     : 'No upcoming matches for you right now.'
                   : !user
-                    ? 'Log in to see your matches and score here.'
+                    ? liveMatches.length > 0 || calledMatches.length > 0
+                      ? 'Courts and calls update below — no login needed.'
+                      : 'Courts and scores will show here when play starts.'
                     : 'Register for this tournament to see your next match here.'}
               </p>
               {!user ? (
-                <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
-                  <Link
-                    to={`/login?next=${encodeURIComponent(`/t/${slug}/live`)}`}
-                    className="btn btn-primary"
-                  >
-                    Log in
-                  </Link>
-                  <Link
-                    to={`/signup?next=${encodeURIComponent(`/t/${slug}/live`)}`}
-                    className="btn btn-ghost"
-                  >
-                    Sign up
-                  </Link>
-                </div>
+                <p className="muted-note" style={{ marginTop: 8, marginBottom: 0 }}>
+                  Playing?{' '}
+                  <Link to={`/login?next=${encodeURIComponent(`/t/${slug}/live`)}`}>Log in</Link>
+                  {' · '}
+                  <Link to={`/signup?next=${encodeURIComponent(`/t/${slug}/live`)}`}>Sign up</Link>
+                </p>
               ) : !hasPaidEntry && !hasPendingCaptain && !isListedPartner && t.status === 'REGISTRATION_OPEN' ? (
                 <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block" style={{ marginTop: 12 }}>
                   Join tournament
@@ -703,21 +746,37 @@ export default function PlayerLivePage() {
               ]
               let aSets = 0
               let bSets = 0
+              let played = 0
               for (const [a, b] of pairs) {
                 if (!(a || b)) continue
+                if (a === b) {
+                  setScoreError('Set scores can’t be tied')
+                  return
+                }
+                played += 1
                 if (a > b) aSets += 1
-                else if (b > a) bSets += 1
+                else bSets += 1
               }
-              if (aSets === bSets) {
-                setScoreError('Enter decisive set scores so there is a winner')
+              if (played < 2) {
+                setScoreError('Enter at least two sets (best of 3)')
                 return
+              }
+              if (Math.max(aSets, bSets) < 2) {
+                setScoreError('One side needs two sets to win')
+                return
+              }
+              if ((aSets === 2 && bSets === 0) || (bSets === 2 && aSets === 0)) {
+                if (sets.set3_a || sets.set3_b) {
+                  setScoreError('Clear set 3 when the match finished 2–0')
+                  return
+                }
               }
               scoreMut.mutate()
             }}
           >
             <h2 id="pl-score-title">Log final score</h2>
             <p className="muted-note" style={{ marginTop: 0 }}>
-              Best of 3. Opponent confirms before it counts.
+              Best of 3. The other team confirms before it counts.
             </p>
             <div className="score-sides-label">
               <div>
@@ -746,38 +805,48 @@ export default function PlayerLivePage() {
                     ? ([['set3_a', 'set3_b', 'Set 3']] as const)
                     : []),
                 ] as const
-              ).map(([ka, kb, label]) => (
-                <div key={label} className="form-group">
-                  <label>{label}</label>
-                  <div className="score-pair">
-                    <NumberInput
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      min={0}
-                      max={7}
-                      emptyValue={0}
-                      value={sets[ka]}
-                      onValueChange={(n) =>
-                        setSets((s) => ({ ...s, [ka]: Math.max(0, Math.min(7, Math.trunc(n))) }))
-                      }
-                      aria-label={`${label} side A`}
-                    />
-                    <span>-</span>
-                    <NumberInput
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      min={0}
-                      max={7}
-                      emptyValue={0}
-                      value={sets[kb]}
-                      onValueChange={(n) =>
-                        setSets((s) => ({ ...s, [kb]: Math.max(0, Math.min(7, Math.trunc(n))) }))
-                      }
-                      aria-label={`${label} side B`}
-                    />
+              ).map(([ka, kb, label]) => {
+                const isDecider = label === 'Set 3'
+                const maxGames = isDecider ? 15 : 7
+                return (
+                  <div key={label} className="form-group">
+                    <label>{isDecider ? 'Set 3 / TB' : label}</label>
+                    <div className="score-pair">
+                      <NumberInput
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        min={0}
+                        max={maxGames}
+                        emptyValue={0}
+                        value={sets[ka]}
+                        onValueChange={(n) =>
+                          setSets((s) => ({
+                            ...s,
+                            [ka]: Math.max(0, Math.min(maxGames, Math.trunc(n))),
+                          }))
+                        }
+                        aria-label={`${label} side A`}
+                      />
+                      <span>-</span>
+                      <NumberInput
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        min={0}
+                        max={maxGames}
+                        emptyValue={0}
+                        value={sets[kb]}
+                        onValueChange={(n) =>
+                          setSets((s) => ({
+                            ...s,
+                            [kb]: Math.max(0, Math.min(maxGames, Math.trunc(n))),
+                          }))
+                        }
+                        aria-label={`${label} side B`}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
             {scoreError && <p className="form-error">{scoreError}</p>}
             <div className="form-actions">

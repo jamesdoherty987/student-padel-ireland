@@ -54,9 +54,11 @@ export default function NativeWelcomePage() {
           <Link to="/login" className="btn btn-ghost btn-block native-welcome-ghost">
             Log in
           </Link>
-          <Link to="/signup" className="native-welcome-signup">
-            Create account
-          </Link>
+          <p className="native-welcome-signup">
+            <Link to="/rankings">Ireland rankings</Link>
+            <span aria-hidden> · </span>
+            <Link to="/signup">Create account</Link>
+          </p>
         </div>
       </div>
     </div>

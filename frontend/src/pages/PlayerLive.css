@@ -530,6 +530,8 @@ html.native-app.has-native-tabs .pl-page {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.55);
+  overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 .pl-side strong {
@@ -677,6 +679,11 @@ html.native-app.has-native-tabs .pl-page {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+
+.score-modal .form-actions .btn {
+  min-height: 48px;
+  flex: 1 1 auto;
 }
 
 @media (min-width: 640px) {

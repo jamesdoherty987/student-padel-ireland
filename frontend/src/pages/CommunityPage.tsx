@@ -159,15 +159,15 @@ export default function CommunityPage() {
         <main className="page">
           <h1 className="page-title">Community</h1>
           <p className="page-sub">
-            Friends, college mates, and match confirmations. Events live under{' '}
-            <Link to="/tournaments">Tournaments</Link>.
+            Friends and private ladders need an account. You can still browse rankings and
+            tournaments without signing in.
           </p>
           <div className="community-guest-actions" style={{ marginBottom: '1.25rem' }}>
-            <Link to={`/signup?next=${next}`} className="btn btn-primary">
-              Sign up
+            <Link to="/rankings" className="btn btn-primary">
+              Ireland rankings
             </Link>
-            <Link to={`/login?next=${next}`} className="btn btn-ghost">
-              Log in
+            <Link to="/tournaments" className="btn btn-ghost">
+              Browse tournaments
             </Link>
           </div>
           <ol className="community-guest-steps">
@@ -184,6 +184,14 @@ export default function CommunityPage() {
               <span>Both sides confirm the score before ratings update.</span>
             </li>
           </ol>
+          <div className="community-guest-actions" style={{ marginTop: '0.25rem' }}>
+            <Link to={`/signup?next=${next}`} className="btn btn-dark">
+              Sign up
+            </Link>
+            <Link to={`/login?next=${next}`} className="btn btn-ghost">
+              Log in
+            </Link>
+          </div>
         </main>
       </div>
     )
