@@ -50,17 +50,44 @@ npm run assets:native
 - CORS allows `https://app.studentpadel.ie` (Capacitor WebView hostname)
 - In-app **Delete account** (password confirm) + hosted **Privacy** / **Terms** pages
 
-## App Store Connect checklist (you still do this)
+## Windows-only: ship iOS updates with Xcode Cloud
 
-1. Enroll in [Apple Developer](https://developer.apple.com)
-2. Upgrade to **Node 22+**, set `VITE_API_URL`, run `npm run build:native`, open Xcode
-3. In Xcode: Team + signing for `ie.studentpadel.app`
-4. Replace `TEAMID` in `public/.well-known/apple-app-site-association` with your Team ID, deploy the site, then enable Associated Domains
-5. Create the app in App Store Connect (name, screenshots 6.7" + 6.1", privacy policy URL `https://studentpadel.ie/privacy`, age rating, support URL)
-6. Review notes: Stripe charges **real-world tournament entry fees** (not digital goods / IAP)
-7. Archive → Upload → TestFlight → Submit for review
+You do **not** need a Mac. Apple’s Macs build the app; you use [App Store Connect](https://appstoreconnect.apple.com) in a browser.
+
+`frontend/ios/App/ci_scripts/ci_post_clone.sh` installs Node, runs `npm run build:native`, and syncs the web UI into the iOS project before Archive.
+
+### One-time setup (browser)
+
+1. Push `main` (version bump + `ci_scripts` must be on GitHub).
+2. Open [App Store Connect](https://appstoreconnect.apple.com) → **Apps** → **Student Padel Ireland** → **Xcode Cloud**.
+3. **Get Started** / create a workflow. Connect the GitHub repo if asked.
+4. Set:
+   - **Project / workspace:** `frontend/ios/App/App.xcodeproj`
+   - **Scheme:** `App`
+   - **Start condition:** Branch changes on `main` (or Manual only)
+   - **Actions:** Archive → App Store Connect / TestFlight
+5. **Environment** → Environment Variables (not secret unless you prefer):
+   - `VITE_API_URL` = `https://student-padel-ireland.onrender.com`
+   - `VITE_WEB_ORIGIN` = `https://studentpadel.ie`
+6. Save and start a build (or push any commit to `main`).
+
+If Connect says you must finish setup in Xcode once: use a cheap cloud Mac for ~30 minutes ([MacinCloud](https://www.macincloud.com/) / [MacStadium](https://www.macstadium.com/)) only for that first “Grant Access / Create Workflow” click, then never again.
+
+### Every update after that
+
+1. Bump iOS version/build if needed (`MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `project.pbxproj`).
+2. Commit + push to `main`.
+3. Wait for the Xcode Cloud build (App Store Connect → Xcode Cloud).
+4. When it appears in **TestFlight**, open the app version → add **1.0.1** (or next) → What’s New → **Submit for Review**.
 
 Apple often rejects thin “website wrappers.” Strong points for review: live scores, organiser scoring, community competitions, rankings, account deletion, native share / status bar / splash.
+
+## App Store Connect checklist (first release)
+
+1. Enroll in [Apple Developer](https://developer.apple.com)
+2. Screenshots 6.7" + 6.1", privacy policy `https://studentpadel.ie/privacy`, age rating, support URL
+3. Review notes: Stripe charges **real-world tournament entry fees** (not digital goods / IAP)
+4. Ship via Xcode Cloud (above) or a Mac Archive
 
 ## Play Store (optional)
 
