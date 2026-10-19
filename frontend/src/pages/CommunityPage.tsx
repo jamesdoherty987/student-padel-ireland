@@ -225,7 +225,15 @@ export default function CommunityPage() {
         {homeQ.isError && (
           <div className="empty-state">
             <p>Could not load community right now.</p>
-            <button type="button" className="btn btn-ghost" onClick={() => homeQ.refetch()}>
+            <p className="muted-note" style={{ marginTop: 8 }}>
+              Check your connection and try again.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ marginTop: 12 }}
+              onClick={() => homeQ.refetch()}
+            >
               Retry
             </button>
           </div>

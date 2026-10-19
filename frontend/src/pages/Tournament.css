@@ -180,7 +180,7 @@
   background: rgba(10, 22, 40, 0.55);
   display: grid;
   place-items: center;
-  z-index: 100;
+  z-index: 200;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
     max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   overflow-x: hidden;
@@ -222,8 +222,8 @@
 
 .join-modal-close {
   flex: 0 0 auto;
-  width: 2rem;
-  height: 2rem;
+  width: 44px;
+  height: 44px;
   border: none;
   border-radius: 999px;
   background: var(--surface);
@@ -231,6 +231,7 @@
   font-size: 1.35rem;
   line-height: 1;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .join-modal-close:hover:not(:disabled) {

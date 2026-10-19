@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { confirmDialog } from '../components/ConfirmDialog'
 import NavBar from '../components/NavBar'
 import NumberInput from '../components/NumberInput'
 import { useAuth } from '../context/AuthContext'
@@ -317,13 +318,14 @@ export default function AdminDashboard() {
                 }}
                 onEdit={() => setEditing(row.tournament)}
                 onDelete={() => {
-                  if (
-                    window.confirm(
-                      `Permanently delete "${row.tournament.name}"? This removes teams, matches, and scores.`,
-                    )
-                  ) {
-                    deleteMut.mutate(row.tournament.id)
-                  }
+                  void confirmDialog({
+                    title: 'Delete tournament?',
+                    message: `Permanently delete "${row.tournament.name}"? This removes teams, matches, and scores.`,
+                    confirmLabel: 'Delete',
+                    danger: true,
+                  }).then((ok) => {
+                    if (ok) deleteMut.mutate(row.tournament.id)
+                  })
                 }}
                 onCopied={(msg) => showToast(msg)}
               />

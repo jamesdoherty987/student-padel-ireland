@@ -45,6 +45,10 @@ export const confirmDialog = ({
   danger?: boolean
 }): Promise<boolean> => {
   return new Promise((resolve) => {
+    // Resolve any open dialog so callers never hang if a second confirm opens
+    if (dialogState.isOpen) {
+      dialogState.onCancel()
+    }
     dialogState = {
       isOpen: true,
       title,
@@ -75,7 +79,7 @@ export function ConfirmDialogProvider() {
     if (!state.isOpen) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    document.documentElement.classList.add('modal-open')
+    document.body.classList.add('modal-open')
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !dialogState.isLoading) {
         dialogState.onCancel()
@@ -86,7 +90,7 @@ export function ConfirmDialogProvider() {
     window.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = prev
-      document.documentElement.classList.remove('modal-open')
+      document.body.classList.remove('modal-open')
       window.removeEventListener('keydown', onKey)
     }
   }, [state.isOpen])

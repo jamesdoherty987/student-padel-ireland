@@ -47,12 +47,12 @@
 }
 
 html.native-app.has-native-tabs .app-shell {
-  /* Tab bar already includes home-indicator padding */
-  padding-bottom: 4.5rem;
+  /* Tab bar (~48px) + home indicator + breathing room */
+  padding-bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 html.native-app.has-native-tabs .page {
-  padding-bottom: 1.75rem;
+  padding-bottom: 1.25rem;
 }
 
 .offline-banner {
@@ -60,6 +60,7 @@ html.native-app.has-native-tabs .page {
   top: 0;
   z-index: 90;
   padding: 0.55rem 1rem;
+  padding-top: max(0.55rem, env(safe-area-inset-top));
   padding-left: max(1rem, env(safe-area-inset-left));
   padding-right: max(1rem, env(safe-area-inset-right));
   background: #0a1628;
@@ -69,11 +70,11 @@ html.native-app.has-native-tabs .page {
   text-align: center;
 }
 
-/* Keep sticky/fixed headers below the offline strip */
+/* Keep sticky/fixed headers below the offline strip (includes notch inset) */
 html:has(.offline-banner) .app-topbar {
-  top: 2.75rem;
+  top: calc(2.4rem + env(safe-area-inset-top, 0px));
 }
 
 html:has(.offline-banner) .lp-header {
-  top: 2.75rem;
+  top: calc(2.4rem + env(safe-area-inset-top, 0px));
 }

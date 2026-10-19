@@ -25,6 +25,7 @@ export function nativeTabsHiddenForPath(pathname: string): boolean {
   // Keep match-day focus — no bottom tabs over live scoring / join
   if (/^\/t\/[^/]+\/(live|join|confirmed)(\/|$)/.test(pathname)) return true
   if (pathname.startsWith('/t/join/')) return true
+  if (pathname.startsWith('/community/join/')) return true
   return HIDDEN_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))
 }
 
@@ -44,7 +45,10 @@ export default function NativeTabBar() {
 
   if (!visible) return null
 
-  const profileTo = user ? `/players/${user.id}` : '/login?next=%2Ftournaments'
+  // After login, land on role home — guests don't have a profile yet
+  const profileTo = user ? `/players/${user.id}` : '/login'
+  const onOwnProfile = Boolean(user && pathname === `/players/${user.id}`)
+  const onOtherProfile = pathname.startsWith('/players/') && !onOwnProfile
 
   return (
     <nav className="native-tab-bar" aria-label="Main">
@@ -70,7 +74,9 @@ export default function NativeTabBar() {
       </NavLink>
       <NavLink
         to="/rankings"
-        className={({ isActive }) => `native-tab ${isActive ? 'is-active' : ''}`}
+        className={({ isActive }) =>
+          `native-tab ${isActive || onOtherProfile ? 'is-active' : ''}`
+        }
         onClick={() => void hapticLight()}
       >
         <i className="fas fa-ranking-star" aria-hidden />
@@ -78,9 +84,7 @@ export default function NativeTabBar() {
       </NavLink>
       <NavLink
         to={profileTo}
-        className={({ isActive }) =>
-          `native-tab ${isActive || (user && pathname.startsWith('/players/')) ? 'is-active' : ''}`
-        }
+        className={({ isActive }) => `native-tab ${isActive || onOwnProfile ? 'is-active' : ''}`}
         onClick={() => void hapticLight()}
       >
         <i className="fas fa-user" aria-hidden />

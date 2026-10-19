@@ -98,8 +98,8 @@ export default function JoinCompetitionPage() {
               <HaveCodeButton className="btn btn-primary" initialCode={clean}>
                 Enter a code
               </HaveCodeButton>
-              <Link to="/tournaments" className="btn btn-ghost">
-                Browse tournaments
+              <Link to="/community" className="btn btn-ghost">
+                Community
               </Link>
             </div>
           </div>

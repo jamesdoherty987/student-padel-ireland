@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import BackButton from '../components/BackButton'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
@@ -156,6 +157,7 @@ export default function TournamentDetailPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page tourney-detail">
+        <BackButton fallbackTo="/tournaments" />
         <div className="tour-title-row">
           <p className="eyebrow">{tournament.location}</p>
           <span className={`badge ${statusBadgeClass(tournament.status)}`}>{statusLabel(tournament.status)}</span>

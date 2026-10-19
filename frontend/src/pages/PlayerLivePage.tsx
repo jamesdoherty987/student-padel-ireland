@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import BackButton from '../components/BackButton'
 import { confirmDialog } from '../components/ConfirmDialog'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
@@ -246,7 +247,7 @@ export default function PlayerLivePage() {
     if (!scoringMatch) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    document.documentElement.classList.add('modal-open')
+    document.body.classList.add('modal-open')
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setScoringMatch(null)
@@ -256,7 +257,7 @@ export default function PlayerLivePage() {
     window.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = prev
-      document.documentElement.classList.remove('modal-open')
+      document.body.classList.remove('modal-open')
       window.removeEventListener('keydown', onKey)
     }
   }, [scoringMatch])
@@ -328,18 +329,21 @@ export default function PlayerLivePage() {
     return (
       <div className="app-shell">
         <NavBar />
-        <main className="pl-page empty-state">
-          <p>Could not load the live board.</p>
-          <p className="muted-note" style={{ marginTop: 8 }}>
-            The server may be waking up. Wait a few seconds and try again.
-          </p>
-          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 16 }}>
-            <button type="button" className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
-              {isFetching ? 'Retrying…' : 'Retry'}
-            </button>
-            <Link to="/tournaments" className="btn btn-ghost">
-              Events
-            </Link>
+        <main className="pl-page">
+          <BackButton fallbackTo={slug ? `/t/${slug}` : '/tournaments'} />
+          <div className="empty-state">
+            <p>Could not load the live board.</p>
+            <p className="muted-note" style={{ marginTop: 8 }}>
+              The server may be waking up. Wait a few seconds and try again.
+            </p>
+            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 16 }}>
+              <button type="button" className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
+                {isFetching ? 'Retrying…' : 'Retry'}
+              </button>
+              <Link to="/tournaments" className="btn btn-ghost">
+                Events
+              </Link>
+            </div>
           </div>
         </main>
       </div>
@@ -432,6 +436,7 @@ export default function PlayerLivePage() {
     <div className="app-shell">
       <NavBar />
       <main className="pl-page">
+        <BackButton fallbackTo={slug ? `/t/${slug}` : '/tournaments'} />
         <header className="pl-header">
           <div className="pl-title-row">
             <h1>{t.name}</h1>

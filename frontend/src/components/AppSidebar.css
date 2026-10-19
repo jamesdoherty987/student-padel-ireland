@@ -81,7 +81,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  min-height: 2.65rem;
+  min-height: 44px;
   padding: 0.55rem 0.75rem;
   border-radius: 10px;
   color: var(--ink-soft);
@@ -337,11 +337,12 @@ html.native-app.has-app-sidebar .org-layout {
   padding-left: 0;
 }
 
+/* Match NativeTabBar.css — banner includes notch inset */
 html:has(.offline-banner) .app-topbar {
-  top: 2.75rem;
+  top: calc(2.4rem + env(safe-area-inset-top, 0px));
 }
 
 html:has(.offline-banner) .app-sidebar {
-  top: 2.75rem;
-  height: calc(100dvh - 2.75rem);
+  top: calc(2.4rem + env(safe-area-inset-top, 0px));
+  height: calc(100dvh - 2.4rem - env(safe-area-inset-top, 0px));
 }

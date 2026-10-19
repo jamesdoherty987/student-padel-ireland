@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import BackButton from '../components/BackButton'
+import { confirmDialog } from '../components/ConfirmDialog'
 import NavBar from '../components/NavBar'
+import { nativeTabsVisibleForPath } from '../components/NativeTabBar'
 import { useAuth } from '../context/AuthContext'
+import { isNativeApp } from '../native/platform'
+import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import {
   apiErrorMessage,
   authApi,
@@ -43,7 +48,9 @@ function winRate(wins: number, losses: number) {
 export default function PlayerProfilePage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { user, logout, patchUser } = useAuth()
+  const tabsVisible = nativeTabsVisibleForPath(pathname)
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -155,6 +162,14 @@ export default function PlayerProfilePage() {
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
   }, [lightbox, reportTarget, confirmClearAvatar])
+
+  useEffect(() => {
+    if (!lightbox) return
+    void setStatusBarForDarkScreen()
+    return () => {
+      void setStatusBarForLightScreen()
+    }
+  }, [lightbox])
 
   useEffect(() => {
     setLightboxError(false)
@@ -320,7 +335,7 @@ export default function PlayerProfilePage() {
     mutationFn: (password: string) => authApi.deleteAccount(password),
     onSuccess: () => {
       logout()
-      navigate('/', { replace: true })
+      navigate(isNativeApp() ? '/welcome' : '/', { replace: true })
     },
     onError: (e) => setDeleteError(apiErrorMessage(e)),
   })
@@ -355,15 +370,8 @@ export default function PlayerProfilePage() {
         )}
         {player && (
           <>
-            <p className="eyebrow profile-back">
-              <button type="button" className="profile-back-btn" onClick={() => navigate(-1)}>
-                ← Back
-              </button>
-              <span className="profile-back-sep" aria-hidden>
-                ·
-              </span>
-              <Link to="/rankings">Rankings</Link>
-            </p>
+            {/* Own profile is a tab root — no Back. Other profiles need an exit. */}
+            {!(isOwn && tabsVisible) && <BackButton fallbackTo="/rankings" />}
 
             <header className="profile-hero">
               <div className="profile-hero-bg" aria-hidden />
@@ -980,9 +988,14 @@ export default function PlayerProfilePage() {
                       type="button"
                       className="btn btn-ghost btn-sm"
                       onClick={() => {
-                        if (window.confirm('Remove this from your gallery?')) {
-                          deleteMut.mutate(lightbox.id)
-                        }
+                        void confirmDialog({
+                          title: 'Delete from gallery?',
+                          message: 'This photo or video will be removed from your profile.',
+                          confirmLabel: 'Delete',
+                          danger: true,
+                        }).then((ok) => {
+                          if (ok) deleteMut.mutate(lightbox.id)
+                        })
                       }}
                       disabled={deleteMut.isPending}
                     >

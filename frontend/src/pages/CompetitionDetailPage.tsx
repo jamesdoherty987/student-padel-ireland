@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Share } from '@capacitor/share'
+import BackButton from '../components/BackButton'
+import { confirmDialog } from '../components/ConfirmDialog'
 import NavBar from '../components/NavBar'
 import NumberInput from '../components/NumberInput'
 import { ShareQr } from '../components/ShareQr'
@@ -330,9 +332,7 @@ export default function CompetitionDetailPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page">
-        <p className="breadcrumb">
-          <Link to="/community">Community</Link> / {c.name}
-        </p>
+        <BackButton fallbackTo="/community" />
         <div className="page-header-row">
           <h1 className="page-title">{c.name}</h1>
           <div className="header-actions">
@@ -559,9 +559,14 @@ export default function CompetitionDetailPage() {
                       className="btn btn-ghost btn-sm standings-remove"
                       disabled={removeMemberMut.isPending}
                       onClick={() => {
-                        if (window.confirm(`Remove ${m.full_name} from this competition?`)) {
-                          removeMemberMut.mutate(m.user_id)
-                        }
+                        void confirmDialog({
+                          title: 'Remove player?',
+                          message: `${m.full_name} will leave this competition.`,
+                          confirmLabel: 'Remove',
+                          danger: true,
+                        }).then((ok) => {
+                          if (ok) removeMemberMut.mutate(m.user_id)
+                        })
                       }}
                     >
                       Remove
@@ -693,9 +698,14 @@ export default function CompetitionDetailPage() {
                       className="btn btn-ghost btn-sm"
                       disabled={cancelMatchMut.isPending}
                       onClick={() => {
-                        if (window.confirm('Cancel this match? The score will be discarded.')) {
-                          cancelMatchMut.mutate(m.id)
-                        }
+                        void confirmDialog({
+                          title: 'Cancel match?',
+                          message: 'The score will be discarded.',
+                          confirmLabel: 'Cancel match',
+                          danger: true,
+                        }).then((ok) => {
+                          if (ok) cancelMatchMut.mutate(m.id)
+                        })
                       }}
                     >
                       Cancel
@@ -720,9 +730,13 @@ export default function CompetitionDetailPage() {
                   )
                   return
                 }
-                if (window.confirm('Mark this competition complete? You can still view results.')) {
-                  closeMut.mutate()
-                }
+                void confirmDialog({
+                  title: 'Mark complete?',
+                  message: 'You can still view results after closing this competition.',
+                  confirmLabel: 'Mark complete',
+                }).then((ok) => {
+                  if (ok) closeMut.mutate()
+                })
               }}
             >
               {closeMut.isPending ? 'Saving…' : 'Mark complete'}
@@ -733,9 +747,16 @@ export default function CompetitionDetailPage() {
             className="btn btn-ghost btn-sm"
             disabled={leaveMut.isPending}
             onClick={() => {
-              if (window.confirm(c.is_owner ? 'Leave as host? Only works if you are the only member.' : 'Leave this competition?')) {
-                leaveMut.mutate()
-              }
+              void confirmDialog({
+                title: c.is_owner ? 'Leave as host?' : 'Leave competition?',
+                message: c.is_owner
+                  ? 'Only works if you are the only member.'
+                  : 'You will leave this competition.',
+                confirmLabel: 'Leave',
+                danger: true,
+              }).then((ok) => {
+                if (ok) leaveMut.mutate()
+              })
             }}
           >
             {leaveMut.isPending ? 'Leaving…' : 'Leave'}

@@ -91,6 +91,16 @@ html.native-app textarea {
   font-size: 16px;
 }
 
+/* Keep focused fields above the keyboard / tab bar when the WebView resizes */
+html.native-app .form-input:focus,
+html.native-app .form-select:focus,
+html.native-app .form-textarea:focus,
+html.native-app textarea:focus,
+html.native-app .searchable-select-trigger:focus,
+html.native-app .searchable-select-input:focus {
+  scroll-margin-bottom: 8rem;
+}
+
 html.native-app a,
 html.native-app button {
   -webkit-tap-highlight-color: transparent;
@@ -426,6 +436,18 @@ input[type='datetime-local']::-webkit-datetime-edit {
   background: transparent;
   border-color: var(--line);
   color: var(--muted);
+}
+
+/* iOS: keep primary filter chips at Apple's 44pt minimum */
+html.native-app .filter-chip-subtle {
+  min-height: 44px;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.82rem;
+}
+
+html.native-app .btn-xs {
+  min-height: 44px;
+  padding: 0.4rem 0.85rem;
 }
 
 .filter-chip-subtle.on,
@@ -863,8 +885,8 @@ input[type='datetime-local']::-webkit-datetime-edit {
 }
 
 .notif-close {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -872,6 +894,7 @@ input[type='datetime-local']::-webkit-datetime-edit {
   font-size: 1.35rem;
   line-height: 1;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .notif-close:hover {

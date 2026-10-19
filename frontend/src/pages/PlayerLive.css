@@ -66,8 +66,13 @@
   }
 }
 
-html.native-app.has-native-tabs .pl-page {
-  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+/* Live route hides tabs; keep home-indicator clearance on the page itself */
+html.native-app .pl-page {
+  padding-bottom: max(3rem, calc(1.5rem + env(safe-area-inset-bottom)));
+}
+
+.pl-page > .back-btn {
+  grid-column: 1 / -1;
 }
 
 .pl-header {
@@ -599,7 +604,7 @@ html.native-app.has-native-tabs .pl-page {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 100;
+  z-index: 200;
   padding: 0;
 }
 
@@ -611,7 +616,7 @@ html.native-app.has-native-tabs .pl-page {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 100;
+  z-index: 200;
   padding: 0;
 }
 
@@ -666,6 +671,7 @@ html.native-app.has-native-tabs .pl-page {
   background: var(--white);
   font-size: 16px;
   box-sizing: border-box;
+  scroll-margin-bottom: 8rem;
 }
 
 .score-pair input {

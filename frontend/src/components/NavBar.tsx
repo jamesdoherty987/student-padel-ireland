@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { isNativeApp } from '../native/platform'
+import { setStatusBarForLightScreen } from '../native/statusBar'
 import { homeForRole } from '../utils/navigation'
 import BrandLogo from './BrandLogo'
 import { nativeTabsVisibleForPath } from './NativeTabBar'
@@ -53,6 +54,11 @@ export default function NavBar() {
     document.documentElement.classList.add('has-app-sidebar')
     return () => document.documentElement.classList.remove('has-app-sidebar')
   }, [])
+
+  useEffect(() => {
+    if (!native) return
+    void setStatusBarForLightScreen()
+  }, [native])
 
   useEffect(() => {
     setOpen(false)
@@ -254,7 +260,7 @@ export default function NavBar() {
               </button>
             </>
           ) : (
-            <Link to="/" className="app-sidebar-link" onClick={close}>
+            <Link to={native ? '/welcome' : '/'} className="app-sidebar-link" onClick={close}>
               <i className="fas fa-house" aria-hidden />
               <span>Home</span>
             </Link>

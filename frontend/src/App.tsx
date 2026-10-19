@@ -138,6 +138,14 @@ function AuthPersistBridge({ children }: { children: ReactNode }) {
   )
 }
 
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
+
 function RootRoute() {
   const { user, loading } = useAuth()
   if (isNativeApp()) return <NativeWelcomePage />
@@ -163,6 +171,7 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <AuthPersistBridge>
+            <ScrollToTop />
             <NativeDeepLinkRouter />
             <RouteSeoFallback />
             <OfflineBanner />

@@ -814,7 +814,14 @@ export default function OrganiserDashboard() {
         </aside>
 
         <main className="org-main">
-          {isLoading && <p>Loading...</p>}
+          {isLoading && (
+            <div aria-busy="true">
+              <div className="skeleton" style={{ height: 28, width: '55%', marginBottom: 16 }} />
+              <div className="skeleton" style={{ height: 120, marginBottom: 12 }} />
+              <div className="skeleton" style={{ height: 180 }} />
+              <span className="visually-hidden">Loading</span>
+            </div>
+          )}
           {isError && !isLoading && (
             <div className="org-empty">
               <h1>Couldn’t load your events</h1>

@@ -3,9 +3,9 @@ import { Browser } from '@capacitor/browser'
 import type { PluginListenerHandle } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
 import { SplashScreen } from '@capacitor/splash-screen'
-import { StatusBar, Style } from '@capacitor/status-bar'
 import { pathFromAppUrl } from './deepLink'
 import { isNativeApp, nativePlatform } from './platform'
+import { setStatusBarForDarkScreen } from './statusBar'
 
 export { pathFromAppUrl } from './deepLink'
 
@@ -143,14 +143,8 @@ export async function initNativeShell(): Promise<void> {
     void hideNativeSplash()
   }, 3500)
 
-  try {
-    await StatusBar.setStyle({ style: Style.Light })
-    if (nativePlatform() === 'android') {
-      await StatusBar.setBackgroundColor({ color: '#ffffff' })
-    }
-  } catch {
-    /* StatusBar unavailable on some simulators */
-  }
+  // Green splash needs light status-bar icons; light screens set their own style on mount
+  void setStatusBarForDarkScreen()
 
   try {
     await Keyboard.setAccessoryBarVisible({ isVisible: true })

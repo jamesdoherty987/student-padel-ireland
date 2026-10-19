@@ -685,7 +685,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 100;
+  z-index: 200;
   padding: 0;
 }
 
@@ -731,6 +731,7 @@
   border-radius: var(--radius-sm);
   background: var(--white);
   font-size: 16px;
+  scroll-margin-bottom: 8rem;
 }
 
 .score-modal input:focus {
