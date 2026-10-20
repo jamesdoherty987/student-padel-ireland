@@ -8,7 +8,7 @@ import { usePageSeo } from '../hooks/usePageSeo'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { apiErrorMessage, platformApi } from '../services/api'
-import { homeForRole, safeNextPath } from '../utils/navigation'
+import { appHomePath, homeForRole, safeNextPath } from '../utils/navigation'
 import './Auth.css'
 
 function useDarkStatusBar() {
@@ -110,11 +110,11 @@ export function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const native = isNativeApp()
-  const lead = next?.includes('/confirmed')
+  const lead = next.includes('/confirmed')
     ? 'Log in with the account used at checkout to confirm your registration.'
-    : next?.includes('/join')
+    : next.includes('/join')
       ? 'Log in to finish joining.'
-      : next?.startsWith('/organiser')
+      : next.startsWith('/organiser')
         ? 'Log in to create and run your events.'
         : 'Log in to join tournaments and see your next match.'
 
@@ -150,7 +150,7 @@ export function LoginPage() {
   return (
     <div className={`auth-page${native ? ' auth-page--native' : ''}`}>
       <div className="auth-panel">
-        <BrandLogo to={native ? '/welcome' : '/'} className="auth-brand" size="md" />
+        <BrandLogo to={native ? null : appHomePath()} className="auth-brand" size="md" />
         <h1>Welcome back</h1>
         <p className="auth-lead">{lead}</p>
         <form onSubmit={onSubmit}>
@@ -207,6 +207,11 @@ export function LoginPage() {
           No account?{' '}
           <Link to={next ? `/signup?next=${encodeURIComponent(next)}` : '/signup'}>Sign up</Link>
         </p>
+        {native && (
+          <p className="auth-foot auth-foot--browse">
+            <Link to="/tournaments">Browse events without an account</Link>
+          </p>
+        )}
         {import.meta.env.DEV && (
           <p className="auth-demo">
             Dev: james@ul.ie / player12345 · organiser@studentpadelireland.ie / organiser123 ·
@@ -293,7 +298,7 @@ export function SignupPage() {
   return (
     <div className={`auth-page${native ? ' auth-page--native' : ''}`}>
       <div className="auth-panel">
-        <BrandLogo to={native ? '/welcome' : '/'} className="auth-brand" size="md" />
+        <BrandLogo to={native ? null : appHomePath()} className="auth-brand" size="md" />
         <h1>Create your account</h1>
         <p className="auth-lead">A few details and you’re ready to play and join events.</p>
         <form onSubmit={onSubmit}>
@@ -453,6 +458,11 @@ export function SignupPage() {
           Already have an account?{' '}
           <Link to={next ? `/login?next=${encodeURIComponent(next)}` : '/login'}>Log in</Link>
         </p>
+        {native && (
+          <p className="auth-foot auth-foot--browse">
+            <Link to="/tournaments">Browse events without an account</Link>
+          </p>
+        )}
       </div>
     </div>
   )

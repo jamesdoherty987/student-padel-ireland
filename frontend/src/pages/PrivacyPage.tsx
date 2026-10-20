@@ -1,9 +1,12 @@
-import { Link } from 'react-router-dom'
+﻿import BackButton from '../components/BackButton'
 import NavBar from '../components/NavBar'
+import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
+import { appHomePath } from '../utils/navigation'
 import './Legal.css'
 
 export default function PrivacyPage() {
+  const { user } = useAuth()
   usePageSeo({
     title: 'Privacy Policy',
     description: 'Privacy policy for Student Padel Ireland — how we collect and use personal data.',
@@ -13,9 +16,7 @@ export default function PrivacyPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page legal-page">
-        <p className="eyebrow">
-          <Link to="/">← Home</Link>
-        </p>
+        <BackButton fallbackTo={appHomePath(user?.role)} />
         <h1 className="page-title">Privacy Policy</h1>
         <p className="page-sub">Last updated: 1 October 2026</p>
 

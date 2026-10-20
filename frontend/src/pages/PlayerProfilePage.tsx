@@ -6,7 +6,6 @@ import { confirmDialog } from '../components/ConfirmDialog'
 import NavBar from '../components/NavBar'
 import { nativeTabsVisibleForPath } from '../components/NativeTabBar'
 import { useAuth } from '../context/AuthContext'
-import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import {
   apiErrorMessage,
@@ -17,6 +16,7 @@ import {
   type ProfileMedia,
 } from '../services/api'
 import { mediaIdFromUrl, mediaUrl } from '../utils/media'
+import { appHomePath } from '../utils/navigation'
 import './Tournament.css'
 import './Profile.css'
 
@@ -335,7 +335,7 @@ export default function PlayerProfilePage() {
     mutationFn: (password: string) => authApi.deleteAccount(password),
     onSuccess: () => {
       logout()
-      navigate(isNativeApp() ? '/welcome' : '/', { replace: true })
+      navigate(appHomePath(), { replace: true })
     },
     onError: (e) => setDeleteError(apiErrorMessage(e)),
   })

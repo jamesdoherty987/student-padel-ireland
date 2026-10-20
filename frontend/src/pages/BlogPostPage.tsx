@@ -3,7 +3,7 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { getPostBySlug, getRelatedPosts, type BlogBlock } from '../data/blogPosts'
-import { homeForRole } from '../utils/navigation'
+import { appHomePath } from '../utils/navigation'
 import './Blog.css'
 import './Legal.css'
 
@@ -41,7 +41,7 @@ function Block({ block }: { block: BlogBlock }) {
 export default function BlogPostPage() {
   const { slug = '' } = useParams()
   const { user } = useAuth()
-  const backTo = user ? homeForRole(user.role) : '/'
+  const backTo = appHomePath(user?.role)
   const post = getPostBySlug(slug)
   const related = post ? getRelatedPosts(post.slug, 2) : []
 

@@ -6,6 +6,7 @@ import { SplashScreen } from '@capacitor/splash-screen'
 import { pathFromAppUrl } from './deepLink'
 import { isNativeApp, nativePlatform } from './platform'
 import { setStatusBarForDarkScreen } from './statusBar'
+import { nativeSafePath } from '../utils/navigation'
 
 export { pathFromAppUrl } from './deepLink'
 
@@ -27,8 +28,10 @@ export function onNativeDeepLink(handler: DeepLinkHandler | null) {
 }
 
 function dispatchDeepLink(url: string) {
-  const path = pathFromAppUrl(url)
-  if (!path || path === '/') return
+  const raw = pathFromAppUrl(url)
+  if (!raw) return
+  // Never open the marketing landing / SEO pages inside the native shell
+  const path = nativeSafePath(raw)
   if (deepLinkHandler) {
     deepLinkHandler(path)
     return

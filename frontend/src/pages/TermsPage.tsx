@@ -1,9 +1,12 @@
-import { Link } from 'react-router-dom'
+import BackButton from '../components/BackButton'
 import NavBar from '../components/NavBar'
+import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
+import { appHomePath } from '../utils/navigation'
 import './Legal.css'
 
 export default function TermsPage() {
+  const { user } = useAuth()
   usePageSeo({
     title: 'Terms of Use',
     description: 'Terms of use for the Student Padel Ireland website and mobile apps.',
@@ -13,9 +16,7 @@ export default function TermsPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page legal-page">
-        <p className="eyebrow">
-          <Link to="/">← Home</Link>
-        </p>
+        <BackButton fallbackTo={appHomePath(user?.role)} />
         <h1 className="page-title">Terms of Use</h1>
         <p className="page-sub">Last updated: 1 October 2026</p>
 

@@ -1,22 +1,14 @@
-import { Link, Navigate } from 'react-router-dom'
+import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import BrandLogo from '../components/BrandLogo'
 import { isNativeApp } from '../native/platform'
-import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { homeForRole } from '../utils/navigation'
-import { useEffect } from 'react'
-import './NativeWelcome.css'
 
-/** Compact native launch screen — not the marketing website. */
+/**
+ * Legacy /welcome route — redirects into login (or role home).
+ * Kept so old deep links / bookmarks do not 404.
+ */
 export default function NativeWelcomePage() {
   const { user, loading } = useAuth()
-
-  useEffect(() => {
-    void setStatusBarForDarkScreen()
-    return () => {
-      void setStatusBarForLightScreen()
-    }
-  }, [])
 
   if (!isNativeApp()) {
     return <Navigate to="/" replace />
@@ -24,12 +16,10 @@ export default function NativeWelcomePage() {
 
   if (loading) {
     return (
-      <div className="native-welcome" aria-busy="true">
-        <div className="native-welcome-bg" aria-hidden />
-        <div className="native-welcome-inner">
-          <BrandLogo to={null} className="native-welcome-brand" size="xl" />
-          <p className="native-welcome-sub">Loading…</p>
-        </div>
+      <div className="route-fallback" aria-busy="true">
+        <div className="skeleton" style={{ width: 'min(16rem, 70%)', height: 22, marginBottom: 12 }} />
+        <div className="skeleton" style={{ width: 'min(22rem, 90%)', height: 14 }} />
+        <span className="visually-hidden">Loading</span>
       </div>
     )
   }
@@ -38,29 +28,5 @@ export default function NativeWelcomePage() {
     return <Navigate to={homeForRole(user.role)} replace />
   }
 
-  return (
-    <div className="native-welcome">
-      <div className="native-welcome-bg" aria-hidden />
-      <div className="native-welcome-inner">
-        <BrandLogo to={null} className="native-welcome-brand" size="xl" />
-        <h1>Play. Score. Climb.</h1>
-        <p className="native-welcome-sub">
-          Join student tournaments, log community matches, and follow live scores across Ireland.
-        </p>
-        <div className="native-welcome-actions">
-          <Link to="/tournaments" className="btn btn-primary btn-block">
-            Browse events
-          </Link>
-          <Link to="/login" className="btn btn-ghost btn-block native-welcome-ghost">
-            Log in
-          </Link>
-          <p className="native-welcome-signup">
-            <Link to="/rankings">Ireland rankings</Link>
-            <span aria-hidden> · </span>
-            <Link to="/signup">Create account</Link>
-          </p>
-        </div>
-      </div>
-    </div>
-  )
+  return <Navigate to="/login" replace />
 }

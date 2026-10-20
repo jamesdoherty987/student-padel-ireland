@@ -3,7 +3,8 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForLightScreen } from '../native/statusBar'
-import { homeForRole } from '../utils/navigation'
+import { appHomePath, guestBrowsePath, nativeBackFallback } from '../utils/navigation'
+import BackButton from './BackButton'
 import BrandLogo from './BrandLogo'
 import { nativeTabsVisibleForPath } from './NativeTabBar'
 import NotificationsBell from './NotificationsBell'
@@ -117,17 +118,24 @@ export default function NavBar() {
   const onLogout = () => {
     close()
     logout()
-    navigate(native ? '/welcome' : '/')
+    navigate(appHomePath())
   }
 
-  const brandTo = native ? (user ? homeForRole(user.role) : '/welcome') : user ? homeForRole(user.role) : '/'
+  // Guests browsing the app: brand stays on Events (cold start still opens login)
+  const brandTo = user ? appHomePath(user.role) : guestBrowsePath()
+  const backFallback = native ? nativeBackFallback(pathname, user?.id, user?.role) : null
 
   const primary: NavItem[] = [
     {
       to: '/tournaments',
-      label: 'Tournaments',
+      label: 'Events',
       icon: 'fa-trophy',
-      match: (p) => p.startsWith('/tournaments') || p.startsWith('/t/') || p.startsWith('/join'),
+      match: (p) =>
+        p.startsWith('/tournaments') ||
+        p.startsWith('/t/') ||
+        p.startsWith('/join') ||
+        p.startsWith('/organiser') ||
+        p.startsWith('/admin'),
     },
     {
       to: '/community',
@@ -260,27 +268,45 @@ export default function NavBar() {
               </button>
             </>
           ) : (
-            <Link to={native ? '/welcome' : '/'} className="app-sidebar-link" onClick={close}>
-              <i className="fas fa-house" aria-hidden />
-              <span>Home</span>
+            <Link to={guestBrowsePath()} className="app-sidebar-link" onClick={close}>
+              <i className={`fas ${native ? 'fa-trophy' : 'fa-house'}`} aria-hidden />
+              <span>{native ? 'Browse events' : 'Home'}</span>
             </Link>
           )}
         </div>
       </aside>
 
-      <header className="app-topbar">
-        <button
-          type="button"
-          className="app-topbar-menu"
-          aria-label={open ? 'Close menu' : 'Open menu'}
-          aria-expanded={open}
-          aria-controls={menuId}
-          onClick={() => setOpen((v) => !v)}
-        >
-          <i className={`fas ${open ? 'fa-times' : 'fa-bars'}`} />
-        </button>
+      <header className={`app-topbar${backFallback ? ' app-topbar--nested' : ''}`}>
+        {backFallback ? (
+          <BackButton fallbackTo={backFallback} force compact className="app-topbar-back" />
+        ) : (
+          <button
+            type="button"
+            className="app-topbar-menu"
+            aria-label={open ? 'Close menu' : 'Open menu'}
+            aria-expanded={open}
+            aria-controls={menuId}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <i className={`fas ${open ? 'fa-times' : 'fa-bars'}`} />
+          </button>
+        )}
         <BrandLogo to={brandTo} className="app-topbar-brand" size="sm" onClick={close} />
-        <div className="app-topbar-end">{user && !desktop ? <NotificationsBell /> : null}</div>
+        <div className="app-topbar-end">
+          {backFallback ? (
+            <button
+              type="button"
+              className="app-topbar-menu app-topbar-menu--end"
+              aria-label={open ? 'Close menu' : 'Open menu'}
+              aria-expanded={open}
+              aria-controls={menuId}
+              onClick={() => setOpen((v) => !v)}
+            >
+              <i className={`fas ${open ? 'fa-times' : 'fa-bars'}`} />
+            </button>
+          ) : null}
+          {user && !desktop ? <NotificationsBell /> : null}
+        </div>
       </header>
     </>
   )

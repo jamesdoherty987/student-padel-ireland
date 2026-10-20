@@ -33,3 +33,17 @@
   outline: 2px solid var(--court-mid);
   outline-offset: 2px;
 }
+
+.back-btn--compact {
+  margin: 0;
+  padding: 0;
+  width: 44px;
+  justify-content: center;
+  color: var(--court-deep);
+  flex-shrink: 0;
+}
+
+.back-btn--compact i {
+  font-size: 1.05rem;
+  width: auto;
+}

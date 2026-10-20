@@ -30,6 +30,11 @@
   text-align: center;
 }
 
+/* Sit above the Instagram-style tab bar in the native shell */
+html.native-app.has-native-tabs .org-toast {
+  bottom: calc(5.75rem + env(safe-area-inset-bottom, 0px));
+}
+
 @keyframes toastIn {
   from {
     opacity: 0;

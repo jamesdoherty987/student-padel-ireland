@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import BackButton from '../components/BackButton'
 import NavBar from '../components/NavBar'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
@@ -90,6 +91,7 @@ export default function JoinCompetitionPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page">
+          <BackButton fallbackTo="/community" />
           <h1 className="page-title">Join with code</h1>
           <p className="page-sub">Code {clean || '-'}</p>
           <div className="empty-state">
@@ -112,6 +114,7 @@ export default function JoinCompetitionPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page">
+        <BackButton fallbackTo="/community" />
         <h1 className="page-title">Join with code</h1>
         <p className="page-sub">Code {clean}</p>
         {error ? (

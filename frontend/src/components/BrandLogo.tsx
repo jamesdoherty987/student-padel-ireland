@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { guestBrowsePath } from '../utils/navigation'
 
 /** In-app brand mark (landing, header, auth). Google/schema uses student-padel-ireland-logo.png. */
 const LOGO_SRC = '/images/spi-logo.png'
@@ -6,7 +7,7 @@ const LOGO_SRC = '/images/spi-logo.png'
 type Size = 'sm' | 'md' | 'lg' | 'xl'
 
 type Props = {
-  /** Link target. Pass null for a non-clickable mark. */
+  /** Link target. Pass null for a non-clickable mark. Native default skips the marketing site. */
   to?: string | null
   className?: string
   size?: Size
@@ -23,14 +24,19 @@ const SIZE_PX: Record<Size, { w: number; h: number }> = {
   xl: { w: 54, h: 73 },
 }
 
+function defaultBrandTo() {
+  return guestBrowsePath()
+}
+
 export default function BrandLogo({
-  to = '/',
+  to,
   className = '',
   size = 'sm',
   showText = true,
   label = 'Student Padel Ireland',
   onClick,
 }: Props) {
+  const href = to === undefined ? defaultBrandTo() : to
   const dims = SIZE_PX[size]
   const classes = ['brand-logo', `brand-logo--${size}`, className].filter(Boolean).join(' ')
 
@@ -48,9 +54,9 @@ export default function BrandLogo({
     </>
   )
 
-  if (to) {
+  if (href) {
     return (
-      <Link to={to} className={classes} aria-label={showText ? undefined : label} onClick={onClick}>
+      <Link to={href} className={classes} aria-label={showText ? undefined : label} onClick={onClick}>
         {inner}
       </Link>
     )

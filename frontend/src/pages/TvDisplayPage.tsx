@@ -1,8 +1,10 @@
 import type { CSSProperties } from 'react'
 import { useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
+import { hapticLight } from '../native/haptics'
+import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { tournamentApi, type Match } from '../services/api'
 import { currentSetScores, formatLiveBoardScore, formatTime } from '../utils/format'
@@ -103,6 +105,8 @@ function UnassignedPanel({ matches }: { matches: Match[] }) {
 
 export default function TvDisplayPage() {
   const { id = '' } = useParams()
+  const navigate = useNavigate()
+  const native = isNativeApp()
 
   useEffect(() => {
     void setStatusBarForDarkScreen()
@@ -110,6 +114,16 @@ export default function TvDisplayPage() {
       void setStatusBarForLightScreen()
     }
   }, [])
+
+  const closeDisplay = () => {
+    void hapticLight()
+    const idx = (window.history.state as { idx?: number } | null)?.idx
+    if (typeof idx === 'number' && idx > 0) {
+      navigate(-1)
+      return
+    }
+    navigate('/organiser')
+  }
 
   const { data, isLoading, isError, dataUpdatedAt, refetch, isFetching } = useQuery({
     queryKey: ['display', id],
@@ -121,12 +135,26 @@ export default function TvDisplayPage() {
   })
 
   if (isLoading) {
-    return <div className="tv-root loading">Loading display…</div>
+    return (
+      <div className="tv-root loading">
+        {native ? (
+          <button type="button" className="tv-close" onClick={closeDisplay} aria-label="Close display">
+            <i className="fas fa-xmark" aria-hidden />
+          </button>
+        ) : null}
+        Loading display…
+      </div>
+    )
   }
 
   if (isError || !data) {
     return (
       <div className="tv-root loading">
+        {native ? (
+          <button type="button" className="tv-close" onClick={closeDisplay} aria-label="Close display">
+            <i className="fas fa-xmark" aria-hidden />
+          </button>
+        ) : null}
         <div className="tv-error">
           <p>Could not load the display.</p>
           <button type="button" className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
@@ -152,6 +180,11 @@ export default function TvDisplayPage() {
 
   return (
     <div className="tv-root">
+      {native ? (
+        <button type="button" className="tv-close" onClick={closeDisplay} aria-label="Close display">
+          <i className="fas fa-xmark" aria-hidden />
+        </button>
+      ) : null}
       <header className="tv-header">
         <BrandLogo to={null} className="tv-brand" size="md" />
         <div className="tv-title-row">

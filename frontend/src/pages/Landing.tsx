@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import { usePageSeo } from '../hooks/usePageSeo'
+import { isNativeApp } from '../native/platform'
 import { tournamentApi, type Tournament } from '../services/api'
 import { formatPerPlayerFee, parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
 import { FlipWords } from '../components/ui/FlipWords'
@@ -231,6 +232,11 @@ export default function Landing() {
 
   const upcoming = tournaments.slice(0, 6)
   const close = () => setMenuOpen(false)
+
+  // Marketing site is web-only (RootRoute also gates this)
+  if (isNativeApp()) {
+    return <Navigate to="/login" replace />
+  }
 
   return (
     <div className="landing">

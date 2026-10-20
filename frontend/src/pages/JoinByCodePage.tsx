@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import BackButton from '../components/BackButton'
 import NavBar from '../components/NavBar'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { cleanInviteCode, resolveInviteCode } from '../utils/inviteCode'
@@ -65,6 +66,7 @@ export default function JoinByCodePage() {
     <div className="app-shell">
       <NavBar />
       <main className="page join-any-page">
+        <BackButton fallbackTo="/tournaments" />
         <h1 className="page-title">Joining…</h1>
         <p className="page-sub">Code {clean || '-'}</p>
 

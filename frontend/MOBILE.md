@@ -99,7 +99,7 @@ Apple often rejects thin “website wrappers.” Strong points for review: live 
 
 Capacitor makes this **App Store–buildable**, not automatically approved. You still need Apple review, a privacy policy, screenshots, and a hosted API. Native chat, push, and App Store IAP are not in this MVP.
 
-Native UX extras (4.2 readiness): bottom tab bar, compact welcome (not marketing site), payment verify-on-return, Share sheet for invites, haptics, offline banner.
+Native UX extras (4.2 readiness): cold start opens **Login** (signup linked; browse-as-guest available), Instagram-style persistent bottom tab bar (hidden on auth / live / TV), top-bar back on nested screens, marketing landing / about / blog stay web-only, payment verify-on-return, Share sheet, haptics, offline banner.
 
 ## Privacy manifest
 

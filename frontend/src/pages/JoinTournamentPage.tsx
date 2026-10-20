@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import BackButton from '../components/BackButton'
 import BrandLogo from '../components/BrandLogo'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
@@ -51,7 +52,8 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
     <div className="app-shell">
       <NavBar />
       <main className="page confirm-page">
-        <BrandLogo to="/tournaments" className="confirm-brand" size="sm" />
+        <BackButton fallbackTo={slug ? `/t/${slug}` : '/tournaments'} />
+        {!isNativeApp() ? <BrandLogo to="/tournaments" className="confirm-brand" size="sm" /> : null}
         <h1 className="page-title">
           {confirmed ? (payOnArrival ? 'You’re in' : 'Registration confirmed') : 'Registration received'}
         </h1>
@@ -869,6 +871,7 @@ export default function JoinTournamentPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page">
+        <BackButton fallbackTo={slug ? `/t/${slug}` : '/tournaments'} />
         <h1 className="page-title">Join {tournament.name}</h1>
         <p className="page-sub">
           {tournamentFormatSummary(tournament.play_format, tournament.format)} · {perPlayer}

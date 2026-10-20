@@ -206,6 +206,37 @@
   cursor: pointer;
 }
 
+.app-topbar-back {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 10px;
+  position: relative;
+  z-index: 1;
+}
+
+.app-topbar-menu--end {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* Equal side slots so the brand sits truly centered on nested screens */
+.app-topbar--nested {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, auto) 1fr minmax(5.5rem, auto);
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.app-topbar--nested .app-topbar-brand {
+  justify-content: center;
+  flex: none;
+  min-width: 0;
+}
+
+.app-topbar--nested .app-topbar-end {
+  justify-content: flex-end;
+}
+
 .app-topbar:has(.notif-root.is-open) {
   z-index: 95;
 }

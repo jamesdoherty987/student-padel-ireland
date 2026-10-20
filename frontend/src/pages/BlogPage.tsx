@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { getAllPosts } from '../data/blogPosts'
-import { homeForRole } from '../utils/navigation'
+import { appHomePath } from '../utils/navigation'
 import './Blog.css'
 import './Legal.css'
 
@@ -17,7 +17,7 @@ function formatDate(iso: string) {
 /** Quiet SEO index — not linked from the main app UI. */
 export default function BlogPage() {
   const { user } = useAuth()
-  const backTo = user ? homeForRole(user.role) : '/'
+  const backTo = appHomePath(user?.role)
 
   usePageSeo({
     title: 'Student Padel Ireland Guides',

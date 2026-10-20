@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { apiErrorMessage, communityApi, tournamentApi } from '../services/api'
 import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
+import { isNativeApp } from '../native/platform'
 import { formatDate, formatPerPlayerFee, statusBadgeClass, statusLabel } from '../utils/format'
 import './Tournament.css'
 import './Community.css'
@@ -222,7 +223,7 @@ export default function TournamentsPage() {
       <NavBar />
       <main className="page">
         <div className="page-header-row">
-          <h1 className="page-title">Tournaments</h1>
+          <h1 className="page-title">{isNativeApp() ? 'Events' : 'Tournaments'}</h1>
           <div className="header-actions">
             <HaveCodeButton className="btn btn-ghost btn-sm" autoOpen={openJoin} onAutoOpened={clearJoinParam} initialCode={codeFromSearch} />
             {user && (
@@ -240,7 +241,9 @@ export default function TournamentsPage() {
           </div>
         </div>
         <p className="page-sub">
-          Official brackets and friend open-play. Have a code? Use it above — or create your own.
+          {isNativeApp()
+            ? 'Official brackets and friend open-play. Have a code? Tap it above.'
+            : 'Official brackets and friend open-play. Have a code? Use it above — or create your own.'}
         </p>
 
         {error && <p className="form-error">{error}</p>}

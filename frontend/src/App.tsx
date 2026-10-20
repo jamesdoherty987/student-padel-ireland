@@ -13,6 +13,12 @@ import { communityApi, tournamentApi } from './services/api'
 import { clearQueryCachePersist, restoreQueryCache, schedulePersistQueryCache } from './utils/queryPersist'
 import { homeForRole } from './utils/navigation'
 
+/** Marketing / SEO pages stay on the website — never inside the iOS/Android shell. */
+function WebOnly({ children }: { children: ReactNode }) {
+  if (isNativeApp()) return <Navigate to="/tournaments" replace />
+  return <>{children}</>
+}
+
 // Landing stays eager — first paint for web home. Everything else is code-split.
 import Landing from './pages/Landing'
 import NativeWelcomePage from './pages/NativeWelcomePage'
@@ -148,7 +154,12 @@ function ScrollToTop() {
 
 function RootRoute() {
   const { user, loading } = useAuth()
-  if (isNativeApp()) return <NativeWelcomePage />
+  // Native: login first for guests; role home when already signed in
+  if (isNativeApp()) {
+    if (loading) return <RouteFallback />
+    if (user) return <Navigate to={homeForRole(user.role)} replace />
+    return <Navigate to="/login" replace />
+  }
   // Marketing site for guests only — logged-in users go straight into the app
   if (loading) return <RouteFallback />
   if (user) return <Navigate to={homeForRole(user.role)} replace />
@@ -182,9 +193,30 @@ export default function App() {
                 <Route path="/welcome" element={<NativeWelcomePage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/terms" element={<TermsPage />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/blog" element={<BlogPage />} />
-                <Route path="/blog/:slug" element={<BlogPostPage />} />
+                <Route
+                  path="/about"
+                  element={
+                    <WebOnly>
+                      <AboutPage />
+                    </WebOnly>
+                  }
+                />
+                <Route
+                  path="/blog"
+                  element={
+                    <WebOnly>
+                      <BlogPage />
+                    </WebOnly>
+                  }
+                />
+                <Route
+                  path="/blog/:slug"
+                  element={
+                    <WebOnly>
+                      <BlogPostPage />
+                    </WebOnly>
+                  }
+                />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
                 <Route path="/tournaments" element={<TournamentsPage />} />

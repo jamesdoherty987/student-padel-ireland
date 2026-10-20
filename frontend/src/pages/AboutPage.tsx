@@ -2,13 +2,13 @@ import { Link } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
-import { homeForRole } from '../utils/navigation'
+import { appHomePath } from '../utils/navigation'
 import './Blog.css'
 import './Legal.css'
 
 export default function AboutPage() {
   const { user } = useAuth()
-  const backTo = user ? homeForRole(user.role) : '/'
+  const backTo = appHomePath(user?.role)
 
   usePageSeo({
     title: 'About Student Padel Ireland',
