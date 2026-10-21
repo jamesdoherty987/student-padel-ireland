@@ -7,10 +7,21 @@ type Props = {
   teamCount?: number
 }
 
-function courtHours(matches: number, durationMins: number, courts: number) {
-  if (courts < 1 || matches < 1) return 0
-  const parallelRounds = Math.ceil(matches / courts)
-  return (parallelRounds * durationMins) / 60
+/** Court-hours = sum of court time (each match uses one court for `durationMins`). */
+function courtHours(matches: number, durationMins: number) {
+  if (matches < 1 || durationMins < 1) return 0
+  return (matches * durationMins) / 60
+}
+
+function formatCourtHours(hours: number) {
+  if (Number.isInteger(hours)) return String(hours)
+  const rounded = Math.round(hours * 3) / 3 // nearest third when close
+  if (Math.abs(rounded - hours) < 0.02) {
+    const thirds = Math.round(hours * 3)
+    if (thirds % 3 === 1) return `${Math.floor(hours)}⅓`
+    if (thirds % 3 === 2) return `${Math.floor(hours)}⅔`
+  }
+  return hours.toFixed(1).replace(/\.0$/, '')
 }
 
 /**
@@ -105,12 +116,10 @@ export default function FormatDrawPreview({ form, teamCount }: Props) {
         )}
         <li>Matches ~{form.match_duration_minutes} minutes · {form.number_of_courts} courts</li>
         <li>
-          ~{courtHours(preview.totalMatches, form.match_duration_minutes, form.number_of_courts).toFixed(1)}{' '}
-          court-hours total (courts can be reduced as rounds shrink)
+          {formatCourtHours(courtHours(preview.totalMatches, form.match_duration_minutes))} court-hours
+          total
         </li>
       </ul>
-
-      {preview.note ? <p className="muted-note">{preview.note}</p> : null}
     </aside>
   )
 }
