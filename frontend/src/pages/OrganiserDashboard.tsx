@@ -34,6 +34,7 @@ import {
   knockoutRoundLabel,
   previewDraw,
 } from '../utils/drawPreview'
+import { mediaUrl } from '../utils/media'
 import './Organiser.css'
 
 /** Respect organiser selection; only bump when a higher set already has games. */
@@ -71,6 +72,14 @@ export default function OrganiserDashboard() {
   const [confirmGenerate, setConfirmGenerate] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [announce, setAnnounce] = useState({ title: '', body: '' })
+  const [sponsorForm, setSponsorForm] = useState({
+    name: '',
+    website: '',
+    featured: false,
+    logo: null as File | null,
+  })
+  const [sponsorPreview, setSponsorPreview] = useState<string | null>(null)
+  const [sponsorLogoKey, setSponsorLogoKey] = useState(0)
   const [adminQuery, setAdminQuery] = useState('')
   const [adminResults, setAdminResults] = useState<PlayerSearch[]>([])
   const [adminSearching, setAdminSearching] = useState(false)
@@ -104,6 +113,8 @@ export default function OrganiserDashboard() {
 
   useEffect(() => {
     setPaymentFilter('all')
+    setSponsorForm({ name: '', website: '', featured: false, logo: null })
+    setSponsorLogoKey((k) => k + 1)
   }, [selectedId])
 
   useEffect(() => {
@@ -172,6 +183,12 @@ export default function OrganiserDashboard() {
     enabled: !!slug && canOrganise,
   })
 
+  const { data: sponsors = [] } = useQuery({
+    queryKey: ['sponsors', slug],
+    queryFn: async () => (await tournamentApi.sponsors(slug!)).data,
+    enabled: !!slug && canOrganise,
+  })
+
   const isOwner = active?.is_owner ?? active?.can_manage_admins ?? false
 
   const { data: tournamentAdmins = [] } = useQuery({
@@ -214,8 +231,19 @@ export default function OrganiserDashboard() {
       qc.invalidateQueries({ queryKey: ['display', slug] })
       qc.invalidateQueries({ queryKey: ['player-view', slug] })
       qc.invalidateQueries({ queryKey: ['announcements', slug] })
+      qc.invalidateQueries({ queryKey: ['sponsors', slug] })
     }
   }
+
+  useEffect(() => {
+    if (!sponsorForm.logo) {
+      setSponsorPreview(null)
+      return
+    }
+    const url = URL.createObjectURL(sponsorForm.logo)
+    setSponsorPreview(url)
+    return () => URL.revokeObjectURL(url)
+  }, [sponsorForm.logo])
 
   const generateMut = useMutation({
     mutationFn: () => tournamentApi.generate(tid!),
@@ -361,6 +389,32 @@ export default function OrganiserDashboard() {
       showToast('Announcement deleted')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not delete announcement')),
+  })
+
+  const sponsorMut = useMutation({
+    mutationFn: () =>
+      tournamentApi.createSponsor(tid!, {
+        name: sponsorForm.name.trim(),
+        website: sponsorForm.website.trim() || undefined,
+        featured: sponsorForm.featured,
+        logo: sponsorForm.logo,
+      }),
+    onSuccess: () => {
+      setSponsorForm({ name: '', website: '', featured: false, logo: null })
+      setSponsorLogoKey((k) => k + 1)
+      qc.invalidateQueries({ queryKey: ['sponsors', slug] })
+      showToast('Sponsor added — shown on the tournament page')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not add sponsor')),
+  })
+
+  const deleteSponsorMut = useMutation({
+    mutationFn: (sponsorId: string) => tournamentApi.deleteSponsor(tid!, sponsorId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sponsors', slug] })
+      showToast('Sponsor removed')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not remove sponsor')),
   })
 
   const addAdminMut = useMutation({
@@ -1544,9 +1598,171 @@ export default function OrganiserDashboard() {
               </section>
 
               <section className="org-section">
+                <h2>Sponsors</h2>
+                <p className="muted org-section-lead">
+                  Shows as a “Supported by” strip on the tournament page. Tap the box to add a logo — PNG or JPG
+                  works best (max 2MB).
+                </p>
+                {sponsors.length > 0 && (
+                  <ul className="org-sponsor-list">
+                    {sponsors.map((s) => (
+                      <li key={s.id} className="org-sponsor-item">
+                        <div className="org-sponsor-thumb">
+                          {s.logo_url ? (
+                            <img src={mediaUrl(s.logo_url)} alt="" />
+                          ) : (
+                            <span aria-hidden>{s.name.slice(0, 1).toUpperCase()}</span>
+                          )}
+                        </div>
+                        <div className="org-sponsor-meta">
+                          <strong>
+                            {s.name}
+                            {s.level === 'MAIN' ? <em> · Featured</em> : null}
+                          </strong>
+                          {s.website ? (
+                            <span className="muted">{s.website.replace(/^https?:\/\//, '')}</span>
+                          ) : (
+                            <span className="muted">No website</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={deleteSponsorMut.isPending}
+                          onClick={() => {
+                            void confirmDialog({
+                              title: 'Remove sponsor?',
+                              message: `Remove “${s.name}” from this event?`,
+                              confirmLabel: 'Remove',
+                              danger: true,
+                            }).then((ok) => {
+                              if (ok) deleteSponsorMut.mutate(s.id)
+                            })
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="org-sponsor-form">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="sponsor-name">
+                      Name
+                    </label>
+                    <input
+                      id="sponsor-name"
+                      className="form-input"
+                      placeholder="Sponsor name"
+                      value={sponsorForm.name}
+                      onChange={(e) => setSponsorForm({ ...sponsorForm, name: e.target.value })}
+                      maxLength={200}
+                      autoCapitalize="words"
+                      enterKeyHint="next"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="sponsor-website">
+                      Website <span className="muted">(optional)</span>
+                    </label>
+                    <input
+                      id="sponsor-website"
+                      className="form-input"
+                      type="text"
+                      inputMode="url"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      placeholder="example.com"
+                      value={sponsorForm.website}
+                      onChange={(e) => setSponsorForm({ ...sponsorForm, website: e.target.value })}
+                      enterKeyHint="done"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="sponsor-logo">
+                      Logo <span className="muted">(recommended)</span>
+                    </label>
+                    <div className={`org-sponsor-upload${sponsorPreview ? ' has-preview' : ''}`}>
+                      {sponsorPreview ? (
+                        <img src={sponsorPreview} alt="" className="org-sponsor-preview" />
+                      ) : (
+                        <span className="org-sponsor-upload-hint">Tap to choose logo</span>
+                      )}
+                      <input
+                        key={sponsorLogoKey}
+                        id="sponsor-logo"
+                        type="file"
+                        accept="image/*,.jpg,.jpeg,.png,.webp,.gif"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          if (!file) {
+                            setSponsorForm({ ...sponsorForm, logo: null })
+                            return
+                          }
+                          if (file.size > 2 * 1024 * 1024) {
+                            showToast('Logo must be 2MB or smaller')
+                            e.target.value = ''
+                            return
+                          }
+                          const type = (file.type || '').toLowerCase()
+                          const name = file.name.toLowerCase()
+                          const heic =
+                            type.includes('heic') ||
+                            type.includes('heif') ||
+                            name.endsWith('.heic') ||
+                            name.endsWith('.heif')
+                          if (heic) {
+                            showToast('Use JPG or PNG — iPhone HEIC photos aren’t supported yet')
+                            e.target.value = ''
+                            return
+                          }
+                          setSponsorForm({ ...sponsorForm, logo: file })
+                        }}
+                      />
+                    </div>
+                    {sponsorForm.logo ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm org-sponsor-clear-logo"
+                        onClick={() => {
+                          setSponsorForm({ ...sponsorForm, logo: null })
+                          setSponsorLogoKey((k) => k + 1)
+                        }}
+                      >
+                        Clear logo
+                      </button>
+                    ) : null}
+                  </div>
+                  <label className="org-sponsor-featured">
+                    <input
+                      type="checkbox"
+                      checked={sponsorForm.featured}
+                      onChange={(e) => setSponsorForm({ ...sponsorForm, featured: e.target.checked })}
+                    />
+                    <span>Featured (shown a bit larger)</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    disabled={sponsorForm.name.trim().length < 2 || sponsorMut.isPending || sponsors.length >= 12}
+                    onClick={() => sponsorMut.mutate()}
+                  >
+                    {sponsorMut.isPending ? 'Adding…' : 'Add sponsor'}
+                  </button>
+                  {sponsors.length >= 12 ? (
+                    <p className="muted-note" style={{ marginTop: 8 }}>
+                      Maximum 12 sponsors reached.
+                    </p>
+                  ) : null}
+                </div>
+              </section>
+
+              <section className="org-section">
                 <h2>Tournament admins</h2>
                 <p className="muted org-section-lead">
-                  Co-admins can edit the event, score matches, manage teams, and post announcements.
+                  Co-admins can edit the event, score matches, manage teams, sponsors, and post announcements.
                   {isOwner
                     ? ' Only the owner can add or remove admins, transfer ownership, or delete the tournament.'
                     : ' Ask the owner if you need changes to this admin list.'}

@@ -112,6 +112,16 @@ export type TournamentAnnouncement = {
   created_at: string
 }
 
+export type TournamentSponsor = {
+  id: string
+  name: string
+  logo_url?: string | null
+  website?: string | null
+  description?: string | null
+  level: string
+  has_logo?: boolean
+}
+
 /** Team row returned by organiser team list / check-in / withdraw */
 export type TournamentTeam = {
   id: string
@@ -392,6 +402,23 @@ export const tournamentApi = {
     ),
   deleteAnnouncement: (tournamentId: string, announcementId: string) =>
     api.delete(`/api/tournaments/${tournamentId}/announcements/${announcementId}`),
+  sponsors: (slugOrId: string) =>
+    api.get<TournamentSponsor[]>(`/api/tournaments/${slugOrId}/sponsors`),
+  createSponsor: (
+    tournamentId: string,
+    data: { name: string; website?: string; featured?: boolean; logo?: File | null },
+  ) => {
+    const form = new FormData()
+    form.append('name', data.name)
+    if (data.website) form.append('website', data.website)
+    if (data.featured) form.append('featured', 'true')
+    if (data.logo) form.append('logo', data.logo)
+    return api.post<TournamentSponsor>(`/api/tournaments/${tournamentId}/sponsors`, form, {
+      timeout: 60_000,
+    })
+  },
+  deleteSponsor: (tournamentId: string, sponsorId: string) =>
+    api.delete(`/api/tournaments/${tournamentId}/sponsors/${sponsorId}`),
   admins: (tournamentId: string) =>
     api.get<TournamentAdmin[]>(`/api/tournaments/${tournamentId}/admins`),
   addAdmin: (tournamentId: string, data: { user_id: string; role?: string }) =>

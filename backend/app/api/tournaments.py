@@ -8,7 +8,8 @@ from urllib.parse import quote
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.responses import Response
 from sqlalchemy import case, or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -2672,10 +2673,188 @@ def remove_tournament_admin(
     return {"ok": True}
 
 
+_SPONSOR_LEVEL_ORDER = case(
+    (Sponsor.level == "MAIN", 0),
+    (Sponsor.level == "GOLD", 1),
+    (Sponsor.level == "SILVER", 2),
+    else_=3,
+)
+_SPONSOR_LOGO_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+_MAX_SPONSOR_LOGO_BYTES = 2 * 1024 * 1024
+_MAX_SPONSORS_PER_TOURNAMENT = 12
+
+
+def _sponsor_public_url(path: str | None) -> str | None:
+    if not path:
+        return None
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+    if path.startswith("/"):
+        return f"{get_settings().backend_url.rstrip('/')}{path}"
+    return path
+
+
+def _infer_sponsor_image_type(data: bytes, filename: str | None, content_type: str | None) -> str | None:
+    """iOS/WebView often sends empty or octet-stream content types — sniff the bytes."""
+    ctype = (content_type or "").lower().strip()
+    if ";" in ctype:
+        ctype = ctype.split(";", 1)[0].strip()
+    if ctype in _SPONSOR_LOGO_TYPES:
+        return ctype
+    head = data[:64]
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if head.startswith(b"GIF87a") or head.startswith(b"GIF89a"):
+        return "image/gif"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    # HEIC/HEIF — common from iPhone Photos; we don't decode these
+    if b"ftypheic" in head or b"ftypheif" in head or b"ftypmif1" in head or b"ftypmsf1" in head:
+        return None
+    name = (filename or "").lower()
+    if name.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if name.endswith(".png"):
+        return "image/png"
+    if name.endswith(".webp"):
+        return "image/webp"
+    if name.endswith(".gif"):
+        return "image/gif"
+    return None
+
+
+def _sponsor_out(s: Sponsor) -> SponsorOut:
+    # logo_data is deferred — use logo_content_type as the uploaded-logo flag
+    if s.logo_content_type:
+        logo = _sponsor_public_url(f"/api/sponsors/{s.id}/logo")
+    else:
+        logo = _sponsor_public_url(s.logo_url)
+    return SponsorOut(
+        id=s.id,
+        name=s.name,
+        logo_url=logo,
+        website=s.website,
+        description=s.description,
+        level=s.level or "GOLD",
+        has_logo=bool(logo),
+    )
+
+
 @router.get("/tournaments/{slug_or_id}/sponsors", response_model=list[SponsorOut])
 def list_sponsors(slug_or_id: str, db: Session = Depends(get_db)):
     t = _resolve_tournament(db, slug_or_id)
-    return db.query(Sponsor).filter(Sponsor.tournament_id == t.id).all()
+    rows = (
+        db.query(Sponsor)
+        .filter(Sponsor.tournament_id == t.id)
+        .order_by(_SPONSOR_LEVEL_ORDER, Sponsor.created_at.asc())
+        .all()
+    )
+    return [_sponsor_out(s) for s in rows]
+
+
+@router.get("/sponsors/{sponsor_id}/logo")
+def sponsor_logo(sponsor_id: UUID, db: Session = Depends(get_db)):
+    s = db.get(Sponsor, sponsor_id)
+    if not s:
+        raise HTTPException(404, "Logo not found")
+    data = s.logo_data
+    if not data:
+        raise HTTPException(404, "Logo not found")
+    ctype = (s.logo_content_type or "image/png").strip() or "image/png"
+    return Response(
+        content=bytes(data),
+        media_type=ctype,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+@router.post("/tournaments/{tournament_id}/sponsors", response_model=SponsorOut)
+async def create_sponsor(
+    tournament_id: UUID,
+    name: str = Form(...),
+    website: str | None = Form(None),
+    featured: str | None = Form(None),
+    logo: UploadFile | None = File(None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+
+    clean_name = (name or "").strip()
+    if len(clean_name) < 2:
+        raise HTTPException(400, "Sponsor name is required")
+    if len(clean_name) > 200:
+        raise HTTPException(400, "Sponsor name is too long")
+
+    count = db.query(Sponsor).filter(Sponsor.tournament_id == t.id).count()
+    if count >= _MAX_SPONSORS_PER_TOURNAMENT:
+        raise HTTPException(400, f"Maximum {_MAX_SPONSORS_PER_TOURNAMENT} sponsors per tournament")
+
+    site = (website or "").strip() or None
+    if site and not (site.startswith("http://") or site.startswith("https://")):
+        site = f"https://{site}"
+
+    is_featured = (featured or "").strip().lower() in {"1", "true", "yes", "on"}
+    level = "MAIN" if is_featured else "GOLD"
+
+    logo_bytes: bytes | None = None
+    logo_ctype: str | None = None
+    # Accept uploads even when filename is blank (some WebViews do that)
+    if logo is not None:
+        data = await logo.read()
+        if data:
+            if len(data) > _MAX_SPONSOR_LOGO_BYTES:
+                raise HTTPException(400, "Logo must be 2MB or smaller")
+            inferred = _infer_sponsor_image_type(data, logo.filename, logo.content_type)
+            if not inferred:
+                raise HTTPException(
+                    400,
+                    "Logo must be a PNG, JPG, WEBP, or GIF. On iPhone, choose “Most Compatible” or export as JPG.",
+                )
+            logo_bytes = data
+            logo_ctype = inferred
+
+    s = Sponsor(
+        tournament_id=t.id,
+        name=clean_name,
+        website=site,
+        level=level,
+        logo_content_type=logo_ctype,
+        logo_data=logo_bytes,
+    )
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    return _sponsor_out(s)
+
+
+@router.delete("/tournaments/{tournament_id}/sponsors/{sponsor_id}")
+def delete_sponsor(
+    tournament_id: UUID,
+    sponsor_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    s = db.get(Sponsor, sponsor_id)
+    if not s or s.tournament_id != t.id:
+        raise HTTPException(404, "Sponsor not found")
+    db.delete(s)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/tournaments/{slug_or_id}/player-view")

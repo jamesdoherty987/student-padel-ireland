@@ -382,6 +382,7 @@ class SponsorOut(BaseModel):
     website: Optional[str] = None
     description: Optional[str] = None
     level: str
+    has_logo: bool = False
 
     model_config = {"from_attributes": True}
 

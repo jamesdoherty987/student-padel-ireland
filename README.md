@@ -112,7 +112,7 @@ Bundle ID: `ie.studentpadel.app`
 4. **Community** - friends, private competitions/ladders, log singles & doubles matches  
 5. **Ratings** - doubles-aware Elo (team average of partners vs both opponents); updates on tournament + community matches  
 6. **Platform** - public profiles, Ireland rankings board  
-7. **Business (stubs)** - sponsors table, announcements, organiser revenue stats  
+7. **Business** - tournament sponsors (logo strip + organiser upload), announcements, organiser revenue stats  
 8. **Native shell** - Capacitor iOS/Android (`frontend/MOBILE.md`) - App Store / Play packaging ready; chat, push, IAP still deferred  
 
 ## Environment

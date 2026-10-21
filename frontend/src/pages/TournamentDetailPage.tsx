@@ -4,6 +4,7 @@ import BackButton from '../components/BackButton'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
+import SponsorStrip from '../components/SponsorStrip'
 import TournamentBracket from '../components/TournamentBracket'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
@@ -40,6 +41,12 @@ export default function TournamentDetailPage() {
     queryKey: ['announcements', slug],
     queryFn: async () => (await tournamentApi.announcements(slug)).data,
     enabled: !!slug,
+  })
+  const { data: sponsors = [] } = useQuery({
+    queryKey: ['sponsors', slug],
+    queryFn: async () => (await tournamentApi.sponsors(slug)).data,
+    enabled: !!slug,
+    staleTime: 60_000,
   })
   const { data: matches = [] } = useQuery({
     queryKey: ['matches', slug],
@@ -234,6 +241,7 @@ export default function TournamentDetailPage() {
             </Link>
           )}
         </div>
+
         {owesAtVenue && (
           <p className="tour-pay-venue" role="status">
             Pay {formatMoney(tournament.entry_fee_cents, tournament.currency)} to the organiser at the
@@ -300,6 +308,8 @@ export default function TournamentDetailPage() {
             Register by {formatDate(tournament.registration_deadline, { day: 'numeric', month: 'short' })}
           </p>
         )}
+
+        <SponsorStrip sponsors={sponsors} />
 
         {live.length > 0 && (
           <section className="block">

@@ -529,6 +529,157 @@ html.native-app.has-native-tabs .org-toast {
   font-size: 0.9rem;
 }
 
+.org-sponsor-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.org-sponsor-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+
+.org-sponsor-thumb {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-weight: 700;
+  color: var(--court-mid);
+}
+
+.org-sponsor-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 0.25rem;
+  box-sizing: border-box;
+}
+
+.org-sponsor-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.org-sponsor-meta strong {
+  font-size: 0.95rem;
+}
+
+.org-sponsor-meta em {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--court-mid);
+}
+
+.org-sponsor-meta span {
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-sponsor-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.org-sponsor-upload {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 5rem;
+  border: 1px dashed rgba(11, 61, 46, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(20, 102, 68, 0.04);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.org-sponsor-upload.has-preview {
+  border-style: solid;
+  border-color: rgba(20, 102, 68, 0.18);
+  background: #fff;
+}
+
+.org-sponsor-upload input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  /* Large hit target for iOS */
+  font-size: 2rem;
+}
+
+.org-sponsor-upload-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.org-sponsor-preview {
+  max-height: 3.75rem;
+  max-width: min(12rem, 72%);
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.org-sponsor-clear-logo {
+  margin-top: 0.45rem;
+}
+
+.org-sponsor-featured {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.45rem 0 0.9rem;
+  min-height: 44px;
+  font-weight: 550;
+  font-size: 0.92rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.org-sponsor-featured input {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: var(--court-mid);
+  flex-shrink: 0;
+}
+
+.org-sponsor-form .btn-block {
+  width: 100%;
+}
+
+@media (max-width: 560px) {
+  .org-sponsor-item {
+    flex-wrap: wrap;
+  }
+
+  .org-sponsor-item .btn {
+    margin-left: auto;
+  }
+}
+
 .org-admin-list {
   list-style: none;
   margin: 0 0 1rem;

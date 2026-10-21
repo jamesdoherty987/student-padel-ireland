@@ -486,6 +486,9 @@ class Sponsor(Base, TimestampMixin):
     description: Mapped[Optional[str]] = mapped_column(Text)
     level: Mapped[str] = mapped_column(String(40), default="GOLD")  # MAIN, GOLD, SILVER, PRIZE, HYDRATION
     is_platform: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Uploaded logos stored in DB so they survive ephemeral disks (Render free).
+    logo_content_type: Mapped[Optional[str]] = mapped_column(String(100))
+    logo_data: Mapped[Optional[bytes]] = deferred(mapped_column(LargeBinary))
 
     tournament: Mapped[Optional[Tournament]] = relationship(back_populates="sponsors")
 
