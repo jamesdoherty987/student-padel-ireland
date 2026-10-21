@@ -101,6 +101,12 @@
   align-items: center;
 }
 
+.admin-actions-more {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+}
+
 .admin-status {
   width: auto;
   flex: 1 1 10rem;

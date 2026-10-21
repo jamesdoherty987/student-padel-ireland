@@ -94,16 +94,23 @@ export function playFormatHint(playFormat?: string | null) {
   return 'Register as a pair. One team fee covers both players.'
 }
 
-export function bracketFormatHint(format?: string | null) {
+export function bracketFormatHint(format?: string | null, enablePlate?: boolean) {
   if (format === 'ROUND_ROBIN') {
     return 'Everyone plays everyone in the draw. Standings decide the winner — no knockout stage.'
+  }
+  if (enablePlate) {
+    return 'Groups first, then a Championship knockout for the top finishers and a Plate knockout for the next tier.'
   }
   return 'Split into groups first. Top finishers from each group advance to a knockout bracket.'
 }
 
 /** Display label for knockout / group round codes from the API. */
 export function knockoutRoundLabel(round: string, stage?: string) {
-  if (!round) return stage === 'KNOCKOUT' ? 'Knockout' : 'Match'
+  if (!round) {
+    if (stage === 'PLATE') return 'Plate'
+    if (stage === 'KNOCKOUT') return 'Championship'
+    return 'Match'
+  }
   if (round.startsWith('GROUP_')) return `Group ${round.replace('GROUP_', '')}`
   const map: Record<string, string> = {
     ROUND_OF_64: 'Round of 64',
@@ -117,7 +124,8 @@ export function knockoutRoundLabel(round: string, stage?: string) {
     FINAL: 'Final',
     BRONZE: '3rd place',
   }
-  return map[round] || round.replace(/_/g, ' ')
+  const base = map[round] || round.replace(/_/g, ' ')
+  return stage === 'PLATE' ? `Plate ${base}` : base
 }
 
 /** Sort key for knockout rounds (earlier rounds first). */
@@ -140,7 +148,7 @@ export function knockoutRoundOrder(round: string) {
   return 500
 }
 
-/** True once knockout has real teams or results (not just empty placeholders). */
+/** True once knockout / plate has real teams or results (not just empty placeholders). */
 export function isKnockoutActive(
   matches: Array<{
     stage: string
@@ -149,7 +157,7 @@ export function isKnockoutActive(
     status: string
   }>,
 ) {
-  const ko = matches.filter((m) => m.stage === 'KNOCKOUT')
+  const ko = matches.filter((m) => m.stage === 'KNOCKOUT' || m.stage === 'PLATE')
   if (!ko.length) return false
   return ko.some(
     (m) =>

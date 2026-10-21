@@ -538,6 +538,9 @@ def _tournament_out(
         match_duration_minutes=t.match_duration_minutes,
         group_size=t.group_size,
         teams_advance_per_group=t.teams_advance_per_group,
+        enable_plate=bool(getattr(t, "enable_plate", False)),
+        championship_size=int(getattr(t, "championship_size", 16) or 16),
+        plate_size=int(getattr(t, "plate_size", 16) or 16),
         registered_teams=_team_count(db, t.id),
         invite_code=t.invite_code,
         is_official=bool(getattr(t, "is_official", False)),
@@ -754,61 +757,44 @@ def _standings_walkover_winner(m: Match, sets: list[tuple[int, int]]) -> str | N
     return None
 
 
-def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
-    """
-    Fill first-round KO slots from finished group standings.
-    Also auto-advances BYE sides. Returns number of slots filled.
-    """
-    groups = db.query(Group).filter(Group.tournament_id == t.id).order_by(Group.sort_order).all()
-    if not groups:
-        return 0
-
-    # All group matches must have a real result (CANCELLED alone is not enough)
-    unfinished = (
-        db.query(Match)
-        .filter(
-            Match.tournament_id == t.id,
-            Match.stage == "GROUP",
-            Match.status.notin_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
-        )
-        .count()
-    )
-    if unfinished > 0:
-        return 0
-
-    ranked_by_group: dict[str, list[UUID]] = {}
-    for g in groups:
-        ranked_by_group[g.name.upper()] = _group_standings_ranked(db, t, g)
-
-    advance = t.teams_advance_per_group or 2
-    first_round = (
-        db.query(Match)
-        .filter(Match.tournament_id == t.id, Match.stage == "KNOCKOUT")
-        .order_by(Match.sort_order)
-        .all()
-    )
-    if not first_round:
-        return 0
-
-    # First KO round = matches that are fed INTO by nothing from other KO, or lowest sort
-    # Identify first round by round name of earliest KO matches
-    first_round_name = first_round[0].round
-    first_matches = [m for m in first_round if m.round == first_round_name]
-
-    filled = 0
-
-    def resolve_slot(label: str | None) -> UUID | None:
-        if not label or label.upper() in ("BYE", "TBD"):
-            return None
-        parsed = _parse_group_placeholder(label)
-        if not parsed:
-            return None
-        gname, rank = parsed
-        teams = ranked_by_group.get(gname, [])
-        if 1 <= rank <= len(teams) and rank <= advance:
-            return teams[rank - 1]
+def _parse_seed_placeholder(label: str | None, prefix: str) -> int | None:
+    """Parse 'Championship seed 3' / 'Plate seed 12' → seed number."""
+    if not label:
         return None
+    import re
 
+    m = re.match(rf"^{re.escape(prefix)}\s+(\d+)$", label.strip(), re.I)
+    return int(m.group(1)) if m else None
+
+
+def _ordered_group_qualifiers(
+    groups: list[Group], ranked_by_group: dict[str, list[UUID]]
+) -> list[UUID]:
+    """
+    Flatten standings into a global qualifier list:
+    all 1sts (group order), then all 2nds, then 3rds, …
+    """
+    max_rank = max((len(v) for v in ranked_by_group.values()), default=0)
+    out: list[UUID] = []
+    seen: set[UUID] = set()
+    for rank in range(1, max_rank + 1):
+        for g in groups:
+            teams = ranked_by_group.get(g.name.upper(), [])
+            if rank <= len(teams):
+                tid = teams[rank - 1]
+                if tid not in seen:
+                    seen.add(tid)
+                    out.append(tid)
+    return out
+
+
+def _fill_first_round_slots(
+    db: Session,
+    first_matches: list[Match],
+    resolve_slot,
+) -> int:
+    """Fill team slots + auto-advance byes. Returns slots filled."""
+    filled = 0
     for m in first_matches:
         changed = False
         if not m.team_a_id:
@@ -819,7 +805,6 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
                 changed = True
                 filled += 1
             elif m.team_a_placeholder:
-                # Explicit BYE or unresolvable placeholder → BYE
                 m.team_a_placeholder = "BYE"
                 changed = True
         if not m.team_b_id:
@@ -833,7 +818,6 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
                 m.team_b_placeholder = "BYE"
                 changed = True
 
-        # Auto-advance bye: one team present, other is BYE
         a_bye = (m.team_a_placeholder or "").upper() == "BYE" and not m.team_a_id
         b_bye = (m.team_b_placeholder or "").upper() == "BYE" and not m.team_b_id
         winner = None
@@ -843,8 +827,10 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
         elif m.team_b_id and a_bye and not m.team_a_id:
             winner = m.team_b_id
             m.team_a_placeholder = "BYE"
-        elif a_bye and b_bye and m.status not in (MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value):
-            # Should not happen with fixed generator; cancel so bracket doesn't hang
+        elif a_bye and b_bye and m.status not in (
+            MatchStatus.COMPLETED.value,
+            MatchStatus.WALKOVER.value,
+        ):
             m.status = MatchStatus.CANCELLED.value
             changed = True
         if winner and m.status not in (MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value):
@@ -862,8 +848,98 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
             changed = True
         if changed:
             db.add(m)
-
     return filled
+
+
+def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
+    """
+    Fill first-round KO / Plate slots from finished group standings.
+    Also auto-advances BYE sides. Returns number of slots filled.
+    """
+    groups = db.query(Group).filter(Group.tournament_id == t.id).order_by(Group.sort_order).all()
+    if not groups:
+        return 0
+
+    unfinished = (
+        db.query(Match)
+        .filter(
+            Match.tournament_id == t.id,
+            Match.stage == "GROUP",
+            Match.status.notin_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
+        )
+        .count()
+    )
+    if unfinished > 0:
+        return 0
+
+    ranked_by_group: dict[str, list[UUID]] = {}
+    for g in groups:
+        ranked_by_group[g.name.upper()] = _group_standings_ranked(db, t, g)
+
+    filled = 0
+    enable_plate = bool(getattr(t, "enable_plate", False))
+
+    if enable_plate:
+        qualifiers = _ordered_group_qualifiers(groups, ranked_by_group)
+        champ_n = int(getattr(t, "championship_size", 16) or 16)
+        plate_n = int(getattr(t, "plate_size", 16) or 16)
+        champ_seeds = {i + 1: tid for i, tid in enumerate(qualifiers[:champ_n])}
+        plate_seeds = {
+            i + 1: tid for i, tid in enumerate(qualifiers[champ_n : champ_n + plate_n])
+        }
+
+        for stage, prefix, seed_map in (
+            ("KNOCKOUT", "Championship seed", champ_seeds),
+            ("PLATE", "Plate seed", plate_seeds),
+        ):
+            stage_matches = (
+                db.query(Match)
+                .filter(Match.tournament_id == t.id, Match.stage == stage)
+                .order_by(Match.sort_order)
+                .all()
+            )
+            if not stage_matches:
+                continue
+            first_name = stage_matches[0].round
+            first_matches = [m for m in stage_matches if m.round == first_name]
+
+            def resolve_seed(label: str | None, _map=seed_map, _prefix=prefix) -> UUID | None:
+                if not label or label.upper() in ("BYE", "TBD"):
+                    return None
+                seed = _parse_seed_placeholder(label, _prefix)
+                if seed is None:
+                    return None
+                return _map.get(seed)
+
+            filled += _fill_first_round_slots(db, first_matches, resolve_seed)
+        return filled
+
+    advance = t.teams_advance_per_group or 2
+    first_round = (
+        db.query(Match)
+        .filter(Match.tournament_id == t.id, Match.stage == "KNOCKOUT")
+        .order_by(Match.sort_order)
+        .all()
+    )
+    if not first_round:
+        return 0
+
+    first_round_name = first_round[0].round
+    first_matches = [m for m in first_round if m.round == first_round_name]
+
+    def resolve_slot(label: str | None) -> UUID | None:
+        if not label or label.upper() in ("BYE", "TBD"):
+            return None
+        parsed = _parse_group_placeholder(label)
+        if not parsed:
+            return None
+        gname, rank = parsed
+        teams = ranked_by_group.get(gname, [])
+        if 1 <= rank <= len(teams) and rank <= advance:
+            return teams[rank - 1]
+        return None
+
+    return _fill_first_round_slots(db, first_matches, resolve_slot)
 
 
 def _assert_organiser(user: User, tournament: Tournament, db: Session) -> None:
@@ -997,6 +1073,9 @@ def create_tournament(
         match_duration_minutes=body.match_duration_minutes,
         group_size=body.group_size,
         teams_advance_per_group=body.teams_advance_per_group,
+        enable_plate=bool(body.enable_plate),
+        championship_size=body.championship_size,
+        plate_size=body.plate_size,
         invite_code=_unique_invite_code(db),
         is_official=is_official,
         tie_break_order=body.tie_break_order
@@ -1983,8 +2062,11 @@ def generate(
     duration = body.match_duration_minutes or t.match_duration_minutes
     group_size = body.group_size or t.group_size
     advance = body.teams_advance_per_group or t.teams_advance_per_group
+    enable_plate = bool(getattr(t, "enable_plate", False))
+    championship_size = int(getattr(t, "championship_size", 16) or 16)
+    plate_size = int(getattr(t, "plate_size", 16) or 16)
 
-    if advance > group_size:
+    if not enable_plate and advance > group_size:
         raise HTTPException(
             400,
             f"Teams advancing per group ({advance}) cannot exceed group size ({group_size})",
@@ -2010,6 +2092,9 @@ def generate(
         group_size=group_size,
         teams_advance_per_group=advance,
         format=t.format,
+        enable_plate=enable_plate,
+        championship_size=championship_size,
+        plate_size=plate_size,
     )
     try:
         generated = generate_tournament(config)
@@ -2019,6 +2104,12 @@ def generate(
     # Persist the advance actually used (may be clamped for uneven / small groups)
     if generated.advance_per_group is not None and generated.advance_per_group > 0:
         t.teams_advance_per_group = generated.advance_per_group
+    if generated.enable_plate:
+        t.enable_plate = True
+        if generated.championship_size:
+            t.championship_size = generated.championship_size
+        if generated.plate_size:
+            t.plate_size = generated.plate_size
 
     court_by_num = {
         c.court_number: c
@@ -2056,13 +2147,14 @@ def generate(
         db.flush()
         created_matches.append(m)
 
-    # Wire knockout next_match links
-    ko_gens = [gm for gm in generated.matches if gm.stage == "KNOCKOUT"]
-    ko_db = [m for m in created_matches if m.stage == "KNOCKOUT"]
-    for i, gm in enumerate(ko_gens):
-        if gm.feeds_into_index is not None and gm.feeds_into_index < len(ko_db):
-            ko_db[i].next_match_id = ko_db[gm.feeds_into_index].id
-            ko_db[i].next_match_slot = gm.feeds_into_slot
+    # Wire knockout / plate next_match links (indices are per-stage)
+    for stage in ("KNOCKOUT", "PLATE"):
+        stage_gens = [gm for gm in generated.matches if gm.stage == stage]
+        stage_db = [m for m in created_matches if m.stage == stage]
+        for i, gm in enumerate(stage_gens):
+            if gm.feeds_into_index is not None and gm.feeds_into_index < len(stage_db):
+                stage_db[i].next_match_id = stage_db[gm.feeds_into_index].id
+                stage_db[i].next_match_slot = gm.feeds_into_slot
 
     if t.status in (TournamentStatus.REGISTRATION_OPEN.value, TournamentStatus.REGISTRATION_CLOSED.value, TournamentStatus.DRAFT.value):
         t.status = TournamentStatus.REGISTRATION_CLOSED.value
@@ -2072,10 +2164,14 @@ def generate(
         "groups": len(generated.groups),
         "matches": len(created_matches),
         "knockout_rounds": generated.knockout_rounds,
+        "plate_rounds": generated.plate_rounds,
         "group_sizes": generated.group_sizes,
         "advance_per_group": generated.advance_per_group,
         "advance_adjusted": generated.advance_adjusted,
         "bye_slots": generated.bye_slots,
+        "enable_plate": generated.enable_plate,
+        "championship_size": generated.championship_size,
+        "plate_size": generated.plate_size,
         "paid_teams": len(paid_teams),
         "max_teams": t.max_teams,
     }

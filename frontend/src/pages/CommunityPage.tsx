@@ -239,6 +239,30 @@ export default function CommunityPage() {
           </div>
         )}
 
+        {!homeQ.isLoading &&
+          !homeQ.isError &&
+          !nextGame &&
+          needsConfirm.length === 0 &&
+          needsScore.length === 0 &&
+          accepted.length === 0 &&
+          outgoing.length === 0 &&
+          incoming.length === 0 && (
+            <div className="empty-state surface-card" style={{ padding: '1.75rem 1.25rem', marginBottom: '1.25rem' }}>
+              <p style={{ color: 'var(--ink-soft)', fontWeight: 600, marginBottom: 6 }}>
+                No games lined up yet
+              </p>
+              <p>Add friends here, then create or join an event under Tournaments.</p>
+              <div className="header-actions">
+                <Link to="/tournaments" className="btn btn-primary">
+                  Browse events
+                </Link>
+                <Link to="/tournaments?join=1" className="btn btn-ghost">
+                  Have a code?
+                </Link>
+              </div>
+            </div>
+          )}
+
         {!homeQ.isLoading && !homeQ.isError && nextGame && (
           <section className="next-game-hero">
             <div className="next-game-label">Your next game</div>

@@ -177,7 +177,7 @@
 .join-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(10, 22, 40, 0.55);
+  background: var(--overlay);
   display: grid;
   place-items: center;
   z-index: 200;
@@ -201,6 +201,7 @@
   margin: auto;
   touch-action: pan-y;
   box-sizing: border-box;
+  box-shadow: var(--shadow-lg);
 }
 
 .join-modal-head {
@@ -516,6 +517,10 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 0.65rem;
+}
+
+.tour-share-tabs {
+  margin-bottom: 0.85rem;
 }
 
 .tour-actions-secondary {
@@ -940,6 +945,22 @@
 @media (max-width: 640px) {
   .tour-actions {
     flex-direction: column;
+    position: sticky;
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+    z-index: 15;
+    padding: 0.65rem;
+    margin-left: -0.35rem;
+    margin-right: -0.35rem;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-md);
+  }
+
+  html.has-native-tabs .tour-actions {
+    bottom: calc(var(--native-tab-clearance, 4.75rem) + 0.35rem);
   }
 
   .tour-actions .btn {

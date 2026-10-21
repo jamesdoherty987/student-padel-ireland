@@ -127,6 +127,7 @@ export function ConfirmDialogProvider() {
             className="btn btn-ghost"
             onClick={() => closeWith(state.onCancel)}
             disabled={state.isLoading}
+            autoFocus={state.danger}
           >
             {state.cancelLabel}
           </button>
@@ -135,7 +136,7 @@ export function ConfirmDialogProvider() {
             className={`btn ${state.danger ? 'btn-danger' : 'btn-primary'}`}
             onClick={() => closeWith(state.onConfirm)}
             disabled={state.isLoading}
-            autoFocus
+            autoFocus={!state.danger}
           >
             {state.confirmLabel}
           </button>

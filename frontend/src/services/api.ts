@@ -86,6 +86,9 @@ export type Tournament = {
   match_duration_minutes: number
   group_size: number
   teams_advance_per_group: number
+  enable_plate?: boolean
+  championship_size?: number
+  plate_size?: number
   registered_teams: number
   invite_code?: string | null
   /** Listed on landing / public browse — admin-created events only */

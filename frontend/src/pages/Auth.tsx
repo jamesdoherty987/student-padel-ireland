@@ -300,7 +300,15 @@ export function SignupPage() {
       <div className="auth-panel">
         <BrandLogo to={native ? null : appHomePath()} className="auth-brand" size="md" />
         <h1>Create your account</h1>
-        <p className="auth-lead">A few details and you’re ready to play and join events.</p>
+        <p className="auth-lead">
+          {next.includes('/join')
+            ? 'Create an account to finish joining with your invite.'
+            : next.includes('/confirmed') || next.includes('/live')
+              ? 'Create an account to continue to your match.'
+              : next.startsWith('/organiser')
+                ? 'Create an account to manage your event.'
+                : 'A few details and you’re ready to play and join events.'}
+        </p>
         <form onSubmit={onSubmit}>
           <div className="form-group">
             <label className="form-label" htmlFor="signup-name">

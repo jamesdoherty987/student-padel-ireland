@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
@@ -31,6 +32,7 @@ import './Tournament.css'
 export default function TournamentDetailPage() {
   const { slug = '' } = useParams()
   const { user } = useAuth()
+  const [shareTab, setShareTab] = useState<'invite' | 'live'>('invite')
   const { data: tournament, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['tournament', slug, user?.id],
     queryFn: async () => (await tournamentApi.get(slug)).data,
@@ -115,7 +117,9 @@ export default function TournamentDetailPage() {
   const upcoming = matches
     .filter((m) => m.status === 'SCHEDULED' || m.status === 'CALLED')
     .slice(0, 8)
-  const knockoutMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
+  const championshipMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
+  const plateMatches = matches.filter((m) => m.stage === 'PLATE')
+  const knockoutMatches = [...championshipMatches, ...plateMatches]
   const knockoutActive = isKnockoutActive(matches)
   const liveUrl = publicPathUrl(`/t/${tournament.slug}/live`)
   const joinUrl = tournament.invite_code
@@ -159,6 +163,7 @@ export default function TournamentDetailPage() {
     !hasPendingCaptain &&
     hasSpot
   const showInvite = !!tournament.invite_code && (canJoin || isOps || hasPendingCaptain)
+  const activeShareTab = showInvite ? shareTab : 'live'
 
   return (
     <div className="app-shell">
@@ -295,7 +300,7 @@ export default function TournamentDetailPage() {
             <strong>{formatMoney(Math.round(perPlayerFeeCents(tournament.entry_fee_cents, tournament.play_format)), tournament.currency)}</strong>
             <span>{tournament.pay_on_arrival ? 'Per player · pay on arrival' : 'Per player'}</span>
           </div>
-          {isOps && (
+          {(isOps || registrationOpen) && (
             <div>
               <strong>{spots === 'Full' ? 'Full' : tournament.max_teams - tournament.registered_teams}</strong>
               <span>{spots === 'Full' ? 'No spots left' : 'Spots left'}</span>
@@ -340,7 +345,7 @@ export default function TournamentDetailPage() {
 
         {pendingConfirm.length > 0 && (
           <section className="block">
-            <h2>Waiting for confirm</h2>
+            <h2>Scores to confirm</h2>
             <ul className="match-preview-list">
               {pendingConfirm.map((m) => (
                 <li key={m.id}>
@@ -389,9 +394,20 @@ export default function TournamentDetailPage() {
           </section>
         )}
 
-        {knockoutActive && (
+        {knockoutActive && knockoutMatches.length > 0 && (
           <section className="block tour-bracket-block">
-            <TournamentBracket matches={knockoutMatches} myTeamId={myTeamId} />
+            {championshipMatches.length > 0 && (
+              <>
+                {plateMatches.length > 0 && <h2>Championship</h2>}
+                <TournamentBracket matches={championshipMatches} myTeamId={myTeamId} />
+              </>
+            )}
+            {plateMatches.length > 0 && (
+              <>
+                <h2>Plate</h2>
+                <TournamentBracket matches={plateMatches} myTeamId={myTeamId} />
+              </>
+            )}
           </section>
         )}
 
@@ -421,25 +437,48 @@ export default function TournamentDetailPage() {
           </section>
         )}
 
-        {showInvite && (
-          <section className="block qr-block">
-            <h2>Invite players</h2>
-            <p>
-              Share the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
-            </p>
-            {tournament.invite_code && (
-              <p className="invite-code-line">
-                Code <code className="share-code">{tournament.invite_code}</code>
-              </p>
-            )}
-            <ShareQr url={joinUrl} openLabel="Open join page" />
-          </section>
-        )}
-
         <section className="block qr-block">
-          <h2>Share live scores</h2>
-          <p>Share the live board link. No login needed.</p>
-          <ShareQr url={liveUrl} openLabel="Open live board" showQr={false} />
+          <h2>Share</h2>
+          {showInvite && (
+            <div className="section-tabs tour-share-tabs" role="tablist" aria-label="Share options">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeShareTab === 'invite'}
+                className={`section-tab${activeShareTab === 'invite' ? ' is-active' : ''}`}
+                onClick={() => setShareTab('invite')}
+              >
+                Invite
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeShareTab === 'live'}
+                className={`section-tab${activeShareTab === 'live' ? ' is-active' : ''}`}
+                onClick={() => setShareTab('live')}
+              >
+                Live scores
+              </button>
+            </div>
+          )}
+          {activeShareTab === 'invite' ? (
+            <>
+              <p>
+                Share the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
+              </p>
+              {tournament.invite_code && (
+                <p className="invite-code-line">
+                  Code <code className="share-code">{tournament.invite_code}</code>
+                </p>
+              )}
+              <ShareQr url={joinUrl} openLabel="Open join page" />
+            </>
+          ) : (
+            <>
+              <p>Share the live board. No login needed.</p>
+              <ShareQr url={liveUrl} openLabel="Open live board" showQr={false} />
+            </>
+          )}
         </section>
       </main>
     </div>

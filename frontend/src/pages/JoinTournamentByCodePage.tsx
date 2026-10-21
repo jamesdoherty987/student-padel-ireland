@@ -47,9 +47,9 @@ export default function JoinTournamentByCodePage() {
   return (
     <div className="app-shell">
       <NavBar />
-      <main className="page">
+      <main className="page join-any-page">
         <BackButton fallbackTo="/tournaments" />
-        <h1 className="page-title">Join with code</h1>
+        <h1 className="page-title">{showError ? 'Join with code' : 'Joining…'}</h1>
         <p className="page-sub">Code {clean || '-'}</p>
         {showError ? (
           <div className="empty-state">
@@ -58,9 +58,9 @@ export default function JoinTournamentByCodePage() {
                 ? 'That invite code looks incomplete. Codes are usually 8 characters.'
                 : error}
             </p>
-            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <div className="header-actions">
               <HaveCodeButton className="btn btn-primary" initialCode={clean}>
-                Enter a code
+                {incomplete || !clean ? 'Enter a code' : 'Try another code'}
               </HaveCodeButton>
               <Link to="/tournaments" className="btn btn-ghost">
                 Browse tournaments

@@ -96,12 +96,12 @@ export default function JoinCompetitionPage() {
           <p className="page-sub">Code {clean || '-'}</p>
           <div className="empty-state">
             <p>That invite code looks incomplete. Codes are usually 8 characters.</p>
-            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <div className="header-actions">
               <HaveCodeButton className="btn btn-primary" initialCode={clean}>
                 Enter a code
               </HaveCodeButton>
-              <Link to="/community" className="btn btn-ghost">
-                Community
+              <Link to="/tournaments" className="btn btn-ghost">
+                Browse tournaments
               </Link>
             </div>
           </div>
@@ -115,12 +115,12 @@ export default function JoinCompetitionPage() {
       <NavBar />
       <main className="page">
         <BackButton fallbackTo="/community" />
-        <h1 className="page-title">Join with code</h1>
+        <h1 className="page-title">{error ? 'Join with code' : 'Joining…'}</h1>
         <p className="page-sub">Code {clean}</p>
         {error ? (
           <div className="empty-state">
             <p>{error}</p>
-            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <div className="header-actions">
               <button
                 type="button"
                 className="btn btn-primary"
@@ -134,6 +134,9 @@ export default function JoinCompetitionPage() {
               <HaveCodeButton className="btn btn-ghost" initialCode={clean}>
                 Try another code
               </HaveCodeButton>
+              <Link to="/tournaments" className="btn btn-ghost">
+                Browse tournaments
+              </Link>
             </div>
           </div>
         ) : (

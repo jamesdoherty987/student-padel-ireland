@@ -35,6 +35,9 @@ function toForm(tournament: Tournament): TournamentFormState {
     rules: tournament.rules || '',
     group_size: tournament.group_size,
     teams_advance_per_group: tournament.teams_advance_per_group,
+    enable_plate: !!tournament.enable_plate,
+    championship_size: tournament.championship_size || 16,
+    plate_size: tournament.plate_size || 16,
   }
 }
 
@@ -115,6 +118,9 @@ export default function EditTournamentModal({
         match_duration_minutes: form.match_duration_minutes,
         group_size: form.group_size,
         teams_advance_per_group: form.teams_advance_per_group,
+        enable_plate: form.enable_plate,
+        championship_size: form.championship_size,
+        plate_size: form.plate_size,
         registration_deadline: form.registration_deadline
           ? new Date(form.registration_deadline).toISOString()
           : null,

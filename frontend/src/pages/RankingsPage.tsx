@@ -127,7 +127,9 @@ export default function RankingsPage() {
       <NavBar />
       <main className="page">
         <h1 className="page-title">Ireland rankings</h1>
-        <p className="page-sub">From tournaments and community matches. Everyone starts at 1500.</p>
+        <p className="page-sub">
+          Rating points from confirmed tournament and community matches. New players start at 1500.
+        </p>
 
         <div className="tour-toolbar">
           <div className="filter-chips filter-chips-subtle" role="tablist" aria-label="Rankings scope">

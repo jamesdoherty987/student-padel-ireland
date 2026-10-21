@@ -164,6 +164,10 @@ class Tournament(Base, TimestampMixin):
     match_duration_minutes: Mapped[int] = mapped_column(Integer, default=20)
     group_size: Mapped[int] = mapped_column(Integer, default=4)
     teams_advance_per_group: Mapped[int] = mapped_column(Integer, default=2)
+    # Dual knockout: top N → Championship, next M → Plate (after groups)
+    enable_plate: Mapped[bool] = mapped_column(Boolean, default=False)
+    championship_size: Mapped[int] = mapped_column(Integer, default=16)
+    plate_size: Mapped[int] = mapped_column(Integer, default=16)
     # JSON-ish comma list of tie-break keys
     tie_break_order: Mapped[str] = mapped_column(
         String(200),

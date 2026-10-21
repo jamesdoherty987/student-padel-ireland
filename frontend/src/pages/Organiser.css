@@ -117,6 +117,27 @@ html.native-app.has-native-tabs .org-toast {
   font-weight: 600;
   color: var(--ink-soft);
   min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.org-nav-item-name {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-nav-item-meta {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .org-nav-item.active {
@@ -748,73 +769,7 @@ html.native-app.has-native-tabs .org-toast {
   color: var(--muted);
 }
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(10, 22, 40, 0.55);
-  display: grid;
-  place-items: center;
-  z-index: 100;
-  padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: none;
-}
-
-.modal {
-  background: var(--white);
-  width: min(440px, 100%);
-  max-width: 100%;
-  max-height: min(90dvh, 90vh);
-  overflow-x: hidden;
-  overflow-y: auto;
-  border-radius: var(--radius-lg);
-  padding: 1.5rem;
-  margin: auto;
-  box-sizing: border-box;
-}
-
-.modal.modal-wide {
-  width: min(560px, 100%);
-}
-
-.modal.modal-with-footer {
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 0;
-  max-height: min(92dvh, 92vh);
-}
-
-.modal-body {
-  flex: 1 1 auto;
-  overflow-x: hidden;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding-bottom: 0.25rem;
-}
-
-.modal-footer {
-  flex: 0 0 auto;
-  margin: 0 -1.5rem 0;
-  padding: 0.85rem 1.5rem calc(0.85rem + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--line);
-  background: var(--white);
-  position: sticky;
-  bottom: 0;
-}
-
-.modal-footer .modal-actions {
-  margin: 0;
-}
-
-.tf-modal-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex-shrink: 0;
-}
+/* ModalShell chrome lives in index.css so Admin / Create reuse the same stacking + layout */
 
 .tf-steps {
   display: grid;
@@ -828,7 +783,7 @@ html.native-app.has-native-tabs .org-toast {
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  min-height: 40px;
+  min-height: 44px;
   padding: 0.35rem 0.45rem;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -901,6 +856,43 @@ html.native-app.has-native-tabs .org-toast {
   color: var(--court-deep);
 }
 
+.tf-draw-preview {
+  margin-top: 1rem;
+  padding: 0.95rem 1rem;
+  background: rgba(11, 61, 46, 0.05);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.tf-draw-preview-warn {
+  background: rgba(180, 60, 40, 0.06);
+  border-color: rgba(180, 60, 40, 0.25);
+}
+
+.tf-draw-preview .tf-section-title {
+  margin-bottom: 0.15rem;
+}
+
+.tf-draw-preview .tf-section-lead {
+  margin-bottom: 0.55rem;
+}
+
+.tf-draw-preview .muted-note {
+  margin: 0.65rem 0 0;
+}
+
+.org-bracket-block + .org-bracket-block {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.org-bracket-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: var(--court-deep);
+}
+
 @media (max-width: 480px) {
   .tf-step-label {
     display: none;
@@ -912,25 +904,6 @@ html.native-app.has-native-tabs .org-toast {
 }
 
 /* Create / edit tournament form sections */
-.tf-modal-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-}
-
-.tf-modal-head h2 {
-  margin: 0 0 0.25rem;
-}
-
-.tf-modal-sub {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-
 .tf-section {
   margin-bottom: 1.35rem;
   padding-bottom: 1.1rem;
@@ -1186,8 +1159,12 @@ html.native-app.has-native-tabs .org-toast {
 
   .org-nav-item {
     flex: 0 0 auto;
-    white-space: nowrap;
     min-height: 44px;
+    max-width: 11rem;
+  }
+
+  .org-nav-item-meta {
+    white-space: nowrap;
   }
 
   .org-main {

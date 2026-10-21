@@ -54,6 +54,9 @@ class GeneratorConfig:
     group_size: int = 4
     teams_advance_per_group: int = 2
     format: str = "GROUP_KNOCKOUT"
+    enable_plate: bool = False
+    championship_size: int = 16
+    plate_size: int = 16
     # Optional: rest minutes between matches on same court
     court_buffer_minutes: int = 0
 
@@ -63,11 +66,15 @@ class GeneratedTournament:
     groups: list[GeneratedGroup] = field(default_factory=list)
     matches: list[GeneratedMatch] = field(default_factory=list)
     knockout_rounds: list[str] = field(default_factory=list)
+    plate_rounds: list[str] = field(default_factory=list)
     # Metadata for organisers (partial fields / auto-adjustments)
     group_sizes: list[int] = field(default_factory=list)
     advance_per_group: int | None = None
     advance_adjusted: bool = False
     bye_slots: int = 0
+    championship_size: int | None = None
+    plate_size: int | None = None
+    enable_plate: bool = False
 
 
 def _balanced_group_sizes(n: int, preferred_size: int) -> list[int]:
@@ -101,6 +108,9 @@ def preview_draw(
     group_size: int = 4,
     teams_advance_per_group: int = 2,
     format: str = "GROUP_KNOCKOUT",
+    enable_plate: bool = False,
+    championship_size: int = 16,
+    plate_size: int = 16,
 ) -> dict:
     """Dry-run summary for the generate confirm UI (no DB / no team list needed)."""
     fmt = format or "GROUP_KNOCKOUT"
@@ -127,15 +137,67 @@ def preview_draw(
             "bye_slots": 0,
             "knockout_rounds": [],
             "knockout_matches": 0,
+            "plate_rounds": [],
+            "plate_matches": 0,
+            "enable_plate": False,
+            "championship_size": 0,
+            "plate_size": 0,
             "total_matches": group_matches,
         }
 
     sizes = _balanced_group_sizes(team_count, group_size)
+    group_matches = sum(s * (s - 1) // 2 for s in sizes)
+
+    if enable_plate:
+        champ = _next_power_of_two(max(2, championship_size))
+        plate = _next_power_of_two(max(2, plate_size))
+        needed = champ + plate
+        if needed > team_count:
+            return {
+                "ok": False,
+                "error": (
+                    f"Championship ({champ}) + Plate ({plate}) need {needed} teams, "
+                    f"but only {team_count} are entered"
+                ),
+                "team_count": team_count,
+                "format": fmt,
+                "enable_plate": True,
+            }
+        champ_rounds = _knockout_round_names(champ)
+        plate_rounds = _knockout_round_names(plate)
+        knockout_matches = champ - 1
+        plate_matches = plate - 1
+        return {
+            "ok": True,
+            "format": fmt,
+            "team_count": team_count,
+            "group_count": len(sizes),
+            "group_sizes": sizes,
+            "group_matches": group_matches,
+            "advance_per_group": 0,
+            "advance_adjusted": False,
+            "requested_advance": 0,
+            "advancing": needed,
+            "bracket_size": champ,
+            "bye_slots": 0,
+            "knockout_rounds": champ_rounds,
+            "knockout_matches": knockout_matches,
+            "plate_rounds": plate_rounds,
+            "plate_matches": plate_matches,
+            "enable_plate": True,
+            "championship_size": champ,
+            "plate_size": plate,
+            "total_matches": group_matches + knockout_matches + plate_matches,
+            "note": (
+                f"{champ} teams → Championship knockout · "
+                f"{plate} teams → Plate knockout"
+            ),
+        }
+
     min_size = min(sizes) if sizes else 0
     requested_advance = max(1, teams_advance_per_group)
     effective_advance = min(requested_advance, min_size) if min_size else 0
     advance_adjusted = effective_advance != requested_advance
-    group_matches = sum(s * (s - 1) // 2 for s in sizes)
     advancing = len(sizes) * effective_advance
     if advancing < 2:
         return {
@@ -152,6 +214,11 @@ def preview_draw(
             "bye_slots": 0,
             "knockout_rounds": [],
             "knockout_matches": 0,
+            "plate_rounds": [],
+            "plate_matches": 0,
+            "enable_plate": False,
+            "championship_size": 0,
+            "plate_size": 0,
             "total_matches": group_matches,
             "note": "Group stage only — not enough advancers for a knockout.",
         }
@@ -174,6 +241,11 @@ def preview_draw(
         "bye_slots": bye_slots,
         "knockout_rounds": rounds,
         "knockout_matches": knockout_matches,
+        "plate_rounds": [],
+        "plate_matches": 0,
+        "enable_plate": False,
+        "championship_size": 0,
+        "plate_size": 0,
         "total_matches": group_matches + knockout_matches,
     }
 
@@ -198,6 +270,94 @@ def _next_power_of_two(n: int) -> int:
     if n <= 1:
         return 1
     return 1 << (n - 1).bit_length()
+
+
+def _is_power_of_two(n: int) -> bool:
+    return n >= 2 and (n & (n - 1)) == 0
+
+
+def _bracket_seed_order(n: int) -> list[int]:
+    """Standard single-elim seed positions for a bracket of size n (power of 2)."""
+    if n == 1:
+        return [1]
+    prev = _bracket_seed_order(n // 2)
+    out: list[int] = []
+    for p in prev:
+        out.append(p)
+        out.append(n + 1 - p)
+    return out
+
+
+def _build_seeded_bracket(
+    *,
+    stage: str,
+    bracket_size: int,
+    placeholder_prefix: str,
+    sort_start: int,
+) -> tuple[list[GeneratedMatch], list[str]]:
+    """
+    Build a full single-elim tree. First-round placeholders are
+    ``{prefix} 1`` … ``{prefix} N`` placed in standard seed order.
+    ``feeds_into_index`` is relative to the returned list.
+    """
+    if not _is_power_of_two(bracket_size):
+        raise ValueError(f"{stage} bracket size must be a power of 2, got {bracket_size}")
+    round_names = _knockout_round_names(bracket_size)
+    seeds = _bracket_seed_order(bracket_size)
+    matches: list[GeneratedMatch] = []
+    sort = sort_start
+    first_round_count = bracket_size // 2
+
+    for i in range(first_round_count):
+        sa = seeds[i * 2]
+        sb = seeds[i * 2 + 1]
+        matches.append(
+            GeneratedMatch(
+                round=round_names[0],
+                stage=stage,
+                group_name=None,
+                team_a_id=None,
+                team_b_id=None,
+                team_a_placeholder=f"{placeholder_prefix} {sa}",
+                team_b_placeholder=f"{placeholder_prefix} {sb}",
+                court_number=None,
+                scheduled_start=None,
+                sort_order=sort,
+            )
+        )
+        sort += 1
+
+    prev_round_start = 0
+    prev_round_count = first_round_count
+    for rn in round_names[1:]:
+        this_count = prev_round_count // 2
+        this_start = len(matches)
+        for i in range(this_count):
+            matches.append(
+                GeneratedMatch(
+                    round=rn,
+                    stage=stage,
+                    group_name=None,
+                    team_a_id=None,
+                    team_b_id=None,
+                    team_a_placeholder=f"Winner match {prev_round_start + i * 2 + 1}",
+                    team_b_placeholder=f"Winner match {prev_round_start + i * 2 + 2}",
+                    court_number=None,
+                    scheduled_start=None,
+                    sort_order=sort,
+                )
+            )
+            feeder_a = prev_round_start + i * 2
+            feeder_b = prev_round_start + i * 2 + 1
+            matches[feeder_a].feeds_into_index = this_start + i
+            matches[feeder_a].feeds_into_slot = "A"
+            matches[feeder_b].feeds_into_index = this_start + i
+            matches[feeder_b].feeds_into_slot = "B"
+            sort += 1
+        prev_round_start = this_start
+        prev_round_count = this_count
+
+    return matches, round_names
 
 
 def _knockout_round_names(bracket_size: int) -> list[str]:
@@ -545,10 +705,63 @@ class GroupKnockoutGenerator:
         )
         result.matches.extend(group_matches)
 
-        # Knockout bracket size
+        last_group_end = config.start_time
+        if group_matches:
+            last = max((m.scheduled_start or config.start_time) for m in group_matches)
+            last_group_end = last + timedelta(minutes=config.match_duration_minutes + 10)
+
+        # Championship + Plate dual brackets
+        if config.enable_plate:
+            champ = config.championship_size
+            plate = config.plate_size
+            if not _is_power_of_two(champ) or not _is_power_of_two(plate):
+                raise ValueError("Championship and Plate sizes must be powers of 2")
+            if champ + plate > n:
+                raise ValueError(
+                    f"Championship ({champ}) + Plate ({plate}) need {champ + plate} teams, "
+                    f"but only {n} are entered"
+                )
+            result.enable_plate = True
+            result.championship_size = champ
+            result.plate_size = plate
+            result.bye_slots = 0
+            # Advance enough per group so standings can fill both brackets later
+            needed = champ + plate
+            result.advance_per_group = max(
+                effective_advance,
+                min(config.group_size, math.ceil(needed / max(1, group_count))),
+            )
+
+            champ_matches, champ_rounds = _build_seeded_bracket(
+                stage="KNOCKOUT",
+                bracket_size=champ,
+                placeholder_prefix="Championship seed",
+                sort_start=sort,
+            )
+            sort += len(champ_matches)
+            plate_matches, plate_rounds = _build_seeded_bracket(
+                stage="PLATE",
+                bracket_size=plate,
+                placeholder_prefix="Plate seed",
+                sort_start=sort,
+            )
+            result.knockout_rounds = champ_rounds
+            result.plate_rounds = plate_rounds
+
+            _schedule_knockout_rounds(
+                champ_matches + plate_matches,
+                config.courts,
+                last_group_end,
+                config.match_duration_minutes,
+                config.court_buffer_minutes,
+            )
+            result.matches.extend(champ_matches)
+            result.matches.extend(plate_matches)
+            return result
+
+        # Single knockout bracket (classic)
         advancing = group_count * effective_advance
         if advancing < 2:
-            # No knockout - group stage only
             return result
 
         bracket_size = _next_power_of_two(advancing)
@@ -559,8 +772,6 @@ class GroupKnockoutGenerator:
         round_names = _knockout_round_names(bracket_size)
         result.knockout_rounds = round_names
 
-        # Build knockout matches from first round to final
-        # First round has bracket_size / 2 matches
         ko_matches: list[GeneratedMatch] = []
         first_round_count = bracket_size // 2
 
@@ -587,7 +798,6 @@ class GroupKnockoutGenerator:
             )
             sort += 1
 
-        # Subsequent rounds
         prev_round_start = 0
         prev_round_count = first_round_count
         for rn in round_names[1:]:
@@ -608,7 +818,6 @@ class GroupKnockoutGenerator:
                         sort_order=sort,
                     )
                 )
-                # Wire previous round feeders
                 feeder_a = prev_round_start + i * 2
                 feeder_b = prev_round_start + i * 2 + 1
                 ko_matches[feeder_a].feeds_into_index = this_start + i
@@ -618,14 +827,6 @@ class GroupKnockoutGenerator:
                 sort += 1
             prev_round_start = this_start
             prev_round_count = this_count
-
-        # Schedule knockout after last group match
-        last_group_end = config.start_time
-        if group_matches:
-            last = max(
-                (m.scheduled_start or config.start_time) for m in group_matches
-            )
-            last_group_end = last + timedelta(minutes=config.match_duration_minutes + 10)
 
         _schedule_knockout_rounds(
             ko_matches,

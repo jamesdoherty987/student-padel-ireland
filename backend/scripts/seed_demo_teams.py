@@ -78,6 +78,6 @@ def main(count: int, slug: str) -> None:
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("-n", type=int, default=16)
-    p.add_argument("--slug", default="limerick-2026")
+    p.add_argument("--slug", default="demo-open")
     args = p.parse_args()
     main(args.n, args.slug)

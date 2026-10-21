@@ -430,6 +430,13 @@ export default function JoinTournamentPage() {
     if (friendPartners.length === 0) setFriendFindOpen(true)
   }, [partnerMode, form.partner_user_id, friendPartners.length])
 
+  const partnerDefaultApplied = useRef(false)
+  useEffect(() => {
+    if (!friendsFetched || partnerDefaultApplied.current || myTeamEarly) return
+    partnerDefaultApplied.current = true
+    if (friendPartners.length > 0) setPartnerMode('friend')
+  }, [friendsFetched, friendPartners.length, myTeamEarly])
+
   if (authLoading || (isConfirmRoute && hasConfirmParams && confirming)) {
     return (
       <div className="app-shell">

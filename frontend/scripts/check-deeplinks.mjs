@@ -31,10 +31,10 @@ function pathFromAppUrl(url) {
 const cases = [
   ['', null],
   ['   ', null],
-  ['https://studentpadel.ie/t/limerick-open/live', '/t/limerick-open/live'],
+  ['https://studentpadel.ie/t/demo-open/live', '/t/demo-open/live'],
   ['https://studentpadel.ie/community/join/ABC?x=1', '/community/join/ABC?x=1'],
   ['https://studentpadel.ie/', null],
-  ['studentpadel://t/limerick-open', '/t/limerick-open'],
+  ['studentpadel://t/demo-open', '/t/demo-open'],
   ['studentpadel:///rankings', '/rankings'],
   ['studentpadel://rankings', '/rankings'],
   ['studentpadel://', null],

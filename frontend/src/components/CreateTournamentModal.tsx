@@ -1,29 +1,22 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from './ConfirmDialog'
 import DraftSponsorsField, { type DraftSponsor } from './DraftSponsorsField'
 import ModalShell from './ModalShell'
 import TournamentFormFields, { type TournamentFormState } from './TournamentFormFields'
 import { apiErrorMessage, tournamentApi } from '../services/api'
-import { tournamentFormatSummary } from '../utils/format'
 
-const STEPS = [
-  { id: 'event', label: 'Event' },
-  { id: 'setup', label: 'Setup' },
-  { id: 'sponsors', label: 'Sponsors' },
-] as const
-
-type StepId = (typeof STEPS)[number]['id']
+export type CreateTournamentVariant = 'admin' | 'organiser'
 
 type Props = {
+  variant?: CreateTournamentVariant
   onClose: () => void
   onCreated: (msg: string, id?: string) => void
-  /** Shown under the title — e.g. official vs private note */
-  subtitle?: string
   onToast?: (msg: string) => void
 }
 
-function defaultForm(): TournamentFormState {
+function defaultForm(variant: CreateTournamentVariant): TournamentFormState {
+  const official = variant === 'admin'
   return {
     name: '',
     location: '',
@@ -33,46 +26,59 @@ function defaultForm(): TournamentFormState {
     registration_deadline: '',
     play_format: 'DOUBLES',
     format: 'GROUP_KNOCKOUT',
-    number_of_courts: 6,
+    number_of_courts: official ? 7 : 6,
     match_duration_minutes: 20,
     max_teams: 48,
     entry_fee_euros: 50,
     pay_on_arrival: true,
     description: '',
-    rules: '',
+    rules: official
+      ? 'Best of 3 sets. Golden point on deuce. Student ID required on the day.'
+      : '',
     group_size: 4,
     teams_advance_per_group: 2,
+    enable_plate: official,
+    championship_size: 16,
+    plate_size: 16,
   }
 }
 
-function validateEvent(form: TournamentFormState): string | null {
+function courtNamesFor(count: number) {
+  return Array.from({ length: count }, (_, i) => `Court ${i + 1}`)
+}
+
+function validateForm(form: TournamentFormState): string | null {
   if (form.name.trim().length < 3) return 'Enter a tournament name (at least 3 characters)'
   if (!form.location.trim()) return 'Enter a city / area'
   if (!form.venue.trim()) return 'Enter a venue'
   if (!form.event_date) return 'Pick an event date'
   if (!form.start_time) return 'Pick a start time'
+  if (form.format === 'GROUP_KNOCKOUT' && form.enable_plate) {
+    const need = form.championship_size + form.plate_size
+    if (need > form.max_teams) {
+      return `Championship (${form.championship_size}) + Plate (${form.plate_size}) need ${need} teams, but max entries is ${form.max_teams}`
+    }
+  }
   return null
 }
 
 export default function CreateTournamentModal({
+  variant = 'organiser',
   onClose,
   onCreated,
-  subtitle = 'Private by default — share the invite code or link. Only Student Padel Ireland admin events appear on the landing page.',
   onToast,
 }: Props) {
   const qc = useQueryClient()
-  const [step, setStep] = useState<StepId>('event')
+  const isAdmin = variant === 'admin'
   const [openRegistration, setOpenRegistration] = useState(true)
-  const [form, setForm] = useState<TournamentFormState>(defaultForm)
-  const [courtNames, setCourtNames] = useState<string[]>(
-    Array.from({ length: 6 }, (_, i) => `Court ${i + 1}`),
+  const [form, setForm] = useState<TournamentFormState>(() => defaultForm(variant))
+  const [courtNames, setCourtNames] = useState(() =>
+    courtNamesFor(defaultForm(variant).number_of_courts),
   )
   const [sponsors, setSponsors] = useState<DraftSponsor[]>([])
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
-
-  const stepIndex = STEPS.findIndex((s) => s.id === step)
 
   const markDirty = () => setDirty(true)
 
@@ -92,6 +98,29 @@ export default function CreateTournamentModal({
     })
   }
 
+  const applyOfficialPreset = () => {
+    markDirty()
+    setForm((f) => ({
+      ...f,
+      play_format: 'DOUBLES',
+      format: 'GROUP_KNOCKOUT',
+      max_teams: 48,
+      group_size: 4,
+      enable_plate: true,
+      championship_size: 16,
+      plate_size: 16,
+      number_of_courts: 7,
+      match_duration_minutes: 20,
+      entry_fee_euros: f.entry_fee_euros || 50,
+      pay_on_arrival: true,
+      rules:
+        f.rules.trim() ||
+        'Best of 3 sets. Golden point on deuce. Student ID required on the day.',
+    }))
+    setCourtNames(courtNamesFor(7))
+    onToast?.('Applied official open format (48 teams · Championship + Plate)')
+  }
+
   const requestClose = async () => {
     if (saving) return
     if (!dirty) {
@@ -107,43 +136,11 @@ export default function CreateTournamentModal({
     if (ok) onClose()
   }
 
-  const goNext = () => {
-    setError('')
-    if (step === 'event') {
-      const err = validateEvent(form)
-      if (err) {
-        setError(err)
-        return
-      }
-      setStep('setup')
-      return
-    }
-    if (step === 'setup') {
-      setStep('sponsors')
-    }
-  }
-
-  const goBack = () => {
-    setError('')
-    if (step === 'setup') setStep('event')
-    else if (step === 'sponsors') setStep('setup')
-  }
-
-  const summaryLine = useMemo(
-    () => tournamentFormatSummary(form.play_format, form.format),
-    [form.play_format, form.format],
-  )
-
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (step !== 'sponsors') {
-      goNext()
-      return
-    }
-    const eventErr = validateEvent(form)
-    if (eventErr) {
-      setError(eventErr)
-      setStep('event')
+    const err = validateForm(form)
+    if (err) {
+      setError(err)
       return
     }
     setError('')
@@ -165,6 +162,9 @@ export default function CreateTournamentModal({
         match_duration_minutes: form.match_duration_minutes,
         group_size: form.group_size,
         teams_advance_per_group: form.teams_advance_per_group,
+        enable_plate: form.enable_plate,
+        championship_size: form.championship_size,
+        plate_size: form.plate_size,
         registration_deadline: form.registration_deadline
           ? new Date(form.registration_deadline).toISOString()
           : null,
@@ -206,8 +206,12 @@ export default function CreateTournamentModal({
       await qc.invalidateQueries({ queryKey: ['sponsors', data.slug] })
 
       let msg = openRegistration
-        ? 'Tournament created — registration is open'
-        : 'Tournament created as draft'
+        ? isAdmin
+          ? 'Official tournament created — registration is open'
+          : 'Tournament created — registration is open'
+        : isAdmin
+          ? 'Official tournament created as draft'
+          : 'Tournament created as draft'
       if (sponsors.length && sponsorFails === 0) {
         msg += ` · ${sponsors.length} sponsor${sponsors.length === 1 ? '' : 's'} added`
       } else if (sponsorFails > 0) {
@@ -224,140 +228,77 @@ export default function CreateTournamentModal({
 
   return (
     <ModalShell
-      title="Create tournament"
+      title={isAdmin ? 'New official tournament' : 'Create tournament'}
       titleId="create-tournament-title"
-      subtitle={subtitle}
+      subtitle={
+        isAdmin
+          ? 'Listed on the public landing page and Events. Defaults to the classic Championship + Plate open format — adjust anything below.'
+          : 'Private by default — share the invite code or link. Only Student Padel Ireland admin events appear on the landing page.'
+      }
       onClose={() => void requestClose()}
       preventClose={saving}
       closeOnBackdrop={false}
       wide
       className="create-tournament-modal"
+      headerExtra={
+        isAdmin ? (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={applyOfficialPreset}
+            disabled={saving}
+          >
+            Official open preset
+          </button>
+        ) : null
+      }
       footer={
         <div className="modal-actions tf-step-actions">
-          {stepIndex > 0 ? (
-            <button type="button" className="btn btn-ghost" onClick={goBack} disabled={saving}>
-              Back
-            </button>
-          ) : (
-            <button type="button" className="btn btn-ghost" onClick={() => void requestClose()} disabled={saving}>
-              Cancel
-            </button>
-          )}
-          {step !== 'sponsors' ? (
-            <button type="button" className="btn btn-primary" onClick={goNext} disabled={saving}>
-              Continue
-            </button>
-          ) : (
-            <button type="submit" form="create-tournament-form" className="btn btn-primary" disabled={saving}>
-              {saving
-                ? sponsors.length
-                  ? 'Creating & uploading…'
-                  : 'Creating…'
-                : openRegistration
-                  ? 'Create & open registration'
-                  : 'Create draft'}
-            </button>
-          )}
+          <button type="button" className="btn btn-ghost" onClick={() => void requestClose()} disabled={saving}>
+            Cancel
+          </button>
+          <button type="submit" form="create-tournament-form" className="btn btn-primary" disabled={saving}>
+            {saving
+              ? sponsors.length
+                ? 'Creating & uploading…'
+                : 'Creating…'
+              : openRegistration
+                ? 'Create & open registration'
+                : 'Create draft'}
+          </button>
         </div>
       }
     >
-      <nav className="tf-steps" aria-label="Create steps">
-        {STEPS.map((s, i) => {
-          const active = s.id === step
-          const done = i < stepIndex
-          return (
-            <button
-              key={s.id}
-              type="button"
-              className={`tf-step${active ? ' is-active' : ''}${done ? ' is-done' : ''}`}
-              disabled={saving || (!done && !active)}
-              onClick={() => {
-                if (done) {
-                  setError('')
-                  setStep(s.id)
-                }
-              }}
-            >
-              <span className="tf-step-num">{i + 1}</span>
-              <span className="tf-step-label">{s.label}</span>
-            </button>
-          )
-        })}
-      </nav>
-
       <form id="create-tournament-form" onSubmit={onSubmit}>
-        {step === 'event' && (
-          <TournamentFormFields
-            form={form}
-            onChange={patchForm}
-            courtNames={courtNames}
-            onCourtNamesChange={(names) => {
+        <TournamentFormFields
+          form={form}
+          onChange={patchForm}
+          courtNames={courtNames}
+          onCourtNamesChange={(names) => {
+            markDirty()
+            setCourtNames(names)
+          }}
+          onCourtCountChange={setCourtCount}
+          mode="create"
+          openRegistration={openRegistration}
+          onOpenRegistrationChange={(v) => {
+            markDirty()
+            setOpenRegistration(v)
+          }}
+        />
+
+        <section className="tf-section">
+          <h3 className="tf-section-title">Sponsors</h3>
+          <DraftSponsorsField
+            sponsors={sponsors}
+            onChange={(next) => {
               markDirty()
-              setCourtNames(names)
+              setSponsors(next)
             }}
-            onCourtCountChange={setCourtCount}
-            mode="create"
-            sections={['event', 'info']}
+            disabled={saving}
+            onToast={onToast}
           />
-        )}
-
-        {step === 'setup' && (
-          <>
-            <p className="tf-step-summary muted">{summaryLine}</p>
-            <TournamentFormFields
-              form={form}
-              onChange={patchForm}
-              courtNames={courtNames}
-              onCourtNamesChange={(names) => {
-                markDirty()
-                setCourtNames(names)
-              }}
-              onCourtCountChange={setCourtCount}
-              mode="create"
-              sections={['format', 'courts', 'fee', 'registration']}
-              openRegistration={openRegistration}
-              onOpenRegistrationChange={(v) => {
-                markDirty()
-                setOpenRegistration(v)
-              }}
-            />
-          </>
-        )}
-
-        {step === 'sponsors' && (
-          <section className="tf-section">
-            <h3 className="tf-section-title">Sponsors</h3>
-            <DraftSponsorsField
-              sponsors={sponsors}
-              onChange={(next) => {
-                markDirty()
-                setSponsors(next)
-              }}
-              disabled={saving}
-              onToast={onToast}
-            />
-            <div className="tf-create-review">
-              <h3 className="tf-section-title">Ready to create</h3>
-              <ul className="tf-review-list">
-                <li>
-                  <strong>{form.name.trim() || 'Untitled'}</strong>
-                  {form.location.trim() ? ` · ${form.location.trim()}` : ''}
-                </li>
-                <li>
-                  {form.event_date || 'No date'}
-                  {form.start_time ? ` · ${form.start_time}` : ''} · {form.venue.trim() || 'No venue'}
-                </li>
-                <li>{summaryLine}</li>
-                <li>
-                  {openRegistration ? 'Registration opens immediately' : 'Saved as draft'}
-                  {sponsors.length
-                    ? ` · ${sponsors.length} sponsor${sponsors.length === 1 ? '' : 's'}`
-                    : ' · No sponsors yet'}
-                </li>
-              </ul>
-            </div>
-          </section>
-        )}
+        </section>
 
         {error && <p className="auth-error">{error}</p>}
       </form>

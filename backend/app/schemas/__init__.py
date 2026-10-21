@@ -125,6 +125,9 @@ class TournamentCreate(BaseModel):
     match_duration_minutes: int = Field(default=20, ge=5, le=120)
     group_size: int = Field(default=4, ge=2, le=8)
     teams_advance_per_group: int = Field(default=2, ge=1, le=4)
+    enable_plate: bool = False
+    championship_size: int = Field(default=16, ge=2, le=64)
+    plate_size: int = Field(default=16, ge=2, le=64)
     tie_break_order: Optional[str] = None
 
     @field_validator("court_names")
@@ -134,6 +137,13 @@ class TournamentCreate(BaseModel):
             return None
         # Keep positions so Court 2 stays index 1 even if left blank
         return [n.strip() if n else "" for n in v]
+
+    @field_validator("championship_size", "plate_size")
+    @classmethod
+    def _power_of_two_bracket(cls, v: int) -> int:
+        if v < 2 or (v & (v - 1)) != 0:
+            raise ValueError("Bracket size must be a power of 2 (2, 4, 8, 16, 32, 64)")
+        return v
 
 
 class TournamentUpdate(BaseModel):
@@ -156,11 +166,23 @@ class TournamentUpdate(BaseModel):
     match_duration_minutes: Optional[int] = Field(default=None, ge=5, le=120)
     group_size: Optional[int] = Field(default=None, ge=2, le=8)
     teams_advance_per_group: Optional[int] = Field(default=None, ge=1, le=4)
+    enable_plate: Optional[bool] = None
+    championship_size: Optional[int] = Field(default=None, ge=2, le=64)
+    plate_size: Optional[int] = Field(default=None, ge=2, le=64)
     tie_break_order: Optional[str] = None
     # Platform ADMIN only — list on landing / public browse
     is_official: Optional[bool] = None
     # Transfer ownership — only current owner or platform ADMIN may set this
     organiser_id: Optional[UUID] = None
+
+    @field_validator("championship_size", "plate_size")
+    @classmethod
+    def _power_of_two_bracket_update(cls, v: Optional[int]) -> Optional[int]:
+        if v is None:
+            return v
+        if v < 2 or (v & (v - 1)) != 0:
+            raise ValueError("Bracket size must be a power of 2 (2, 4, 8, 16, 32, 64)")
+        return v
 
 
 class CourtOut(BaseModel):
@@ -192,6 +214,9 @@ class TournamentOut(BaseModel):
     match_duration_minutes: int
     group_size: int
     teams_advance_per_group: int
+    enable_plate: bool = False
+    championship_size: int = 16
+    plate_size: int = 16
     registered_teams: int = 0
     invite_code: Optional[str] = None
     is_official: bool = False

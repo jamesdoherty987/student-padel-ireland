@@ -397,7 +397,9 @@ export default function PlayerLivePage() {
   // Only hide venue board when you're actually on court — still show it while waiting to confirm
   const myOnCourt =
     hasPaidEntry && next && (next.status === 'LIVE' || next.status === 'CALLED')
-  const knockoutMatches = allMatches.filter((m) => m.stage === 'KNOCKOUT')
+  const championshipMatches = allMatches.filter((m) => m.stage === 'KNOCKOUT')
+  const plateMatches = allMatches.filter((m) => m.stage === 'PLATE')
+  const knockoutMatches = [...championshipMatches, ...plateMatches]
   const knockoutActive = isKnockoutActive(allMatches)
 
   const nextActions: NextActions = {
@@ -651,9 +653,20 @@ export default function PlayerLivePage() {
           </section>
         )}
 
-        {knockoutActive && (
+        {knockoutActive && knockoutMatches.length > 0 && (
           <section className="pl-block pl-bracket">
-            <TournamentBracket matches={knockoutMatches} myTeamId={myTeamId} />
+            {championshipMatches.length > 0 && (
+              <>
+                {plateMatches.length > 0 && <h2>Championship</h2>}
+                <TournamentBracket matches={championshipMatches} myTeamId={myTeamId} />
+              </>
+            )}
+            {plateMatches.length > 0 && (
+              <>
+                <h2>Plate</h2>
+                <TournamentBracket matches={plateMatches} myTeamId={myTeamId} />
+              </>
+            )}
           </section>
         )}
 

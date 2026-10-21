@@ -242,8 +242,8 @@ export default function TournamentsPage() {
         </div>
         <p className="page-sub">
           {isNativeApp()
-            ? 'Official brackets and friend open-play. Have a code? Tap it above.'
-            : 'Official brackets and friend open-play. Have a code? Use it above — or create your own.'}
+            ? 'Find an event, or join with a code.'
+            : 'Find an event, join with a code, or create friend open-play.'}
         </p>
 
         {error && <p className="form-error">{error}</p>}

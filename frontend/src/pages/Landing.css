@@ -2,7 +2,7 @@
 
 .landing {
   min-height: 100vh;
-  background: #fafafa;
+  background: var(--surface);
   color: var(--ink);
 }
 
@@ -120,7 +120,7 @@
 .lp-header.is-menu-open .lp-nav a,
 .lp-header.is-scrolled .lp-nav-logout,
 .lp-header.is-menu-open .lp-nav-logout {
-  color: #525252;
+  color: var(--ink-soft);
 }
 
 @media (hover: hover) {
@@ -628,10 +628,10 @@
   height: 1.75rem;
   border-radius: 999px;
   border: 1px solid rgba(0, 0, 0, 0.08);
-  background: #fafafa;
+  background: var(--surface);
   font-size: 0.8rem;
   font-weight: 600;
-  color: #525252;
+  color: var(--ink-soft);
   margin-bottom: 0.75rem;
 }
 
@@ -978,7 +978,7 @@
   }
 
   .lp-nav a {
-    color: #525252 !important;
+    color: var(--ink-soft) !important;
     font-size: 1.15rem;
     padding: 0.85rem 1rem;
     min-height: 48px;
@@ -988,7 +988,7 @@
   }
 
   .lp-nav-logout {
-    color: #525252 !important;
+    color: var(--ink-soft) !important;
     font-size: 1.15rem;
     padding: 0.85rem 1rem;
     min-height: 48px;

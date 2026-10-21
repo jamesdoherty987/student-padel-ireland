@@ -27,8 +27,17 @@ import {
   formatMoney,
   formatTime,
   statusBadgeClass,
+  statusLabel,
   tournamentFormatSummary,
 } from '../utils/format'
+
+type OrgPanel = 'registration' | 'day-of' | 'settings'
+
+function defaultOrgPanel(status: string, hasFixtures: boolean): OrgPanel {
+  if (status === 'LIVE' || hasFixtures) return 'day-of'
+  if (status === 'COMPLETED' || status === 'CANCELLED') return 'day-of'
+  return 'registration'
+}
 import {
   formatGroupSizes,
   knockoutRoundLabel,
@@ -91,6 +100,7 @@ export default function OrganiserDashboard() {
   const [courtFilter, setCourtFilter] = useState<string>('all')
   const [matchFilter, setMatchFilter] = useState<'active' | 'all' | 'done'>('active')
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'owing'>('all')
+  const [orgPanel, setOrgPanel] = useState<OrgPanel>('registration')
   const [scoreForm, setScoreForm] = useState({
     set1_a: 0,
     set1_b: 0,
@@ -575,6 +585,11 @@ export default function OrganiserDashboard() {
   const maxTeams = active?.tournament.max_teams ?? 0
   const orgTeams: TournamentTeam[] = teams
 
+  useEffect(() => {
+    if (!active) return
+    setOrgPanel(defaultOrgPanel(active.tournament.status, fixturesExist))
+  }, [active?.tournament.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const paymentBucket = (team: TournamentTeam): 'paid' | 'owing' | 'other' => {
     if (team.payment_status === 'PENDING' || team.payment_status === 'FAILED') return 'owing'
     if (team.payment_status === 'PAID' && team.payment_via === 'pay_on_arrival') return 'owing'
@@ -645,8 +660,20 @@ export default function OrganiserDashboard() {
       groupSize: tournamentDetail?.group_size ?? 4,
       teamsAdvancePerGroup: tournamentDetail?.teams_advance_per_group ?? 2,
       format: activeFormat,
+      enablePlate: !!tournamentDetail?.enable_plate,
+      championshipSize: tournamentDetail?.championship_size ?? 16,
+      plateSize: tournamentDetail?.plate_size ?? 16,
     })
-  }, [active, paidCount, tournamentDetail?.group_size, tournamentDetail?.teams_advance_per_group, activeFormat])
+  }, [
+    active,
+    paidCount,
+    tournamentDetail?.group_size,
+    tournamentDetail?.teams_advance_per_group,
+    tournamentDetail?.enable_plate,
+    tournamentDetail?.championship_size,
+    tournamentDetail?.plate_size,
+    activeFormat,
+  ])
   const canGenerate = paidCount >= 2 && !!drawPreview?.ok
   const canAddTeams =
     !!active &&
@@ -690,7 +717,9 @@ export default function OrganiserDashboard() {
     })
   }, [matches, courtFilter, matchFilter])
 
-  const hasKnockoutMatches = matches.some((m) => m.stage === 'KNOCKOUT')
+  const hasKnockoutMatches = matches.some((m) => m.stage === 'KNOCKOUT' || m.stage === 'PLATE')
+  const championshipMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
+  const plateMatches = matches.filter((m) => m.stage === 'PLATE')
 
   useEffect(() => {
     if (matchView === 'bracket' && !hasKnockoutMatches) {
@@ -855,7 +884,8 @@ export default function OrganiserDashboard() {
                 setSearchParams({ t: t.tournament.id }, { replace: true })
               }}
             >
-              {t.tournament.name}
+              <span className="org-nav-item-name">{t.tournament.name}</span>
+              <span className="org-nav-item-meta">{statusLabel(t.tournament.status)}</span>
             </button>
           ))}
           <button className="btn btn-ghost btn-block" onClick={() => setShowCreate(true)}>
@@ -1129,6 +1159,29 @@ export default function OrganiserDashboard() {
                 </div>
               </div>
 
+              <div className="section-tabs" role="tablist" aria-label="Organiser sections">
+                {(
+                  [
+                    { id: 'registration' as const, label: 'Registration' },
+                    { id: 'day-of' as const, label: 'Day-of' },
+                    { id: 'settings' as const, label: 'Settings' },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={orgPanel === tab.id}
+                    className={`section-tab${orgPanel === tab.id ? ' is-active' : ''}`}
+                    onClick={() => setOrgPanel(tab.id)}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {orgPanel === 'registration' && (
+              <>
               <section className="org-section">
                 <h2>Invite players</h2>
                 {active.tournament.status === 'DRAFT' ? (
@@ -1368,7 +1421,11 @@ export default function OrganiserDashboard() {
                   )}
                 </div>
               </section>
+              </>
+              )}
 
+              {orgPanel === 'day-of' && (
+              <>
               <section className="org-section">
                 <div className="org-section-head">
                   <h2>Matches & scoring</h2>
@@ -1448,7 +1505,18 @@ export default function OrganiserDashboard() {
                 )}
                 {matchView === 'bracket' && hasKnockoutMatches && (
                   <div className="org-bracket">
-                    <TournamentBracket matches={matches.filter((m) => m.stage === 'KNOCKOUT')} />
+                    {championshipMatches.length > 0 && (
+                      <div className="org-bracket-block">
+                        {plateMatches.length > 0 && <h3 className="org-bracket-title">Championship</h3>}
+                        <TournamentBracket matches={championshipMatches} />
+                      </div>
+                    )}
+                    {plateMatches.length > 0 && (
+                      <div className="org-bracket-block">
+                        <h3 className="org-bracket-title">Plate</h3>
+                        <TournamentBracket matches={plateMatches} />
+                      </div>
+                    )}
                   </div>
                 )}
                 {matchView === 'courts' && matches.length > 0 && (
@@ -1596,7 +1664,11 @@ export default function OrganiserDashboard() {
                   Post announcement
                 </button>
               </section>
+              </>
+              )}
 
+              {orgPanel === 'settings' && (
+              <>
               <section className="org-section">
                 <h2>Sponsors</h2>
                 <p className="muted org-section-lead">
@@ -1851,6 +1923,8 @@ export default function OrganiserDashboard() {
                   </div>
                 )}
               </section>
+              </>
+              )}
             </>
           )}
         </main>
@@ -1858,6 +1932,7 @@ export default function OrganiserDashboard() {
 
       {showCreate && (
         <CreateTournamentModal
+          variant="organiser"
           onClose={() => setShowCreate(false)}
           onToast={showToast}
           onCreated={(msg, id) => {
@@ -1927,7 +2002,8 @@ export default function OrganiserDashboard() {
               </p>
             )}
             <p className="org-gen-meta">
-              {tournamentFormatSummary(activePlayFormat, activeFormat)}. {bracketFormatHint(activeFormat)}
+              {tournamentFormatSummary(activePlayFormat, activeFormat)}.{' '}
+              {bracketFormatHint(activeFormat, !!tournamentDetail?.enable_plate)}
             </p>
 
             <div className="org-gen-stats">
@@ -1978,21 +2054,40 @@ export default function OrganiserDashboard() {
 
             {drawPreview?.ok && activeFormat !== 'ROUND_ROBIN' && (
               <ul className="org-gen-list">
-                <li>
-                  Top {drawPreview.advancePerGroup} per group advance
-                  {drawPreview.advanceAdjusted
-                    ? ` (adjusted from ${drawPreview.requestedAdvance} to fit smaller groups)`
-                    : ''}
-                </li>
-                {drawPreview.knockoutRounds.length > 0 ? (
-                  <li>
-                    Knockout starts at {knockoutRoundLabel(drawPreview.knockoutRounds[0])}
-                    {drawPreview.byeSlots > 0
-                      ? ` · ${drawPreview.byeSlots} bye${drawPreview.byeSlots === 1 ? '' : 's'} for the bracket`
-                      : ''}
-                  </li>
+                {drawPreview.enablePlate ? (
+                  <>
+                    <li>
+                      {drawPreview.championshipSize} teams → Championship
+                      {drawPreview.knockoutRounds.length
+                        ? ` (${drawPreview.knockoutRounds.map(knockoutRoundLabel).join(' → ')})`
+                        : ''}
+                    </li>
+                    <li>
+                      {drawPreview.plateSize} teams → Plate
+                      {drawPreview.plateRounds.length
+                        ? ` (${drawPreview.plateRounds.map(knockoutRoundLabel).join(' → ')})`
+                        : ''}
+                    </li>
+                  </>
                 ) : (
-                  <li>{drawPreview.note || 'Group stage only'}</li>
+                  <>
+                    <li>
+                      Top {drawPreview.advancePerGroup} per group advance
+                      {drawPreview.advanceAdjusted
+                        ? ` (adjusted from ${drawPreview.requestedAdvance} to fit smaller groups)`
+                        : ''}
+                    </li>
+                    {drawPreview.knockoutRounds.length > 0 ? (
+                      <li>
+                        Knockout starts at {knockoutRoundLabel(drawPreview.knockoutRounds[0])}
+                        {drawPreview.byeSlots > 0
+                          ? ` · ${drawPreview.byeSlots} bye${drawPreview.byeSlots === 1 ? '' : 's'} for the bracket`
+                          : ''}
+                      </li>
+                    ) : (
+                      <li>{drawPreview.note || 'Group stage only'}</li>
+                    )}
+                  </>
                 )}
               </ul>
             )}

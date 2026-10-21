@@ -1,10 +1,10 @@
 .pl-page {
-  width: min(1080px, 100%);
+  width: min(1120px, 100%);
   margin: 0 auto;
-  padding: 1.5rem 1.5rem 3rem;
-  padding-left: max(1.5rem, env(safe-area-inset-left));
-  padding-right: max(1.5rem, env(safe-area-inset-right));
-  padding-bottom: max(3rem, calc(1.5rem + env(safe-area-inset-bottom)));
+  padding-top: var(--page-pad-y, 2rem);
+  padding-right: max(var(--page-pad-x, 1.5rem), env(safe-area-inset-right));
+  padding-bottom: max(3.5rem, calc(var(--page-pad-y, 2rem) + env(safe-area-inset-bottom)));
+  padding-left: max(var(--page-pad-x, 1.5rem), env(safe-area-inset-left));
   box-sizing: border-box;
 }
 

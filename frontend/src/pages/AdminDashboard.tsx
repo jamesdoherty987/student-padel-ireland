@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from '../components/ConfirmDialog'
 import CreateTournamentModal from '../components/CreateTournamentModal'
+import EditTournamentModal from '../components/EditTournamentModal'
 import NavBar from '../components/NavBar'
-import NumberInput from '../components/NumberInput'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl, publicWebOrigin } from '../native/platform'
 import {
@@ -26,81 +26,6 @@ const STATUSES = [
   'COMPLETED',
   'CANCELLED',
 ] as const
-
-type TournamentFormState = {
-  name: string
-  location: string
-  venue: string
-  event_date: string
-  start_time: string
-  number_of_courts: number
-  entry_fee_euros: number
-  pay_on_arrival: boolean
-  max_teams: number
-  format: string
-  play_format: string
-  match_duration_minutes: number
-  description: string
-  rules: string
-  registration_deadline: string
-  open_now: boolean
-}
-
-function formFromTournament(t: Tournament): TournamentFormState {
-  return {
-    name: t.name,
-    location: t.location,
-    venue: t.venue,
-    event_date: t.event_date.slice(0, 10),
-    start_time: t.start_time?.slice(0, 5) || '10:00',
-    number_of_courts: t.number_of_courts,
-    entry_fee_euros: Math.round(t.entry_fee_cents) / 100,
-    pay_on_arrival: t.pay_on_arrival !== false,
-    max_teams: t.max_teams,
-    format: t.format === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : 'GROUP_KNOCKOUT',
-    play_format: t.play_format === 'SINGLES' ? 'SINGLES' : 'DOUBLES',
-    match_duration_minutes: t.match_duration_minutes || 20,
-    description: t.description || '',
-    rules: t.rules || '',
-    registration_deadline: t.registration_deadline ? t.registration_deadline.slice(0, 10) : '',
-    open_now: false,
-  }
-}
-
-function payloadFromForm(
-  form: TournamentFormState,
-  previous?: Tournament,
-  opts?: { omitFormat?: boolean },
-) {
-  const payload: Record<string, unknown> = {
-    name: form.name.trim(),
-    location: form.location.trim(),
-    venue: form.venue.trim(),
-    event_date: form.event_date,
-    start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
-    entry_fee_cents: Math.round(Number(form.entry_fee_euros) * 100),
-    pay_on_arrival: form.pay_on_arrival,
-    max_teams: Number(form.max_teams),
-    match_duration_minutes: Number(form.match_duration_minutes) || 20,
-    description: form.description.trim() || null,
-    rules: form.rules.trim() || null,
-    registration_deadline: form.registration_deadline
-      ? `${form.registration_deadline}T23:59:00`
-      : null,
-  }
-  if (!opts?.omitFormat) {
-    payload.format = form.format || 'GROUP_KNOCKOUT'
-    payload.play_format = form.play_format || 'DOUBLES'
-  }
-
-  const courts = Number(form.number_of_courts)
-  // Only send court count when creating, or when it actually changed (avoids wiping courts)
-  if (!previous || previous.number_of_courts !== courts) {
-    payload.number_of_courts = courts
-  }
-
-  return payload
-}
 
 async function copyText(text: string) {
   if (navigator.clipboard?.writeText) {
@@ -162,7 +87,7 @@ export default function AdminDashboard() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
       qc.invalidateQueries({ queryKey: ['tournaments'] })
-      showToast(`Status → ${statusLabel(vars.status)}`)
+      showToast(`Status â†’ ${statusLabel(vars.status)}`)
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not update status')),
   })
@@ -215,7 +140,7 @@ export default function AdminDashboard() {
             <p className="eyebrow">Admin</p>
             <h1 className="page-title">Official tournaments</h1>
             <p className="page-sub">
-              These appear on the landing page and public browse. Open registration when ready — day-of
+              These appear on the landing page and public browse. Open registration when ready â€” day-of
               scoring lives in Day-of ops.
             </p>
           </div>
@@ -279,7 +204,32 @@ export default function AdminDashboard() {
                 busy={pendingStatusId === row.tournament.id || pendingDeleteId === row.tournament.id}
                 onStatus={(status) => {
                   if (status === row.tournament.status) return
-                  statusMut.mutate({ id: row.tournament.id, status })
+                  const needsConfirm =
+                    status === 'LIVE' || status === 'COMPLETED' || status === 'CANCELLED'
+                  const run = () => statusMut.mutate({ id: row.tournament.id, status })
+                  if (!needsConfirm) {
+                    run()
+                    return
+                  }
+                  void confirmDialog({
+                    title:
+                      status === 'LIVE'
+                        ? 'Go live?'
+                        : status === 'COMPLETED'
+                          ? 'Mark completed?'
+                          : 'Cancel event?',
+                    message:
+                      status === 'LIVE'
+                        ? `Start â€œ${row.tournament.name}â€ for players on the live board?`
+                        : status === 'COMPLETED'
+                          ? `End â€œ${row.tournament.name}â€ for everyone?`
+                          : `Cancel â€œ${row.tournament.name}â€? Players will no longer be able to register or play.`,
+                    confirmLabel:
+                      status === 'LIVE' ? 'Go live' : status === 'COMPLETED' ? 'Mark completed' : 'Cancel event',
+                    danger: status === 'CANCELLED',
+                  }).then((ok) => {
+                    if (ok) run()
+                  })
                 }}
                 onEdit={() => setEditing(row.tournament)}
                 onDelete={() => {
@@ -301,7 +251,7 @@ export default function AdminDashboard() {
 
       {showCreate && (
         <CreateTournamentModal
-          subtitle="Official Student Padel Ireland event — appears on the public landing page and Events list."
+          variant="admin"
           onClose={() => setShowCreate(false)}
           onToast={showToast}
           onCreated={(msg) => showToast(msg)}
@@ -309,28 +259,10 @@ export default function AdminDashboard() {
       )}
 
       {editing && (
-        <TournamentModal
-          title="Edit tournament"
-          initial={formFromTournament(editing)}
-          submitLabel="Save changes"
-          formatLocked={
-            editing.status === 'LIVE' ||
-            editing.status === 'COMPLETED' ||
-            editing.status === 'CANCELLED' ||
-            editing.status === 'REGISTRATION_CLOSED'
-          }
+        <EditTournamentModal
+          tournament={editing}
           onClose={() => setEditing(null)}
-          onSubmit={async (form) => {
-            const locked =
-              editing.status === 'LIVE' ||
-              editing.status === 'COMPLETED' ||
-              editing.status === 'CANCELLED' ||
-              editing.status === 'REGISTRATION_CLOSED'
-            await tournamentApi.update(editing.id, payloadFromForm(form, editing, { omitFormat: locked }))
-            await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
-            await qc.invalidateQueries({ queryKey: ['tournaments'] })
-            showToast('Tournament updated')
-          }}
+          onSaved={(msg) => showToast(msg)}
         />
       )}
     </div>
@@ -353,6 +285,7 @@ function AdminTournamentCard({
   onCopied: (msg: string) => void
 }) {
   const t = row.tournament
+  const [moreOpen, setMoreOpen] = useState(false)
   const origin = publicWebOrigin()
   const publicUrl = `${origin}/t/${t.slug}`
   const joinUrl = t.invite_code
@@ -396,6 +329,9 @@ function AdminTournamentCard({
       </div>
 
       <div className="admin-actions">
+        <Link to={`/organiser?t=${t.id}`} className="btn btn-primary btn-sm">
+          Day-of ops
+        </Link>
         {quickAction && (
           <button
             type="button"
@@ -407,333 +343,59 @@ function AdminTournamentCard({
           </button>
         )}
         {t.status === 'REGISTRATION_CLOSED' && (
-          <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={() => onStatus('LIVE')}>
+          <button type="button" className="btn btn-dark btn-sm" disabled={busy} onClick={() => onStatus('LIVE')}>
             Go live
           </button>
         )}
-        <select
-          className="form-select admin-status"
-          value={STATUSES.includes(t.status as (typeof STATUSES)[number]) ? t.status : 'DRAFT'}
-          disabled={busy}
-          onChange={(e) => onStatus(e.target.value)}
-          aria-label={`Status for ${t.name}`}
-        >
-          {!STATUSES.includes(t.status as (typeof STATUSES)[number]) && (
-            <option value={t.status}>{statusLabel(t.status)}</option>
-          )}
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {statusLabel(s)}
-            </option>
-          ))}
-        </select>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>
           Edit
         </button>
-        <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={onDelete}>
-          Delete
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen((v) => !v)}
+        >
+          {moreOpen ? 'Less' : 'More'}
         </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(publicUrl, 'Public link copied')}>
-          Copy link
-        </button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(joinUrl, 'Join link copied')}>
-          Copy join link
-        </button>
-        <Link to={`/t/${t.slug}`} className="btn btn-ghost btn-sm">
-          Public page
-        </Link>
-        <Link to={`/tournament/${t.slug}/display`} className="btn btn-ghost btn-sm">
-          TV
-        </Link>
-        <Link to={`/organiser?t=${t.id}`} className="btn btn-ghost btn-sm">
-          Day-of ops
-        </Link>
       </div>
+
+      {moreOpen && (
+        <div className="admin-actions admin-actions-more">
+          <select
+            className="form-select admin-status"
+            value={STATUSES.includes(t.status as (typeof STATUSES)[number]) ? t.status : 'DRAFT'}
+            disabled={busy}
+            onChange={(e) => onStatus(e.target.value)}
+            aria-label={`Status for ${t.name}`}
+          >
+            {!STATUSES.includes(t.status as (typeof STATUSES)[number]) && (
+              <option value={t.status}>{statusLabel(t.status)}</option>
+            )}
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {statusLabel(s)}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(publicUrl, 'Public link copied')}>
+            Copy link
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(joinUrl, 'Join link copied')}>
+            Copy join link
+          </button>
+          <Link to={`/t/${t.slug}`} className="btn btn-ghost btn-sm">
+            Public page
+          </Link>
+          <Link to={`/tournament/${t.slug}/display`} className="btn btn-ghost btn-sm">
+            TV
+          </Link>
+          <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={onDelete}>
+            Delete
+          </button>
+        </div>
+      )}
     </li>
   )
 }
 
-function TournamentModal({
-  title,
-  initial,
-  submitLabel,
-  showOpenNow = false,
-  formatLocked = false,
-  onClose,
-  onSubmit,
-}: {
-  title: string
-  initial: TournamentFormState
-  submitLabel: string
-  showOpenNow?: boolean
-  formatLocked?: boolean
-  onClose: () => void
-  onSubmit: (form: TournamentFormState) => Promise<void>
-}) {
-  const [form, setForm] = useState(initial)
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !saving) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, saving])
-
-  const set = <K extends keyof TournamentFormState>(key: K, value: TournamentFormState[K]) =>
-    setForm((f) => ({ ...f, [key]: value }))
-
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (saving) return
-    setError('')
-    setSaving(true)
-    try {
-      await onSubmit(form)
-      onClose()
-    } catch (err: unknown) {
-      setError(apiErrorMessage(err, 'Something went wrong'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(e) => {
-        if (!saving && e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div
-        className="modal admin-modal"
-        onMouseDown={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="admin-modal-title"
-      >
-        <div className="admin-modal-head">
-          <h2 id="admin-modal-title">{title}</h2>
-        </div>
-        <p className="admin-modal-lead">
-          Entry fee is per {form.play_format === 'SINGLES' ? 'player' : 'doubles team'}.
-        </p>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label className="form-label">Name</label>
-            <input
-              className="form-input"
-              value={form.name}
-              onChange={(e) => set('name', e.target.value)}
-              required
-              minLength={3}
-              disabled={saving}
-            />
-          </div>
-          <div className="admin-form-row admin-form-row-2">
-            <div className="form-group">
-              <label className="form-label">City</label>
-              <input
-                className="form-input"
-                value={form.location}
-                onChange={(e) => set('location', e.target.value)}
-                required
-                disabled={saving}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Venue</label>
-              <input
-                className="form-input"
-                value={form.venue}
-                onChange={(e) => set('venue', e.target.value)}
-                required
-                disabled={saving}
-              />
-            </div>
-          </div>
-          <div className="admin-form-row admin-form-row-2">
-            <div className="form-group">
-              <label className="form-label">Event date</label>
-              <input
-                className="form-input"
-                type="date"
-                value={form.event_date}
-                onChange={(e) => set('event_date', e.target.value)}
-                required
-                disabled={saving}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Start time</label>
-              <input
-                className="form-input"
-                type="time"
-                value={form.start_time}
-                onChange={(e) => set('start_time', e.target.value)}
-                required
-                disabled={saving}
-              />
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Registration deadline (optional)</label>
-            <input
-              className="form-input"
-              type="date"
-              value={form.registration_deadline}
-              onChange={(e) => set('registration_deadline', e.target.value)}
-              disabled={saving}
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Singles or doubles</label>
-            <select
-              className="form-select"
-              value={form.play_format}
-              onChange={(e) => set('play_format', e.target.value)}
-              disabled={saving || formatLocked}
-            >
-              <option value="DOUBLES">Doubles</option>
-              <option value="SINGLES">Singles</option>
-            </select>
-            {formatLocked && (
-              <small className="form-hint">Format is locked after fixtures exist or the event is live.</small>
-            )}
-          </div>
-          <div className="form-group">
-            <label className="form-label">Format</label>
-            <select
-              className="form-select"
-              value={form.format}
-              onChange={(e) => set('format', e.target.value)}
-              disabled={saving || formatLocked}
-            >
-              <option value="GROUP_KNOCKOUT">Groups then knockout</option>
-              <option value="ROUND_ROBIN">Round robin</option>
-            </select>
-          </div>
-          <div className="admin-form-row">
-            <div className="form-group">
-              <label className="form-label">Courts</label>
-              <NumberInput
-                className="form-input"
-                min={1}
-                max={32}
-                emptyValue={1}
-                value={form.number_of_courts}
-                onValueChange={(n) => set('number_of_courts', n)}
-                disabled={saving}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Match mins</label>
-              <NumberInput
-                className="form-input"
-                min={5}
-                max={120}
-                emptyValue={20}
-                value={form.match_duration_minutes}
-                onValueChange={(n) => set('match_duration_minutes', n)}
-                disabled={saving}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">
-                Max {form.play_format === 'SINGLES' ? 'players' : 'doubles teams'}
-              </label>
-              <NumberInput
-                className="form-input"
-                min={2}
-                max={256}
-                emptyValue={2}
-                value={form.max_teams}
-                onValueChange={(n) => set('max_teams', n)}
-                disabled={saving}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">
-                € / {form.play_format === 'SINGLES' ? 'player' : 'doubles team'}
-              </label>
-              <NumberInput
-                className="form-input"
-                min={0}
-                step={0.5}
-                emptyValue={0}
-                value={form.entry_fee_euros}
-                onValueChange={(n) => {
-                  set('entry_fee_euros', n)
-                  if (n <= 0) set('pay_on_arrival', false)
-                }}
-                disabled={saving}
-              />
-              {form.play_format !== 'SINGLES' && (
-                <small className="form-hint">= €{(form.entry_fee_euros / 2).toFixed(2).replace(/\.00$/, '')} per player</small>
-              )}
-            </div>
-          </div>
-          {form.entry_fee_euros > 0 && (
-            <label className="tf-check" style={{ marginBottom: '1rem' }}>
-              <input
-                type="checkbox"
-                checked={form.pay_on_arrival}
-                onChange={(e) => set('pay_on_arrival', e.target.checked)}
-                disabled={saving}
-              />
-              <span>
-                Pay on arrival
-                <small className="form-hint">
-                  Players confirm online; collect at the venue. They can still choose pay online for
-                  the full team fee.
-                </small>
-              </span>
-            </label>
-          )}
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <textarea
-              className="form-textarea"
-              value={form.description}
-              onChange={(e) => set('description', e.target.value)}
-              rows={2}
-              disabled={saving}
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Rules</label>
-            <textarea
-              className="form-textarea"
-              value={form.rules}
-              onChange={(e) => set('rules', e.target.value)}
-              rows={3}
-              disabled={saving}
-            />
-          </div>
-          {showOpenNow && (
-            <label className="admin-check">
-              <input
-                type="checkbox"
-                checked={form.open_now}
-                onChange={(e) => set('open_now', e.target.checked)}
-                disabled={saving}
-              />
-              Open registration immediately
-            </label>
-          )}
-          {error && <p className="form-error">{error}</p>}
-          <div className="modal-actions">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
-              Cancel
-            </button>
-            <button className="btn btn-primary" disabled={saving}>
-              {saving ? 'Saving...' : submitLabel}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}

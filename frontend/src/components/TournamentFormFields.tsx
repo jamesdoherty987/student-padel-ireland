@@ -1,3 +1,4 @@
+import FormatDrawPreview from './FormatDrawPreview'
 import NumberInput from './NumberInput'
 import {
   bracketFormatHint,
@@ -25,9 +26,19 @@ export type TournamentFormState = {
   rules: string
   group_size: number
   teams_advance_per_group: number
+  enable_plate: boolean
+  championship_size: number
+  plate_size: number
 }
 
-export type TournamentFormSection = 'event' | 'format' | 'courts' | 'fee' | 'info' | 'registration'
+export type TournamentFormSection =
+  | 'event'
+  | 'format'
+  | 'courts'
+  | 'fee'
+  | 'info'
+  | 'registration'
+  | 'preview'
 
 const ALL_SECTIONS: TournamentFormSection[] = [
   'event',
@@ -83,7 +94,7 @@ export default function TournamentFormFields({
         {(
           [
             ['name', 'Tournament name', 'text', 'e.g. UL Spring Open'],
-            ['location', 'City / area', 'text', 'e.g. Limerick'],
+            ['location', 'City / area', 'text', 'e.g. Cork'],
             ['venue', 'Venue', 'text', 'e.g. UL Arena Padel'],
             ['event_date', 'Date', 'date', ''],
             ['start_time', 'Start time', 'time', ''],
@@ -186,32 +197,94 @@ export default function TournamentFormFields({
                 emptyValue={4}
                 value={form.group_size}
                 onValueChange={(n) => onChange({ group_size: n })}
+                disabled={formatLocked}
               />
               <small className="form-hint">
                 Typical: 3–4 {singles ? 'players' : 'teams'} per group
                 {formatLocked ? '. Takes effect when you regenerate the draw.' : '.'}
               </small>
             </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="tf-advance">
-                Advance to knockout per group
-              </label>
-              <NumberInput
-                id="tf-advance"
-                className="form-input"
-                min={1}
-                max={4}
-                emptyValue={2}
-                value={form.teams_advance_per_group}
-                onValueChange={(n) => onChange({ teams_advance_per_group: n })}
+
+            <label className="tf-check" style={{ marginTop: '0.5rem' }}>
+              <input
+                type="checkbox"
+                checked={form.enable_plate}
+                disabled={formatLocked}
+                onChange={(e) => onChange({ enable_plate: e.target.checked })}
               />
-              <small className="form-hint">
-                How many from each group go into the knockout stage
-                {formatLocked ? '. Takes effect when you regenerate the draw.' : '.'}
-              </small>
-            </div>
+              <span>
+                Championship + Plate
+                <small className="form-hint">
+                  After groups, top finishers enter the Championship knockout and the next tier enter
+                  a Plate knockout (classic official open structure).
+                </small>
+              </span>
+            </label>
+
+            {form.enable_plate ? (
+              <div className="admin-form-row admin-form-row-2">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="tf-champ-size">
+                    Championship bracket
+                  </label>
+                  <select
+                    id="tf-champ-size"
+                    className="form-select"
+                    value={form.championship_size}
+                    disabled={formatLocked}
+                    onChange={(e) => onChange({ championship_size: Number(e.target.value) })}
+                  >
+                    {[4, 8, 16, 32].map((n) => (
+                      <option key={n} value={n}>
+                        {n} teams
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="tf-plate-size">
+                    Plate bracket
+                  </label>
+                  <select
+                    id="tf-plate-size"
+                    className="form-select"
+                    value={form.plate_size}
+                    disabled={formatLocked}
+                    onChange={(e) => onChange({ plate_size: Number(e.target.value) })}
+                  >
+                    {[4, 8, 16, 32].map((n) => (
+                      <option key={n} value={n}>
+                        {n} teams
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label className="form-label" htmlFor="tf-advance">
+                  Advance to knockout per group
+                </label>
+                <NumberInput
+                  id="tf-advance"
+                  className="form-input"
+                  min={1}
+                  max={4}
+                  emptyValue={2}
+                  value={form.teams_advance_per_group}
+                  onValueChange={(n) => onChange({ teams_advance_per_group: n })}
+                  disabled={formatLocked}
+                />
+                <small className="form-hint">
+                  How many from each group go into a single knockout bracket
+                  {formatLocked ? '. Takes effect when you regenerate the draw.' : '.'}
+                </small>
+              </div>
+            )}
           </div>
         )}
+
+        {isGroupKnockout && <FormatDrawPreview form={form} />}
       </section>
       )}
 

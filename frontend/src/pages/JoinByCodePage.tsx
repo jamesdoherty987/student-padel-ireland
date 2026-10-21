@@ -74,7 +74,7 @@ export default function JoinByCodePage() {
         {autoError && (
           <div className="empty-state" style={{ padding: '1.25rem 0' }}>
             <p>{autoError}</p>
-            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <div className="header-actions">
               <HaveCodeButton className="btn btn-primary" initialCode={clean}>
                 Try another code
               </HaveCodeButton>
@@ -86,8 +86,8 @@ export default function JoinByCodePage() {
         )}
         {clean.length < 6 && (
           <div className="empty-state" style={{ padding: '1.25rem 0' }}>
-            <p>That invite code looks incomplete.</p>
-            <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <p>That invite code looks incomplete. Codes are usually 8 characters.</p>
+            <div className="header-actions">
               <HaveCodeButton className="btn btn-primary">Enter a code</HaveCodeButton>
               <Link to="/tournaments" className="btn btn-ghost">
                 Browse tournaments

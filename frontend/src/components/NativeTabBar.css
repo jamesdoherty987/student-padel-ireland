@@ -27,7 +27,7 @@
   border: none;
   border-radius: 10px;
   background: transparent;
-  color: #8a939e;
+  color: var(--muted-icon);
   font-size: 0.62rem;
   font-weight: 600;
   letter-spacing: 0.01em;

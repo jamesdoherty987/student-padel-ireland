@@ -166,6 +166,12 @@ def init_db() -> None:
     _pg_add_column_if_missing("sponsors", "logo_data", "BYTEA")
     _sqlite_add_column_if_missing("tournaments", "is_official", "BOOLEAN DEFAULT 0")
     _pg_add_column_if_missing("tournaments", "is_official", "BOOLEAN DEFAULT FALSE")
+    _sqlite_add_column_if_missing("tournaments", "enable_plate", "BOOLEAN DEFAULT 0")
+    _pg_add_column_if_missing("tournaments", "enable_plate", "BOOLEAN DEFAULT FALSE")
+    _sqlite_add_column_if_missing("tournaments", "championship_size", "INTEGER DEFAULT 16")
+    _pg_add_column_if_missing("tournaments", "championship_size", "INTEGER DEFAULT 16")
+    _sqlite_add_column_if_missing("tournaments", "plate_size", "INTEGER DEFAULT 16")
+    _pg_add_column_if_missing("tournaments", "plate_size", "INTEGER DEFAULT 16")
     _backfill_tournament_is_official()
     _sqlite_ensure_ranking_history_nullable_tournament()
     _pg_ensure_ranking_history_nullable_tournament()
@@ -194,14 +200,13 @@ def _migrate_organiser_roles_to_player() -> None:
 
 
 def _backfill_tournament_is_official() -> None:
-    """Mark admin-owned events as publicly listed (plus any leftover limerick-open row)."""
+    """Mark admin-owned events as publicly listed."""
     with engine.begin() as conn:
         try:
             conn.execute(
                 text(
                     "UPDATE tournaments SET is_official = TRUE "
-                    "WHERE slug = 'limerick-open' "
-                    "OR organiser_id IN (SELECT id FROM users WHERE role = 'ADMIN')"
+                    "WHERE organiser_id IN (SELECT id FROM users WHERE role = 'ADMIN')"
                 )
             )
         except Exception:
