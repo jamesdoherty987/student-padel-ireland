@@ -4,7 +4,7 @@ import { confirmDialog } from './ConfirmDialog'
 import ModalShell from './ModalShell'
 import TournamentFormFields, { type TournamentFormState } from './TournamentFormFields'
 import { apiErrorMessage, tournamentApi, type Tournament } from '../services/api'
-import { toDatetimeLocalValue, tournamentFormatSummary } from '../utils/format'
+import { toDatetimeLocalValue } from '../utils/format'
 
 type Props = {
   tournament: Tournament
@@ -148,7 +148,6 @@ export default function EditTournamentModal({
     <ModalShell
       title="Edit tournament"
       titleId="edit-tournament-title"
-      subtitle={tournamentFormatSummary(form.play_format, form.format)}
       onClose={() => void requestClose()}
       preventClose={saving}
       closeOnBackdrop={false}
@@ -176,7 +175,6 @@ export default function EditTournamentModal({
           onCourtCountChange={setCourtCount}
           mode="edit"
           formatLocked={formatLocked}
-          tournamentStatus={tournament.status}
         />
 
         {error && <p className="auth-error">{error}</p>}

@@ -139,10 +139,6 @@ export default function AdminDashboard() {
           <div>
             <p className="eyebrow">Admin</p>
             <h1 className="page-title">Official tournaments</h1>
-            <p className="page-sub">
-              These appear on the landing page and public browse. Open registration when ready â€” day-of
-              scoring lives in Day-of ops.
-            </p>
           </div>
           <div className="header-actions">
             <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
@@ -220,10 +216,10 @@ export default function AdminDashboard() {
                           : 'Cancel event?',
                     message:
                       status === 'LIVE'
-                        ? `Start â€œ${row.tournament.name}â€ for players on the live board?`
+                        ? `Start "${row.tournament.name}" for players?`
                         : status === 'COMPLETED'
-                          ? `End â€œ${row.tournament.name}â€ for everyone?`
-                          : `Cancel â€œ${row.tournament.name}â€? Players will no longer be able to register or play.`,
+                          ? `Mark "${row.tournament.name}" as completed?`
+                          : `Cancel "${row.tournament.name}"?`,
                     confirmLabel:
                       status === 'LIVE' ? 'Go live' : status === 'COMPLETED' ? 'Mark completed' : 'Cancel event',
                     danger: status === 'CANCELLED',

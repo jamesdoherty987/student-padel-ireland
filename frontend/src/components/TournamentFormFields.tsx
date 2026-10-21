@@ -1,12 +1,6 @@
 import FormatDrawPreview from './FormatDrawPreview'
 import NumberInput from './NumberInput'
-import {
-  bracketFormatHint,
-  bracketFormatLabel,
-  playFormatHint,
-  playFormatLabel,
-  tournamentFormatSummary,
-} from '../utils/format'
+import { tournamentFormatSummary } from '../utils/format'
 
 export type TournamentFormState = {
   name: string
@@ -58,8 +52,6 @@ type Props = {
   mode: 'create' | 'edit'
   /** When true, play_format + bracket format are read-only (fixtures already exist). */
   formatLocked?: boolean
-  /** Optional status for locked-format messaging */
-  tournamentStatus?: string
   openRegistration?: boolean
   onOpenRegistrationChange?: (v: boolean) => void
   /** Limit which blocks render (used by stepped create flow). */
@@ -74,7 +66,6 @@ export default function TournamentFormFields({
   onCourtCountChange,
   mode,
   formatLocked = false,
-  tournamentStatus,
   openRegistration = false,
   onOpenRegistrationChange,
   sections = ALL_SECTIONS,
@@ -89,7 +80,6 @@ export default function TournamentFormFields({
       {show('event') && (
       <section className="tf-section">
         <h3 className="tf-section-title">Event details</h3>
-        <p className="tf-section-lead">What players see on the public tournament page.</p>
 
         {(
           [
@@ -127,7 +117,6 @@ export default function TournamentFormFields({
             value={form.registration_deadline}
             onChange={(e) => onChange({ registration_deadline: e.target.value })}
           />
-          <small className="form-hint">After this time, new entries stop. Leave blank to close manually.</small>
         </div>
       </section>
       )}
@@ -135,17 +124,11 @@ export default function TournamentFormFields({
       {show('format') && (
       <section className="tf-section">
         <h3 className="tf-section-title">Format</h3>
-        <p className="tf-section-lead">How people enter and how the draw works.</p>
 
         {formatLocked ? (
           <div className="tf-format-locked">
             <strong>{tournamentFormatSummary(form.play_format, form.format)}</strong>
-            <p className="muted">{bracketFormatHint(form.format)}</p>
-            <small className="form-hint">
-              {tournamentStatus === 'LIVE' || tournamentStatus === 'COMPLETED'
-                ? 'Format can’t be changed while the event is live or finished.'
-                : 'Format is locked after the draw exists. Close registration and regenerate the draw to change it.'}
-            </small>
+            <small className="form-hint">Format locked after the draw exists.</small>
           </div>
         ) : (
           <>
@@ -162,7 +145,6 @@ export default function TournamentFormFields({
                 <option value="DOUBLES">Doubles (pairs)</option>
                 <option value="SINGLES">Singles (1v1)</option>
               </select>
-              <small className="form-hint">{playFormatHint(form.play_format)}</small>
             </div>
 
             <div className="form-group">
@@ -178,7 +160,6 @@ export default function TournamentFormFields({
                 <option value="GROUP_KNOCKOUT">Groups then knockout</option>
                 <option value="ROUND_ROBIN">Round robin</option>
               </select>
-              <small className="form-hint">{bracketFormatHint(form.format)}</small>
             </div>
           </>
         )}
@@ -199,10 +180,6 @@ export default function TournamentFormFields({
                 onValueChange={(n) => onChange({ group_size: n })}
                 disabled={formatLocked}
               />
-              <small className="form-hint">
-                Typical: 3–4 {singles ? 'players' : 'teams'} per group
-                {formatLocked ? '. Takes effect when you regenerate the draw.' : '.'}
-              </small>
             </div>
 
             <label className="tf-check" style={{ marginTop: '0.5rem' }}>
@@ -212,13 +189,7 @@ export default function TournamentFormFields({
                 disabled={formatLocked}
                 onChange={(e) => onChange({ enable_plate: e.target.checked })}
               />
-              <span>
-                Championship + Plate
-                <small className="form-hint">
-                  After groups, top finishers enter the Championship knockout and the next tier enter
-                  a Plate knockout (classic official open structure).
-                </small>
-              </span>
+              <span>Championship + Plate</span>
             </label>
 
             {form.enable_plate ? (
@@ -275,10 +246,6 @@ export default function TournamentFormFields({
                   onValueChange={(n) => onChange({ teams_advance_per_group: n })}
                   disabled={formatLocked}
                 />
-                <small className="form-hint">
-                  How many from each group go into a single knockout bracket
-                  {formatLocked ? '. Takes effect when you regenerate the draw.' : '.'}
-                </small>
               </div>
             )}
           </div>
@@ -291,7 +258,6 @@ export default function TournamentFormFields({
       {show('courts') && (
       <section className="tf-section">
         <h3 className="tf-section-title">Courts & schedule</h3>
-        <p className="tf-section-lead">Used for the live board and match start times.</p>
 
         <div className="form-group">
           <label className="form-label" htmlFor="tf-courts">
@@ -310,9 +276,6 @@ export default function TournamentFormFields({
 
         <div className="form-group">
           <label className="form-label">Court names</label>
-          <small className="form-hint" style={{ marginBottom: '0.45rem' }}>
-            Shown to players and on the TV board — e.g. Glass Court, Court 3.
-          </small>
           <div className="court-name-grid">
             {courtNames.map((name, i) => (
               <input
@@ -344,7 +307,6 @@ export default function TournamentFormFields({
             value={form.match_duration_minutes}
             onValueChange={(n) => onChange({ match_duration_minutes: n })}
           />
-          <small className="form-hint">Used to schedule start times across courts when you generate the draw.</small>
         </div>
       </section>
       )}
@@ -386,15 +348,9 @@ export default function TournamentFormFields({
               })
             }
           />
-          {!singles && (
+          {!singles && form.entry_fee_euros > 0 && (
             <small className="form-hint">
-              = €{(form.entry_fee_euros / 2).toFixed(2).replace(/\.00$/, '')} per player. Captain pays the full team
-              fee{form.pay_on_arrival ? ' at the venue' : ' online'}.
-            </small>
-          )}
-          {singles && (
-            <small className="form-hint">
-              Each player pays this amount {form.pay_on_arrival ? 'at the venue' : 'when they join'}.
+              = €{(form.entry_fee_euros / 2).toFixed(2).replace(/\.00$/, '')} per player
             </small>
           )}
         </div>
@@ -406,13 +362,7 @@ export default function TournamentFormFields({
               checked={form.pay_on_arrival}
               onChange={(e) => onChange({ pay_on_arrival: e.target.checked })}
             />
-            <span>
-              Pay on arrival
-              <small className="form-hint">
-                Default for new events. Players confirm their spot without card payment; you collect at
-                the venue. They can still choose “Pay online now” for the full team fee if they prefer.
-              </small>
-            </span>
+            <span>Pay on arrival</span>
           </label>
         )}
       </section>
@@ -421,7 +371,6 @@ export default function TournamentFormFields({
       {show('info') && (
       <section className="tf-section">
         <h3 className="tf-section-title">Player information</h3>
-        <p className="tf-section-lead">Optional notes on the public page and join flow.</p>
 
         <div className="form-group">
           <label className="form-label" htmlFor="tf-desc">
@@ -460,20 +409,8 @@ export default function TournamentFormFields({
             checked={openRegistration}
             onChange={(e) => onOpenRegistrationChange(e.target.checked)}
           />
-          <span>
-            Open registration now
-            <small className="form-hint">
-              Players can join immediately. Otherwise it stays a draft until you open it.
-            </small>
-          </span>
+          <span>Open registration now</span>
         </label>
-      )}
-
-      {mode === 'edit' && !formatLocked && show('format') && (
-        <p className="tf-edit-note muted">
-          Editing {playFormatLabel(form.play_format).toLowerCase()} · {bracketFormatLabel(form.format).toLowerCase()}.
-          Changes save to the public page right away.
-        </p>
       )}
     </>
   )

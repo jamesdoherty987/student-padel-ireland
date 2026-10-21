@@ -103,11 +103,6 @@ export default function DraftSponsorsField({
 
   return (
     <div className="draft-sponsors">
-      <p className="tf-section-lead">
-        Optional. Logos show as a “Supported by” strip on the tournament page. You can add more later
-        from Manage.
-      </p>
-
       {sponsors.length > 0 && (
         <ul className="org-sponsor-list">
           {sponsors.map((s) => (

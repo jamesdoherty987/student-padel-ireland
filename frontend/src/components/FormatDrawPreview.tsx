@@ -33,7 +33,6 @@ export default function FormatDrawPreview({ form, teamCount }: Props) {
     return (
       <aside className="tf-draw-preview" aria-live="polite">
         <h3 className="tf-section-title">Draw summary</h3>
-        <p className="tf-section-lead">Round robin — everyone plays everyone.</p>
         <ul className="tf-review-list">
           <li>
             {n} {form.play_format === 'SINGLES' ? 'players' : 'teams'}
@@ -65,7 +64,6 @@ export default function FormatDrawPreview({ form, teamCount }: Props) {
   return (
     <aside className="tf-draw-preview" aria-live="polite">
       <h3 className="tf-section-title">Draw summary</h3>
-      <p className="tf-section-lead">Updates as you change format settings.</p>
 
       <ul className="tf-review-list">
         <li>

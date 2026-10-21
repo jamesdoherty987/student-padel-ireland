@@ -1184,25 +1184,6 @@ export default function OrganiserDashboard() {
               <>
               <section className="org-section">
                 <h2>Invite players</h2>
-                {active.tournament.status === 'DRAFT' ? (
-                  <p className="muted org-section-lead">
-                    Open registration first — players can’t join while this event is still a draft.
-                  </p>
-                ) : active.tournament.status === 'REGISTRATION_OPEN' ? (
-                  <p className="muted org-section-lead">
-                    Share this code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
-                  </p>
-                ) : fixturesExist ? (
-                  <p className="muted org-section-lead">
-                    Registration is closed and the draw is live — new players can’t join this code.
-                    Share the live board instead if people want scores.
-                  </p>
-                ) : (
-                  <p className="muted org-section-lead">
-                    Registration is closed. Re-open it if you still need more players before generating
-                    the draw.
-                  </p>
-                )}
                 {inviteCode && active.tournament.status === 'REGISTRATION_OPEN' ? (
                   <div className="org-invite">
                     <div className="org-invite-code">
@@ -1237,12 +1218,6 @@ export default function OrganiserDashboard() {
                     </button>
                   )}
                 </div>
-                {!canAddTeams && fixturesExist && (
-                  <p className="muted org-section-lead">
-                    Fixtures already generated — add players before generate, or regenerate (replaces the draw).
-                  </p>
-                )}
-
                 {orgTeams.length > 0 && (
                   <div className="org-pay-toolbar">
                     <div className="org-view-toggle org-pay-filters" role="group" aria-label="Payment filter">
@@ -1442,12 +1417,6 @@ export default function OrganiserDashboard() {
                     )}
                 </div>
                 {matches.length > 0 && (
-                  <p className="muted org-section-lead">
-                    <strong>Call to court</strong> notifies players · <strong>Start live</strong> begins scoring ·{' '}
-                    <strong>Move</strong> changes court or time
-                  </p>
-                )}
-                {matches.length > 0 && (
                   <div className="org-match-filters">
                     <div className="org-view-toggle" role="group" aria-label="Match view">
                       <button
@@ -1610,7 +1579,6 @@ export default function OrganiserDashboard() {
 
               <section className="org-section">
                 <h2>Announcements</h2>
-                <p className="muted org-section-lead">Posted notes appear on the player live page.</p>
                 {announcements.length > 0 && (
                   <ul className="org-announce-list">
                     {announcements.slice(0, 8).map((a) => (
@@ -1671,10 +1639,6 @@ export default function OrganiserDashboard() {
               <>
               <section className="org-section">
                 <h2>Sponsors</h2>
-                <p className="muted org-section-lead">
-                  Shows as a “Supported by” strip on the tournament page. Tap the box to add a logo — PNG or JPG
-                  works best (max 2MB).
-                </p>
                 {sponsors.length > 0 && (
                   <ul className="org-sponsor-list">
                     {sponsors.map((s) => (
@@ -1833,12 +1797,6 @@ export default function OrganiserDashboard() {
 
               <section className="org-section">
                 <h2>Tournament admins</h2>
-                <p className="muted org-section-lead">
-                  Co-admins can edit the event, score matches, manage teams, sponsors, and post announcements.
-                  {isOwner
-                    ? ' Only the owner can add or remove admins, transfer ownership, or delete the tournament.'
-                    : ' Ask the owner if you need changes to this admin list.'}
-                </p>
                 <ul className="org-admin-list">
                   {tournamentAdmins.map((a) => (
                     <li key={`${a.user_id}-${a.role}`}>

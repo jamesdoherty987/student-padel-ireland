@@ -98,29 +98,6 @@ export default function CreateTournamentModal({
     })
   }
 
-  const applyOfficialPreset = () => {
-    markDirty()
-    setForm((f) => ({
-      ...f,
-      play_format: 'DOUBLES',
-      format: 'GROUP_KNOCKOUT',
-      max_teams: 48,
-      group_size: 4,
-      enable_plate: true,
-      championship_size: 16,
-      plate_size: 16,
-      number_of_courts: 7,
-      match_duration_minutes: 20,
-      entry_fee_euros: f.entry_fee_euros || 50,
-      pay_on_arrival: true,
-      rules:
-        f.rules.trim() ||
-        'Best of 3 sets. Golden point on deuce. Student ID required on the day.',
-    }))
-    setCourtNames(courtNamesFor(7))
-    onToast?.('Applied official open format (48 teams · Championship + Plate)')
-  }
-
   const requestClose = async () => {
     if (saving) return
     if (!dirty) {
@@ -230,28 +207,11 @@ export default function CreateTournamentModal({
     <ModalShell
       title={isAdmin ? 'New official tournament' : 'Create tournament'}
       titleId="create-tournament-title"
-      subtitle={
-        isAdmin
-          ? 'Listed on the public landing page and Events. Defaults to the classic Championship + Plate open format — adjust anything below.'
-          : 'Private by default — share the invite code or link. Only Student Padel Ireland admin events appear on the landing page.'
-      }
       onClose={() => void requestClose()}
       preventClose={saving}
       closeOnBackdrop={false}
       wide
       className="create-tournament-modal"
-      headerExtra={
-        isAdmin ? (
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={applyOfficialPreset}
-            disabled={saving}
-          >
-            Official open preset
-          </button>
-        ) : null
-      }
       footer={
         <div className="modal-actions tf-step-actions">
           <button type="button" className="btn btn-ghost" onClick={() => void requestClose()} disabled={saving}>
