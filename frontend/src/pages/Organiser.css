@@ -780,6 +780,137 @@ html.native-app.has-native-tabs .org-toast {
   width: min(560px, 100%);
 }
 
+.modal.modal-with-footer {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+  max-height: min(92dvh, 92vh);
+}
+
+.modal-body {
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.25rem;
+}
+
+.modal-footer {
+  flex: 0 0 auto;
+  margin: 0 -1.5rem 0;
+  padding: 0.85rem 1.5rem calc(0.85rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--white);
+  position: sticky;
+  bottom: 0;
+}
+
+.modal-footer .modal-actions {
+  margin: 0;
+}
+
+.tf-modal-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.tf-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  margin: 0 0 1.1rem;
+}
+
+.tf-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 40px;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface, #f6f7f5);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: default;
+}
+
+.tf-step.is-done {
+  cursor: pointer;
+  color: var(--court-deep);
+  background: rgba(11, 61, 46, 0.06);
+}
+
+.tf-step.is-active {
+  color: var(--court-deep);
+  border-color: var(--court-deep);
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--court-deep);
+}
+
+.tf-step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: rgba(11, 61, 46, 0.12);
+  font-size: 0.75rem;
+}
+
+.tf-step.is-active .tf-step-num,
+.tf-step.is-done .tf-step-num {
+  background: var(--court-deep);
+  color: #fff;
+}
+
+.tf-step-label {
+  white-space: nowrap;
+}
+
+.tf-step-summary {
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+}
+
+.tf-step-actions {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.tf-create-review {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.tf-review-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.tf-review-list strong {
+  color: var(--court-deep);
+}
+
+@media (max-width: 480px) {
+  .tf-step-label {
+    display: none;
+  }
+
+  .tf-step {
+    padding: 0.45rem;
+  }
+}
+
 /* Create / edit tournament form sections */
 .tf-modal-head {
   display: flex;

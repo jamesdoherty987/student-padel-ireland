@@ -44,7 +44,7 @@ Open http://localhost:5173
 | Player | james@ul.ie | player12345 |
 | Admin | admin@studentpadelireland.ie | admin12345 |
 
-Seeded tournament: **Limerick Open** (`/t/limerick-open`)
+Demo seed creates users only (no sample tournament). Create official events from **`/admin`**. Player-created events are private (invite/link only).
 
 ## Tests
 

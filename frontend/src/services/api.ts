@@ -88,6 +88,8 @@ export type Tournament = {
   teams_advance_per_group: number
   registered_teams: number
   invite_code?: string | null
+  /** Listed on landing / public browse — admin-created events only */
+  is_official?: boolean
   courts?: Array<{ number: number; name: string; id: string }>
   can_manage?: boolean
 }

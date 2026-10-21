@@ -4,10 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
 import { confirmDialog } from '../components/ConfirmDialog'
+import CreateTournamentModal from '../components/CreateTournamentModal'
 import EditTournamentModal from '../components/EditTournamentModal'
 import NumberInput from '../components/NumberInput'
 import TournamentBracket from '../components/TournamentBracket'
-import TournamentFormFields, { type TournamentFormState } from '../components/TournamentFormFields'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl } from '../native/platform'
 import {
@@ -889,8 +889,8 @@ export default function OrganiserDashboard() {
             <div className="org-empty">
               <h1>Running an event?</h1>
               <p>
-                Set up registration, payments, and live scoring. Create a tournament to get started —
-                anyone signed in can host.
+                Set up registration, payments, and live scoring. Events you create here are private —
+                players join with your invite code (they won’t appear on the landing page).
               </p>
               <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
                 Create a tournament
@@ -1859,6 +1859,7 @@ export default function OrganiserDashboard() {
       {showCreate && (
         <CreateTournamentModal
           onClose={() => setShowCreate(false)}
+          onToast={showToast}
           onCreated={(msg, id) => {
             showToast(msg)
             if (id) setSelectedId(id)
@@ -1891,7 +1892,12 @@ export default function OrganiserDashboard() {
       )}
 
       {confirmGenerate && (
-        <div className="modal-backdrop" onClick={() => !generateMut.isPending && setConfirmGenerate(false)}>
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (!generateMut.isPending && e.target === e.currentTarget) setConfirmGenerate(false)
+          }}
+        >
           <div
             className="modal modal-wide"
             role="dialog"
@@ -2023,13 +2029,18 @@ export default function OrganiserDashboard() {
       )}
 
       {scoreMatch && (
-        <div className="modal-backdrop" onClick={() => setScoreMatch(null)}>
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setScoreMatch(null)
+          }}
+        >
           <div
             className="modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="score-entry-title"
-            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
           >
             <h2 id="score-entry-title">Enter score</h2>
             <p>
@@ -2150,7 +2161,12 @@ export default function OrganiserDashboard() {
       )}
 
       {moveMatch && (
-        <div className="modal-backdrop" onClick={() => setMoveMatch(null)}>
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setMoveMatch(null)
+          }}
+        >
           <div
             className="modal"
             role="dialog"
@@ -2304,13 +2320,18 @@ function AddTeamModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (!saving && e.target === e.currentTarget) onClose()
+      }}
+    >
       <div
         className="modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-team-title"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
       >
         <h2 id="add-team-title">{singles ? 'Add player' : 'Add team'}</h2>
         <p className="muted" style={{ marginBottom: '1rem' }}>
@@ -2416,162 +2437,6 @@ function AddTeamModal({
             </button>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Adding...' : singles ? 'Add player' : 'Add team'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-function CreateTournamentModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void
-  onCreated: (msg: string, id?: string) => void
-}) {
-  const qc = useQueryClient()
-  const [openRegistration, setOpenRegistration] = useState(true)
-  const [form, setForm] = useState<TournamentFormState>({
-    name: '',
-    location: '',
-    venue: '',
-    event_date: '',
-    start_time: '10:00',
-    registration_deadline: '',
-    play_format: 'DOUBLES',
-    format: 'GROUP_KNOCKOUT',
-    number_of_courts: 6,
-    match_duration_minutes: 20,
-    max_teams: 48,
-    entry_fee_euros: 50,
-    pay_on_arrival: true,
-    description: '',
-    rules: '',
-    group_size: 4,
-    teams_advance_per_group: 2,
-  })
-  const [courtNames, setCourtNames] = useState<string[]>(
-    Array.from({ length: 6 }, (_, i) => `Court ${i + 1}`),
-  )
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !saving) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, saving])
-
-  const patchForm = (patch: Partial<TournamentFormState>) => {
-    setForm((f) => ({ ...f, ...patch }))
-  }
-
-  const setCourtCount = (n: number) => {
-    const count = Math.max(1, Math.min(32, Number.isFinite(n) ? Math.trunc(n) : 1))
-    patchForm({ number_of_courts: count })
-    setCourtNames((prev) => {
-      const next = [...prev]
-      while (next.length < count) next.push(`Court ${next.length + 1}`)
-      return next.slice(0, count)
-    })
-  }
-
-  const onSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setSaving(true)
-    try {
-      const { data } = await tournamentApi.create({
-        name: form.name.trim(),
-        location: form.location.trim(),
-        venue: form.venue.trim(),
-        event_date: form.event_date,
-        start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
-        number_of_courts: form.number_of_courts,
-        court_names: courtNames.map((n, i) => n.trim() || `Court ${i + 1}`),
-        entry_fee_cents: Math.round(form.entry_fee_euros * 100),
-        pay_on_arrival: form.pay_on_arrival,
-        max_teams: form.max_teams,
-        format: form.format,
-        play_format: form.play_format,
-        match_duration_minutes: form.match_duration_minutes,
-        group_size: form.group_size,
-        teams_advance_per_group: form.teams_advance_per_group,
-        registration_deadline: form.registration_deadline
-          ? new Date(form.registration_deadline).toISOString()
-          : null,
-        description: form.description.trim() || null,
-        rules: form.rules.trim() || null,
-      })
-      if (openRegistration) {
-        try {
-          await tournamentApi.update(data.id, { status: 'REGISTRATION_OPEN' })
-        } catch {
-          await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
-          await qc.invalidateQueries({ queryKey: ['tournaments'] })
-          onCreated('Tournament created, but registration could not be opened — open it from My events', data.id)
-          onClose()
-          return
-        }
-      }
-      await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
-      await qc.invalidateQueries({ queryKey: ['tournaments'] })
-      onCreated(
-        openRegistration ? 'Tournament created — registration is open' : 'Tournament created as draft',
-        data.id,
-      )
-      onClose()
-    } catch (err: unknown) {
-      setError(apiErrorMessage(err, 'Could not create tournament'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
-      <div
-        className="modal modal-wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-tournament-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="tf-modal-head">
-          <div>
-            <h2 id="create-tournament-title">Create tournament</h2>
-            <p className="tf-modal-sub">
-              Set the format, courts, and fee. Players will see a clear summary on the public page.
-            </p>
-          </div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>
-            Close
-          </button>
-        </header>
-
-        <form onSubmit={onSubmit}>
-          <TournamentFormFields
-            form={form}
-            onChange={patchForm}
-            courtNames={courtNames}
-            onCourtNamesChange={setCourtNames}
-            onCourtCountChange={setCourtCount}
-            mode="create"
-            openRegistration={openRegistration}
-            onOpenRegistrationChange={setOpenRegistration}
-          />
-
-          {error && <p className="auth-error">{error}</p>}
-          <div className="modal-actions">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Creating…' : openRegistration ? 'Create & open registration' : 'Create draft'}
             </button>
           </div>
         </form>

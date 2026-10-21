@@ -27,6 +27,17 @@ export type TournamentFormState = {
   teams_advance_per_group: number
 }
 
+export type TournamentFormSection = 'event' | 'format' | 'courts' | 'fee' | 'info' | 'registration'
+
+const ALL_SECTIONS: TournamentFormSection[] = [
+  'event',
+  'format',
+  'courts',
+  'fee',
+  'info',
+  'registration',
+]
+
 type Props = {
   form: TournamentFormState
   onChange: (patch: Partial<TournamentFormState>) => void
@@ -40,6 +51,8 @@ type Props = {
   tournamentStatus?: string
   openRegistration?: boolean
   onOpenRegistrationChange?: (v: boolean) => void
+  /** Limit which blocks render (used by stepped create flow). */
+  sections?: TournamentFormSection[]
 }
 
 export default function TournamentFormFields({
@@ -53,13 +66,16 @@ export default function TournamentFormFields({
   tournamentStatus,
   openRegistration = false,
   onOpenRegistrationChange,
+  sections = ALL_SECTIONS,
 }: Props) {
   const singles = form.play_format === 'SINGLES'
   const entryUnit = singles ? 'player' : 'doubles team'
   const isGroupKnockout = form.format === 'GROUP_KNOCKOUT'
+  const show = (s: TournamentFormSection) => sections.includes(s)
 
   return (
     <>
+      {show('event') && (
       <section className="tf-section">
         <h3 className="tf-section-title">Event details</h3>
         <p className="tf-section-lead">What players see on the public tournament page.</p>
@@ -103,7 +119,9 @@ export default function TournamentFormFields({
           <small className="form-hint">After this time, new entries stop. Leave blank to close manually.</small>
         </div>
       </section>
+      )}
 
+      {show('format') && (
       <section className="tf-section">
         <h3 className="tf-section-title">Format</h3>
         <p className="tf-section-lead">How people enter and how the draw works.</p>
@@ -195,7 +213,9 @@ export default function TournamentFormFields({
           </div>
         )}
       </section>
+      )}
 
+      {show('courts') && (
       <section className="tf-section">
         <h3 className="tf-section-title">Courts & schedule</h3>
         <p className="tf-section-lead">Used for the live board and match start times.</p>
@@ -254,7 +274,9 @@ export default function TournamentFormFields({
           <small className="form-hint">Used to schedule start times across courts when you generate the draw.</small>
         </div>
       </section>
+      )}
 
+      {show('fee') && (
       <section className="tf-section">
         <h3 className="tf-section-title">Capacity & fee</h3>
 
@@ -321,7 +343,9 @@ export default function TournamentFormFields({
           </label>
         )}
       </section>
+      )}
 
+      {show('info') && (
       <section className="tf-section">
         <h3 className="tf-section-title">Player information</h3>
         <p className="tf-section-lead">Optional notes on the public page and join flow.</p>
@@ -354,8 +378,9 @@ export default function TournamentFormFields({
           />
         </div>
       </section>
+      )}
 
-      {mode === 'create' && onOpenRegistrationChange && (
+      {show('registration') && mode === 'create' && onOpenRegistrationChange && (
         <label className="tf-check">
           <input
             type="checkbox"
@@ -371,7 +396,7 @@ export default function TournamentFormFields({
         </label>
       )}
 
-      {mode === 'edit' && !formatLocked && (
+      {mode === 'edit' && !formatLocked && show('format') && (
         <p className="tf-edit-note muted">
           Editing {playFormatLabel(form.play_format).toLowerCase()} · {bracketFormatLabel(form.format).toLowerCase()}.
           Changes save to the public page right away.

@@ -171,6 +171,8 @@ class Tournament(Base, TimestampMixin):
     )
     description: Mapped[Optional[str]] = mapped_column(Text)
     invite_code: Mapped[Optional[str]] = mapped_column(String(12), unique=True, index=True)
+    # True = listed on landing / public browse. False = private (invite / direct link only).
+    is_official: Mapped[bool] = mapped_column(Boolean, default=False)
 
     organiser: Mapped[User] = relationship()
     teams: Mapped[list["Team"]] = relationship(back_populates="tournament")

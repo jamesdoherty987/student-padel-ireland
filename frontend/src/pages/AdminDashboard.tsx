@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from '../components/ConfirmDialog'
+import CreateTournamentModal from '../components/CreateTournamentModal'
 import NavBar from '../components/NavBar'
 import NumberInput from '../components/NumberInput'
 import { useAuth } from '../context/AuthContext'
@@ -43,43 +44,6 @@ type TournamentFormState = {
   rules: string
   registration_deadline: string
   open_now: boolean
-}
-
-const EMPTY_FORM: TournamentFormState = {
-  name: '',
-  location: '',
-  venue: '',
-  event_date: '',
-  start_time: '10:00',
-  number_of_courts: 6,
-  entry_fee_euros: 50,
-  pay_on_arrival: true,
-  max_teams: 48,
-  format: 'GROUP_KNOCKOUT',
-  play_format: 'DOUBLES',
-  match_duration_minutes: 20,
-  description: '',
-  rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day.',
-  registration_deadline: '',
-  open_now: true,
-}
-
-const LIMERICK_TEMPLATE: TournamentFormState = {
-  ...EMPTY_FORM,
-  name: 'Limerick Open',
-  location: 'Limerick',
-  venue: 'UL Padel Centre',
-  description: 'Ireland student padel open. Doubles teams, groups then knockout.',
-  open_now: true,
-}
-
-function localDateISO(daysAhead = 0) {
-  const d = new Date()
-  d.setDate(d.getDate() + daysAhead)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
 }
 
 function formFromTournament(t: Tournament): TournamentFormState {
@@ -251,7 +215,8 @@ export default function AdminDashboard() {
             <p className="eyebrow">Admin</p>
             <h1 className="page-title">Official tournaments</h1>
             <p className="page-sub">
-              Set up events, open registration, and manage status. Day-of scoring lives in Day-of ops.
+              These appear on the landing page and public browse. Open registration when ready — day-of
+              scoring lives in Day-of ops.
             </p>
           </div>
           <div className="header-actions">
@@ -335,29 +300,11 @@ export default function AdminDashboard() {
       </main>
 
       {showCreate && (
-        <TournamentModal
-          title="New official tournament"
-          initial={{ ...EMPTY_FORM, event_date: localDateISO(21) }}
-          submitLabel="Create tournament"
-          showOpenNow
-          showTemplate
+        <CreateTournamentModal
+          subtitle="Official Student Padel Ireland event — appears on the public landing page and Events list."
           onClose={() => setShowCreate(false)}
-          onSubmit={async (form) => {
-            const { data: created } = await tournamentApi.create(payloadFromForm(form))
-            if (form.open_now) {
-              try {
-                await tournamentApi.update(created.id, { status: 'REGISTRATION_OPEN' })
-              } catch {
-                await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
-                await qc.invalidateQueries({ queryKey: ['tournaments'] })
-                showToast('Created, but could not open registration. Open it from the list.')
-                return
-              }
-            }
-            await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
-            await qc.invalidateQueries({ queryKey: ['tournaments'] })
-            showToast(form.open_now ? 'Created & registration opened' : 'Created as draft')
-          }}
+          onToast={showToast}
+          onCreated={(msg) => showToast(msg)}
         />
       )}
 
@@ -511,7 +458,6 @@ function TournamentModal({
   initial,
   submitLabel,
   showOpenNow = false,
-  showTemplate = false,
   formatLocked = false,
   onClose,
   onSubmit,
@@ -520,7 +466,6 @@ function TournamentModal({
   initial: TournamentFormState
   submitLabel: string
   showOpenNow?: boolean
-  showTemplate?: boolean
   formatLocked?: boolean
   onClose: () => void
   onSubmit: (form: TournamentFormState) => Promise<void>
@@ -556,26 +501,21 @@ function TournamentModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (!saving && e.target === e.currentTarget) onClose()
+      }}
+    >
       <div
         className="modal admin-modal"
-        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-labelledby="admin-modal-title"
       >
         <div className="admin-modal-head">
           <h2 id="admin-modal-title">{title}</h2>
-          {showTemplate && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              disabled={saving}
-              onClick={() => setForm({ ...LIMERICK_TEMPLATE, event_date: form.event_date || localDateISO(21) })}
-            >
-              Limerick Open template
-            </button>
-          )}
         </div>
         <p className="admin-modal-lead">
           Entry fee is per {form.play_format === 'SINGLES' ? 'player' : 'doubles team'}.

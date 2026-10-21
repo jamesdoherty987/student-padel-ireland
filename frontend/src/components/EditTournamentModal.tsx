@@ -1,5 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { confirmDialog } from './ConfirmDialog'
+import ModalShell from './ModalShell'
 import TournamentFormFields, { type TournamentFormState } from './TournamentFormFields'
 import { apiErrorMessage, tournamentApi, type Tournament } from '../services/api'
 import { toDatetimeLocalValue, tournamentFormatSummary } from '../utils/format'
@@ -56,6 +58,7 @@ export default function EditTournamentModal({
   const [courtNames, setCourtNames] = useState(() => initialCourtNames(tournament))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
 
   const formatLocked =
     fixturesExist ||
@@ -63,15 +66,8 @@ export default function EditTournamentModal({
     tournament.status === 'COMPLETED' ||
     tournament.status === 'CANCELLED'
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !saving) onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, saving])
-
   const patchForm = (patch: Partial<TournamentFormState>) => {
+    setDirty(true)
     setForm((f) => ({ ...f, ...patch }))
   }
 
@@ -83,6 +79,21 @@ export default function EditTournamentModal({
       while (next.length < count) next.push(`Court ${next.length + 1}`)
       return next.slice(0, count)
     })
+  }
+
+  const requestClose = async () => {
+    if (saving) return
+    if (!dirty) {
+      onClose()
+      return
+    }
+    const ok = await confirmDialog({
+      title: 'Discard changes?',
+      message: 'You have unsaved edits. Close without saving?',
+      confirmLabel: 'Discard',
+      danger: true,
+    })
+    if (ok) onClose()
   }
 
   const onSubmit = async (e: FormEvent) => {
@@ -128,47 +139,42 @@ export default function EditTournamentModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
-      <div
-        className="modal modal-wide"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="edit-tournament-title"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="tf-modal-head">
-          <div>
-            <h2 id="edit-tournament-title">Edit tournament</h2>
-            <p className="tf-modal-sub">{tournamentFormatSummary(form.play_format, form.format)}</p>
-          </div>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} disabled={saving}>
-            Close
+    <ModalShell
+      title="Edit tournament"
+      titleId="edit-tournament-title"
+      subtitle={tournamentFormatSummary(form.play_format, form.format)}
+      onClose={() => void requestClose()}
+      preventClose={saving}
+      closeOnBackdrop={false}
+      wide
+      footer={
+        <div className="modal-actions">
+          <button type="button" className="btn btn-ghost" onClick={() => void requestClose()} disabled={saving}>
+            Cancel
           </button>
-        </header>
+          <button type="submit" form="edit-tournament-form" className="btn btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </button>
+        </div>
+      }
+    >
+      <form id="edit-tournament-form" onSubmit={onSubmit}>
+        <TournamentFormFields
+          form={form}
+          onChange={patchForm}
+          courtNames={courtNames}
+          onCourtNamesChange={(names) => {
+            setDirty(true)
+            setCourtNames(names)
+          }}
+          onCourtCountChange={setCourtCount}
+          mode="edit"
+          formatLocked={formatLocked}
+          tournamentStatus={tournament.status}
+        />
 
-        <form onSubmit={onSubmit}>
-          <TournamentFormFields
-            form={form}
-            onChange={patchForm}
-            courtNames={courtNames}
-            onCourtNamesChange={setCourtNames}
-            onCourtCountChange={setCourtCount}
-            mode="edit"
-            formatLocked={formatLocked}
-            tournamentStatus={tournament.status}
-          />
-
-          {error && <p className="auth-error">{error}</p>}
-          <div className="modal-actions">
-            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        {error && <p className="auth-error">{error}</p>}
+      </form>
+    </ModalShell>
   )
 }

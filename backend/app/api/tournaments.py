@@ -540,6 +540,7 @@ def _tournament_out(
         teams_advance_per_group=t.teams_advance_per_group,
         registered_teams=_team_count(db, t.id),
         invite_code=t.invite_code,
+        is_official=bool(getattr(t, "is_official", False)),
         courts=[
             {"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts
         ],
@@ -928,7 +929,8 @@ def list_tournaments(
     upcoming: bool = False,
     db: Session = Depends(get_db),
 ):
-    q = db.query(Tournament)
+    """Public catalogue — official (admin) events only. Private events stay invite/link-only."""
+    q = db.query(Tournament).filter(Tournament.is_official.is_(True))
     if status_filter:
         q = q.filter(Tournament.status == status_filter)
     if upcoming:
@@ -972,6 +974,8 @@ def create_tournament(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Only platform admins create publicly listed events (landing + /tournaments).
+    is_official = user.role == Role.ADMIN.value
     t = Tournament(
         name=body.name.strip(),
         slug=_unique_slug(db, body.name),
@@ -994,6 +998,7 @@ def create_tournament(
         group_size=body.group_size,
         teams_advance_per_group=body.teams_advance_per_group,
         invite_code=_unique_invite_code(db),
+        is_official=is_official,
         tie_break_order=body.tie_break_order
         or "points,head_to_head,set_difference,game_difference,games_won",
     )
@@ -1019,6 +1024,12 @@ def update_tournament(
     data = body.model_dump(exclude_unset=True)
     court_names = data.pop("court_names", None)
     new_organiser_id = data.pop("organiser_id", None)
+    # Only platform admins can promote/demote public listing
+    if "is_official" in data:
+        if user.role != Role.ADMIN.value:
+            data.pop("is_official", None)
+        else:
+            data["is_official"] = bool(data["is_official"])
 
     format_fields = {"format", "play_format"}
     changing_format = any(f in data and getattr(t, f) != (

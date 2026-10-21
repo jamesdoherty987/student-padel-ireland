@@ -157,6 +157,8 @@ class TournamentUpdate(BaseModel):
     group_size: Optional[int] = Field(default=None, ge=2, le=8)
     teams_advance_per_group: Optional[int] = Field(default=None, ge=1, le=4)
     tie_break_order: Optional[str] = None
+    # Platform ADMIN only — list on landing / public browse
+    is_official: Optional[bool] = None
     # Transfer ownership — only current owner or platform ADMIN may set this
     organiser_id: Optional[UUID] = None
 
@@ -192,6 +194,7 @@ class TournamentOut(BaseModel):
     teams_advance_per_group: int
     registered_teams: int = 0
     invite_code: Optional[str] = None
+    is_official: bool = False
     courts: list[CourtOut] = Field(default_factory=list)
     can_manage: bool = False
 
