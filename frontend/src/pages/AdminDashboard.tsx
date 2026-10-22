@@ -357,38 +357,48 @@ function AdminTournamentCard({
       </div>
 
       {moreOpen && (
-        <div className="admin-actions admin-actions-more">
-          <select
-            className="form-select admin-status"
-            value={STATUSES.includes(t.status as (typeof STATUSES)[number]) ? t.status : 'DRAFT'}
-            disabled={busy}
-            onChange={(e) => onStatus(e.target.value)}
-            aria-label={`Status for ${t.name}`}
-          >
-            {!STATUSES.includes(t.status as (typeof STATUSES)[number]) && (
-              <option value={t.status}>{statusLabel(t.status)}</option>
-            )}
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {statusLabel(s)}
-              </option>
-            ))}
-          </select>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(publicUrl, 'Public link copied')}>
-            Copy link
-          </button>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(joinUrl, 'Join link copied')}>
-            Copy join link
-          </button>
-          <Link to={`/t/${t.slug}`} className="btn btn-ghost btn-sm">
-            Public page
-          </Link>
-          <Link to={`/tournament/${t.slug}/display`} className="btn btn-ghost btn-sm">
-            TV
-          </Link>
-          <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={onDelete}>
-            Delete
-          </button>
+        <div className="admin-actions-more">
+          <div className="admin-actions-group">
+            <span className="admin-actions-label">Status</span>
+            <select
+              className="form-select admin-status"
+              value={STATUSES.includes(t.status as (typeof STATUSES)[number]) ? t.status : 'DRAFT'}
+              disabled={busy}
+              onChange={(e) => onStatus(e.target.value)}
+              aria-label={`Status for ${t.name}`}
+            >
+              {!STATUSES.includes(t.status as (typeof STATUSES)[number]) && (
+                <option value={t.status}>{statusLabel(t.status)}</option>
+              )}
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {statusLabel(s)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="admin-actions-group">
+            <span className="admin-actions-label">Links</span>
+            <div className="admin-actions">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(publicUrl, 'Public link copied')}>
+                Copy link
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(joinUrl, 'Join link copied')}>
+                Copy join link
+              </button>
+              <Link to={`/t/${t.slug}`} className="btn btn-ghost btn-sm">
+                Public page
+              </Link>
+              <Link to={`/tournament/${t.slug}/display`} className="btn btn-ghost btn-sm">
+                TV
+              </Link>
+            </div>
+          </div>
+          <div className="admin-actions-group admin-actions-danger">
+            <button type="button" className="btn btn-danger btn-sm" disabled={busy} onClick={onDelete}>
+              Delete
+            </button>
+          </div>
         </div>
       )}
     </li>

@@ -4,7 +4,28 @@
     "details": [
       {
         "appID": "99WD4RQR95.ie.studentpadel.app",
-        "paths": ["*", "/t/*", "/community/*", "/tournaments", "/rankings", "/players/*"]
+        "paths": [
+          "/t/*",
+          "/community/*",
+          "/tournaments",
+          "/tournaments/*",
+          "/rankings",
+          "/rankings/*",
+          "/players/*",
+          "/join",
+          "/join/*",
+          "/login",
+          "/login/*",
+          "/signup",
+          "/signup/*",
+          "/organiser",
+          "/organiser/*",
+          "/admin",
+          "/admin/*",
+          "/privacy",
+          "/terms",
+          "/welcome"
+        ]
       }
     ]
   },

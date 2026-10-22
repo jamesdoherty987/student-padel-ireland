@@ -6,6 +6,7 @@ import { confirmDialog } from '../components/ConfirmDialog'
 import NavBar from '../components/NavBar'
 import { nativeTabsVisibleForPath } from '../components/NativeTabBar'
 import { useAuth } from '../context/AuthContext'
+import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import {
   apiErrorMessage,
@@ -72,6 +73,14 @@ export default function PlayerProfilePage() {
   const [reportTarget, setReportTarget] = useState<{ type: 'user' | 'media'; id: string } | null>(null)
   const [reportReason, setReportReason] = useState('')
   const [reportMsg, setReportMsg] = useState('')
+  useKeyboardInset(
+    showDeleteAccount ||
+      bioDraft !== null ||
+      nameDraft !== null ||
+      showUpload ||
+      reportTarget !== null ||
+      captionDraft !== null,
+  )
 
   const reportMut = useMutation({
     mutationFn: () => reportApi.create(reportTarget!.type, reportTarget!.id, reportReason.trim()),
@@ -760,93 +769,101 @@ export default function PlayerProfilePage() {
             </section>
 
             {isOwn && (
-              <section className="profile-account-panel" aria-labelledby="account-panel-title">
-                <h2 id="account-panel-title">Account</h2>
-                <div className="profile-account-actions">
-                  <Link to="/organiser" className="btn btn-ghost btn-block">
-                    My events
-                  </Link>
-                  {user?.role === 'ADMIN' && (
-                    <Link to="/admin" className="btn btn-ghost btn-block">
-                      Admin
+              <>
+                <section className="profile-account-panel" aria-labelledby="account-panel-title">
+                  <h2 id="account-panel-title">Account</h2>
+                  <div className="profile-account-actions">
+                    <Link to="/organiser" className="btn btn-primary btn-block">
+                      My events
                     </Link>
+                    <Link to="/organiser?create=1" className="btn btn-ghost btn-block">
+                      Create a tournament
+                    </Link>
+                    {user?.role === 'ADMIN' && (
+                      <Link to="/admin" className="btn btn-ghost btn-block">
+                        Admin
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-block"
+                      onClick={() => {
+                        logout()
+                        navigate(appHomePath(), { replace: true })
+                      }}
+                    >
+                      Log out
+                    </button>
+                  </div>
+                </section>
+                <section className="profile-account-danger" aria-labelledby="account-danger-title">
+                  <h2 id="account-danger-title">Delete account</h2>
+                  <p className="muted-note">
+                    Removes your personal data from Student Padel Ireland. Tournament history may remain in
+                    anonymised form.
+                  </p>
+                  {!showDeleteAccount ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm profile-delete-trigger"
+                      onClick={() => {
+                        setShowDeleteAccount(true)
+                        setDeleteError('')
+                        setDeletePassword('')
+                      }}
+                    >
+                      Delete account
+                    </button>
+                  ) : (
+                    <form
+                      className="profile-delete-form"
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        setDeleteError('')
+                        if (!deletePassword.trim()) {
+                          setDeleteError('Enter your password to confirm')
+                          return
+                        }
+                        deleteAccountMut.mutate(deletePassword)
+                      }}
+                    >
+                      <label className="profile-delete-label" htmlFor="delete-account-password">
+                        Confirm with your password
+                      </label>
+                      <input
+                        id="delete-account-password"
+                        type="password"
+                        autoComplete="current-password"
+                        value={deletePassword}
+                        onChange={(e) => setDeletePassword(e.target.value)}
+                        placeholder="Password"
+                      />
+                      {deleteError && <p className="form-error">{deleteError}</p>}
+                      <div className="profile-upload-actions">
+                        <button
+                          type="submit"
+                          className="btn btn-primary btn-sm"
+                          disabled={deleteAccountMut.isPending}
+                        >
+                          {deleteAccountMut.isPending ? 'Deleting…' : 'Permanently delete'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={deleteAccountMut.isPending}
+                          onClick={() => {
+                            setShowDeleteAccount(false)
+                            setDeletePassword('')
+                            setDeleteError('')
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
                   )}
-                  <button
-                    type="button"
-                    className="btn btn-dark btn-block"
-                    onClick={() => {
-                      logout()
-                      navigate(appHomePath(), { replace: true })
-                    }}
-                  >
-                    Log out
-                  </button>
-                </div>
-                <p className="muted-note" style={{ marginTop: '1.1rem' }}>
-                  Delete your account to remove personal data from Student Padel Ireland. Tournament history may
-                  remain in anonymised form.
-                </p>
-                {!showDeleteAccount ? (
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm profile-delete-trigger"
-                    onClick={() => {
-                      setShowDeleteAccount(true)
-                      setDeleteError('')
-                      setDeletePassword('')
-                    }}
-                  >
-                    Delete account
-                  </button>
-                ) : (
-                  <form
-                    className="profile-delete-form"
-                    onSubmit={(e) => {
-                      e.preventDefault()
-                      setDeleteError('')
-                      if (!deletePassword.trim()) {
-                        setDeleteError('Enter your password to confirm')
-                        return
-                      }
-                      deleteAccountMut.mutate(deletePassword)
-                    }}
-                  >
-                    <label className="profile-delete-label" htmlFor="delete-account-password">
-                      Confirm with your password
-                    </label>
-                    <input
-                      id="delete-account-password"
-                      type="password"
-                      autoComplete="current-password"
-                      value={deletePassword}
-                      onChange={(e) => setDeletePassword(e.target.value)}
-                      placeholder="Password"
-                    />
-                    {deleteError && <p className="form-error">{deleteError}</p>}
-                    <div className="profile-upload-actions">
-                      <button
-                        type="submit"
-                        className="btn btn-primary btn-sm"
-                        disabled={deleteAccountMut.isPending}
-                      >
-                        {deleteAccountMut.isPending ? 'Deleting…' : 'Permanently delete'}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        disabled={deleteAccountMut.isPending}
-                        onClick={() => {
-                          setShowDeleteAccount(false)
-                          setDeletePassword('')
-                          setDeleteError('')
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </section>
+                </section>
+              </>
             )}
 
             {!isOwn && (

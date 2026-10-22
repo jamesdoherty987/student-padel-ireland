@@ -182,7 +182,8 @@
   place-items: center;
   z-index: 200;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    max(1rem, env(safe-area-inset-bottom), var(--keyboard-inset, 0px))
+    max(1rem, env(safe-area-inset-left));
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -193,12 +194,13 @@
   background: var(--white);
   width: min(420px, 100%);
   max-width: 100%;
-  max-height: min(90dvh, 90vh);
+  max-height: min(90dvh, calc(90vh - var(--keyboard-inset, 0px)));
   overflow-x: hidden;
   overflow-y: auto;
   border-radius: var(--radius-lg);
   padding: 1.35rem 1.25rem 1.25rem;
   margin: auto;
+  margin-bottom: max(0px, var(--keyboard-inset, 0px));
   touch-action: pan-y;
   box-sizing: border-box;
   box-shadow: var(--shadow-lg);
@@ -947,7 +949,8 @@
     flex-direction: column;
     position: sticky;
     bottom: max(0.75rem, env(safe-area-inset-bottom));
-    z-index: 15;
+    /* Above page content, below tab bar (80) and modals */
+    z-index: 70;
     padding: 0.65rem;
     margin-left: -0.35rem;
     margin-right: -0.35rem;

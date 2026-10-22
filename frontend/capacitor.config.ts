@@ -19,11 +19,13 @@ const config: CapacitorConfig = {
       splashImmersive: true,
     },
     StatusBar: {
-      style: 'LIGHT',
-      backgroundColor: '#ffffff',
+      // Match green splash / dark auth screens; light screens set style in JS
+      style: 'DARK',
+      backgroundColor: '#0d623e',
     },
     Keyboard: {
-      resize: 'body',
+      // App pads with --keyboard-inset; avoid double-shrink with body resize
+      resize: 'none',
       resizeOnFullScreen: true,
     },
   },
@@ -31,7 +33,7 @@ const config: CapacitorConfig = {
     contentInset: 'never',
     preferredContentMode: 'mobile',
     backgroundColor: '#0d623e',
-    scheme: 'Student Padel Ireland',
+    scheme: 'App',
   },
   android: {
     allowMixedContent: false,

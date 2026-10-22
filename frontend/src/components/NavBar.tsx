@@ -45,6 +45,8 @@ export default function NavBar() {
   const native = isNativeApp()
   const desktop = useIsDesktopNav()
   const tabsVisible = nativeTabsVisibleForPath(pathname)
+  const liveFocus =
+    /^\/t\/[^/]+\/live(\/|$)/.test(pathname) || pathname.startsWith('/tournament/')
   const menuId = useId()
   const scrollYRef = useRef(0)
 
@@ -179,19 +181,21 @@ export default function NavBar() {
 
   const showPrimaryInSidebar = !tabsVisible
   const sidebarOpen = desktop || open
-  // Native with bottom tabs: no hamburger / drawer — Account tab owns profile + logout
-  const hideChromeSidebar = native && tabsVisible
+  // Native with bottom tabs, or match-day / TV focus: compact topbar only (no hamburger)
+  const hideChromeSidebar = native && (tabsVisible || liveFocus)
 
   if (hideChromeSidebar) {
     return (
-      <header className={`app-topbar${backFallback ? ' app-topbar--nested' : ''}`}>
+      <header className={`app-topbar${backFallback || liveFocus ? ' app-topbar--nested' : ''}`}>
         {backFallback ? (
           <BackButton fallbackTo={backFallback} force compact className="app-topbar-back" />
         ) : (
           <span className="app-topbar-spacer" aria-hidden />
         )}
         <BrandLogo to={brandTo} className="app-topbar-brand" size="sm" />
-        <div className="app-topbar-end">{user ? <NotificationsBell /> : null}</div>
+        <div className="app-topbar-end">
+          {user && !liveFocus ? <NotificationsBell /> : <span className="app-topbar-spacer" aria-hidden />}
+        </div>
       </header>
     )
   }

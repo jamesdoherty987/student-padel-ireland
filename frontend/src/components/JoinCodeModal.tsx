@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 import { apiErrorMessage } from '../services/api'
 import { cleanInviteCode, resolveInviteCode } from '../utils/inviteCode'
 import '../pages/Tournament.css'
@@ -22,6 +23,8 @@ export function JoinCodeModal({ open, onClose, initialCode = '' }: JoinCodeModal
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
 
+  useKeyboardInset(open)
+
   useEffect(() => {
     if (!open) return
     setCode(initialCode)
@@ -29,7 +32,10 @@ export function JoinCodeModal({ open, onClose, initialCode = '' }: JoinCodeModal
     setStatus('')
     setBusy(false)
     document.body.classList.add('modal-open')
-    const t = window.setTimeout(() => inputRef.current?.focus(), 50)
+    const t = window.setTimeout(() => {
+      inputRef.current?.focus()
+      scrollFieldAboveKeyboard(inputRef.current)
+    }, 50)
     return () => {
       window.clearTimeout(t)
       document.body.classList.remove('modal-open')

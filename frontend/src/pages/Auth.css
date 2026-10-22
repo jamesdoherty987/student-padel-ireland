@@ -66,10 +66,13 @@
   }
 }
 
-/* Native / narrow phones: fuller, app-like sheet */
+/* Native / narrow phones: fuller, app-like sheet — keep keyboard inset so fields stay visible */
 .auth-page--native {
   padding-top: max(1.25rem, calc(0.75rem + env(safe-area-inset-top, 0px)));
-  padding-bottom: max(1rem, calc(0.75rem + env(safe-area-inset-bottom, 0px)));
+  padding-bottom: max(
+    1rem,
+    calc(0.75rem + env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px))
+  );
 }
 
 .auth-page--native .auth-panel {

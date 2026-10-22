@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
+import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { apiErrorMessage, communityApi, tournamentApi } from '../services/api'
 import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
@@ -63,6 +64,7 @@ export default function TournamentsPage() {
   const [courts, setCourts] = useState(2)
   const [selectedFriends, setSelectedFriends] = useState<string[]>([])
   const [error, setError] = useState('')
+  useKeyboardInset(createOpen)
   const openJoin = searchParams.get('join') === '1'
   const codeFromSearch = looksLikeInviteCode(query) ? cleanInviteCode(query) : ''
 
@@ -227,23 +229,28 @@ export default function TournamentsPage() {
           <div className="header-actions">
             <HaveCodeButton className="btn btn-ghost btn-sm" autoOpen={openJoin} onAutoOpened={clearJoinParam} initialCode={codeFromSearch} />
             {user && (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  setCreateOpen(true)
-                  setError('')
-                }}
-              >
-                Create
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setCreateOpen(true)
+                    setError('')
+                  }}
+                >
+                  Open-play
+                </button>
+                <Link to="/organiser?create=1" className="btn btn-ghost btn-sm">
+                  Tournament
+                </Link>
+              </>
             )}
           </div>
         </div>
         <p className="page-sub">
           {isNativeApp()
-            ? 'Find an event, or join with a code.'
-            : 'Find an event, join with a code, or create friend open-play.'}
+            ? 'Find an event, join with a code, or create open-play.'
+            : 'Find an event, join with a code, or create open-play / a full tournament.'}
         </p>
 
         {error && <p className="form-error">{error}</p>}
@@ -457,20 +464,24 @@ export default function TournamentsPage() {
               </button>
             )}
             {events.length === 0 && user && (
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ marginTop: 12 }}
-                onClick={() => {
-                  setCreateOpen(true)
-                  setError('')
-                }}
-              >
-                Create a tournament
-              </button>
+              <div className="header-actions" style={{ marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setCreateOpen(true)
+                    setError('')
+                  }}
+                >
+                  Create open-play
+                </button>
+                <Link to="/organiser?create=1" className="btn btn-ghost">
+                  Create tournament
+                </Link>
+              </div>
             )}
             {!user && events.length === 0 && !codeFromSearch && (
-              <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+              <div className="header-actions" style={{ marginTop: 12 }}>
                 <Link to="/signup?next=%2Ftournaments" className="btn btn-primary">
                   Sign up to create
                 </Link>

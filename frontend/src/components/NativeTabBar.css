@@ -97,11 +97,19 @@ html.native-app.has-native-tabs .page {
   text-align: center;
 }
 
-/* Keep sticky/fixed headers below the offline strip (includes notch inset) */
+/*
+ * Banner already clears the notch. Sticky headers sit below the banner height
+ * and must not add safe-area padding again (that double-counted the notch).
+ */
+html:has(.offline-banner) {
+  --offline-banner-clearance: calc(2.35rem + env(safe-area-inset-top, 0px));
+}
+
 html:has(.offline-banner) .app-topbar {
-  top: calc(2.4rem + env(safe-area-inset-top, 0px));
+  top: var(--offline-banner-clearance);
+  padding-top: 0.7rem;
 }
 
 html:has(.offline-banner) .lp-header {
-  top: calc(2.4rem + env(safe-area-inset-top, 0px));
+  top: var(--offline-banner-clearance);
 }

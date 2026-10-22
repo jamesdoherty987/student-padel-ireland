@@ -374,12 +374,13 @@ html.native-app.has-app-sidebar .org-layout {
   padding-left: 0;
 }
 
-/* Match NativeTabBar.css — banner includes notch inset */
+/* Match NativeTabBar.css — banner owns notch; don't double-count safe-area */
 html:has(.offline-banner) .app-topbar {
-  top: calc(2.4rem + env(safe-area-inset-top, 0px));
+  top: var(--offline-banner-clearance, calc(2.35rem + env(safe-area-inset-top, 0px)));
+  padding-top: 0.7rem;
 }
 
 html:has(.offline-banner) .app-sidebar {
-  top: calc(2.4rem + env(safe-area-inset-top, 0px));
-  height: calc(100dvh - 2.4rem - env(safe-area-inset-top, 0px));
+  top: var(--offline-banner-clearance, calc(2.35rem + env(safe-area-inset-top, 0px)));
+  height: calc(100dvh - var(--offline-banner-clearance, 2.35rem + env(safe-area-inset-top, 0px)));
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
@@ -22,6 +22,7 @@ export default function RankingsPage() {
     path: '/rankings',
   })
   const { user, loading: authLoading } = useAuth()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const scopeParam = searchParams.get('scope')
   const initialScope =
@@ -139,10 +140,16 @@ export default function RankingsPage() {
                 type="button"
                 role="tab"
                 aria-selected={scope === f.id}
-                className={`filter-chip filter-chip-subtle ${scope === f.id ? 'on' : ''}`}
-                onClick={() => setScopeAndUrl(f.id)}
-                disabled={f.id !== 'all' && !user}
-                title={f.id !== 'all' && !user ? 'Log in to use this filter' : undefined}
+                className={`filter-chip filter-chip-subtle ${scope === f.id ? 'on' : ''}${
+                  f.id !== 'all' && !user ? ' is-locked' : ''
+                }`}
+                onClick={() => {
+                  if (f.id !== 'all' && !user) {
+                    navigate(`/login?next=${encodeURIComponent(`/rankings?scope=${f.id}`)}`)
+                    return
+                  }
+                  setScopeAndUrl(f.id)
+                }}
               >
                 {f.label}
               </button>
@@ -166,7 +173,7 @@ export default function RankingsPage() {
           )}
           {!user && (
             <p className="muted-note" style={{ margin: 0 }}>
-              <Link to="/login?next=/rankings">Log in</Link> to filter by friends or your university.
+              Tap Friends or My university to log in and filter.
             </p>
           )}
         </div>
@@ -242,7 +249,26 @@ export default function RankingsPage() {
           </ol>
         )}
 
-        {!isLoading && !scopeLoading && !isError && rankings.length > 0 && visible.length === 0 && (
+        {!isLoading && !scopeLoading && !isError && scope === 'friends' && friendsQ.isError && (
+          <div className="empty-state">
+            <p>Could not load your friends list.</p>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ marginTop: 12 }}
+              onClick={() => void friendsQ.refetch()}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!isLoading &&
+          !scopeLoading &&
+          !isError &&
+          !(scope === 'friends' && friendsQ.isError) &&
+          rankings.length > 0 &&
+          visible.length === 0 && (
           <div className="empty-state">
             <p>
               {scope === 'friends'

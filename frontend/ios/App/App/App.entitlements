@@ -6,6 +6,8 @@
 	<array>
 		<string>applinks:studentpadel.ie</string>
 		<string>applinks:www.studentpadel.ie</string>
+		<string>webcredentials:studentpadel.ie</string>
+		<string>webcredentials:www.studentpadel.ie</string>
 	</array>
 </dict>
 </plist>

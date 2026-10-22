@@ -57,7 +57,12 @@ export default function TournamentDetailPage() {
     refetchInterval: 12000,
   })
 
-  const { data: playerView } = useQuery({
+  const {
+    data: playerView,
+    isError: playerViewError,
+    isPending: playerViewPending,
+    refetch: refetchPlayerView,
+  } = useQuery({
     queryKey: ['player-view', slug],
     queryFn: async () => (await tournamentApi.playerView(slug)).data,
     enabled: !!slug && !!user,
@@ -155,9 +160,12 @@ export default function TournamentDetailPage() {
     tournament.status === 'LIVE' ||
     tournament.status === 'COMPLETED' ||
     tournament.status === 'CANCELLED'
+  // Don't offer join/resume until we know whether the user already has an entry
+  const entryUnknown = !!user && (playerViewPending || playerViewError)
   const canResumePayment = hasPendingCaptain && !eventStarted
   const canJoin =
     registrationOpen &&
+    !entryUnknown &&
     !hasPaidEntry &&
     !isListedPartner &&
     !hasPendingCaptain &&
@@ -216,6 +224,17 @@ export default function TournamentDetailPage() {
                     : `Tournament is full. Check back if a ${singles ? 'player' : 'team'} withdraws.`}
                 </p>
               )}
+          </div>
+        )}
+
+        {playerViewError && user && (
+          <div className="tour-entry-notes">
+            <p className="muted-note">
+              Could not check your entry status.{' '}
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void refetchPlayerView()}>
+                Retry
+              </button>
+            </p>
           </div>
         )}
 

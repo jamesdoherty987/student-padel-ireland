@@ -20,20 +20,28 @@ export function useOnlineStatus(): boolean {
       }
     }
 
+    let cancelled = false
     let handle: { remove: () => Promise<void> } | undefined
+
     void (async () => {
       try {
         const status = await Network.getStatus()
+        if (cancelled) return
         setOnline(status.connected)
         handle = await Network.addListener('networkStatusChange', (s) => {
           setOnline(s.connected)
         })
+        if (cancelled) {
+          void handle.remove()
+          handle = undefined
+        }
       } catch {
         /* Network plugin unavailable */
       }
     })()
 
     return () => {
+      cancelled = true
       void handle?.remove()
     }
   }, [])

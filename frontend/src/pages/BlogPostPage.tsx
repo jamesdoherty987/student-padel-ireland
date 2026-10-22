@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
+import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { getPostBySlug, getRelatedPosts, type BlogBlock } from '../data/blogPosts'
@@ -107,10 +108,13 @@ export default function BlogPostPage() {
 
   return (
     <div className="app-shell blog-shell">
+      <NavBar />
       <main className="page blog-page">
         <article className="blog-article">
           <p className="eyebrow">
-            <Link to={backTo}>← Student Padel Ireland</Link>
+            <Link to="/blog">← Guides</Link>
+            {' · '}
+            <Link to={backTo}>Home</Link>
           </p>
           <h1 className="page-title">{post.title}</h1>
           <div className="blog-meta">

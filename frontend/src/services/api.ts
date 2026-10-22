@@ -35,13 +35,12 @@ api.interceptors.response.use(
         const isTournamentJoin = /\/t\/[^/]+\/(join|confirmed)/.test(path)
         const isCommunityPrivate =
           path.startsWith('/community/') && !path.startsWith('/community/join/')
-        const isLiveBoard = /\/t\/[^/]+\/live/.test(path)
+        // Live boards are public — don't kick viewers to login on a stale token
         const needsAuth =
           path.startsWith('/organiser') ||
           path.startsWith('/admin') ||
           isCommunityPrivate ||
-          isTournamentJoin ||
-          isLiveBoard
+          isTournamentJoin
         if (needsAuth && !path.startsWith('/login') && !path.startsWith('/signup')) {
           const next = encodeURIComponent(path + window.location.search)
           window.location.assign(`/login?next=${next}`)

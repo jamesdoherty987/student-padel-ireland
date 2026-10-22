@@ -63,6 +63,11 @@ export default function NumberInput({
       value={text}
       onFocus={(e) => {
         focused.current = true
+        // Clear a lone zero so iOS users can type a score without fighting the default
+        const fallback = emptyValue ?? min ?? 0
+        if (text === String(fallback) || text === '0') {
+          setText('')
+        }
         onFocus?.(e)
       }}
       onChange={(e) => {

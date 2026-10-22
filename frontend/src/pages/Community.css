@@ -697,7 +697,7 @@
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 1.25rem;
   padding-bottom: max(1.5rem, calc(1rem + env(safe-area-inset-bottom)));
-  max-height: min(90vh, 90dvh);
+  max-height: min(90vh, calc(90dvh - var(--keyboard-inset, 0px)));
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;

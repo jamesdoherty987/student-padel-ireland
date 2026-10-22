@@ -400,6 +400,10 @@ input[type='datetime-local']::-webkit-datetime-edit {
   resize: vertical;
 }
 
+.muted {
+  color: var(--muted);
+}
+
 .muted-note {
   color: var(--muted);
   font-size: 0.88rem;
@@ -462,6 +466,11 @@ html.native-app .btn-xs {
   background: rgba(11, 61, 46, 0.1);
   border-color: var(--court-deep);
   color: var(--court-deep);
+}
+
+.filter-chip.is-locked {
+  opacity: 0.72;
+  border-style: dashed;
 }
 
 .filter-chip:disabled {
@@ -1273,7 +1282,8 @@ html.native-app .btn-xs {
   place-items: center;
   z-index: 400;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
-    max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+    max(1rem, env(safe-area-inset-bottom), var(--keyboard-inset, 0px))
+    max(1rem, env(safe-area-inset-left));
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -1284,12 +1294,13 @@ html.native-app .btn-xs {
   background: var(--white);
   width: min(440px, 100%);
   max-width: 100%;
-  max-height: min(90dvh, 90vh);
+  max-height: min(90dvh, calc(90vh - var(--keyboard-inset, 0px)));
   overflow-x: hidden;
   overflow-y: auto;
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   margin: auto;
+  margin-bottom: max(0px, var(--keyboard-inset, 0px));
   box-sizing: border-box;
   box-shadow: var(--shadow-lg);
 }
@@ -1302,7 +1313,7 @@ html.native-app .btn-xs {
   display: flex;
   flex-direction: column;
   padding-bottom: 0;
-  max-height: min(92dvh, 92vh);
+  max-height: min(92dvh, calc(92vh - var(--keyboard-inset, 0px)));
 }
 
 .modal-body {
@@ -1515,6 +1526,10 @@ html.native-app .btn-xs {
   overscroll-behavior: contain;
 }
 
+html.native-app .searchable-select-list {
+  max-height: min(220px, calc(36dvh - var(--keyboard-inset, 0px) * 0.25), 42vh);
+}
+
 .searchable-select-option {
   display: block;
   width: 100%;
@@ -1522,6 +1537,7 @@ html.native-app .btn-xs {
   border: none;
   background: transparent;
   padding: 0.7rem 0.9rem;
+  min-height: 44px;
   font: inherit;
   font-size: 16px;
   color: var(--ink);

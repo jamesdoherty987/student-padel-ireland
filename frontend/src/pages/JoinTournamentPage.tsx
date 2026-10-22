@@ -178,6 +178,10 @@ function ConfirmPayOnlineButton({
                   navigate(`/t/${slug}/confirmed?registration_id=${regId}`, { replace: true })
                   return
                 }
+                if (reg.status === 'PAID') {
+                  navigate(`/t/${slug}/confirmed?registration_id=${regId}`, { replace: true })
+                  return
+                }
               } catch {
                 /* fall through */
               }
@@ -268,7 +272,12 @@ export default function JoinTournamentPage() {
     enabled: !!slug && !isConfirmRoute,
   })
 
-  const { data: playerView, isLoading: pvLoading } = useQuery({
+  const {
+    data: playerView,
+    isLoading: pvLoading,
+    isError: pvError,
+    refetch: refetchPlayerView,
+  } = useQuery({
     queryKey: ['player-view', slug],
     queryFn: async () => (await tournamentApi.playerView(slug)).data,
     enabled: !!slug && !!user && !isConfirmRoute,
@@ -433,6 +442,9 @@ export default function JoinTournamentPage() {
 
   const resumeDefaultsApplied = useRef(false)
   useEffect(() => {
+    resumeDefaultsApplied.current = false
+  }, [slug])
+  useEffect(() => {
     if (!myTeamEarly || myTeamEarly.payment_status !== 'PENDING' || myTeamEarly.slot !== 1) return
     if (resumeDefaultsApplied.current) return
     resumeDefaultsApplied.current = true
@@ -582,6 +594,26 @@ export default function JoinTournamentPage() {
           <Link to="/tournaments" className="btn btn-ghost" style={{ marginTop: 12 }}>
             Browse tournaments
           </Link>
+        </main>
+      </div>
+    )
+  }
+
+  if (user && pvError) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page empty-state">
+          <h1 className="page-title">Could not load your entry</h1>
+          <p className="page-sub">Check your connection and try again before joining.</p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <button type="button" className="btn btn-primary" onClick={() => void refetchPlayerView()}>
+              Retry
+            </button>
+            <Link to={`/t/${tournament.slug}`} className="btn btn-ghost">
+              Tournament page
+            </Link>
+          </div>
         </main>
       </div>
     )
@@ -1226,7 +1258,7 @@ export default function JoinTournamentPage() {
           )}
           <div className="form-group">
             <label className="form-label" htmlFor="join-phone">
-              Phone
+              Phone <span className="muted">(optional)</span>
             </label>
             <input
               id="join-phone"
@@ -1237,7 +1269,8 @@ export default function JoinTournamentPage() {
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               autoComplete="tel"
               inputMode="tel"
-              enterKeyHint="next"
+              enterKeyHint="done"
+              placeholder="Optional"
             />
           </div>
           <div className="form-group">

@@ -292,7 +292,10 @@ export default function CommunityPage() {
                 </button>
               )}
               {nextGame.can_i_score && !nextGame.needs_my_confirm && (
-                <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-dark btn-sm">
+                <Link
+                  to={`/community/${nextGame.competition_slug}?score=${nextGame.id}`}
+                  className="btn btn-dark btn-sm"
+                >
                   Who won?
                 </Link>
               )}
@@ -327,8 +330,8 @@ export default function CommunityPage() {
                   key={m.id}
                   title="Who won?"
                   match={m}
-                  actionLabel="Open"
-                  onAction={() => navigate(`/community/${m.competition_slug}`)}
+                  actionLabel="Pick winner"
+                  onAction={() => navigate(`/community/${m.competition_slug}?score=${m.id}`)}
                 />
               ))}
             </section>

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { getAllPosts } from '../data/blogPosts'
@@ -30,9 +31,10 @@ export default function BlogPage() {
 
   return (
     <div className="app-shell blog-shell">
+      <NavBar />
       <main className="page blog-page blog-page--index">
         <p className="eyebrow">
-          <Link to={backTo}>← Student Padel Ireland</Link>
+          <Link to={backTo}>← Home</Link>
         </p>
         <h1 className="page-title">Guides</h1>
         <p className="blog-lead">Notes on student padel across Ireland.</p>

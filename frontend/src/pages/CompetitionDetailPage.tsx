@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Share } from '@capacitor/share'
 import BackButton from '../components/BackButton'
@@ -32,6 +32,8 @@ const emptySets = {
 export default function CompetitionDetailPage() {
   const { slug = '' } = useParams()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const scoreMatchId = searchParams.get('score')
   const { user } = useAuth()
   const qc = useQueryClient()
   const [error, setError] = useState('')
@@ -47,7 +49,7 @@ export default function CompetitionDetailPage() {
   const [scoringMatch, setScoringMatch] = useState<CommunityMatch | null>(null)
   const [winnerSide, setWinnerSide] = useState<'A' | 'B' | ''>('')
   const [lastDeltas, setLastDeltas] = useState<CommunityMatch['rating_changes']>([])
-  useKeyboardInset(!!scoringMatch)
+  useKeyboardInset(!!scoringMatch || showMatch)
   const [inviteIds, setInviteIds] = useState<string[]>([])
   const [copied, setCopied] = useState('')
   const [pendingNotice, setPendingNotice] = useState('')
@@ -62,6 +64,24 @@ export default function CompetitionDetailPage() {
     queryFn: async () => (await communityApi.matches(slug)).data,
     enabled: !!user && !!slug,
   })
+
+  // Deep-link from Community home: /community/:slug?score=matchId
+  useEffect(() => {
+    if (!scoreMatchId || scoringMatch) return
+    const match = (matchesQ.data || []).find((m) => m.id === scoreMatchId)
+    if (!match || !match.can_i_score || match.needs_my_confirm) return
+    setWinnerSide('')
+    setScoreError('')
+    setScoringMatch(match)
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('score')
+        return next
+      },
+      { replace: true },
+    )
+  }, [scoreMatchId, matchesQ.data, scoringMatch, setSearchParams])
   const friendsQ = useQuery({
     queryKey: ['friends'],
     queryFn: async () => (await communityApi.friends()).data,
@@ -534,7 +554,7 @@ export default function CompetitionDetailPage() {
               />
             </div>
             <button type="submit" className="btn btn-dark" disabled={createMatchMut.isPending}>
-              Next: enter score
+              Next: pick winner
             </button>
           </form>
         )}
@@ -705,7 +725,7 @@ export default function CompetitionDetailPage() {
                       onClick={() => {
                         void confirmDialog({
                           title: 'Cancel match?',
-                          message: 'The score will be discarded.',
+                          message: 'This match will be cancelled with no result.',
                           confirmLabel: 'Cancel match',
                           danger: true,
                         }).then((ok) => {

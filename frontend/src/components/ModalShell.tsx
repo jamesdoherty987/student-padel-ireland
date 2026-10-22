@@ -1,4 +1,5 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, type PointerEvent, type ReactNode } from 'react'
+import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 
 type Props = {
   title: string
@@ -8,7 +9,7 @@ type Props = {
   /** While true, Escape / backdrop / header close are ignored */
   preventClose?: boolean
   /**
-   * Close when pressing the dimmed area. Uses mousedown + target check so
+   * Close when pressing the dimmed area. Uses pointerdown + target check so
    * selecting/deleting text in inputs cannot accidentally close the modal.
    */
   closeOnBackdrop?: boolean
@@ -37,6 +38,8 @@ export default function ModalShell({
   footer,
   headerExtra,
 }: Props) {
+  useKeyboardInset(true)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !preventClose) onClose()
@@ -45,24 +48,34 @@ export default function ModalShell({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, preventClose])
 
+  useEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (!t.closest('.modal')) return
+      scrollFieldAboveKeyboard(t)
+    }
+    window.addEventListener('focusin', onFocus)
+    return () => window.removeEventListener('focusin', onFocus)
+  }, [])
+
   const requestClose = () => {
     if (!preventClose) onClose()
   }
 
+  const onBackdropPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    if (!closeOnBackdrop || preventClose) return
+    if (e.target === e.currentTarget) requestClose()
+  }
+
   return (
-    <div
-      className="modal-backdrop"
-      onMouseDown={(e) => {
-        if (!closeOnBackdrop || preventClose) return
-        if (e.target === e.currentTarget) requestClose()
-      }}
-    >
+    <div className="modal-backdrop" onPointerDown={onBackdropPointerDown}>
       <div
         className={`modal${wide ? ' modal-wide' : ''}${footer ? ' modal-with-footer' : ''} ${className}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        onMouseDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
       >
         <header className="tf-modal-head">
           <div>
