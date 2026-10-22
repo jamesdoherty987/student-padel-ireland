@@ -18,15 +18,6 @@ import { formatDate, formatEntrySummary, formatMoney, statusBadgeClass, statusLa
 import './Organiser.css'
 import './Admin.css'
 
-const STATUSES = [
-  'DRAFT',
-  'REGISTRATION_OPEN',
-  'REGISTRATION_CLOSED',
-  'LIVE',
-  'COMPLETED',
-  'CANCELLED',
-] as const
-
 async function copyText(text: string) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(text)
@@ -198,35 +189,9 @@ export default function AdminDashboard() {
                 key={row.tournament.id}
                 row={row}
                 busy={pendingStatusId === row.tournament.id || pendingDeleteId === row.tournament.id}
-                onStatus={(status) => {
-                  if (status === row.tournament.status) return
-                  const needsConfirm =
-                    status === 'LIVE' || status === 'COMPLETED' || status === 'CANCELLED'
-                  const run = () => statusMut.mutate({ id: row.tournament.id, status })
-                  if (!needsConfirm) {
-                    run()
-                    return
-                  }
-                  void confirmDialog({
-                    title:
-                      status === 'LIVE'
-                        ? 'Go live?'
-                        : status === 'COMPLETED'
-                          ? 'Mark completed?'
-                          : 'Cancel event?',
-                    message:
-                      status === 'LIVE'
-                        ? `Start "${row.tournament.name}" for players?`
-                        : status === 'COMPLETED'
-                          ? `Mark "${row.tournament.name}" as completed?`
-                          : `Cancel "${row.tournament.name}"?`,
-                    confirmLabel:
-                      status === 'LIVE' ? 'Go live' : status === 'COMPLETED' ? 'Mark completed' : 'Cancel event',
-                    danger: status === 'CANCELLED',
-                  }).then((ok) => {
-                    if (ok) run()
-                  })
-                }}
+                onOpenRegistration={() =>
+                  statusMut.mutate({ id: row.tournament.id, status: 'REGISTRATION_OPEN' })
+                }
                 onEdit={() => setEditing(row.tournament)}
                 onDelete={() => {
                   void confirmDialog({
@@ -268,14 +233,14 @@ export default function AdminDashboard() {
 function AdminTournamentCard({
   row,
   busy,
-  onStatus,
+  onOpenRegistration,
   onEdit,
   onDelete,
   onCopied,
 }: {
   row: OrganiserDashRow
   busy: boolean
-  onStatus: (status: string) => void
+  onOpenRegistration: () => void
   onEdit: () => void
   onDelete: () => void
   onCopied: (msg: string) => void
@@ -287,15 +252,6 @@ function AdminTournamentCard({
   const joinUrl = t.invite_code
     ? publicPathUrl(`/join/${t.invite_code}`)
     : `${origin}/t/${t.slug}/join`
-
-  const quickAction =
-    t.status === 'DRAFT' || t.status === 'REGISTRATION_CLOSED'
-      ? { label: 'Open registration', status: 'REGISTRATION_OPEN' }
-      : t.status === 'REGISTRATION_OPEN'
-        ? { label: 'Close registration', status: 'REGISTRATION_CLOSED' }
-        : t.status === 'LIVE'
-          ? { label: 'Mark completed', status: 'COMPLETED' }
-          : null
 
   const handleCopy = async (url: string, msg: string) => {
     try {
@@ -326,21 +282,16 @@ function AdminTournamentCard({
 
       <div className="admin-actions">
         <Link to={`/organiser?t=${t.id}`} className="btn btn-primary btn-sm">
-          Day-of ops
+          Manage event
         </Link>
-        {quickAction && (
+        {(t.status === 'DRAFT' || t.status === 'REGISTRATION_CLOSED') && (
           <button
             type="button"
-            className="btn btn-dark btn-sm"
+            className="btn btn-ghost btn-sm"
             disabled={busy}
-            onClick={() => onStatus(quickAction.status)}
+            onClick={onOpenRegistration}
           >
-            {busy ? 'Updating...' : quickAction.label}
-          </button>
-        )}
-        {t.status === 'REGISTRATION_CLOSED' && (
-          <button type="button" className="btn btn-dark btn-sm" disabled={busy} onClick={() => onStatus('LIVE')}>
-            Go live
+            {busy ? 'Updating…' : 'Open registration'}
           </button>
         )}
         <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>
@@ -358,25 +309,9 @@ function AdminTournamentCard({
 
       {moreOpen && (
         <div className="admin-actions-more">
-          <div className="admin-actions-group">
-            <span className="admin-actions-label">Status</span>
-            <select
-              className="form-select admin-status"
-              value={STATUSES.includes(t.status as (typeof STATUSES)[number]) ? t.status : 'DRAFT'}
-              disabled={busy}
-              onChange={(e) => onStatus(e.target.value)}
-              aria-label={`Status for ${t.name}`}
-            >
-              {!STATUSES.includes(t.status as (typeof STATUSES)[number]) && (
-                <option value={t.status}>{statusLabel(t.status)}</option>
-              )}
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {statusLabel(s)}
-                </option>
-              ))}
-            </select>
-          </div>
+          <p className="muted-note admin-manage-hint">
+            Draw, scoring, go live, and complete are under <strong>Manage event</strong>.
+          </p>
           <div className="admin-actions-group">
             <span className="admin-actions-label">Links</span>
             <div className="admin-actions">
@@ -388,9 +323,6 @@ function AdminTournamentCard({
               </button>
               <Link to={`/t/${t.slug}`} className="btn btn-ghost btn-sm">
                 Public page
-              </Link>
-              <Link to={`/tournament/${t.slug}/display`} className="btn btn-ghost btn-sm">
-                TV
               </Link>
             </div>
           </div>

@@ -264,6 +264,12 @@ class OrganiserAddTeamRequest(BaseModel):
     university_id: Optional[UUID] = None
 
 
+class PartnerInviteRespond(BaseModel):
+    """Partner acknowledges being added to a doubles team (and pending friendship)."""
+
+    accept: bool
+
+
 class CheckoutResponse(BaseModel):
     checkout_url: Optional[str] = None
     registration_id: UUID
@@ -567,6 +573,7 @@ class NotificationOut(BaseModel):
     actionable: bool = False
     friendship_id: Optional[UUID] = None
     match_id: Optional[UUID] = None
+    tournament_id: Optional[UUID] = None
     actor_user_id: Optional[UUID] = None
     actor_name: Optional[str] = None
 

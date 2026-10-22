@@ -58,6 +58,7 @@ from app.schemas import (
     MatchMove,
     MatchOut,
     OrganiserAddTeamRequest,
+    PartnerInviteRespond,
     PlayerScoreSubmit,
     RegisterTeamRequest,
     ScoreUpdate,
@@ -254,6 +255,45 @@ def _are_friends(db: Session, a: UUID, b: UUID) -> bool:
     )
 
 
+def _friendship_between(db: Session, a: UUID, b: UUID) -> Friendship | None:
+    return (
+        db.query(Friendship)
+        .filter(
+            or_(
+                (Friendship.requester_id == a) & (Friendship.addressee_id == b),
+                (Friendship.requester_id == b) & (Friendship.addressee_id == a),
+            ),
+        )
+        .first()
+    )
+
+
+def _ensure_pending_friendship(db: Session, requester_id: UUID, addressee_id: UUID) -> Friendship | None:
+    """Ensure a friendship exists; create PENDING from requester→addressee if none. No-op if already friends."""
+    if requester_id == addressee_id:
+        return None
+    existing = _friendship_between(db, requester_id, addressee_id)
+    if existing:
+        if existing.status == FriendshipStatus.ACCEPTED.value:
+            return existing
+        if existing.status == FriendshipStatus.PENDING.value:
+            return existing
+        # Declined / other — reopen as pending from captain
+        existing.requester_id = requester_id
+        existing.addressee_id = addressee_id
+        existing.status = FriendshipStatus.PENDING.value
+        db.add(existing)
+        return existing
+    fr = Friendship(
+        requester_id=requester_id,
+        addressee_id=addressee_id,
+        status=FriendshipStatus.PENDING.value,
+    )
+    db.add(fr)
+    db.flush()
+    return fr
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -286,7 +326,8 @@ def _notify_email_partner(
             f"Hi {partner.full_name},\n\n"
             f"{captain.full_name} registered you as their partner for "
             f"{tournament.name} on Student Padel Ireland.\n\n"
-            f"You're already on the team — no need to accept an invite.\n"
+            f"You're already on the team. Open the app to Accept (become friends) "
+            f"or Decline (leave the team so they can pick someone else).\n"
             f"Open the tournament:\n{event_url}\n\n"
             f"If you can't play, leave the team from that page so your partner can re-enter.\n\n"
             f"Student Padel Ireland\n"
@@ -323,6 +364,14 @@ def _conflict_message(db: Session, tournament_id: UUID, you: UUID, partner: UUID
         if singles
         else "You or your partner are already entered in this tournament"
     )
+
+
+def _team_member_count(db: Session, team_id: UUID) -> int:
+    return db.query(TeamPlayer).filter(TeamPlayer.team_id == team_id).count()
+
+
+def _doubles_team_complete(db: Session, team_id: UUID) -> bool:
+    return _team_member_count(db, team_id) >= 2
 
 
 def _paid_team_count(db: Session, tournament_id: UUID) -> int:
@@ -1370,6 +1419,7 @@ def register_team(
                             raise HTTPException(400, "That partner is already entered in this tournament")
                         slot2.user_id = partner.id
                         slot2.invitation_accepted = True
+                        _ensure_pending_friendship(db, user.id, partner.id)
                 else:
                     db.add(
                         TeamPlayer(
@@ -1379,6 +1429,7 @@ def register_team(
                             invitation_accepted=True,
                         )
                     )
+                    _ensure_pending_friendship(db, user.id, partner.id)
         if notify_email_partner and partner:
             _notify_email_partner(
                 captain=user,
@@ -1412,6 +1463,7 @@ def register_team(
                 invitation_accepted=True,
             )
         )
+        _ensure_pending_friendship(db, user.id, partner.id)
 
     reg = Registration(
         tournament_id=t.id,
@@ -2013,6 +2065,189 @@ def leave_tournament(
     return _apply_team_withdraw(db, t, team, as_organiser=False)
 
 
+@router.post("/tournaments/{tournament_id}/replace-partner")
+def replace_partner(
+    tournament_id: UUID,
+    body: RegisterTeamRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Captain adds/replaces doubles partner before the draw (keeps existing payment)."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    if _is_singles(t):
+        raise HTTPException(400, "Singles events don’t use partners")
+    if t.status in (
+        TournamentStatus.LIVE.value,
+        TournamentStatus.COMPLETED.value,
+        TournamentStatus.CANCELLED.value,
+    ) or _tournament_has_fixtures(db, t.id):
+        raise HTTPException(400, "Can’t change partners after the draw is published")
+
+    membership = _membership_for_user(db, t.id, user.id)
+    if not membership:
+        raise HTTPException(400, "You are not entered in this tournament")
+    tp, team, reg = membership
+    if tp.slot != 1:
+        raise HTTPException(400, "Only the team captain can change the partner")
+
+    partner: User | None = None
+    notify_email_partner = False
+    partner_needs_signup = False
+    if body.partner_user_id:
+        partner = db.get(User, body.partner_user_id)
+        if not partner or not partner.is_active:
+            raise HTTPException(400, "Partner not found")
+    elif body.partner_email:
+        email = body.partner_email.lower().strip()
+        partner = db.query(User).filter(User.email == email).first()
+        if partner:
+            partner_needs_signup = bool(getattr(partner, "must_set_password", False))
+            if partner_needs_signup:
+                name = (body.partner_name or "").strip()
+                if len(name) >= 2:
+                    partner.full_name = name
+            notify_email_partner = True
+        else:
+            name = (body.partner_name or "").strip()
+            if len(name) < 2:
+                raise HTTPException(400, "Partner name is required for a new email")
+            partner = User(
+                email=email,
+                password_hash=hash_password(str(uuid4())),
+                full_name=name,
+                role="PLAYER",
+                university_id=None,
+                must_set_password=True,
+            )
+            db.add(partner)
+            db.flush()
+            _ensure_ranking(db, partner.id)
+            partner_needs_signup = True
+            notify_email_partner = True
+    else:
+        raise HTTPException(400, "Pick a partner or enter their email")
+
+    if partner.id == user.id:
+        raise HTTPException(400, "Partner must be a different player")
+
+    partner_entry = _membership_for_user(db, t.id, partner.id)
+    if partner_entry:
+        _ptp, _pteam, preg = partner_entry
+        if preg.team_id != team.id:
+            raise HTTPException(400, "That player is already entered in this tournament")
+
+    if body.team_name and body.team_name.strip():
+        team.name = body.team_name.strip()
+
+    slot2 = (
+        db.query(TeamPlayer)
+        .filter(TeamPlayer.team_id == team.id, TeamPlayer.slot == 2)
+        .first()
+    )
+    if slot2:
+        slot2.user_id = partner.id
+        slot2.invitation_accepted = True
+        db.add(slot2)
+    else:
+        db.add(
+            TeamPlayer(
+                team_id=team.id,
+                user_id=partner.id,
+                slot=2,
+                invitation_accepted=True,
+            )
+        )
+    _ensure_pending_friendship(db, user.id, partner.id)
+    if notify_email_partner:
+        _notify_email_partner(
+            captain=user,
+            partner=partner,
+            tournament=t,
+            needs_signup=partner_needs_signup,
+        )
+    db.commit()
+    return {
+        "ok": True,
+        "registration_id": str(reg.id),
+        "tournament_slug": t.slug,
+        "payment_status": reg.status,
+    }
+
+
+@router.post("/tournaments/{tournament_id}/partner-invite/respond")
+def respond_partner_invite(
+    tournament_id: UUID,
+    body: PartnerInviteRespond,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Partner accepts (become friends, stay on team) or declines (leave team slot, decline friendship)."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    if _is_singles(t):
+        raise HTTPException(400, "Singles events have no partner invite")
+
+    membership = _membership_for_user(db, t.id, user.id)
+    if not membership:
+        raise HTTPException(400, "You are not on a team for this tournament")
+    tp, team, reg = membership
+    if tp.slot != 2:
+        raise HTTPException(400, "Only the listed partner can respond to this invite")
+
+    captain_tp = (
+        db.query(TeamPlayer)
+        .filter(TeamPlayer.team_id == team.id, TeamPlayer.slot == 1)
+        .first()
+    )
+    if not captain_tp:
+        raise HTTPException(400, "Team captain not found")
+
+    fr = _friendship_between(db, captain_tp.user_id, user.id)
+
+    if body.accept:
+        if fr and fr.status == FriendshipStatus.PENDING.value:
+            fr.status = FriendshipStatus.ACCEPTED.value
+            db.add(fr)
+        elif not fr:
+            db.add(
+                Friendship(
+                    requester_id=captain_tp.user_id,
+                    addressee_id=user.id,
+                    status=FriendshipStatus.ACCEPTED.value,
+                )
+            )
+        tp.invitation_accepted = True
+        db.add(tp)
+        db.commit()
+        return {"ok": True, "accepted": True, "tournament_slug": t.slug}
+
+    # Decline: remove partner only so captain can pick someone else
+    if fr and fr.status == FriendshipStatus.PENDING.value:
+        db.delete(fr)
+
+    if t.status in (
+        TournamentStatus.LIVE.value,
+        TournamentStatus.COMPLETED.value,
+        TournamentStatus.CANCELLED.value,
+    ) or _tournament_has_fixtures(db, t.id):
+        raise HTTPException(
+            400,
+            "You can’t leave after the draw is published — contact the organiser",
+        )
+
+    db.delete(tp)
+    db.commit()
+    return {
+        "ok": True,
+        "accepted": False,
+        "tournament_slug": t.slug,
+        "needs_new_partner": True,
+    }
+
+
 # ── Generate ──────────────────────────────────────────────────
 
 @router.post("/tournaments/{tournament_id}/generate")
@@ -2047,6 +2282,7 @@ def generate(
 
     paid_teams = (
         db.query(Team)
+        .options(joinedload(Team.members))
         .join(Registration)
         .filter(
             Team.tournament_id == tournament_id,
@@ -2055,6 +2291,18 @@ def generate(
         )
         .all()
     )
+    singles = _is_singles(t)
+    if not singles:
+        incomplete = [team for team in paid_teams if len(team.members or []) < 2]
+        paid_teams = [team for team in paid_teams if len(team.members or []) >= 2]
+        if incomplete:
+            names = ", ".join(team.name for team in incomplete[:5])
+            extra = f" (+{len(incomplete) - 5} more)" if len(incomplete) > 5 else ""
+            raise HTTPException(
+                400,
+                f"{len(incomplete)} paid team(s) are missing a partner ({names}{extra}). "
+                "Ask them to add a partner, or withdraw those entries before generating.",
+            )
     if len(paid_teams) < 2:
         raise HTTPException(400, "Need at least 2 paid teams to generate")
 
@@ -3079,6 +3327,22 @@ def player_view(
                 for m in done:
                     my_results.append(_match_out(db, m, viewer=user))
 
+    partner_invite_pending = False
+    needs_partner = False
+    if my_team and user and not _is_singles(t):
+        member_count = len(my_team.members or [])
+        if my_slot == 1 and member_count < 2:
+            needs_partner = True
+        if my_slot == 2 and partner_user_id is None:
+            # partner_user_id above is the *other* player; for slot 2 captain is the other
+            pass
+        if my_slot == 2:
+            captain = next((m for m in (my_team.members or []) if m.slot == 1), None)
+            if captain:
+                fr = _friendship_between(db, captain.user_id, user.id)
+                if fr and fr.status == FriendshipStatus.PENDING.value:
+                    partner_invite_pending = True
+
     court_rank = case((Match.court_number.is_(None), 1), else_=0)
     live = (
         db.query(Match)
@@ -3116,6 +3380,8 @@ def player_view(
                 "partner_name": partner_name,
                 "partner_email": partner_email,
                 "can_leave": _player_can_leave_entry(db, t, my_team),
+                "partner_invite_pending": partner_invite_pending,
+                "needs_partner": needs_partner,
             }
             if my_team
             else None

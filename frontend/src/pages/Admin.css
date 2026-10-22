@@ -101,6 +101,11 @@
   align-items: center;
 }
 
+.admin-manage-hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+}
+
 .admin-actions-more {
   margin-top: 0.65rem;
   padding-top: 0.65rem;

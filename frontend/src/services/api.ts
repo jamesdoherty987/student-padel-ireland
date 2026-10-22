@@ -323,6 +323,7 @@ export type NotificationItem = {
   actionable: boolean
   friendship_id?: string | null
   match_id?: string | null
+  tournament_id?: string | null
   actor_user_id?: string | null
   actor_name?: string | null
 }
@@ -455,6 +456,20 @@ export const tournamentApi = {
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
   leaveTournament: (tournamentId: string) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/leave`),
+  respondPartnerInvite: (tournamentId: string, accept: boolean) =>
+    api.post<{
+      ok: boolean
+      accepted: boolean
+      tournament_slug: string
+      needs_new_partner?: boolean
+    }>(`/api/tournaments/${tournamentId}/partner-invite/respond`, { accept }),
+  replacePartner: (tournamentId: string, data: Record<string, unknown>) =>
+    api.post<{
+      ok: boolean
+      registration_id: string
+      tournament_slug: string
+      payment_status: string
+    }>(`/api/tournaments/${tournamentId}/replace-partner`, data),
   getRegistration: (id: string) => api.get<RegistrationConfirm>(`/api/registrations/${id}`),
   confirmPaymentSession: (sessionId: string) =>
     api.get<RegistrationConfirm>('/api/payments/confirm', { params: { session_id: sessionId } }),

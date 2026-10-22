@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext'
 import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 import { apiErrorMessage, tournamentApi, type Match } from '../services/api'
 import {
+  formatDate,
   formatLiveBoardScore,
   formatMatchScore,
   formatMoney,
@@ -36,6 +37,52 @@ type ScoreSets = {
   set2_b: number
   set3_a: number
   set3_b: number
+}
+
+function ScoreStep({
+  label,
+  value,
+  max,
+  onChange,
+}: {
+  label: string
+  value: number
+  max: number
+  onChange: (n: number) => void
+}) {
+  return (
+    <div className="pl-score-step">
+      <button
+        type="button"
+        className="pl-score-step-btn"
+        aria-label={`Decrease ${label}`}
+        disabled={value <= 0}
+        onClick={() => onChange(Math.max(0, value - 1))}
+      >
+        −
+      </button>
+      <NumberInput
+        className="pl-score-step-input"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        min={0}
+        max={max}
+        emptyValue={0}
+        value={value}
+        onValueChange={(n) => onChange(Math.max(0, Math.min(max, Math.trunc(n))))}
+        aria-label={label}
+      />
+      <button
+        type="button"
+        className="pl-score-step-btn"
+        aria-label={`Increase ${label}`}
+        disabled={value >= max}
+        onClick={() => onChange(Math.min(max, value + 1))}
+      >
+        +
+      </button>
+    </div>
+  )
 }
 
 function opponentName(m: Match, myTeamId?: string) {
@@ -116,8 +163,13 @@ function NextMatchCard({
       )}
 
       <p className="pl-round">{knockoutRoundLabel(next.round, next.stage)}</p>
-      <div className="pl-court">{court}</div>
+      <div className="pl-court" aria-label="Court">
+        {court}
+      </div>
       <div className="pl-time">{when}</div>
+      {next.status === 'SCHEDULED' && (
+        <p className="pl-next-hint">Head to this court when called — keep this page open.</p>
+      )}
 
       {opp ? (
         <div className="pl-vs pl-vs--you">
@@ -172,7 +224,7 @@ function NextMatchCard({
           </>
         ) : next.can_i_score ? (
           <button type="button" className="btn btn-primary btn-block" onClick={actions.onLogScore}>
-            Log final score
+            Enter score
           </button>
         ) : null}
         {next.score_submitted_by_me && next.status === 'AWAITING_CONFIRM' && (
@@ -312,6 +364,18 @@ export default function PlayerLivePage() {
     onError: (err) => setActionError(apiErrorMessage(err)),
   })
 
+  const partnerInviteMut = useMutation({
+    mutationFn: ({ tournamentId, accept }: { tournamentId: string; accept: boolean }) =>
+      tournamentApi.respondPartnerInvite(tournamentId, accept),
+    onSuccess: () => {
+      setActionError('')
+      invalidate()
+      void qc.invalidateQueries({ queryKey: ['notifications'] })
+      void qc.invalidateQueries({ queryKey: ['friends'] })
+    },
+    onError: (err) => setActionError(apiErrorMessage(err)),
+  })
+
   const openScoreSheet = (m: Match) => {
     setScoreError('')
     setActionError('')
@@ -375,6 +439,8 @@ export default function PlayerLivePage() {
     can_leave?: boolean
     players?: string[]
     partner_name?: string | null
+    partner_invite_pending?: boolean
+    needs_partner?: boolean
   } | null
   const myPayment = myTeam?.payment_status
   const myPaymentVia = myTeam?.payment_via
@@ -383,6 +449,8 @@ export default function PlayerLivePage() {
   const owesAtVenue = hasPaidEntry && myPaymentVia === 'pay_on_arrival'
   const hasPendingCaptain = !!myTeam && myPayment === 'PENDING' && mySlot === 1
   const isListedPartner = !!myTeam && myPayment === 'PENDING' && mySlot !== 1
+  const partnerInvitePending = !!myTeam?.partner_invite_pending && mySlot === 2
+  const needsPartner = !!myTeam?.needs_partner && mySlot === 1
   const canLeave = !!myTeam?.can_leave
   const singles = t.play_format === 'SINGLES'
   const myTeamId = hasPaidEntry ? myTeam?.id : undefined
@@ -405,12 +473,19 @@ export default function PlayerLivePage() {
   const announcements = (data.announcements || []) as LiveAnnouncement[]
   const myUpcoming = (data.my_upcoming || []) as Match[]
   const myResults = (data.my_results || []) as Match[]
-  const boardQuiet = liveMatches.length === 0 && calledMatches.length === 0
   const drawReady = allMatches.length > 0
-  const waitingOnDraw = hasPaidEntry && !drawReady && t.status !== 'COMPLETED' && t.status !== 'CANCELLED'
+  const waitingOnDraw =
+    hasPaidEntry &&
+    !drawReady &&
+    t.status !== 'LIVE' &&
+    t.status !== 'COMPLETED' &&
+    t.status !== 'CANCELLED'
+  const matchDayLive = hasPaidEntry && (t.status === 'LIVE' || drawReady)
   // Only hide venue board when you're actually on court — still show it while waiting to confirm
   const myOnCourt =
     hasPaidEntry && next && (next.status === 'LIVE' || next.status === 'CALLED')
+  // Pre-start: don't drown “you're in” with empty venue chrome
+  const showVenueBoard = !waitingOnDraw && !hasPendingCaptain && !isListedPartner
   const championshipMatches = allMatches.filter((m) => m.stage === 'KNOCKOUT')
   const plateMatches = allMatches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]
@@ -467,9 +542,9 @@ export default function PlayerLivePage() {
           {!myOnCourt && (
             <p className="pl-lead">
               {waitingOnDraw
-                ? 'You’re in. Fixtures will show here once the organiser publishes the draw.'
-                : hasPaidEntry
-                  ? 'Your next court, opponent, and score — updated live.'
+                ? 'You’re registered. We’ll show your next court here when the draw goes live.'
+                : matchDayLive
+                  ? 'Next court, opponent, and score — updates live.'
                   : 'Courts, calls, and scores — updates every few seconds.'}
             </p>
           )}
@@ -512,7 +587,52 @@ export default function PlayerLivePage() {
                   ? 'Live board'
                   : 'Get on the board'}
           </h2>
-          {hasPendingCaptain ? (
+          {needsPartner ? (
+            <div className="pl-next-card">
+              <p className="pl-youre-in-badge">Partner needed</p>
+              <p className="pl-empty" style={{ marginBottom: 12 }}>
+                Your partner left <strong>{myTeam?.name}</strong>. Add someone new to stay in the
+                draw — your entry stays paid.
+              </p>
+              <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block">
+                Add partner
+              </Link>
+              {leaveBtn}
+            </div>
+          ) : partnerInvitePending ? (
+            <div className="pl-next-card">
+              <p className="pl-youre-in-badge">Team invite</p>
+              <p className="pl-empty" style={{ marginBottom: 12 }}>
+                You’re on <strong>{myTeam?.name}</strong>
+                {myTeam?.partner_name ? (
+                  <>
+                    {' '}
+                    with <strong>{myTeam.partner_name}</strong>
+                  </>
+                ) : null}
+                . Accept to become friends, or decline to leave the team.
+              </p>
+              <div className="pl-next-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block"
+                  disabled={partnerInviteMut.isPending}
+                  onClick={() => partnerInviteMut.mutate({ tournamentId: t.id, accept: true })}
+                >
+                  {partnerInviteMut.isPending ? 'Saving…' : 'Accept'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-block pl-btn-on-dark"
+                  disabled={partnerInviteMut.isPending}
+                  onClick={() => partnerInviteMut.mutate({ tournamentId: t.id, accept: false })}
+                >
+                  Decline
+                </button>
+              </div>
+              {actionError && <p className="form-error pl-action-error">{actionError}</p>}
+            </div>
+          ) : hasPendingCaptain ? (
             <div className="pl-next-card">
               <p className="pl-empty" style={{ marginBottom: 12 }}>
                 Your registration is waiting for payment.
@@ -525,8 +645,8 @@ export default function PlayerLivePage() {
           ) : isListedPartner ? (
             <div className="pl-next-card">
               <p className="pl-empty" style={{ marginBottom: 12 }}>
-                You’re on <strong>{myTeam?.name}</strong> already — no invite to accept. Your teammate
-                needs to finish payment. If you can’t play, leave below.
+                You’re on <strong>{myTeam?.name}</strong>. Your teammate still needs to finish
+                payment.
               </p>
               <Link to={`/t/${slug}`} className="btn btn-primary btn-block">
                 View tournament
@@ -534,23 +654,33 @@ export default function PlayerLivePage() {
               {leaveBtn}
             </div>
           ) : waitingOnDraw ? (
-            <div className="pl-next-card">
+            <div className="pl-next-card pl-youre-in-card">
+              <p className="pl-youre-in-badge">You’re in</p>
               <p className="pl-empty" style={{ marginBottom: 8 }}>
-                You’re registered
                 {myTeam?.name ? (
                   <>
-                    {' '}
-                    as <strong>{myTeam.name}</strong>
+                    <strong>{myTeam.name}</strong>
+                    {myTeam.players?.length ? (
+                      <span className="pl-youre-in-players"> · {myTeam.players.join(' / ')}</span>
+                    ) : null}
                   </>
-                ) : null}
-                . Matches haven’t been organised yet.
+                ) : (
+                  'Your entry is confirmed.'
+                )}
               </p>
               <p className="muted-note" style={{ marginBottom: 12 }}>
-                Check back here later — this page updates automatically when the draw goes live.
+                Waiting for the draw. This page updates automatically — no need to refresh.
               </p>
+              <div className="pl-youre-in-meta">
+                <span>{t.venue}</span>
+                <span>
+                  {formatDate(t.event_date, { day: 'numeric', month: 'short' })} ·{' '}
+                  {formatTime(t.start_time)}
+                </span>
+              </div>
               {leaveBtn}
               <Link to={`/t/${slug}`} className="pl-details-link">
-                Full tournament page
+                Tournament details
               </Link>
             </div>
           ) : next && hasPaidEntry ? (
@@ -598,94 +728,42 @@ export default function PlayerLivePage() {
           )}
         </section>
 
-        {!myOnCourt && liveMatches.length > 0 && (
-          <section className="pl-block pl-block--first">
-            <h2>Live now</h2>
-            <ul className="pl-live-list">
-              {liveMatches.map((m) => {
-                const board = formatLiveBoardScore(m.score)
-                return (
-                  <li key={m.id}>
-                    <div className="pl-live-top">
-                      <strong>{courtLabel(m.court_name, m.court_number)}</strong>
-                      <span className="pl-live-games">
-                        Set {board.set} · {board.games}
-                      </span>
-                    </div>
-                    <span className="pl-live-names">
-                      <MatchNames m={m} />
-                    </span>
-                    {board.sets && <span className="pl-live-sets">Sets {board.sets}</span>}
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        )}
-
-        {!myOnCourt && calledMatches.length > 0 && (
-          <section className="pl-block">
-            <h2>Called to court</h2>
-            <ul className="pl-live-list pl-called-list">
-              {calledMatches.map((m) => (
-                <li key={m.id}>
-                  <div className="pl-live-top">
-                    <strong>{courtLabel(m.court_name, m.court_number)}</strong>
-                    <span className="pl-called-tag">Go now</span>
-                  </div>
-                  <span className="pl-live-names">
-                    <MatchNames m={m} />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {boardQuiet && !waitingOnDraw && (
-          <section className={`pl-block${!hasPaidEntry || !next ? ' pl-block--first' : ''}`}>
-            <h2>On court</h2>
-            <p className="pl-empty">
-              {drawReady
-                ? 'No matches are live or called right now.'
-                : 'Courts will show here once play starts.'}
-            </p>
-          </section>
-        )}
-
-        {announcements.length > 0 && (
-          <section className="pl-block pl-announce">
-            <h2>Announcements</h2>
-            <ul className="pl-announce-list">
-              {announcements.map((a) => (
-                <li key={a.id}>
-                  <strong>{a.title}</strong>
-                  <span>{a.body}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {knockoutActive && knockoutMatches.length > 0 && (
-          <section className="pl-block pl-bracket">
-            {championshipMatches.length > 0 && (
-              <>
-                {plateMatches.length > 0 && <h2>Championship</h2>}
-                <TournamentBracket matches={championshipMatches} myTeamId={myTeamId} />
-              </>
-            )}
-            {plateMatches.length > 0 && (
-              <>
-                <h2>Plate</h2>
-                <TournamentBracket matches={plateMatches} myTeamId={myTeamId} />
-              </>
-            )}
-          </section>
-        )}
+        {matchDayLive &&
+          (myUpcoming.filter((m) => m.id !== next?.id).length > 0 ||
+            myResults.length > 0 ||
+            standings.length > 0 ||
+            knockoutActive) && (
+            <nav className="pl-jump" aria-label="Jump to section">
+              {myUpcoming.filter((m) => m.id !== next?.id).length > 0 && (
+                <a href="#pl-later" className="pl-jump-link">
+                  Later
+                </a>
+              )}
+              {myResults.length > 0 && (
+                <a href="#pl-results" className="pl-jump-link">
+                  Results
+                </a>
+              )}
+              {standings.length > 0 && (
+                <a href="#pl-groups" className="pl-jump-link">
+                  Groups
+                </a>
+              )}
+              {knockoutActive && knockoutMatches.length > 0 && (
+                <a href="#pl-draw" className="pl-jump-link">
+                  Draw
+                </a>
+              )}
+              {showVenueBoard && (liveMatches.length > 0 || calledMatches.length > 0) && (
+                <a href="#pl-venue" className="pl-jump-link">
+                  Courts
+                </a>
+              )}
+            </nav>
+          )}
 
         {hasPaidEntry && myUpcoming.filter((m) => m.id !== next?.id).length > 0 && (
-          <section className="pl-block">
+          <section className="pl-block" id="pl-later">
             <h2>Later today</h2>
             <ul className="pl-schedule">
               {myUpcoming
@@ -714,7 +792,7 @@ export default function PlayerLivePage() {
         )}
 
         {hasPaidEntry && myResults.length > 0 && (
-          <section className="pl-block">
+          <section className="pl-block" id="pl-results">
             <h2>Your results</h2>
             <ul className="pl-results">
               {myResults.map((m) => {
@@ -738,20 +816,102 @@ export default function PlayerLivePage() {
           </section>
         )}
 
-        {standings.map((g) => (
-          <section key={g.group} className="pl-block">
-            <h2>Group {g.group}</h2>
-            <ol className="pl-table">
-              {g.standings.map((row, i) => (
-                <li key={row.team_id} className={row.team_id === myTeamId ? 'me' : ''}>
-                  <span className="pos">{i + 1}.</span>
-                  <span className="name">{row.team_name}</span>
-                  <span className="pts">{row.points} pts</span>
+        {standings.length > 0 && (
+          <div id="pl-groups">
+            {standings.map((g) => (
+              <section key={g.group} className="pl-block">
+                <h2>Group {g.group}</h2>
+                <ol className="pl-table">
+                  {g.standings.map((row, i) => (
+                    <li key={row.team_id} className={row.team_id === myTeamId ? 'me' : ''}>
+                      <span className="pos">{i + 1}.</span>
+                      <span className="name">{row.team_name}</span>
+                      <span className="pts">{row.points} pts</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ))}
+          </div>
+        )}
+
+        {knockoutActive && knockoutMatches.length > 0 && (
+          <section className="pl-block pl-bracket" id="pl-draw">
+            {championshipMatches.length > 0 && (
+              <>
+                {plateMatches.length > 0 && <h2>Championship</h2>}
+                <TournamentBracket matches={championshipMatches} myTeamId={myTeamId} />
+              </>
+            )}
+            {plateMatches.length > 0 && (
+              <>
+                <h2>Plate</h2>
+                <TournamentBracket matches={plateMatches} myTeamId={myTeamId} />
+              </>
+            )}
+          </section>
+        )}
+
+        {showVenueBoard && !myOnCourt && (liveMatches.length > 0 || calledMatches.length > 0) && (
+          <div id="pl-venue">
+            {liveMatches.length > 0 && (
+              <section className="pl-block">
+                <h2>Live now</h2>
+                <ul className="pl-live-list">
+                  {liveMatches.map((m) => {
+                    const board = formatLiveBoardScore(m.score)
+                    return (
+                      <li key={m.id}>
+                        <div className="pl-live-top">
+                          <strong>{courtLabel(m.court_name, m.court_number)}</strong>
+                          <span className="pl-live-games">
+                            Set {board.set} · {board.games}
+                          </span>
+                        </div>
+                        <span className="pl-live-names">
+                          <MatchNames m={m} />
+                        </span>
+                        {board.sets && <span className="pl-live-sets">Sets {board.sets}</span>}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </section>
+            )}
+            {calledMatches.length > 0 && (
+              <section className="pl-block">
+                <h2>Called to court</h2>
+                <ul className="pl-live-list pl-called-list">
+                  {calledMatches.map((m) => (
+                    <li key={m.id}>
+                      <div className="pl-live-top">
+                        <strong>{courtLabel(m.court_name, m.court_number)}</strong>
+                        <span className="pl-called-tag">Go now</span>
+                      </div>
+                      <span className="pl-live-names">
+                        <MatchNames m={m} />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+        )}
+
+        {announcements.length > 0 && !waitingOnDraw && (
+          <section className="pl-block pl-announce">
+            <h2>Announcements</h2>
+            <ul className="pl-announce-list">
+              {announcements.map((a) => (
+                <li key={a.id}>
+                  <strong>{a.title}</strong>
+                  <span>{a.body}</span>
                 </li>
               ))}
-            </ol>
+            </ul>
           </section>
-        ))}
+        )}
       </main>
 
       {scoringMatch && (
@@ -808,18 +968,18 @@ export default function PlayerLivePage() {
           >
             <h2 id="pl-score-title">Log final score</h2>
             <p className="muted-note" style={{ marginTop: 0 }}>
-              Best of 3. The other team confirms before it counts.
+              Best of 3. Opponent confirms before it counts.
             </p>
             <div className="score-sides-label">
               <div>
                 <span className="muted-note">
-                  {scoringMatch.team_a_id === myTeamId ? 'You' : 'Side A'}
+                  {scoringMatch.team_a_id === myTeamId ? 'You' : 'Opponent'}
                 </span>
                 <strong>{scoringMatch.team_a_name || 'Team A'}</strong>
               </div>
               <div>
                 <span className="muted-note">
-                  {scoringMatch.team_b_id === myTeamId ? 'You' : 'Side B'}
+                  {scoringMatch.team_b_id === myTeamId ? 'You' : 'Opponent'}
                 </span>
                 <strong>{scoringMatch.team_b_name || 'Team B'}</strong>
               </div>
@@ -841,39 +1001,21 @@ export default function PlayerLivePage() {
                 const isDecider = label === 'Set 3'
                 const maxGames = isDecider ? 15 : 7
                 return (
-                  <div key={label} className="form-group">
+                  <div key={label} className="form-group pl-score-row">
                     <label>{isDecider ? 'Set 3 / TB' : label}</label>
-                    <div className="score-pair">
-                      <NumberInput
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        min={0}
-                        max={maxGames}
-                        emptyValue={0}
+                    <div className="score-pair pl-score-pair">
+                      <ScoreStep
+                        label={`${label} left`}
                         value={sets[ka]}
-                        onValueChange={(n) =>
-                          setSets((s) => ({
-                            ...s,
-                            [ka]: Math.max(0, Math.min(maxGames, Math.trunc(n))),
-                          }))
-                        }
-                        aria-label={`${label} side A`}
-                      />
-                      <span>-</span>
-                      <NumberInput
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        min={0}
                         max={maxGames}
-                        emptyValue={0}
+                        onChange={(n) => setSets((s) => ({ ...s, [ka]: n }))}
+                      />
+                      <span className="pl-score-dash">–</span>
+                      <ScoreStep
+                        label={`${label} right`}
                         value={sets[kb]}
-                        onValueChange={(n) =>
-                          setSets((s) => ({
-                            ...s,
-                            [kb]: Math.max(0, Math.min(maxGames, Math.trunc(n))),
-                          }))
-                        }
-                        aria-label={`${label} side B`}
+                        max={maxGames}
+                        onChange={(n) => setSets((s) => ({ ...s, [kb]: n }))}
                       />
                     </div>
                   </div>
@@ -881,19 +1023,19 @@ export default function PlayerLivePage() {
               })}
             </div>
             {scoreError && <p className="form-error">{scoreError}</p>}
-            <div className="form-actions">
-              <button type="submit" className="btn btn-dark" disabled={scoreMut.isPending}>
+            <div className="form-actions pl-score-actions">
+              <button type="submit" className="btn btn-primary btn-block" disabled={scoreMut.isPending}>
                 {scoreMut.isPending ? 'Sending…' : 'Submit for confirm'}
               </button>
               <button
                 type="button"
-                className="btn btn-ghost"
+                className="btn btn-ghost btn-block"
                 onClick={() => {
                   setScoringMatch(null)
                   setScoreError('')
                 }}
               >
-                Back
+                Cancel
               </button>
             </div>
           </form>

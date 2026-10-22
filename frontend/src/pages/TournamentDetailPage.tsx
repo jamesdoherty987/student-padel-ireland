@@ -139,12 +139,16 @@ export default function TournamentDetailPage() {
         name?: string
         players?: string[]
         can_leave?: boolean
+        needs_partner?: boolean
+        partner_invite_pending?: boolean
       }
     | null
   const myPayment = myTeamInfo?.payment_status
   const myPaymentVia = myTeamInfo?.payment_via
   const mySlot = myTeamInfo?.slot ?? null
   const hasPaidEntry = !!myTeamInfo && myPayment === 'PAID'
+  const needsPartner = !!myTeamInfo?.needs_partner && mySlot === 1
+  const partnerInvitePending = !!myTeamInfo?.partner_invite_pending && mySlot === 2
   const owesAtVenue = hasPaidEntry && myPaymentVia === 'pay_on_arrival'
   const hasPendingCaptain = !!myTeamInfo && myPayment === 'PENDING' && mySlot === 1
   const isListedPartner = !!myTeamInfo && myPayment === 'PENDING' && mySlot !== 1
@@ -160,6 +164,16 @@ export default function TournamentDetailPage() {
     tournament.status === 'LIVE' ||
     tournament.status === 'COMPLETED' ||
     tournament.status === 'CANCELLED'
+  const preStart =
+    hasPaidEntry &&
+    !eventStarted &&
+    matches.length === 0 &&
+    tournament.status !== 'COMPLETED' &&
+    tournament.status !== 'CANCELLED'
+  const matchDay =
+    hasPaidEntry &&
+    (tournament.status === 'LIVE' || matches.length > 0) &&
+    tournament.status !== 'CANCELLED'
   // Don't offer join/resume until we know whether the user already has an entry
   const entryUnknown = !!user && (playerViewPending || playerViewError)
   const canResumePayment = hasPendingCaptain && !eventStarted
@@ -238,6 +252,41 @@ export default function TournamentDetailPage() {
           </div>
         )}
 
+        {needsPartner && (
+          <div className="tour-youre-in" role="status">
+            <p className="tour-youre-in-kicker">Partner needed</p>
+            <p className="tour-youre-in-body">
+              Your partner left the team. Add someone new to stay in the event — your entry stays
+              paid.
+            </p>
+          </div>
+        )}
+        {partnerInvitePending && (
+          <div className="tour-youre-in" role="status">
+            <p className="tour-youre-in-kicker">Team invite</p>
+            <p className="tour-youre-in-body">
+              You’ve been added to <strong>{myTeamInfo?.name}</strong>. Open your entry to Accept
+              (friends) or Decline (leave the team).
+            </p>
+          </div>
+        )}
+        {preStart && !needsPartner && !partnerInvitePending && (
+          <div className="tour-youre-in" role="status">
+            <p className="tour-youre-in-kicker">You’re in</p>
+            <p className="tour-youre-in-body">
+              Registered
+              {myTeamInfo?.name ? (
+                <>
+                  {' '}
+                  as <strong>{myTeamInfo.name}</strong>
+                </>
+              ) : null}
+              {myTeamInfo?.players?.length ? ` · ${myTeamInfo.players.join(' / ')}` : ''}.
+              Waiting for the organiser to publish the draw.
+            </p>
+          </div>
+        )}
+
         <div className="tour-actions">
           {canJoin && (
             <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
@@ -249,19 +298,29 @@ export default function TournamentDetailPage() {
               Complete payment
             </Link>
           )}
-          {hasPaidEntry && (
+          {needsPartner && (
+            <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
+              Add partner
+            </Link>
+          )}
+          {(partnerInvitePending || (preStart && !needsPartner)) && (
+            <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
+              {partnerInvitePending ? 'Respond to invite' : 'View my entry'}
+            </Link>
+          )}
+          {matchDay && !needsPartner && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
               My matches
             </Link>
           )}
-          {!hasPaidEntry && (
+          {!hasPaidEntry && !canJoin && !canResumePayment && tournament.status === 'LIVE' && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-ghost">
               Live scores
             </Link>
           )}
           {isOps && (
             <Link to={`/organiser?t=${tournament.id}`} className="btn btn-dark">
-              Manage
+              Manage event
             </Link>
           )}
         </div>
@@ -278,11 +337,6 @@ export default function TournamentDetailPage() {
             )}
           </p>
         )}
-        {hasPaidEntry && matches.length === 0 && tournament.status !== 'COMPLETED' && tournament.status !== 'CANCELLED' && (
-          <p className="muted-note" style={{ marginTop: '-0.35rem', marginBottom: '1rem' }}>
-            Fixtures aren’t out yet — My matches will show your entry until the draw is published.
-          </p>
-        )}
         {(canLeave || isOps) && (
           <div className="tour-actions-secondary">
             {canLeave && (
@@ -296,7 +350,7 @@ export default function TournamentDetailPage() {
                 className="btn btn-ghost btn-sm"
               />
             )}
-            {isOps && (
+            {isOps && tournament.status === 'LIVE' && (
               <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost btn-sm">
                 TV display
               </Link>
@@ -335,8 +389,50 @@ export default function TournamentDetailPage() {
 
         <SponsorStrip sponsors={sponsors} />
 
+        {(knockoutActive || live.length > 0 || upcoming.length > 0) && (
+          <nav className="tour-jump" aria-label="Jump to section">
+            {matchDay && (
+              <Link to={`/t/${tournament.slug}/live`} className="tour-jump-link tour-jump-link--primary">
+                My matches
+              </Link>
+            )}
+            {live.length > 0 && (
+              <a href="#tour-live" className="tour-jump-link">
+                Live
+              </a>
+            )}
+            {upcoming.length > 0 && (
+              <a href="#tour-upcoming" className="tour-jump-link">
+                Coming up
+              </a>
+            )}
+            {knockoutActive && knockoutMatches.length > 0 && (
+              <a href="#tour-draw" className="tour-jump-link">
+                Draw
+              </a>
+            )}
+          </nav>
+        )}
+
+        {knockoutActive && knockoutMatches.length > 0 && (
+          <section className="block tour-bracket-block" id="tour-draw">
+            {championshipMatches.length > 0 && (
+              <>
+                {plateMatches.length > 0 ? <h2>Championship draw</h2> : <h2>Draw</h2>}
+                <TournamentBracket matches={championshipMatches} myTeamId={myTeamId} />
+              </>
+            )}
+            {plateMatches.length > 0 && (
+              <>
+                <h2>Plate</h2>
+                <TournamentBracket matches={plateMatches} myTeamId={myTeamId} />
+              </>
+            )}
+          </section>
+        )}
+
         {live.length > 0 && (
-          <section className="block">
+          <section className="block" id="tour-live">
             <h2>
               <span className="live-dot" /> Live now
             </h2>
@@ -390,7 +486,7 @@ export default function TournamentDetailPage() {
         )}
 
         {upcoming.length > 0 && (
-          <section className="block">
+          <section className="block" id="tour-upcoming">
             <h2>Coming up</h2>
             <ul className="match-preview-list">
               {upcoming.map((m) => (
@@ -410,23 +506,6 @@ export default function TournamentDetailPage() {
             <Link to={`/t/${tournament.slug}/live`} className="tour-inline-link">
               Full live view
             </Link>
-          </section>
-        )}
-
-        {knockoutActive && knockoutMatches.length > 0 && (
-          <section className="block tour-bracket-block">
-            {championshipMatches.length > 0 && (
-              <>
-                {plateMatches.length > 0 && <h2>Championship</h2>}
-                <TournamentBracket matches={championshipMatches} myTeamId={myTeamId} />
-              </>
-            )}
-            {plateMatches.length > 0 && (
-              <>
-                <h2>Plate</h2>
-                <TournamentBracket matches={plateMatches} myTeamId={myTeamId} />
-              </>
-            )}
           </section>
         )}
 

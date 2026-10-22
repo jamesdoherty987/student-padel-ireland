@@ -322,6 +322,33 @@
   margin: 0;
 }
 
+.partner-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(11, 61, 46, 0.06);
+  border: 1px solid rgba(11, 61, 46, 0.12);
+}
+
+.partner-selected-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.partner-selected strong {
+  color: var(--court-deep);
+  overflow-wrap: anywhere;
+}
+
 .partner-mode-row {
   display: flex;
   flex-wrap: wrap;
@@ -512,6 +539,75 @@
 
 .tour-title-row .eyebrow {
   margin: 0;
+}
+
+.tour-jump {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  overflow-x: auto;
+  margin: 0 0 1.15rem;
+  padding: 0.1rem 0 0.35rem;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tour-jump::-webkit-scrollbar {
+  display: none;
+}
+
+.tour-jump-link {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(11, 61, 46, 0.14);
+  background: var(--white);
+  color: var(--court-deep);
+  font-size: 0.82rem;
+  font-weight: 650;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tour-jump-link--primary {
+  background: var(--court-deep);
+  border-color: var(--court-deep);
+  color: #fff;
+}
+
+.tour-bracket-block,
+#tour-live,
+#tour-upcoming,
+#tour-draw {
+  scroll-margin-top: 5rem;
+}
+
+.tour-youre-in {
+  margin: 0 0 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-md, 12px);
+  background: linear-gradient(145deg, rgba(11, 61, 46, 0.08), rgba(200, 230, 0, 0.12));
+  border: 1px solid rgba(11, 61, 46, 0.12);
+}
+
+.tour-youre-in-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--court-deep);
+}
+
+.tour-youre-in-body {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--ink);
 }
 
 .tour-actions {

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   apiErrorMessage,
   communityApi,
+  tournamentApi,
   type NotificationItem,
 } from '../services/api'
 
@@ -29,6 +30,7 @@ function saveSeen(ids: Set<string>) {
 }
 
 function kindLabel(kind: string) {
+  if (kind === 'partner_invite') return 'Team invites'
   if (kind === 'friend_request' || kind === 'friend_accepted') return 'Friends'
   if (kind === 'match_confirm' || kind === 'match_score') return 'Action needed'
   if (kind === 'upcoming') return 'Upcoming'
@@ -105,6 +107,17 @@ export default function NotificationsBell() {
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
+  const partnerMut = useMutation({
+    mutationFn: ({ tournamentId, accept }: { tournamentId: string; accept: boolean }) =>
+      tournamentApi.respondPartnerInvite(tournamentId, accept),
+    onSuccess: () => {
+      setError('')
+      refreshNotifs()
+      qc.invalidateQueries({ queryKey: ['player-view'] })
+      qc.invalidateQueries({ queryKey: ['tournament'] })
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  })
 
   const markInfoSeen = () => {
     if (items.length === 0) return
@@ -153,7 +166,15 @@ export default function NotificationsBell() {
   }, [open, items])
 
   const grouped = useMemo(() => {
-    const order = ['friend_request', 'match_confirm', 'match_score', 'upcoming', 'friend_accepted', 'match_result']
+    const order = [
+      'partner_invite',
+      'friend_request',
+      'match_confirm',
+      'match_score',
+      'upcoming',
+      'friend_accepted',
+      'match_result',
+    ]
     const map = new Map<string, NotificationItem[]>()
     for (const n of items) {
       const key = kindLabel(n.kind)
@@ -253,6 +274,30 @@ export default function NotificationsBell() {
                             <span>{n.body}</span>
                             <em>{timeAgo(n.created_at)}</em>
                           </button>
+                          {n.kind === 'partner_invite' && n.tournament_id && (
+                            <div className="notif-item-actions">
+                              <button
+                                type="button"
+                                className="btn btn-dark btn-xs"
+                                disabled={partnerMut.isPending}
+                                onClick={() =>
+                                  partnerMut.mutate({ tournamentId: n.tournament_id!, accept: true })
+                                }
+                              >
+                                Accept
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                disabled={partnerMut.isPending}
+                                onClick={() =>
+                                  partnerMut.mutate({ tournamentId: n.tournament_id!, accept: false })
+                                }
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          )}
                           {n.kind === 'friend_request' && n.friendship_id && (
                             <div className="notif-item-actions">
                               <button

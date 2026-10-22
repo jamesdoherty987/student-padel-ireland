@@ -24,6 +24,10 @@ from app.models import (
     FriendshipStatus,
     MatchStatus,
     Ranking,
+    Team,
+    TeamPlayer,
+    Tournament,
+    TournamentStatus,
     University,
     User,
 )
@@ -1103,7 +1107,70 @@ def list_notifications(
         for uni in db.query(University).filter(University.id.in_(list(uni_ids))).all():
             uni_short[uni.id] = uni.short_name or uni.name
 
+    # Combined team+friend invites: I'm slot-2 and friendship with captain is still pending
+    partner_invite_friendship_ids: set[UUID] = set()
+    my_partner_slots = (
+        db.query(TeamPlayer)
+        .filter(TeamPlayer.user_id == user.id, TeamPlayer.slot == 2)
+        .limit(30)
+        .all()
+    )
+    for ptp in my_partner_slots:
+        team = db.get(Team, ptp.team_id)
+        if not team or team.withdrawn:
+            continue
+        tourney = db.get(Tournament, team.tournament_id)
+        if not tourney or tourney.status in (
+            TournamentStatus.COMPLETED.value,
+            TournamentStatus.CANCELLED.value,
+        ):
+            continue
+        captain = (
+            db.query(TeamPlayer)
+            .options(joinedload(TeamPlayer.user))
+            .filter(TeamPlayer.team_id == team.id, TeamPlayer.slot == 1)
+            .first()
+        )
+        if not captain or not captain.user:
+            continue
+        fr = (
+            db.query(Friendship)
+            .filter(
+                Friendship.status == FriendshipStatus.PENDING.value,
+                or_(
+                    (Friendship.requester_id == captain.user_id)
+                    & (Friendship.addressee_id == user.id),
+                    (Friendship.requester_id == user.id)
+                    & (Friendship.addressee_id == captain.user_id),
+                ),
+            )
+            .first()
+        )
+        if not fr:
+            continue
+        partner_invite_friendship_ids.add(fr.id)
+        items.append(
+            NotificationOut(
+                id=f"partner_invite:{tourney.id}:{fr.id}",
+                kind="partner_invite",
+                title="Team invite",
+                body=(
+                    f"{captain.user.full_name} added you to {team.name} "
+                    f"for {tourney.name}. Accept to become friends, or decline to leave the team."
+                ),
+                href=f"/t/{tourney.slug}/live",
+                created_at=fr.created_at or now,
+                actionable=True,
+                friendship_id=fr.id,
+                tournament_id=tourney.id,
+                actor_user_id=captain.user_id,
+                actor_name=captain.user.full_name,
+            )
+        )
+
     for f in incoming:
+        if f.id in partner_invite_friendship_ids:
+            continue  # already shown as combined team+friend invite
         other = friend_users.get(f.requester_id)
         if not other:
             continue

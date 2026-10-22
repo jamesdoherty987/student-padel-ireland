@@ -674,7 +674,28 @@ export default function OrganiserDashboard() {
     tournamentDetail?.plate_size,
     activeFormat,
   ])
-  const canGenerate = paidCount >= 2 && !!drawPreview?.ok
+  const incompleteDoubles = !isSingles
+    ? orgTeams.filter(
+        (team) =>
+          team.payment_status === 'PAID' &&
+          !team.withdrawn &&
+          (team.player_names?.length || 0) < 2,
+      ).length
+    : 0
+  const canOpenGenerate = paidCount >= 2
+  const canGenerate = canOpenGenerate && !!drawPreview?.ok && incompleteDoubles === 0
+  const generateBlockedReason = (() => {
+    if (paidCount < 2) {
+      return `Need at least 2 paid ${isSingles ? 'players' : 'teams'} to generate (you have ${paidCount}).`
+    }
+    if (incompleteDoubles > 0) {
+      return `${incompleteDoubles} paid team${incompleteDoubles === 1 ? ' is' : 's are'} missing a partner. Ask them to add one, or withdraw those entries.`
+    }
+    if (drawPreview && !drawPreview.ok) {
+      return drawPreview.error || 'Draw settings look invalid — check group / plate sizes in Edit.'
+    }
+    return null
+  })()
   const canAddTeams =
     !!active &&
     active.tournament.status !== 'COMPLETED' &&
@@ -963,12 +984,8 @@ export default function OrganiserDashboard() {
                       <button
                         className="btn btn-primary"
                         onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending || !canGenerate}
-                        title={
-                          paidCount < 2
-                            ? 'Need at least 2 paid entries before generating'
-                            : undefined
-                        }
+                        disabled={generateMut.isPending || !canOpenGenerate}
+                        title={generateBlockedReason || undefined}
                       >
                         Generate draw
                       </button>
@@ -979,12 +996,8 @@ export default function OrganiserDashboard() {
                       <button
                         className="btn btn-ghost"
                         onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending || !canGenerate}
-                        title={
-                          paidCount < 2
-                            ? 'Need at least 2 paid entries before generating'
-                            : undefined
-                        }
+                        disabled={generateMut.isPending || !canOpenGenerate}
+                        title={generateBlockedReason || undefined}
                       >
                         Re-generate
                       </button>
@@ -1005,12 +1018,8 @@ export default function OrganiserDashboard() {
                       <button
                         className="btn btn-primary"
                         onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending || !canGenerate}
-                        title={
-                          paidCount < 2
-                            ? 'Need at least 2 paid entries before generating'
-                            : undefined
-                        }
+                        disabled={generateMut.isPending || !canOpenGenerate}
+                        title={generateBlockedReason || undefined}
                       >
                         Generate draw
                       </button>
@@ -1028,12 +1037,8 @@ export default function OrganiserDashboard() {
                       <button
                         className="btn btn-ghost"
                         onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending || !canGenerate}
-                        title={
-                          paidCount < 2
-                            ? 'Need at least 2 paid entries before generating'
-                            : undefined
-                        }
+                        disabled={generateMut.isPending || !canOpenGenerate}
+                        title={generateBlockedReason || undefined}
                       >
                         Re-generate
                       </button>
@@ -1125,6 +1130,14 @@ export default function OrganiserDashboard() {
                   </div>
                 ) : null}
               </header>
+
+              {generateBlockedReason &&
+                (active.tournament.status === 'REGISTRATION_OPEN' ||
+                  active.tournament.status === 'REGISTRATION_CLOSED') && (
+                  <p className="org-generate-hint" role="status">
+                    Can’t generate yet: {generateBlockedReason}
+                  </p>
+                )}
 
               <div className="org-stats">
                 <div>
@@ -2050,9 +2063,9 @@ export default function OrganiserDashboard() {
               </ul>
             )}
 
-            {drawPreview && !drawPreview.ok && (
+            {generateBlockedReason && (
               <p className="org-gen-warn" role="alert">
-                {drawPreview.error}
+                {generateBlockedReason}
               </p>
             )}
 
