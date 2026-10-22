@@ -930,6 +930,23 @@ html.native-app.has-native-tabs .org-toast {
   line-height: 1.4;
 }
 
+.tf-rules-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.tf-rules-examples .btn {
+  font-size: 0.78rem;
+  min-height: 36px;
+  padding: 0.35rem 0.65rem;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.25;
+  max-width: 100%;
+}
+
 .tf-optional {
   font-weight: 500;
   color: var(--muted);

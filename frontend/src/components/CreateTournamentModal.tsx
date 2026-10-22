@@ -34,7 +34,7 @@ function defaultForm(variant: CreateTournamentVariant): TournamentFormState {
     description: '',
     rules: official
       ? 'Best of 3 sets. Golden point on deuce. Student ID required on the day.'
-      : '',
+      : 'Best of 3 sets. Golden point on deuce.',
     group_size: 4,
     teams_advance_per_group: 2,
     enable_plate: official,

@@ -760,9 +760,29 @@ export default function PlayerProfilePage() {
             </section>
 
             {isOwn && (
-              <section className="profile-account-danger" aria-labelledby="account-danger-title">
-                <h2 id="account-danger-title">Account</h2>
-                <p className="muted-note">
+              <section className="profile-account-panel" aria-labelledby="account-panel-title">
+                <h2 id="account-panel-title">Account</h2>
+                <div className="profile-account-actions">
+                  <Link to="/organiser" className="btn btn-ghost btn-block">
+                    My events
+                  </Link>
+                  {user?.role === 'ADMIN' && (
+                    <Link to="/admin" className="btn btn-ghost btn-block">
+                      Admin
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-dark btn-block"
+                    onClick={() => {
+                      logout()
+                      navigate(appHomePath(), { replace: true })
+                    }}
+                  >
+                    Log out
+                  </button>
+                </div>
+                <p className="muted-note" style={{ marginTop: '1.1rem' }}>
                   Delete your account to remove personal data from Student Padel Ireland. Tournament history may
                   remain in anonymised form.
                 </p>
@@ -829,14 +849,16 @@ export default function PlayerProfilePage() {
               </section>
             )}
 
-            <div className="profile-footer-links">
-              <Link to="/community" className="btn btn-ghost">
-                Community
-              </Link>
-              <Link to="/rankings" className="btn btn-ghost">
-                Rankings
-              </Link>
-            </div>
+            {!isOwn && (
+              <div className="profile-footer-links">
+                <Link to="/community" className="btn btn-ghost">
+                  Community
+                </Link>
+                <Link to="/rankings" className="btn btn-ghost">
+                  Rankings
+                </Link>
+              </div>
+            )}
           </>
         )}
 
@@ -988,13 +1010,17 @@ export default function PlayerProfilePage() {
                       type="button"
                       className="btn btn-ghost btn-sm"
                       onClick={() => {
+                        const mediaId = lightbox.id
+                        const snapshot = lightbox
+                        setLightbox(null)
                         void confirmDialog({
                           title: 'Delete from gallery?',
                           message: 'This photo or video will be removed from your profile.',
                           confirmLabel: 'Delete',
                           danger: true,
                         }).then((ok) => {
-                          if (ok) deleteMut.mutate(lightbox.id)
+                          if (ok) deleteMut.mutate(mediaId)
+                          else setLightbox(snapshot)
                         })
                       }}
                       disabled={deleteMut.isPending}

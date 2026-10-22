@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
 import BrandLogo from '../components/BrandLogo'
@@ -7,6 +7,7 @@ import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
+import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 import { hapticSuccess } from '../native/haptics'
 import { isNativeApp } from '../native/platform'
 import { openExternalUrl, whenExternalBrowserCloses } from '../native/shell'
@@ -59,20 +60,34 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
         </h1>
         <p className="confirm-tour">{data.tournament?.name}</p>
         <div className="confirm-box">
-          <div>
-            <span>{singles ? 'Entry' : 'Team'}</span>
-            <strong>{data.team_name}</strong>
-          </div>
-          <div>
-            <span>{singles ? 'Player' : 'Players'}</span>
-            <strong>
-              {data.players.map((p, i) => (
-                <span key={`${p}-${i}`} style={{ display: 'block' }}>
-                  {p}
-                </span>
-              ))}
-            </strong>
-          </div>
+          {(() => {
+            const names = [...new Set(data.players.filter(Boolean))]
+            const teamLabel = (data.team_name || '').trim()
+            const singlesSameName =
+              singles && names.length === 1 && names[0].toLowerCase() === teamLabel.toLowerCase()
+            return (
+              <>
+                <div>
+                  <span>{singles ? 'Entry' : 'Team'}</span>
+                  <strong>{teamLabel || '—'}</strong>
+                </div>
+                {!singlesSameName && (
+                  <div>
+                    <span>{singles ? 'Player' : 'Players'}</span>
+                    <strong>
+                      {names.length === 0
+                        ? '—'
+                        : names.map((p, i) => (
+                            <span key={`${p}-${i}`} style={{ display: 'block' }}>
+                              {p}
+                            </span>
+                          ))}
+                    </strong>
+                  </div>
+                )}
+              </>
+            )
+          })()}
           <div>
             <span>Payment</span>
             <strong className={fullyPaid ? 'paid' : ''}>
@@ -216,11 +231,12 @@ type MyTeamInfo = {
 
 export default function JoinTournamentPage() {
   const { slug = '' } = useParams()
+  const { pathname } = useLocation()
   const [params] = useSearchParams()
   const sessionId = params.get('session_id')
   const registrationId = params.get('registration_id')
   const paymentCancelled = params.get('cancelled') === '1'
-  const isConfirmRoute = window.location.pathname.includes('/confirmed') || !!sessionId
+  const isConfirmRoute = pathname.includes('/confirmed') || !!sessionId
   const hasConfirmParams = !!sessionId || !!registrationId
 
   const { user, loading: authLoading } = useAuth()
@@ -233,6 +249,18 @@ export default function JoinTournamentPage() {
   const [friendFindOpen, setFriendFindOpen] = useState(false)
   const [partnerMode, setPartnerMode] = useState<'friend' | 'email'>('email')
   const [friendActionError, setFriendActionError] = useState('')
+  useKeyboardInset(!isConfirmRoute)
+
+  useEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (!t.closest('.page')) return
+      if (t.matches('input, textarea, select')) scrollFieldAboveKeyboard(t)
+    }
+    document.addEventListener('focusin', onFocus)
+    return () => document.removeEventListener('focusin', onFocus)
+  }, [])
 
   const { data: tournament, isLoading: tLoading, isError: tError } = useQuery({
     queryKey: ['tournament', slug],
@@ -285,7 +313,6 @@ export default function JoinTournamentPage() {
     partner_user_id: '',
     phone: '',
     university_id: '',
-    student_number: '',
   })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -301,14 +328,15 @@ export default function JoinTournamentPage() {
   // Prefill from profile whenever /me catches up — only fills empty fields so typing isn’t overwritten
   useEffect(() => {
     if (!user) return
+    const singlesPrefill = tournament?.play_format === 'SINGLES'
     setForm((f) => ({
       ...f,
       phone: f.phone || user.phone || '',
       university_id: f.university_id || user.university_id || '',
-      student_number: f.student_number || user.student_number || '',
-      team_name: f.team_name || user.full_name || '',
+      // Doubles: leave team name blank so it isn’t confused with the player roster
+      team_name: f.team_name || (singlesPrefill ? user.full_name || '' : ''),
     }))
-  }, [user])
+  }, [user, tournament?.play_format])
 
   const myTeamEarly = (playerView?.my_team || null) as MyTeamInfo | null
   const resumePartnerId = myTeamEarly?.partner_user_id || ''
@@ -422,20 +450,6 @@ export default function JoinTournamentPage() {
       setPartnerMode('email')
     }
   }, [myTeamEarly, friendPartners, friendsFetched])
-
-  useEffect(() => {
-    if (partnerMode !== 'friend') return
-    if (form.partner_user_id) return
-    // Only auto-open search when they have nobody to pick from the list yet
-    if (friendPartners.length === 0) setFriendFindOpen(true)
-  }, [partnerMode, form.partner_user_id, friendPartners.length])
-
-  const partnerDefaultApplied = useRef(false)
-  useEffect(() => {
-    if (!friendsFetched || partnerDefaultApplied.current || myTeamEarly) return
-    partnerDefaultApplied.current = true
-    if (friendPartners.length > 0) setPartnerMode('friend')
-  }, [friendsFetched, friendPartners.length, myTeamEarly])
 
   if (authLoading || (isConfirmRoute && hasConfirmParams && confirming)) {
     return (
@@ -839,7 +853,7 @@ export default function JoinTournamentPage() {
         team_name: form.team_name.trim() || user.full_name,
         phone: form.phone || null,
         university_id: form.university_id || null,
-        student_number: form.student_number || null,
+        student_number: null,
         pay_online_now: payOnlineNow,
       }
       if (!singles) {
@@ -979,7 +993,7 @@ export default function JoinTournamentPage() {
                   onClick={() => {
                     setPartnerMode('friend')
                     setForm((f) => ({ ...f, partner_name: '', partner_email: '' }))
-                    setFriendFindOpen(friendPartners.length === 0)
+                    setFriendFindOpen(false)
                     setFriendActionError('')
                   }}
                 >
@@ -1243,22 +1257,6 @@ export default function JoinTournamentPage() {
                 label: u.name,
                 keywords: u.short_name || '',
               }))}
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label" htmlFor="join-student">
-              Student number (optional)
-            </label>
-            <input
-              id="join-student"
-              className="form-input"
-              value={form.student_number}
-              onChange={(e) => setForm({ ...form, student_number: e.target.value })}
-              autoComplete="off"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              spellCheck={false}
-              enterKeyHint="done"
             />
           </div>
           {error && (

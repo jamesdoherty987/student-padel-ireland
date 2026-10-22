@@ -8,6 +8,7 @@ import NavBar from '../components/NavBar'
 import NumberInput from '../components/NumberInput'
 import TournamentBracket from '../components/TournamentBracket'
 import { useAuth } from '../context/AuthContext'
+import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 import { apiErrorMessage, tournamentApi, type Match } from '../services/api'
 import {
   formatLiveBoardScore,
@@ -213,6 +214,19 @@ export default function PlayerLivePage() {
   })
   const [scoreError, setScoreError] = useState('')
   const [actionError, setActionError] = useState('')
+  useKeyboardInset(!!scoringMatch)
+
+  useEffect(() => {
+    if (!scoringMatch) return
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (!t.closest('.score-modal')) return
+      if (t.matches('input, textarea, select')) scrollFieldAboveKeyboard(t)
+    }
+    document.addEventListener('focusin', onFocus)
+    return () => document.removeEventListener('focusin', onFocus)
+  }, [scoringMatch])
 
   const { data, isLoading, isError, dataUpdatedAt, refetch, isFetching } = useQuery({
     queryKey: ['player-view', slug],
@@ -749,7 +763,7 @@ export default function PlayerLivePage() {
           }}
         >
           <form
-            className="score-modal"
+            className="score-modal pl-score-sheet"
             role="dialog"
             aria-modal="true"
             aria-labelledby="pl-score-title"

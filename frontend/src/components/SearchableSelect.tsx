@@ -106,7 +106,7 @@ export default function SearchableSelect({
     onChange('')
     setQuery('')
     setOpen(true)
-    window.setTimeout(() => inputRef.current?.focus(), 0)
+    window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0)
   }
 
   const displayLabel = selected
@@ -158,7 +158,7 @@ export default function SearchableSelect({
             if (disabled) return
             setRequiredError(false)
             setOpen(true)
-            window.setTimeout(() => inputRef.current?.focus(), 0)
+            window.setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 0)
           }}
         >
           <span className="searchable-select-value">{displayLabel}</span>

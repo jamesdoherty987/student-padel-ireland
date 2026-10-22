@@ -681,15 +681,16 @@
 .score-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(10, 22, 40, 0.55);
+  background: var(--overlay, rgba(10, 22, 40, 0.55));
   display: flex;
   align-items: flex-end;
   justify-content: center;
   z-index: 200;
   padding: 0;
+  padding-bottom: var(--keyboard-inset, 0px);
 }
 
-.score-modal {
+.community-score-sheet.score-modal {
   width: min(480px, 100%);
   max-width: 100%;
   background: var(--white);
@@ -703,27 +704,62 @@
   box-sizing: border-box;
 }
 
-.score-modal h2 {
-  margin-bottom: 1rem;
+.community-score-sheet h2 {
+  margin: 0 0 0.35rem;
   color: var(--court-deep);
 }
 
-.score-grid {
+.winner-pick {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  margin: 0.85rem 0 1.1rem;
 }
 
-.score-pair {
+.winner-pick-btn {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  width: 100%;
+  text-align: left;
+  padding: 1rem 1.05rem;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 72px;
+}
+
+.winner-pick-btn strong {
+  color: var(--court-deep);
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.winner-pick-tag {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.winner-pick-btn.is-selected {
+  border-color: var(--court-deep);
+  background: rgba(11, 61, 46, 0.08);
+  box-shadow: 0 0 0 1px var(--court-deep);
+}
+
+.winner-pick-btn.is-selected .winner-pick-tag {
+  color: var(--court-mid);
 }
 
 .community-panel .form-group input,
 .community-panel .form-group select,
 .community-section .form-group input,
-.side-pick .form-group select,
-.score-modal input {
+.side-pick .form-group select {
   width: 100%;
   min-height: 48px;
   padding: 0.6rem 0.85rem;
@@ -731,19 +767,7 @@
   border-radius: var(--radius-sm);
   background: var(--white);
   font-size: 16px;
-  scroll-margin-bottom: 8rem;
-}
-
-.score-modal input:focus {
-  outline: none;
-  border-color: var(--court-mid);
-  box-shadow: 0 0 0 3px rgba(20, 102, 68, 0.15);
-}
-
-.score-pair input {
-  width: 72px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
+  scroll-margin-bottom: calc(1.25rem + var(--keyboard-inset, 0px));
 }
 
 @media (min-width: 640px) {
@@ -751,7 +775,7 @@
     align-items: center;
     padding: 1rem;
   }
-  .score-modal {
+  .community-score-sheet.score-modal {
     border-radius: var(--radius-lg);
     padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
   }

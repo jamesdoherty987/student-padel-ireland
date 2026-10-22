@@ -6,7 +6,10 @@
   justify-content: center;
   padding: 2rem 1rem;
   padding-top: max(2.5rem, calc(1.5rem + env(safe-area-inset-top, 0px)));
-  padding-bottom: max(2rem, calc(1.25rem + env(safe-area-inset-bottom, 0px)));
+  padding-bottom: max(
+    2rem,
+    calc(1.25rem + env(safe-area-inset-bottom, 0px) + var(--keyboard-inset, 0px))
+  );
   padding-left: max(1rem, env(safe-area-inset-left, 0px));
   padding-right: max(1rem, env(safe-area-inset-right, 0px));
   background:
@@ -335,5 +338,5 @@
 .auth-panel .form-input:focus,
 .auth-panel .searchable-select-trigger:focus,
 .auth-panel .searchable-select-input:focus {
-  scroll-margin-bottom: 7rem;
+  scroll-margin-bottom: calc(7rem + var(--keyboard-inset, 0px));
 }

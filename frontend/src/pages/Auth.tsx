@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import SearchableSelect from '../components/SearchableSelect'
 import { useAuth } from '../context/AuthContext'
+import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
@@ -94,6 +95,7 @@ function PasswordField({
 
 export function LoginPage() {
   useDarkStatusBar()
+  useKeyboardInset(true)
   usePageSeo({
     title: 'Log in',
     description: 'Log in to Student Padel Ireland to join tournaments and track your matches.',
@@ -110,6 +112,19 @@ export function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const native = isNativeApp()
+
+  useEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (!t.closest('.auth-page')) return
+      if (t.matches('input, textarea, select, [contenteditable]')) {
+        scrollFieldAboveKeyboard(t)
+      }
+    }
+    document.addEventListener('focusin', onFocus)
+    return () => document.removeEventListener('focusin', onFocus)
+  }, [])
   const lead = next.includes('/confirmed')
     ? 'Log in with the account used at checkout to confirm your registration.'
     : next.includes('/join')
@@ -225,6 +240,7 @@ export function LoginPage() {
 
 export function SignupPage() {
   useDarkStatusBar()
+  useKeyboardInset(true)
   usePageSeo({
     title: 'Sign up',
     description: 'Create a Student Padel Ireland account to join student padel tournaments across Ireland.',
@@ -232,6 +248,19 @@ export function SignupPage() {
     noIndex: true,
   })
   const { register, user, loading: authLoading } = useAuth()
+
+  useEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (!t.closest('.auth-page')) return
+      if (t.matches('input, textarea, select, [contenteditable]')) {
+        scrollFieldAboveKeyboard(t)
+      }
+    }
+    document.addEventListener('focusin', onFocus)
+    return () => document.removeEventListener('focusin', onFocus)
+  }, [])
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = safeNextPath(params.get('next'))

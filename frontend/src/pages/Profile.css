@@ -715,6 +715,26 @@
   margin-top: 0.85rem;
 }
 
+.profile-account-panel {
+  margin: 1.75rem 0 0;
+  padding: 1.15rem 1.15rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--surface);
+}
+
+.profile-account-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  color: var(--court-deep);
+}
+
+.profile-account-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
 .profile-account-danger {
   margin: 1.75rem 0 0;
   padding: 1.1rem 1.15rem;

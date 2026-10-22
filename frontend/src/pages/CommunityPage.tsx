@@ -288,12 +288,12 @@ export default function CommunityPage() {
                 >
                   {confirmMut.isPending && confirmMut.variables === nextGame.id
                     ? 'Confirming…'
-                    : 'Confirm score'}
+                    : 'Confirm result'}
                 </button>
               )}
               {nextGame.can_i_score && !nextGame.needs_my_confirm && (
                 <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-dark btn-sm">
-                  Enter score
+                  Who won?
                 </Link>
               )}
               <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-ghost btn-sm">
@@ -313,10 +313,10 @@ export default function CommunityPage() {
               {confirmCards.map((m) => (
                 <ActionCard
                   key={m.id}
-                  title="Confirm score"
+                  title="Confirm result"
                   match={m}
                   actionLabel={
-                    confirmMut.isPending && confirmMut.variables === m.id ? 'Confirming…' : 'Confirm score'
+                    confirmMut.isPending && confirmMut.variables === m.id ? 'Confirming…' : 'Confirm result'
                   }
                   disabled={confirmMut.isPending && confirmMut.variables === m.id}
                   onAction={() => confirmMut.mutate(m.id)}
@@ -325,7 +325,7 @@ export default function CommunityPage() {
               {scoreCards.map((m) => (
                 <ActionCard
                   key={m.id}
-                  title="Enter score"
+                  title="Who won?"
                   match={m}
                   actionLabel="Open"
                   onAction={() => navigate(`/community/${m.competition_slug}`)}

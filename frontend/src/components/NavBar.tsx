@@ -179,6 +179,22 @@ export default function NavBar() {
 
   const showPrimaryInSidebar = !tabsVisible
   const sidebarOpen = desktop || open
+  // Native with bottom tabs: no hamburger / drawer — Account tab owns profile + logout
+  const hideChromeSidebar = native && tabsVisible
+
+  if (hideChromeSidebar) {
+    return (
+      <header className={`app-topbar${backFallback ? ' app-topbar--nested' : ''}`}>
+        {backFallback ? (
+          <BackButton fallbackTo={backFallback} force compact className="app-topbar-back" />
+        ) : (
+          <span className="app-topbar-spacer" aria-hidden />
+        )}
+        <BrandLogo to={brandTo} className="app-topbar-brand" size="sm" />
+        <div className="app-topbar-end">{user ? <NotificationsBell /> : null}</div>
+      </header>
+    )
+  }
 
   return (
     <>

@@ -388,16 +388,43 @@ export default function TournamentFormFields({
 
         <div className="form-group">
           <label className="form-label" htmlFor="tf-rules">
-            Rules <span className="tf-optional">(optional)</span>
+            Rules & scoring <span className="tf-optional">(optional)</span>
           </label>
           <textarea
             id="tf-rules"
             className="form-textarea"
-            rows={3}
-            placeholder="Scoring, check-in time, house rules"
+            rows={5}
+            placeholder={
+              'How scoring works, check-in, and house rules.\n\nExamples:\n• Best of 3 sets to 6, golden point on deuce\n• No-ad scoring — sudden death at deuce\n• Timed matches — 15 min, leading team wins'
+            }
             value={form.rules}
             onChange={(e) => onChange({ rules: e.target.value })}
           />
+          <p className="form-hint">
+            Tell players how sets are won (e.g. best of 3, golden point). They see this on the event page.
+          </p>
+          <div className="tf-rules-examples" role="group" aria-label="Insert scoring example">
+            {(
+              [
+                'Best of 3 sets to 6. Golden point on deuce.',
+                'Best of 3 sets. No-ad scoring — sudden death at deuce.',
+                'Timed matches: 15 minutes. Leading team wins when time is up.',
+              ] as const
+            ).map((example) => (
+              <button
+                key={example}
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() =>
+                  onChange({
+                    rules: form.rules.trim() ? `${form.rules.trim()}\n${example}` : example,
+                  })
+                }
+              >
+                {example.length > 42 ? `${example.slice(0, 40)}…` : example}
+              </button>
+            ))}
+          </div>
         </div>
       </section>
       )}

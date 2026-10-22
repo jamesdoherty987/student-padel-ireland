@@ -97,14 +97,15 @@ html.native-app textarea {
   font-size: 16px;
 }
 
-/* Keep focused fields above the keyboard / tab bar when the WebView resizes */
+/* Keep focused fields above the keyboard / tab bar when the WebView resizes.
+   Prefer --keyboard-inset from useKeyboardInset; avoid huge margins that jump iOS to the top. */
 html.native-app .form-input:focus,
 html.native-app .form-select:focus,
 html.native-app .form-textarea:focus,
 html.native-app textarea:focus,
 html.native-app .searchable-select-trigger:focus,
 html.native-app .searchable-select-input:focus {
-  scroll-margin-bottom: 8rem;
+  scroll-margin-bottom: calc(1.5rem + var(--keyboard-inset, 0px) + var(--native-tab-clearance, 0px));
 }
 
 html.native-app a,
@@ -1270,7 +1271,7 @@ html.native-app .btn-xs {
   background: var(--overlay);
   display: grid;
   place-items: center;
-  z-index: 200;
+  z-index: 400;
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
     max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   overflow-x: hidden;

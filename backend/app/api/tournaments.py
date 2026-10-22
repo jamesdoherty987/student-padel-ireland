@@ -157,8 +157,23 @@ def _payment_via(reg: Registration | None) -> str | None:
     return "online"
 
 
+def _unique_player_names(members) -> list[str]:
+    """Roster names by slot, skipping duplicate user ids (and blank names)."""
+    names: list[str] = []
+    seen: set = set()
+    for m in sorted((x for x in members if getattr(x, "user", None)), key=lambda x: x.slot):
+        uid = m.user_id
+        if uid in seen:
+            continue
+        seen.add(uid)
+        label = (m.user.full_name or "").strip()
+        if label:
+            names.append(label)
+    return names
+
+
 def _team_out(team: Team) -> TeamOut:
-    names = [m.user.full_name for m in sorted(team.members, key=lambda x: x.slot) if m.user]
+    names = _unique_player_names(team.members)
     return TeamOut(
         id=team.id,
         tournament_id=team.tournament_id,
@@ -1739,7 +1754,7 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
         "payment_via": _payment_via(reg),
         "tournament": _tournament_out(db, t) if t else None,
         "team_name": team.name,
-        "players": [m.user.full_name for m in members if m.user],
+        "players": _unique_player_names(members),
         "slot": my_slot,
         "can_leave": bool(t and _player_can_leave_entry(db, t, team)),
     }

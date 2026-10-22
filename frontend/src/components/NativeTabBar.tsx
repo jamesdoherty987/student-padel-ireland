@@ -90,7 +90,7 @@ export default function NativeTabBar() {
         <span className="native-tab-icon" aria-hidden>
           <i className="fas fa-user" />
         </span>
-        <span>{user ? 'Profile' : 'Account'}</span>
+        <span>Account</span>
       </NavLink>
     </nav>
   )

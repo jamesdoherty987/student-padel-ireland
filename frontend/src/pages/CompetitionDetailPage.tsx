@@ -5,9 +5,9 @@ import { Share } from '@capacitor/share'
 import BackButton from '../components/BackButton'
 import { confirmDialog } from '../components/ConfirmDialog'
 import NavBar from '../components/NavBar'
-import NumberInput from '../components/NumberInput'
 import { ShareQr } from '../components/ShareQr'
 import { useAuth } from '../context/AuthContext'
+import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { isNativeApp, publicPathUrl } from '../native/platform'
 import {
   apiErrorMessage,
@@ -45,8 +45,9 @@ export default function CompetitionDetailPage() {
   const [b1, setB1] = useState('')
   const [b2, setB2] = useState('')
   const [scoringMatch, setScoringMatch] = useState<CommunityMatch | null>(null)
-  const [sets, setSets] = useState(emptySets)
+  const [winnerSide, setWinnerSide] = useState<'A' | 'B' | ''>('')
   const [lastDeltas, setLastDeltas] = useState<CommunityMatch['rating_changes']>([])
+  useKeyboardInset(!!scoringMatch)
   const [inviteIds, setInviteIds] = useState<string[]>([])
   const [copied, setCopied] = useState('')
   const [pendingNotice, setPendingNotice] = useState('')
@@ -101,7 +102,7 @@ export default function CompetitionDetailPage() {
     onSuccess: (res) => {
       setError('')
       setShowMatch(false)
-      setSets(emptySets)
+      setWinnerSide('')
       setScoringMatch(res.data)
       setPendingNotice('')
       refresh()
@@ -112,13 +113,15 @@ export default function CompetitionDetailPage() {
   const scoreMut = useMutation({
     mutationFn: () =>
       communityApi.scoreMatch(scoringMatch!.id, {
-        ...sets,
+        ...emptySets,
+        winner_side: winnerSide,
         status: 'AWAITING_CONFIRM',
       }),
     onSuccess: () => {
       setScoreError('')
       setScoringMatch(null)
-      setPendingNotice('Score saved. Someone else on court needs to confirm before ratings update.')
+      setWinnerSide('')
+      setPendingNotice('Result saved. Someone else on court needs to confirm before ratings update.')
       setLastDeltas([])
       refresh()
     },
@@ -146,6 +149,7 @@ export default function CompetitionDetailPage() {
     onSuccess: () => {
       setError('')
       setScoringMatch(null)
+      setWinnerSide('')
       setPendingNotice('')
       refresh()
     },
@@ -202,6 +206,7 @@ export default function CompetitionDetailPage() {
       if (e.key === 'Escape') {
         setScoringMatch(null)
         setScoreError('')
+        setWinnerSide('')
       }
     }
     window.addEventListener('keydown', onKey)
@@ -416,7 +421,7 @@ export default function CompetitionDetailPage() {
                   >
                     {confirmMut.isPending && confirmMut.variables === myNext.id
                       ? 'Confirming…'
-                      : 'Confirm score'}
+                      : 'Confirm result'}
                   </button>
                 )}
                 {myNext.can_i_score && !myNext.needs_my_confirm && (
@@ -424,11 +429,12 @@ export default function CompetitionDetailPage() {
                     type="button"
                     className="btn btn-dark btn-sm"
                     onClick={() => {
-                      setSets(emptySets)
+                      setWinnerSide('')
+                      setScoreError('')
                       setScoringMatch(myNext)
                     }}
                   >
-                    Enter score
+                    Who won?
                   </button>
                 )}
               </div>
@@ -649,17 +655,15 @@ export default function CompetitionDetailPage() {
                 </div>
                 <p className="rank-meta">
                   {labelFormat(m.format)} · {statusLabel(m.status)}
-                  {m.status === 'COMPLETED'
-                    ? ` · ${m.set1_a}-${m.set1_b}, ${m.set2_a}-${m.set2_b}${
-                        m.set3_a || m.set3_b ? `, ${m.set3_a}-${m.set3_b}` : ''
-                      }`
+                  {m.status === 'COMPLETED' && m.winner_side
+                    ? ` · ${m.winner_side === 'A' ? 'Side A' : 'Side B'} won`
                     : ''}
                 </p>
                 {m.status === 'AWAITING_CONFIRM' && (
                   <p className="rank-meta" style={{ marginTop: 6 }}>
                     Waiting for someone else to confirm
-                    {m.set1_a || m.set1_b
-                      ? ` · ${m.set1_a}-${m.set1_b}, ${m.set2_a}-${m.set2_b}`
+                    {m.winner_side
+                      ? ` · ${m.winner_side === 'A' ? 'Side A' : 'Side B'} reported as winner`
                       : ''}
                   </p>
                 )}
@@ -673,7 +677,7 @@ export default function CompetitionDetailPage() {
                     >
                       {confirmMut.isPending && confirmMut.variables === m.id
                         ? 'Confirming…'
-                        : 'Confirm score'}
+                        : 'Confirm result'}
                     </button>
                   )}
                   {m.can_i_score && !m.needs_my_confirm && (
@@ -681,12 +685,13 @@ export default function CompetitionDetailPage() {
                       type="button"
                       className="btn btn-dark btn-sm"
                       onClick={() => {
-                        setSets(emptySets)
+                        setWinnerSide('')
+                        setScoreError('')
                         setLastDeltas([])
                         setScoringMatch(m)
                       }}
                     >
-                      Enter score
+                      Who won?
                     </button>
                   )}
                   {(m.can_i_score ||
@@ -769,10 +774,11 @@ export default function CompetitionDetailPage() {
             onClick={() => {
               setScoringMatch(null)
               setScoreError('')
+              setWinnerSide('')
             }}
           >
             <form
-              className="score-modal"
+              className="score-modal community-score-sheet"
               role="dialog"
               aria-modal="true"
               aria-labelledby="score-modal-title"
@@ -780,89 +786,49 @@ export default function CompetitionDetailPage() {
               onSubmit={(e) => {
                 e.preventDefault()
                 setScoreError('')
-                const pairs: [number, number][] = [
-                  [sets.set1_a, sets.set1_b],
-                  [sets.set2_a, sets.set2_b],
-                  [sets.set3_a, sets.set3_b],
-                ]
-                let aSets = 0
-                let bSets = 0
-                for (const [a, b] of pairs) {
-                  if (!(a || b)) continue
-                  if (a > b) aSets += 1
-                  else if (b > a) bSets += 1
-                }
-                if (aSets === bSets) {
-                  setScoreError('Enter decisive set scores so there is a winner')
+                if (winnerSide !== 'A' && winnerSide !== 'B') {
+                  setScoreError('Pick who won the match')
                   return
                 }
                 scoreMut.mutate()
               }}
             >
-              <h2 id="score-modal-title">Enter score</h2>
+              <h2 id="score-modal-title">Who won?</h2>
               <p className="muted-note" style={{ marginTop: 0 }}>
-                Someone on the other side will confirm before ratings update.
+                Tap the winning side. Someone on the other side will confirm before ratings update.
               </p>
-              <div className="score-sides-label">
-                <div>
+              <div className="winner-pick" role="group" aria-label="Match winner">
+                <button
+                  type="button"
+                  className={`winner-pick-btn${winnerSide === 'A' ? ' is-selected' : ''}`}
+                  aria-pressed={winnerSide === 'A'}
+                  onClick={() => setWinnerSide('A')}
+                >
                   <span className="muted-note">Side A</span>
                   <strong>
                     {scoringMatch.player_a1_name}
                     {scoringMatch.player_a2_name ? ` / ${scoringMatch.player_a2_name}` : ''}
                   </strong>
-                </div>
-                <div>
+                  <span className="winner-pick-tag">{winnerSide === 'A' ? 'Winner' : 'Tap if they won'}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`winner-pick-btn${winnerSide === 'B' ? ' is-selected' : ''}`}
+                  aria-pressed={winnerSide === 'B'}
+                  onClick={() => setWinnerSide('B')}
+                >
                   <span className="muted-note">Side B</span>
                   <strong>
                     {scoringMatch.player_b1_name}
                     {scoringMatch.player_b2_name ? ` / ${scoringMatch.player_b2_name}` : ''}
                   </strong>
-                </div>
-              </div>
-              <div className="score-grid">
-                {(
-                  [
-                    ['set1_a', 'set1_b', 'Set 1'],
-                    ['set2_a', 'set2_b', 'Set 2'],
-                    ['set3_a', 'set3_b', 'Set 3 (if needed)'],
-                  ] as const
-                ).map(([ka, kb, label]) => (
-                  <div key={label} className="form-group">
-                    <label>{label}</label>
-                    <div className="score-pair">
-                      <NumberInput
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        min={0}
-                        max={7}
-                        emptyValue={0}
-                        value={sets[ka]}
-                        onValueChange={(n) =>
-                          setSets((s) => ({ ...s, [ka]: Math.max(0, Math.min(7, Math.trunc(n))) }))
-                        }
-                        aria-label={`${label} side A`}
-                      />
-                      <span>-</span>
-                      <NumberInput
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        min={0}
-                        max={7}
-                        emptyValue={0}
-                        value={sets[kb]}
-                        onValueChange={(n) =>
-                          setSets((s) => ({ ...s, [kb]: Math.max(0, Math.min(7, Math.trunc(n))) }))
-                        }
-                        aria-label={`${label} side B`}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  <span className="winner-pick-tag">{winnerSide === 'B' ? 'Winner' : 'Tap if they won'}</span>
+                </button>
               </div>
               {scoreError && <p className="form-error">{scoreError}</p>}
               <div className="tour-actions">
-                <button type="submit" className="btn btn-dark" disabled={scoreMut.isPending}>
-                  Submit for confirm
+                <button type="submit" className="btn btn-dark" disabled={scoreMut.isPending || !winnerSide}>
+                  {scoreMut.isPending ? 'Saving…' : 'Submit for confirm'}
                 </button>
                 <button
                   type="button"
@@ -870,6 +836,7 @@ export default function CompetitionDetailPage() {
                   onClick={() => {
                     setScoringMatch(null)
                     setScoreError('')
+                    setWinnerSide('')
                   }}
                 >
                   Back

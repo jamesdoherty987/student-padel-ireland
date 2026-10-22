@@ -600,69 +600,71 @@ html.native-app .pl-page {
 .pl-page .score-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(10, 22, 40, 0.55);
+  background: var(--overlay, rgba(10, 22, 40, 0.55));
   display: flex;
   align-items: flex-end;
   justify-content: center;
   z-index: 200;
   padding: 0;
+  padding-bottom: var(--keyboard-inset, 0px);
 }
 
 .pl-page ~ .score-modal-backdrop,
 .app-shell > .score-modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(10, 22, 40, 0.55);
+  background: var(--overlay, rgba(10, 22, 40, 0.55));
   display: flex;
   align-items: flex-end;
   justify-content: center;
   z-index: 200;
   padding: 0;
+  padding-bottom: var(--keyboard-inset, 0px);
 }
 
-.score-modal {
+.pl-score-sheet.score-modal {
   width: min(480px, 100%);
   max-width: 100%;
   background: var(--white);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   padding: 1.25rem;
   padding-bottom: max(1.5rem, calc(1rem + env(safe-area-inset-bottom)));
-  max-height: min(90vh, 90dvh);
+  max-height: min(85vh, calc(90dvh - var(--keyboard-inset, 0px)));
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   box-sizing: border-box;
 }
 
-.score-modal h2 {
+.pl-score-sheet h2 {
   margin: 0 0 0.35rem;
   color: var(--court-deep);
 }
 
-.score-sides-label {
+.pl-score-sheet .score-sides-label {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.75rem;
   margin: 0.85rem 0 1rem;
 }
 
-.score-sides-label strong {
+.pl-score-sheet .score-sides-label strong {
   display: block;
   overflow-wrap: anywhere;
 }
 
-.score-grid {
+.pl-score-sheet .score-grid {
   display: grid;
   gap: 0.5rem;
 }
 
-.score-pair {
+.pl-score-sheet .score-pair {
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-.score-modal input {
+.pl-score-sheet input {
   width: 100%;
   min-height: 48px;
   padding: 0.6rem 0.85rem;
@@ -671,23 +673,23 @@ html.native-app .pl-page {
   background: var(--white);
   font-size: 16px;
   box-sizing: border-box;
-  scroll-margin-bottom: 8rem;
+  scroll-margin-bottom: calc(1.25rem + var(--keyboard-inset, 0px));
 }
 
-.score-pair input {
+.pl-score-sheet .score-pair input {
   width: 72px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
 
-.score-modal .form-actions {
+.pl-score-sheet .form-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 1rem;
 }
 
-.score-modal .form-actions .btn {
+.pl-score-sheet .form-actions .btn {
   min-height: 48px;
   flex: 1 1 auto;
 }
@@ -697,7 +699,7 @@ html.native-app .pl-page {
     align-items: center;
     padding: 1rem;
   }
-  .score-modal {
+  .pl-score-sheet.score-modal {
     border-radius: var(--radius-lg);
     padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
   }
