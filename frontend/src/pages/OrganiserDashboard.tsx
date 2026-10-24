@@ -22,6 +22,7 @@ import {
 } from '../services/api'
 import {
   bracketFormatHint,
+  calendarDaysFromToday,
   courtLabel,
   formatMatchScore,
   formatMoney,
@@ -548,6 +549,21 @@ export default function OrganiserDashboard() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Check-in failed')),
   })
 
+  const remindMut = useMutation({
+    mutationFn: () => tournamentApi.sendReminders(tid!),
+    onSuccess: (res) => {
+      const d = res.data
+      if (d.sent > 0) {
+        showToast(`Reminder sent to ${d.sent} player${d.sent === 1 ? '' : 's'}`)
+      } else if (d.failed > 0) {
+        showToast('Could not send reminders — check that email (Resend) is configured')
+      } else {
+        showToast('Everyone eligible already got a reminder')
+      }
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not send reminders')),
+  })
+
   const collectFeeMut = useMutation({
     mutationFn: (teamId: string) => tournamentApi.markFeeCollected(tid!, teamId),
     onSuccess: () => {
@@ -702,6 +718,16 @@ export default function OrganiserDashboard() {
     active.tournament.status !== 'CANCELLED' &&
     active.tournament.status !== 'LIVE' &&
     !fixturesExist
+  const daysToEvent = active ? calendarDaysFromToday(active.tournament.event_date) : null
+  const showRemindersSection =
+    !!active &&
+    active.tournament.status !== 'CANCELLED' &&
+    active.tournament.status !== 'COMPLETED' &&
+    active.tournament.status !== 'DRAFT' &&
+    active.tournament.status !== 'LIVE' &&
+    daysToEvent != null &&
+    daysToEvent >= 0
+  const canSendRemindersNow = showRemindersSection && daysToEvent != null && daysToEvent <= 1
 
   const courtColumns = useMemo(() => {
     const fromConfig = (tournamentDetail?.courts || [])
@@ -1221,6 +1247,38 @@ export default function OrganiserDashboard() {
                   <p className="muted">Invite code will appear once the tournament is saved.</p>
                 )}
               </section>
+
+              {showRemindersSection && (
+                <section className="org-section org-reminders">
+                  <div className="org-section-head">
+                    <h2>Reminders</h2>
+                    {canSendRemindersNow ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={remindMut.isPending || !tid}
+                        onClick={() => {
+                          void confirmDialog({
+                            title: 'Send reminder emails?',
+                            message:
+                              'Emails paid players who haven’t received a reminder yet. Safe to run more than once — nobody gets a duplicate.',
+                            confirmLabel: 'Send now',
+                          }).then((ok) => {
+                            if (ok) remindMut.mutate()
+                          })
+                        }}
+                      >
+                        {remindMut.isPending ? 'Sending…' : 'Send now'}
+                      </button>
+                    ) : null}
+                  </div>
+                  <p className="muted org-reminders-copy">
+                    {canSendRemindersNow
+                      ? 'Automatic emails go out the day before with time, venue, and a Log in button. Use Send now if anyone still needs one.'
+                      : 'Paid players get an automatic email the day before with time, venue, and a Log in button. Late joiners are included.'}
+                  </p>
+                </section>
+              )}
 
               <section className="org-section">
                 <div className="org-section-head">

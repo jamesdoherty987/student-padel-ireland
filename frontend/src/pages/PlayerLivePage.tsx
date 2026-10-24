@@ -19,6 +19,7 @@ import {
   courtLabel,
   isKnockoutActive,
   knockoutRoundLabel,
+  reminderPromiseCopy,
 } from '../utils/format'
 import './PlayerLive.css'
 import './Tournament.css'
@@ -480,6 +481,7 @@ export default function PlayerLivePage() {
     t.status !== 'LIVE' &&
     t.status !== 'COMPLETED' &&
     t.status !== 'CANCELLED'
+  const reminderNote = waitingOnDraw ? reminderPromiseCopy(t.event_date) : ''
   const matchDayLive = hasPaidEntry && (t.status === 'LIVE' || drawReady)
   // Only hide venue board when you're actually on court — still show it while waiting to confirm
   const myOnCourt =
@@ -542,7 +544,9 @@ export default function PlayerLivePage() {
           {!myOnCourt && (
             <p className="pl-lead">
               {waitingOnDraw
-                ? 'You’re registered. We’ll show your next court here when the draw goes live.'
+                ? reminderNote
+                  ? `You’re registered. ${reminderNote} Your next court appears here when the draw goes live.`
+                  : 'You’re registered. We’ll show your next court here when the draw goes live.'
                 : matchDayLive
                   ? 'Next court, opponent, and score — updates live.'
                   : 'Courts, calls, and scores — updates every few seconds.'}

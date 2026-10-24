@@ -10,7 +10,7 @@ Ireland's student padel competition platform. Contained in this folder so you ca
 | Backend | FastAPI (Render) |
 | Database | SQLite locally · **Supabase Postgres** in production |
 | Payments | Stripe Checkout (demo mode without keys) |
-| Email | Resend (optional) |
+| Email | Resend (optional) — includes day-before tournament reminders |
 
 UI: simple tournament-first site (Outfit, court green). Payments via Stripe when keys are set; local demo mode otherwise.
 
@@ -70,6 +70,8 @@ Tournament generator tests cover 8–64 team fields, no self-matches, full group
 You can launch for **€0/month** on free tiers. Expect cold starts on Render free + possible Supabase pause if the site sits idle.
 
 **Keep the API warm (recommended on free Render):** the workflow `.github/workflows/keep-api-warm.yml` pings `https://student-padel-ireland.onrender.com/health` every 10 minutes so the dyno does not sleep. Override with repo variable `API_HEALTH_URL` if needed. Or upgrade Render to Starter (~$7/mo) for always-on.
+
+**Day-before reminders:** `.github/workflows/tournament-reminders.yml` calls `POST /api/cron/tournament-reminders` twice daily. Set the same `CRON_SECRET` on Render and as a GitHub Actions repository secret. Requires `RESEND_API_KEY`.
 
 ### Backend (Render)
 

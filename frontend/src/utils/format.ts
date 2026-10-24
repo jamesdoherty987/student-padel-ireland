@@ -192,6 +192,25 @@ export function isPastCalendarDate(iso: string | null | undefined) {
   return today > d
 }
 
+/** Whole calendar days from local today to a YYYY-MM-DD (or datetime) date. */
+export function calendarDaysFromToday(iso: string | null | undefined) {
+  if (!iso) return null
+  const d = parseCalendarDate(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  d.setHours(0, 0, 0, 0)
+  return Math.round((d.getTime() - today.getTime()) / 86_400_000)
+}
+
+/** Short copy for the automatic day-before reminder (empty if not relevant). */
+export function reminderPromiseCopy(eventDate: string | null | undefined) {
+  const days = calendarDaysFromToday(eventDate)
+  if (days == null || days < 1) return ''
+  if (days === 1) return 'Watch for a reminder email today with a login link.'
+  return 'We’ll email you the day before with a login link.'
+}
+
 /** Format an ISO datetime for `<input type="datetime-local">` in local time. */
 export function toDatetimeLocalValue(iso: string | null | undefined) {
   if (!iso) return ''

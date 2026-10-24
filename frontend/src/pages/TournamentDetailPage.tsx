@@ -22,6 +22,7 @@ import {
   formatTime,
   isKnockoutActive,
   isPastCalendarDate,
+  reminderPromiseCopy,
   spotsLeftLabel,
   statusBadgeClass,
   statusLabel,
@@ -164,6 +165,7 @@ export default function TournamentDetailPage() {
     tournament.status === 'LIVE' ||
     tournament.status === 'COMPLETED' ||
     tournament.status === 'CANCELLED'
+  const reminderNote = reminderPromiseCopy(tournament.event_date)
   const preStart =
     hasPaidEntry &&
     !eventStarted &&
@@ -282,7 +284,8 @@ export default function TournamentDetailPage() {
                 </>
               ) : null}
               {myTeamInfo?.players?.length ? ` · ${myTeamInfo.players.join(' / ')}` : ''}.
-              Waiting for the organiser to publish the draw.
+              Waiting for the organiser to publish the draw
+              {reminderNote ? `. ${reminderNote}` : '.'}
             </p>
           </div>
         )}

@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, community, profiles, reports, tournaments
+from app.api import auth, community, cron, profiles, reports, tournaments
 from app.core.config import get_settings
 from app.db.session import init_db
 from app.db.seed import seed_if_empty
@@ -36,6 +36,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(community.router, prefix="/api")
+app.include_router(cron.router, prefix="/api")
 app.include_router(profiles.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(tournaments.router, prefix="/api")
@@ -58,6 +59,11 @@ def _warn_production_config() -> None:
         )
     if settings.should_seed_demo():
         print("WARNING: SEED_DEMO_DATA is enabled in production - demo passwords will be created.")
+    if settings.resend_api_key and not settings.cron_secret:
+        print(
+            "WARNING: RESEND_API_KEY is set but CRON_SECRET is missing — "
+            "day-before tournament reminder cron cannot authenticate."
+        )
 
 
 @app.on_event("startup")

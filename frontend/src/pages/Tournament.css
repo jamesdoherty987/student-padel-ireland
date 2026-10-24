@@ -935,6 +935,17 @@
   line-height: 1.4;
 }
 
+.confirm-hint {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md, 12px);
+  background: linear-gradient(145deg, rgba(11, 61, 46, 0.07), rgba(200, 230, 0, 0.1));
+  border: 1px solid rgba(11, 61, 46, 0.12);
+  color: var(--ink);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
 .pl-pay-venue {
   margin-bottom: 0.75rem;
 }

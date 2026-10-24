@@ -456,6 +456,18 @@ export const tournamentApi = {
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
   leaveTournament: (tournamentId: string) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/leave`),
+  sendReminders: (tournamentId: string, dryRun = false) =>
+    api.post<{
+      ok: boolean
+      tournament_id: string
+      name: string
+      sent: number
+      skipped: number
+      failed: number
+      dry_run: number
+    }>(`/api/tournaments/${tournamentId}/reminders`, {}, {
+      params: dryRun ? { dry_run: true } : undefined,
+    }),
   respondPartnerInvite: (tournamentId: string, accept: boolean) =>
     api.post<{
       ok: boolean

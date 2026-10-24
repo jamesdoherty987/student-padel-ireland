@@ -1,0 +1,74 @@
+# Day-before tournament reminder emails (Ireland calendar).
+# Runs morning + evening so late registrants still get a reminder.
+# Requires repository secrets: CRON_SECRET (must match Render CRON_SECRET)
+# Optional variable: API_BASE_URL (default Render API)
+name: Tournament reminders
+
+on:
+  schedule:
+    # ~9:00 Ireland summer / 8:00 winter
+    - cron: '0 8 * * *'
+    # Catch afternoon/evening registrations the day before
+    - cron: '0 17 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no emails sent)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Send day-before reminders
+        env:
+          API_BASE_URL: ${{ vars.API_BASE_URL != '' && vars.API_BASE_URL || 'https://student-padel-ireland.onrender.com' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          DRY_RUN: ${{ github.event_inputs.dry_run || 'false' }}
+        run: |
+          set +e
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET secret is not set — skip"
+            exit 1
+          fi
+
+          qs=""
+          if [ "$DRY_RUN" = "true" ]; then
+            qs="?dry_run=true"
+          fi
+          url="${API_BASE_URL%/}/api/cron/tournament-reminders${qs}"
+          echo "POST $url"
+
+          # Wake free-tier dyno, then call the cron endpoint
+          for i in $(seq 1 12); do
+            body_file="$(mktemp)"
+            code=$(curl -sS -o "$body_file" -w "%{http_code}" --max-time 90 \
+              -X POST "$url" \
+              -H "Authorization: Bearer $CRON_SECRET" \
+              -H "Content-Type: application/json" || echo "000")
+            body=$(cat "$body_file" 2>/dev/null || true)
+            rm -f "$body_file"
+
+            echo "Attempt $i → HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "$body"
+              echo "OK"
+              exit 0
+            fi
+            # Cold start / waking
+            if [ "$code" = "502" ] || [ "$code" = "503" ] || [ "$code" = "000" ]; then
+              sleep 15
+              continue
+            fi
+            echo "$body"
+            exit 1
+          done
+
+          echo "Reminder cron failed after retries"
+          exit 1

@@ -42,3 +42,5 @@ services:
         value: Student Padel Ireland <noreply@studentpadel.ie>
       - key: REPORT_EMAIL
         value: jkdoherty123@gmail.com
+      - key: CRON_SECRET
+        sync: false

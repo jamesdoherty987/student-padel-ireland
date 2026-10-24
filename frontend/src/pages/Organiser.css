@@ -269,6 +269,12 @@ html.native-app.has-native-tabs .org-toast {
   max-width: 52ch;
 }
 
+.org-reminders-copy {
+  margin: 0;
+  line-height: 1.45;
+  max-width: 52ch;
+}
+
 .org-invite {
   display: flex;
   flex-direction: column;

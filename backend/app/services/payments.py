@@ -256,6 +256,9 @@ def fulfill_checkout_session(db: Session, session_id: str) -> Registration | Non
     )
     db.commit()
     db.refresh(reg)
+    from app.services.reminders import maybe_remind_team_after_paid
+
+    maybe_remind_team_after_paid(db, reg.tournament_id, reg.team_id)
     return reg
 
 

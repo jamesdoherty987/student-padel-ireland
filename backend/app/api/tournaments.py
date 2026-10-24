@@ -1588,9 +1588,11 @@ def _issue_checkout(
     # Free entry — mark paid immediately (Stripe rejects €0 line items)
     if t.entry_fee_cents <= 0:
         from app.services.payments import mark_registration_paid
+        from app.services.reminders import maybe_remind_team_after_paid
 
         mark_registration_paid(db, reg, stripe_payment_id="free_entry")
         db.commit()
+        maybe_remind_team_after_paid(db, t.id, reg.team_id)
         return CheckoutResponse(
             checkout_url=None,
             registration_id=reg.id,
@@ -1602,11 +1604,13 @@ def _issue_checkout(
     # (unless the captain chose optional pay-online-now for the full team fee)
     if getattr(t, "pay_on_arrival", False) and not pay_online_now:
         from app.services.payments import mark_registration_paid
+        from app.services.reminders import maybe_remind_team_after_paid
 
         reg.amount_cents = t.entry_fee_cents
         reg.currency = t.currency
         mark_registration_paid(db, reg, stripe_payment_id="pay_on_arrival")
         db.commit()
+        maybe_remind_team_after_paid(db, t.id, reg.team_id)
         fee = f"{(t.entry_fee_cents / 100):.2f} {t.currency}".replace(".00 ", " ")
         return CheckoutResponse(
             checkout_url=None,
@@ -1648,9 +1652,11 @@ def _issue_checkout(
         )
 
     from app.services.payments import mark_registration_paid
+    from app.services.reminders import maybe_remind_team_after_paid
 
     mark_registration_paid(db, reg, stripe_payment_id="demo_payment")
     db.commit()
+    maybe_remind_team_after_paid(db, t.id, reg.team_id)
     return CheckoutResponse(
         checkout_url=None,
         registration_id=reg.id,

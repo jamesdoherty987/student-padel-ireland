@@ -282,6 +282,24 @@ class Payment(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), default=PaymentStatus.PENDING.value)
 
 
+class TournamentReminderLog(Base, TimestampMixin):
+    """Idempotency log: one day-before reminder email per player per tournament."""
+
+    __tablename__ = "tournament_reminder_logs"
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "user_id", name="uq_tournament_reminder_user"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class Group(Base, TimestampMixin):
     __tablename__ = "groups"
 

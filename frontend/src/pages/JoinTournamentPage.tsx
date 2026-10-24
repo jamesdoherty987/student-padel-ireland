@@ -20,7 +20,13 @@ import {
   type PlayerSearch,
   type RegistrationConfirm,
 } from '../services/api'
-import { formatMoney, formatPerPlayerFee, isPastCalendarDate, tournamentFormatSummary } from '../utils/format'
+import {
+  formatMoney,
+  formatPerPlayerFee,
+  isPastCalendarDate,
+  reminderPromiseCopy,
+  tournamentFormatSummary,
+} from '../utils/format'
 import './Tournament.css'
 
 function paymentLabel(status: string, paymentVia?: string | null) {
@@ -44,6 +50,7 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
   const isCaptain = data.slot == null || data.slot === 1
   const singles = data.tournament?.play_format === 'SINGLES'
   const canLeave = !!data.can_leave
+  const reminderNote = confirmed ? reminderPromiseCopy(data.tournament?.event_date) : ''
 
   useEffect(() => {
     if (confirmed) void hapticSuccess()
@@ -103,6 +110,11 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
             {!singles ? ' (full team fee)' : ''}.
           </p>
         )}
+        {reminderNote ? (
+          <p className="confirm-hint" role="status">
+            {reminderNote}
+          </p>
+        ) : null}
         {slug && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {confirmed ? (

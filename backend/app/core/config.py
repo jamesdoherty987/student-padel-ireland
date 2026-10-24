@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     email_from: str = "Student Padel Ireland <noreply@studentpadel.ie>"
     # Where user reports of objectionable content are emailed
     report_email: str = "jkdoherty123@gmail.com"
+    # Shared secret for GitHub Actions → POST /api/cron/tournament-reminders
+    cron_secret: str = ""
 
     # Comma-separated extra CORS origins (Capacitor, preview deploys, custom domains)
     cors_extra_origins: str = ""
