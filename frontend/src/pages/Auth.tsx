@@ -378,7 +378,6 @@ export function SignupPage() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              placeholder="you@college.ie"
             />
           </div>
           <PasswordField
