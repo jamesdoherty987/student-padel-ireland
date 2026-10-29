@@ -89,7 +89,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Open Tournaments and filter for open or upcoming events. Each page shows venue, date, format (singles or doubles), entry fee, and spots left.',
+        text: 'Open Tournaments and filter for open or upcoming events. Each page shows venue, date, format (singles or doubles), and entry fee.',
       },
       {
         type: 'h2',

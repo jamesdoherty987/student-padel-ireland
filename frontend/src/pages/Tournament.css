@@ -610,6 +610,155 @@
   color: var(--ink);
 }
 
+/* Clear “You’re in” / entry status on tournament page */
+.tour-entry-banner {
+  margin: 0.9rem 0 1.1rem;
+  padding: 1.15rem 1.15rem 1.2rem;
+  border-radius: 18px;
+  background: linear-gradient(165deg, #0f4a36 0%, #0b3d2e 55%, #146644 100%);
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(11, 61, 46, 0.18);
+}
+
+.tour-entry-banner--alert {
+  background: linear-gradient(165deg, #5c3d0a 0%, #3d2a08 55%, #6b4a12 100%);
+}
+
+.tour-entry-banner--pending {
+  background: linear-gradient(165deg, #1a3a52 0%, #122a3d 55%, #1e4a66 100%);
+}
+
+.tour-entry-banner--live {
+  box-shadow:
+    0 10px 28px rgba(11, 61, 46, 0.18),
+    0 0 0 2px rgba(200, 230, 0, 0.35);
+}
+
+.tour-entry-badge {
+  display: inline-block;
+  margin: 0 0 0.65rem;
+  padding: 0.32rem 0.75rem;
+  border-radius: 999px;
+  background: var(--ball, #c8e600);
+  color: var(--court-deep, #0b3d2e);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.tour-entry-banner--alert .tour-entry-badge {
+  background: #ffd666;
+  color: #3d2a08;
+}
+
+.tour-entry-banner--pending .tour-entry-badge {
+  background: #7ec8ff;
+  color: #0b2740;
+}
+
+.tour-entry-title {
+  margin: 0 0 0.2rem;
+  font-family: var(--font-display, inherit);
+  font-size: clamp(1.25rem, 4vw, 1.55rem);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.tour-entry-players {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.35;
+}
+
+.tour-entry-body {
+  margin: 0 0 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.tour-entry-facts {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tour-entry-facts li {
+  position: relative;
+  padding-left: 1rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.tour-entry-facts li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 50%;
+  background: var(--ball, #c8e600);
+}
+
+.tour-entry-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.tour-entry-actions .btn-primary {
+  background: var(--ball, #c8e600);
+  color: var(--court-deep, #0b3d2e);
+  border-color: transparent;
+}
+
+.tour-entry-actions .btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+.tour-entry-btn-ghost,
+.tour-entry-actions .btn-ghost {
+  color: #fff !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  background: transparent !important;
+}
+
+.tour-entry-btn-ghost:hover,
+.tour-entry-actions .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.tour-entry-tour-name {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.confirm-page .tour-entry-banner {
+  margin-top: 0.5rem;
+}
+
+.confirm-page .tour-entry-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.confirm-page .tour-entry-actions .btn {
+  width: 100%;
+  justify-content: center;
+}
+
 .tour-actions {
   display: flex;
   flex-wrap: wrap;

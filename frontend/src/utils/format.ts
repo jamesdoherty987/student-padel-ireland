@@ -50,14 +50,6 @@ export function formatDoublesEntry(
   return formatEntrySummary(registered, maxTeams, entryFeeCents, currency, 'DOUBLES')
 }
 
-export function spotsLeftLabel(registered: number, maxTeams: number, playFormat: string = 'DOUBLES') {
-  const left = Math.max(0, maxTeams - registered)
-  if (left === 0) return 'Full'
-  const noun = playFormat === 'SINGLES' ? 'singles spot' : 'doubles spot'
-  if (left === 1) return `1 ${noun} left`
-  return `${left} ${noun}s left`
-}
-
 export function courtLabel(courtName?: string | null, courtNumber?: number | null) {
   if (courtName) return courtName
   if (courtNumber != null) return `Court ${courtNumber}`

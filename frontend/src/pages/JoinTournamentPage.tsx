@@ -100,66 +100,100 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
       <main className="page confirm-page">
         <BackButton fallbackTo={slug ? `/t/${slug}` : '/tournaments'} />
         {!isNativeApp() ? <BrandLogo to="/tournaments" className="confirm-brand" size="sm" /> : null}
-        <h1 className="page-title">
-          {confirmed ? (payOnArrival ? 'You’re in' : 'Registration confirmed') : 'Registration received'}
-        </h1>
-        <p className="confirm-tour">{data.tournament?.name}</p>
-        <div className="confirm-box">
-          {(() => {
-            const names = [...new Set(data.players.filter(Boolean))]
-            const teamLabel = (data.team_name || '').trim()
-            const singlesSameName =
-              singles && names.length === 1 && names[0].toLowerCase() === teamLabel.toLowerCase()
-            return (
-              <>
-                <div>
-                  <span>{singles ? 'Entry' : 'Team'}</span>
-                  <strong>{teamLabel || '-'}</strong>
-                </div>
-                {!singlesSameName && (
-                  <div>
-                    <span>{singles ? 'Player' : 'Players'}</span>
-                    <strong>
-                      {names.length === 0
-                        ? '-'
-                        : names.map((p, i) => (
-                            <span key={`${p}-${i}`} style={{ display: 'block' }}>
-                              {p}
-                            </span>
-                          ))}
-                    </strong>
-                  </div>
+        {confirmed ? (
+          <div className="tour-entry-banner" role="status">
+            <p className="tour-entry-badge">You’re in</p>
+            <h1 className="tour-entry-title">
+              {(data.team_name || '').trim() || data.tournament?.name || 'Entry confirmed'}
+            </h1>
+            {(() => {
+              const names = [...new Set(data.players.filter(Boolean))]
+              const teamLabel = (data.team_name || '').trim()
+              const singlesSameName =
+                singles && names.length === 1 && names[0].toLowerCase() === teamLabel.toLowerCase()
+              if (!names.length || singlesSameName) return null
+              return <p className="tour-entry-players">{names.join(' · ')}</p>
+            })()}
+            <p className="tour-entry-tour-name">{data.tournament?.name}</p>
+            <ul className="tour-entry-facts">
+              <li>
+                {formatMoney(data.amount_cents, data.currency)} ·{' '}
+                {paymentLabel(data.status, data.payment_via)}
+              </li>
+              {payOnArrival ? (
+                <li>
+                  Spot reserved - bring payment to the organiser at the venue
+                  {!singles ? ' (full team fee)' : ''}
+                </li>
+              ) : (
+                <li>Your spot is locked in</li>
+              )}
+              {reminderNote ? <li>{reminderNote}</li> : null}
+            </ul>
+            {slug && (
+              <div className="tour-entry-actions">
+                <Link to={`/t/${slug}/live`} className="btn btn-primary">
+                  View my entry
+                </Link>
+                {payOnArrival && isCaptain && tournamentId && data.amount_cents > 0 && (
+                  <ConfirmPayOnlineButton
+                    tournamentId={tournamentId}
+                    slug={slug}
+                    feeLabel={formatMoney(data.amount_cents, data.currency)}
+                  />
                 )}
-              </>
-            )
-          })()}
-          <div>
-            <span>Payment</span>
-            <strong className={fullyPaid ? 'paid' : ''}>
-              {formatMoney(data.amount_cents, data.currency)} ·{' '}
-              {paymentLabel(data.status, data.payment_via)}
-            </strong>
+                <Link to={`/t/${slug}`} className="btn btn-ghost tour-entry-btn-ghost">
+                  Tournament page
+                </Link>
+              </div>
+            )}
           </div>
-        </div>
-        {payOnArrival && (
-          <p className="confirm-venue-note" role="status">
-            Your spot is reserved. Bring {formatMoney(data.amount_cents, data.currency)} to pay the
-            organiser at the venue
-            {!singles ? ' (full team fee)' : ''}.
-          </p>
+        ) : (
+          <>
+            <h1 className="page-title">Registration received</h1>
+            <p className="confirm-tour">{data.tournament?.name}</p>
+            <div className="confirm-box">
+              {(() => {
+                const names = [...new Set(data.players.filter(Boolean))]
+                const teamLabel = (data.team_name || '').trim()
+                const singlesSameName =
+                  singles && names.length === 1 && names[0].toLowerCase() === teamLabel.toLowerCase()
+                return (
+                  <>
+                    <div>
+                      <span>{singles ? 'Entry' : 'Team'}</span>
+                      <strong>{teamLabel || '-'}</strong>
+                    </div>
+                    {!singlesSameName && (
+                      <div>
+                        <span>{singles ? 'Player' : 'Players'}</span>
+                        <strong>
+                          {names.length === 0
+                            ? '-'
+                            : names.map((p, i) => (
+                                <span key={`${p}-${i}`} style={{ display: 'block' }}>
+                                  {p}
+                                </span>
+                              ))}
+                        </strong>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+              <div>
+                <span>Payment</span>
+                <strong className={fullyPaid ? 'paid' : ''}>
+                  {formatMoney(data.amount_cents, data.currency)} ·{' '}
+                  {paymentLabel(data.status, data.payment_via)}
+                </strong>
+              </div>
+            </div>
+          </>
         )}
-        {reminderNote ? (
-          <p className="confirm-hint" role="status">
-            {reminderNote}
-          </p>
-        ) : null}
-        {slug && (
+        {!confirmed && slug && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {confirmed ? (
-              <Link to={`/t/${slug}/live`} className="btn btn-primary btn-block">
-                View my entry
-              </Link>
-            ) : isCaptain ? (
+            {isCaptain ? (
               <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block">
                 Complete payment
               </Link>
@@ -169,25 +203,22 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
                 you want out.
               </p>
             )}
-            {payOnArrival && isCaptain && tournamentId && data.amount_cents > 0 && (
-              <ConfirmPayOnlineButton tournamentId={tournamentId} slug={slug} feeLabel={formatMoney(data.amount_cents, data.currency)} />
-            )}
             <Link to={`/t/${slug}`} className="btn btn-ghost btn-block">
               Tournament page
             </Link>
-            {(pending || (confirmed && canLeave)) && canLeave && tournamentId && (
-              <LeaveTournamentButton
-                tournamentId={tournamentId}
-                slug={slug}
-                paymentStatus={data.status}
-                paymentVia={data.payment_via}
-                teamName={data.team_name}
-                singles={singles}
-                className="btn btn-ghost btn-block"
-                onLeft={() => navigate(`/t/${slug}`, { replace: true })}
-              />
-            )}
           </div>
+        )}
+        {(pending || (confirmed && canLeave)) && canLeave && tournamentId && slug && (
+          <LeaveTournamentButton
+            tournamentId={tournamentId}
+            slug={slug}
+            paymentStatus={data.status}
+            paymentVia={data.payment_via}
+            teamName={data.team_name}
+            singles={singles}
+            className="btn btn-ghost btn-block"
+            onLeft={() => navigate(`/t/${slug}`, { replace: true })}
+          />
         )}
       </main>
     </div>
@@ -671,43 +702,49 @@ export default function JoinTournamentPage() {
   const needsPartner = !!myTeam?.needs_partner && mySlot === 1
 
   if (myTeam && myPayment === 'PAID' && !needsPartner) {
+    const payAtVenue = myTeam.payment_via === 'pay_on_arrival'
     return (
       <div className="app-shell">
         <NavBar />
-        <main className="page empty-state">
-          <h1 className="page-title">You’re already in</h1>
-          <p className="page-sub">
-            {myTeam.name}
-            {myTeam.players?.length ? ` · ${myTeam.players.join(' / ')}` : ''}
-          </p>
-          {myTeam.payment_via === 'pay_on_arrival' && (
-            <p className="confirm-venue-note" role="status">
-              Pay {formatMoney(tournament.entry_fee_cents, tournament.currency)} to the organiser at
-              the venue{!singles ? ' (full team fee)' : ''}.
-            </p>
-          )}
-          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
-            <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
-              My matches
-            </Link>
-            {myTeam.payment_via === 'pay_on_arrival' &&
-              (mySlot === 1 || mySlot == null) &&
-              tournament.entry_fee_cents > 0 && (
-                <ConfirmPayOnlineButton
-                  tournamentId={tournament.id}
-                  slug={tournament.slug}
-                  feeLabel={formatMoney(tournament.entry_fee_cents, tournament.currency)}
-                />
-              )}
-            <Link to={`/t/${tournament.slug}`} className="btn btn-ghost">
-              Tournament page
-            </Link>
+        <main className="page">
+          <BackButton fallbackTo={`/t/${tournament.slug}`} />
+          <div className="tour-entry-banner" role="status">
+            <p className="tour-entry-badge">You’re in</p>
+            <h1 className="tour-entry-title">{myTeam.name || tournament.name}</h1>
+            {myTeam.players?.length ? (
+              <p className="tour-entry-players">{myTeam.players.join(' · ')}</p>
+            ) : null}
+            <ul className="tour-entry-facts">
+              <li>
+                {payAtVenue
+                  ? `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)} at the venue${!singles ? ' (full team fee)' : ''}`
+                  : 'Entry paid · spot confirmed'}
+              </li>
+              <li>You’re already registered for this tournament</li>
+            </ul>
+            <div className="tour-entry-actions">
+              <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
+                View my entry
+              </Link>
+              {payAtVenue &&
+                (mySlot === 1 || mySlot == null) &&
+                tournament.entry_fee_cents > 0 && (
+                  <ConfirmPayOnlineButton
+                    tournamentId={tournament.id}
+                    slug={tournament.slug}
+                    feeLabel={formatMoney(tournament.entry_fee_cents, tournament.currency)}
+                  />
+                )}
+              <Link to={`/t/${tournament.slug}`} className="btn btn-ghost tour-entry-btn-ghost">
+                Tournament page
+              </Link>
+            </div>
           </div>
           {myTeam.can_leave && (
             <>
               <p className="muted-note entry-leave-note">
                 Need to pull out before the event starts? You can leave below.
-                {myTeam.payment_via === 'pay_on_arrival'
+                {payAtVenue
                   ? ' You haven’t paid online - this just frees your spot.'
                   : ' Fees aren’t refunded automatically - message the organiser if you need one.'}
               </p>
