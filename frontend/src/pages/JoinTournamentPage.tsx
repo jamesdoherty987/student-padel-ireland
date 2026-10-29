@@ -6,6 +6,7 @@ import BrandLogo from '../components/BrandLogo'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import SearchableSelect from '../components/SearchableSelect'
+import SponsorStrip from '../components/SponsorStrip'
 import { useAuth } from '../context/AuthContext'
 import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 import { hapticSuccess } from '../native/haptics'
@@ -36,6 +37,43 @@ function paymentLabel(status: string, paymentVia?: string | null) {
   if (status === 'PAID') return 'Paid'
   if (status === 'PENDING') return 'Awaiting payment'
   return status.replace(/_/g, ' ')
+}
+
+/** Stripe Checkout URLs embed cs_live_… / cs_test_… — use for native return confirm. */
+function checkoutSessionIdFromUrl(checkoutUrl: string): string | null {
+  const match = checkoutUrl.match(/\bcs_(?:live|test)_[A-Za-z0-9]+/)
+  return match?.[0] ?? null
+}
+
+async function waitMs(ms: number) {
+  await new Promise((r) => setTimeout(r, ms))
+}
+
+/** After returning from Stripe, poll until PAID (webhook / confirm race). */
+async function pollRegistrationPaid(
+  registrationId: string,
+  checkoutUrl?: string | null,
+): Promise<RegistrationConfirm | null> {
+  const sessionId = checkoutUrl ? checkoutSessionIdFromUrl(checkoutUrl) : null
+  const delays = [0, 800, 1600, 2800, 4000]
+  for (const delay of delays) {
+    if (delay) await waitMs(delay)
+    try {
+      if (sessionId) {
+        const { data } = await tournamentApi.confirmPaymentSession(sessionId)
+        if (data.status === 'PAID') return data
+      }
+    } catch {
+      /* fall through to registration lookup */
+    }
+    try {
+      const { data } = await tournamentApi.getRegistration(registrationId)
+      if (data.status === 'PAID') return data
+    } catch {
+      /* retry */
+    }
+  }
+  return null
 }
 
 function ConfirmView({ data }: { data: RegistrationConfirm }) {
@@ -176,34 +214,29 @@ function ConfirmPayOnlineButton({
     setBusy(true)
     setErr('')
     try {
-      const { data } = await tournamentApi.payOnlineNow(tournamentId)
+      const { data } = await tournamentApi.payOnlineNow(tournamentId, {
+        return_origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+      })
       if (data.checkout_url) {
         if (isNativeApp()) {
           const regId = data.registration_id
+          const checkoutUrl = data.checkout_url
           checkoutDisposeRef.current?.()
           const dispose = await whenExternalBrowserCloses(() => {
             checkoutDisposeRef.current = null
             void (async () => {
-              try {
-                const { data: reg } = await tournamentApi.getRegistration(regId)
-                if (reg.status === 'PAID' && reg.payment_via !== 'pay_on_arrival') {
-                  navigate(`/t/${slug}/confirmed?registration_id=${regId}`, { replace: true })
-                  return
-                }
-                if (reg.status === 'PAID') {
-                  navigate(`/t/${slug}/confirmed?registration_id=${regId}`, { replace: true })
-                  return
-                }
-              } catch {
-                /* fall through */
+              const reg = await pollRegistrationPaid(regId, checkoutUrl)
+              if (reg?.status === 'PAID') {
+                navigate(`/t/${slug}/confirmed?registration_id=${regId}`, { replace: true })
+                return
               }
-              setErr('Payment was not completed. If you paid, open My matches or try again shortly.')
+              setErr('Payment was not completed. If you paid, open the tournament page — we will retry confirming.')
               setBusy(false)
             })()
           })
           checkoutDisposeRef.current = dispose
           try {
-            await openExternalUrl(data.checkout_url)
+            await openExternalUrl(checkoutUrl)
           } catch {
             dispose()
             checkoutDisposeRef.current = null
@@ -284,6 +317,12 @@ export default function JoinTournamentPage() {
     queryFn: async () => (await tournamentApi.get(slug)).data,
     enabled: !!slug && !isConfirmRoute,
   })
+  const { data: sponsors = [] } = useQuery({
+    queryKey: ['sponsors', slug],
+    queryFn: async () => (await tournamentApi.sponsors(slug)).data,
+    enabled: !!slug && !isConfirmRoute,
+    staleTime: 60_000,
+  })
 
   const {
     data: playerView,
@@ -317,15 +356,35 @@ export default function JoinTournamentPage() {
     isLoading: confirming,
     isError: confirmError,
     error: confirmErr,
+    refetch: refetchConfirm,
+    isFetching: confirmFetching,
   } = useQuery({
     queryKey: ['payment-confirm', sessionId, registrationId],
     queryFn: async () => {
-      if (sessionId) return (await tournamentApi.confirmPaymentSession(sessionId)).data
+      // Website Stripe return: try session confirm, then registration_id fallback
+      if (sessionId) {
+        try {
+          return (await tournamentApi.confirmPaymentSession(sessionId)).data
+        } catch (err: unknown) {
+          if (registrationId) {
+            try {
+              const { data } = await tournamentApi.getRegistration(registrationId)
+              if (data.status === 'PAID') return data
+            } catch {
+              /* rethrow original */
+            }
+          }
+          throw err
+        }
+      }
       if (registrationId) return (await tournamentApi.getRegistration(registrationId)).data
       throw new Error('Missing session')
     },
     enabled: isConfirmRoute && !!user && hasConfirmParams,
-    retry: 2,
+    // Webhook / Stripe redirect often races the first confirm call
+    retry: 6,
+    retryDelay: (attempt) => Math.min(900 * 2 ** attempt, 5000),
+    refetchOnWindowFocus: true,
   })
 
   const [form, setForm] = useState({
@@ -474,13 +533,13 @@ export default function JoinTournamentPage() {
   if (isConfirmRoute && confirmError) {
     const status = apiErrorStatus(confirmErr)
     const title =
-      status === 403 ? 'Wrong account' : status === 404 ? 'Registration not found' : 'Couldn’t confirm payment'
+      status === 403 ? 'Wrong account' : status === 404 ? 'Still confirming payment' : 'Couldn’t confirm payment'
     const copy =
       status === 403
         ? 'This registration belongs to another account. Log in with the email used at checkout.'
         : status === 404
-          ? 'We could not find this registration. If you just paid, wait a moment and refresh.'
-          : "We couldn't verify this payment yet. If you were charged, your registration will appear shortly."
+          ? 'Payment usually lands within a few seconds. Tap try again — if you were charged, your spot will show as paid.'
+          : "We couldn't verify this payment yet. If you were charged, tap try again or open the tournament page."
 
     return (
       <div className="app-shell">
@@ -488,9 +547,19 @@ export default function JoinTournamentPage() {
         <main className="page empty-state">
           <h1 className="page-title">{title}</h1>
           <p className="page-sub">{copy}</p>
-          <Link to={slug ? `/t/${slug}` : '/tournaments'} className="btn btn-primary">
-            Back to tournament
-          </Link>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={confirmFetching}
+              onClick={() => void refetchConfirm()}
+            >
+              {confirmFetching ? 'Checking…' : 'Try again'}
+            </button>
+            <Link to={slug ? `/t/${slug}` : '/tournaments'} className="btn btn-ghost">
+              Back to tournament
+            </Link>
+          </div>
         </main>
       </div>
     )
@@ -794,23 +863,16 @@ export default function JoinTournamentPage() {
       const dispose = await whenExternalBrowserCloses(() => {
         checkoutDisposeRef.current = null
         void (async () => {
-          try {
-            const { data: reg } = await tournamentApi.getRegistration(registrationId)
-            if (reg.status === 'PAID' && reg.payment_via !== 'pay_on_arrival') {
-              navigate(`/t/${slug}/confirmed?registration_id=${registrationId}`, { replace: true })
-              return
-            }
-            if (reg.status === 'PAID') {
-              navigate(`/t/${slug}/confirmed?registration_id=${registrationId}`, { replace: true })
-              return
-            }
-          } catch {
-            /* fall through */
+          const reg = await pollRegistrationPaid(registrationId, checkoutUrl)
+          if (reg?.status === 'PAID') {
+            navigate(`/t/${slug}/confirmed?registration_id=${registrationId}`, { replace: true })
+            return
           }
           setPaymentNote(
-            'Payment was not completed. If you paid, open My matches or try confirming again shortly.',
+            'Payment was not completed. If you paid, open the tournament page — confirmation will retry automatically.',
           )
           setLoading(false)
+          void qc.invalidateQueries({ queryKey: ['player-view', slug] })
         })()
       })
       checkoutDisposeRef.current = dispose
@@ -863,6 +925,7 @@ export default function JoinTournamentPage() {
         university_id: form.university_id || null,
         student_number: null,
         pay_online_now: payOnlineNow,
+        return_origin: typeof window !== 'undefined' ? window.location.origin : undefined,
       }
       if (!singles) {
         if (partnerMode === 'friend' && form.partner_user_id) {
@@ -925,6 +988,7 @@ export default function JoinTournamentPage() {
           {tournamentFormatSummary(tournament.play_format, tournament.format)} · {perPlayer}
           {!singles ? ` · team fee ${teamFee}` : ''}
         </p>
+        <SponsorStrip sponsors={sponsors} placement="hero" compact />
 
         {resumingPending && (
           <p className="form-success" style={{ marginBottom: '1rem' }}>

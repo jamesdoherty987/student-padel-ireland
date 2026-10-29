@@ -64,6 +64,13 @@ def _warn_production_config() -> None:
             "WARNING: RESEND_API_KEY is set but CRON_SECRET is missing - "
             "day-before tournament reminder cron cannot authenticate."
         )
+    from_addr = (settings.email_from or "").lower()
+    if settings.resend_api_key and "studentpadelireland.ie" in from_addr:
+        print(
+            "WARNING: EMAIL_FROM uses studentpadelireland.ie which Resend rejects. "
+            "Set EMAIL_FROM to a verified domain, e.g. "
+            "'Student Padel Ireland <noreply@studentpadel.ie>'."
+        )
 
 
 @app.on_event("startup")

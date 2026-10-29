@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
+import SponsorStrip from '../components/SponsorStrip'
 import { hapticLight } from '../native/haptics'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
@@ -133,6 +134,12 @@ export default function TvDisplayPage() {
     retry: 4,
     retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 8000),
   })
+  const { data: sponsors = [] } = useQuery({
+    queryKey: ['sponsors', id],
+    queryFn: async () => (await tournamentApi.sponsors(id)).data,
+    enabled: !!id,
+    staleTime: 60_000,
+  })
 
   if (isLoading) {
     return (
@@ -201,6 +208,9 @@ export default function TvDisplayPage() {
             {isFetching ? ' · refreshing…' : ''}
           </p>
         )}
+        <div className="tv-sponsors">
+          <SponsorStrip sponsors={sponsors} placement="hero" compact tone="dark" />
+        </div>
       </header>
 
       <div className="tv-grid" style={{ '--cols': cols } as CSSProperties}>

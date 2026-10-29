@@ -102,6 +102,15 @@
   color: rgba(255, 255, 255, 0.55);
 }
 
+.tv-sponsors {
+  margin: 0.85rem auto 0;
+  max-width: min(920px, 100%);
+}
+
+.tv-sponsors .sponsor-strip--hero {
+  margin: 0;
+}
+
 .tv-grid {
   display: grid;
   grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));

@@ -7,6 +7,7 @@ import { confirmDialog } from '../components/ConfirmDialog'
 import CreateTournamentModal from '../components/CreateTournamentModal'
 import EditTournamentModal from '../components/EditTournamentModal'
 import NumberInput from '../components/NumberInput'
+import SponsorStrip from '../components/SponsorStrip'
 import TournamentBracket from '../components/TournamentBracket'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl } from '../native/platform'
@@ -1710,48 +1711,57 @@ export default function OrganiserDashboard() {
               <>
               <section className="org-section">
                 <h2>Sponsors</h2>
+                <p className="muted-note" style={{ marginTop: 0 }}>
+                  Logo and name show at the top of the tournament page, join flow, and TV display.
+                </p>
                 {sponsors.length > 0 && (
-                  <ul className="org-sponsor-list">
-                    {sponsors.map((s) => (
-                      <li key={s.id} className="org-sponsor-item">
-                        <div className="org-sponsor-thumb">
-                          {s.logo_url ? (
-                            <img src={mediaUrl(s.logo_url)} alt="" />
-                          ) : (
-                            <span aria-hidden>{s.name.slice(0, 1).toUpperCase()}</span>
-                          )}
-                        </div>
-                        <div className="org-sponsor-meta">
-                          <strong>
-                            {s.name}
-                            {s.level === 'MAIN' ? <em> · Featured</em> : null}
-                          </strong>
-                          {s.website ? (
-                            <span className="muted">{s.website.replace(/^https?:\/\//, '')}</span>
-                          ) : (
-                            <span className="muted">No website</span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          disabled={deleteSponsorMut.isPending}
-                          onClick={() => {
-                            void confirmDialog({
-                              title: 'Remove sponsor?',
-                              message: `Remove “${s.name}” from this event?`,
-                              confirmLabel: 'Remove',
-                              danger: true,
-                            }).then((ok) => {
-                              if (ok) deleteSponsorMut.mutate(s.id)
-                            })
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <div className="org-sponsor-preview" aria-label="Player preview">
+                      <p className="org-sponsor-preview-label">Player preview</p>
+                      <SponsorStrip sponsors={sponsors} placement="hero" />
+                    </div>
+                    <ul className="org-sponsor-list">
+                      {sponsors.map((s) => (
+                        <li key={s.id} className="org-sponsor-item">
+                          <div className="org-sponsor-thumb">
+                            {s.logo_url ? (
+                              <img src={mediaUrl(s.logo_url)} alt="" />
+                            ) : (
+                              <span aria-hidden>{s.name.slice(0, 1).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div className="org-sponsor-meta">
+                            <strong>
+                              {s.name}
+                              {s.level === 'MAIN' ? <em> · Featured</em> : null}
+                            </strong>
+                            {s.website ? (
+                              <span className="muted">{s.website.replace(/^https?:\/\//, '')}</span>
+                            ) : (
+                              <span className="muted">No website</span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={deleteSponsorMut.isPending}
+                            onClick={() => {
+                              void confirmDialog({
+                                title: 'Remove sponsor?',
+                                message: `Remove “${s.name}” from this event?`,
+                                confirmLabel: 'Remove',
+                                danger: true,
+                              }).then((ok) => {
+                                if (ok) deleteSponsorMut.mutate(s.id)
+                              })
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
                 <div className="org-sponsor-form">
                   <div className="form-group">

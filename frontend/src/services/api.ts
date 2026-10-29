@@ -14,8 +14,13 @@ api.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${token}`
   }
   if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
-    // Let the browser set multipart boundary
-    delete config.headers['Content-Type']
+    // Let the browser set multipart boundary (AxiosHeaders needs .delete / set false)
+    const headers = config.headers
+    if (headers && typeof (headers as { delete?: (k: string) => void }).delete === 'function') {
+      ;(headers as { delete: (k: string) => void }).delete('Content-Type')
+    } else if (headers) {
+      delete (headers as Record<string, unknown>)['Content-Type']
+    }
   }
   return config
 })
@@ -378,13 +383,13 @@ export const tournamentApi = {
       demo_mode?: boolean
       message?: string
     }>(`/api/tournaments/${tournamentId}/register`, data),
-  payOnlineNow: (tournamentId: string) =>
+  payOnlineNow: (tournamentId: string, data?: Record<string, unknown>) =>
     api.post<{
       checkout_url?: string | null
       registration_id: string
       demo_mode?: boolean
       message?: string
-    }>(`/api/tournaments/${tournamentId}/pay-online-now`),
+    }>(`/api/tournaments/${tournamentId}/pay-online-now`, data || {}),
   organiserAddTeam: (tournamentId: string, data: Record<string, unknown>) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/organiser-add-team`, data),
   teams: (tournamentId: string) => api.get<TournamentTeam[]>(`/api/tournaments/${tournamentId}/teams`),
@@ -416,8 +421,11 @@ export const tournamentApi = {
     const form = new FormData()
     form.append('name', data.name)
     if (data.website) form.append('website', data.website)
-    if (data.featured) form.append('featured', 'true')
-    if (data.logo) form.append('logo', data.logo)
+    form.append('featured', data.featured ? 'true' : 'false')
+    if (data.logo) {
+      const filename = data.logo.name?.trim() || 'logo.png'
+      form.append('logo', data.logo, filename)
+    }
     return api.post<TournamentSponsor>(`/api/tournaments/${tournamentId}/sponsors`, form, {
       timeout: 60_000,
     })

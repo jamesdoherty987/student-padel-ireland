@@ -1,7 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from './ConfirmDialog'
-import DraftSponsorsField, { type DraftSponsor } from './DraftSponsorsField'
+import DraftSponsorsField, {
+  type DraftSponsor,
+  type DraftSponsorsFieldHandle,
+} from './DraftSponsorsField'
 import ModalShell from './ModalShell'
 import TournamentFormFields, { type TournamentFormState } from './TournamentFormFields'
 import { apiErrorMessage, tournamentApi } from '../services/api'
@@ -76,6 +79,7 @@ export default function CreateTournamentModal({
     courtNamesFor(defaultForm(variant).number_of_courts),
   )
   const [sponsors, setSponsors] = useState<DraftSponsor[]>([])
+  const sponsorsFieldRef = useRef<DraftSponsorsFieldHandle>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -123,6 +127,9 @@ export default function CreateTournamentModal({
     setError('')
     setSaving(true)
     try {
+      // Include a filled-in sponsor row even if "Add to list" wasn't clicked
+      const sponsorsToUpload = sponsorsFieldRef.current?.flush() ?? sponsors
+
       const { data } = await tournamentApi.create({
         name: form.name.trim(),
         location: form.location.trim(),
@@ -150,7 +157,8 @@ export default function CreateTournamentModal({
       })
 
       let sponsorFails = 0
-      for (const s of sponsors) {
+      let lastSponsorError = ''
+      for (const s of sponsorsToUpload) {
         try {
           await tournamentApi.createSponsor(data.id, {
             name: s.name,
@@ -158,8 +166,9 @@ export default function CreateTournamentModal({
             featured: s.featured,
             logo: s.logo,
           })
-        } catch {
+        } catch (err: unknown) {
           sponsorFails += 1
+          lastSponsorError = apiErrorMessage(err, 'Sponsor upload failed')
         }
       }
 
@@ -169,10 +178,15 @@ export default function CreateTournamentModal({
         } catch {
           await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
           await qc.invalidateQueries({ queryKey: ['tournaments'] })
-          onCreated(
-            'Tournament created, but registration could not be opened - open it from My events',
-            data.id,
-          )
+          await qc.invalidateQueries({ queryKey: ['sponsors', data.slug] })
+          let msg =
+            'Tournament created, but registration could not be opened - open it from My events'
+          if (sponsorsToUpload.length && sponsorFails === 0) {
+            msg += ` · ${sponsorsToUpload.length} sponsor${sponsorsToUpload.length === 1 ? '' : 's'} saved`
+          } else if (sponsorFails > 0) {
+            msg += ` · ${sponsorFails} sponsor${sponsorFails === 1 ? '' : 's'} failed${lastSponsorError ? ` (${lastSponsorError})` : ''} - add from Manage`
+          }
+          onCreated(msg, data.id)
           onClose()
           return
         }
@@ -189,10 +203,10 @@ export default function CreateTournamentModal({
         : isAdmin
           ? 'Official tournament created as draft'
           : 'Tournament created as draft'
-      if (sponsors.length && sponsorFails === 0) {
-        msg += ` · ${sponsors.length} sponsor${sponsors.length === 1 ? '' : 's'} added`
+      if (sponsorsToUpload.length && sponsorFails === 0) {
+        msg += ` · ${sponsorsToUpload.length} sponsor${sponsorsToUpload.length === 1 ? '' : 's'} saved`
       } else if (sponsorFails > 0) {
-        msg += ` · ${sponsorFails} sponsor${sponsorFails === 1 ? '' : 's'} failed - add them from Manage`
+        msg += ` · ${sponsorFails} sponsor${sponsorFails === 1 ? '' : 's'} failed${lastSponsorError ? ` (${lastSponsorError})` : ''} - add from Manage`
       }
       onCreated(msg, data.id)
       onClose()
@@ -250,6 +264,7 @@ export default function CreateTournamentModal({
         <section className="tf-section">
           <h3 className="tf-section-title">Sponsors</h3>
           <DraftSponsorsField
+            ref={sponsorsFieldRef}
             sponsors={sponsors}
             onChange={(next) => {
               markDirty()

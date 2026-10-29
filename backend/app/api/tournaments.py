@@ -59,6 +59,7 @@ from app.schemas import (
     MatchOut,
     OrganiserAddTeamRequest,
     PartnerInviteRespond,
+    PayOnlineNowRequest,
     PlayerScoreSubmit,
     RegisterTeamRequest,
     ScoreUpdate,
@@ -1444,6 +1445,7 @@ def register_team(
             resume_reg,
             customer_email=user.email,
             pay_online_now=bool(body.pay_online_now),
+            return_origin=body.return_origin,
         )
 
     team = Team(
@@ -1490,6 +1492,7 @@ def register_team(
         reg,
         customer_email=user.email,
         pay_online_now=bool(body.pay_online_now),
+        return_origin=body.return_origin,
     )
 
 
@@ -1573,6 +1576,33 @@ def organiser_add_team(
     return _team_out(team)
 
 
+def _checkout_web_origin(return_origin: str | None) -> str:
+    """Prefer the browser host the player started from (www vs apex), else FRONTEND_URL."""
+    settings = get_settings()
+    allowed = {o.rstrip("/").lower() for o in settings.cors_origins()}
+    raw = (return_origin or "").strip().rstrip("/")
+    if raw and raw.lower() in allowed and raw.lower().startswith("https://"):
+        return raw
+    return settings.frontend_url.rstrip("/")
+
+
+def _checkout_success_cancel_urls(
+    t: Tournament,
+    reg: Registration,
+    *,
+    return_origin: str | None = None,
+    cancel_path: str | None = None,
+) -> tuple[str, str]:
+    origin = _checkout_web_origin(return_origin)
+    # Include registration_id so the website can recover if session confirm races
+    success = (
+        f"{origin}/t/{t.slug}/confirmed"
+        f"?session_id={{CHECKOUT_SESSION_ID}}&registration_id={reg.id}"
+    )
+    cancel = f"{origin}{cancel_path or f'/t/{t.slug}/join?cancelled=1'}"
+    return success, cancel
+
+
 def _issue_checkout(
     db: Session,
     t: Tournament,
@@ -1581,6 +1611,7 @@ def _issue_checkout(
     *,
     customer_email: str | None = None,
     pay_online_now: bool = False,
+    return_origin: str | None = None,
 ) -> CheckoutResponse:
     if not team:
         raise HTTPException(404, "Team not found")
@@ -1623,14 +1654,15 @@ def _issue_checkout(
     if settings.stripe_secret_key:
         from app.services.payments import create_checkout_session
 
+        success_url, cancel_url = _checkout_success_cancel_urls(t, reg, return_origin=return_origin)
         try:
             session = create_checkout_session(
                 tournament_name=t.name,
                 team_name=team.name,
                 amount_cents=t.entry_fee_cents,
                 currency=t.currency,
-                success_url=f"{settings.frontend_url}/t/{t.slug}/confirmed?session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"{settings.frontend_url}/t/{t.slug}/join?cancelled=1",
+                success_url=success_url,
+                cancel_url=cancel_url,
                 registration_id=reg.id,
                 tournament_id=t.id,
                 customer_email=customer_email,
@@ -1670,8 +1702,10 @@ def pay_online_now(
     tournament_id: UUID,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    body: PayOnlineNowRequest = PayOnlineNowRequest(),
 ):
     """Captain (or singles player) with a pay-on-arrival spot pays the full team fee online."""
+    req = body
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
@@ -1693,7 +1727,15 @@ def pay_online_now(
         raise HTTPException(400, "This entry was withdrawn")
     if reg.status != PaymentStatus.PAID.value:
         # Pending captains should use register with pay_online_now
-        return _issue_checkout(db, t, team, reg, customer_email=user.email, pay_online_now=True)
+        return _issue_checkout(
+            db,
+            t,
+            team,
+            reg,
+            customer_email=user.email,
+            pay_online_now=True,
+            return_origin=req.return_origin,
+        )
 
     via = (reg.stripe_payment_intent_id or "").strip().lower()
     if via != "pay_on_arrival":
@@ -1705,14 +1747,20 @@ def pay_online_now(
     if settings.stripe_secret_key:
         from app.services.payments import create_checkout_session
 
+        success_url, cancel_url = _checkout_success_cancel_urls(
+            t,
+            reg,
+            return_origin=req.return_origin,
+            cancel_path=f"/t/{t.slug}/live?pay_cancelled=1",
+        )
         try:
             session = create_checkout_session(
                 tournament_name=t.name,
                 team_name=team.name,
                 amount_cents=t.entry_fee_cents,
                 currency=t.currency,
-                success_url=f"{settings.frontend_url}/t/{t.slug}/confirmed?session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"{settings.frontend_url}/t/{t.slug}/live?pay_cancelled=1",
+                success_url=success_url,
+                cancel_url=cancel_url,
                 registration_id=reg.id,
                 tournament_id=t.id,
                 customer_email=user.email,
@@ -1742,6 +1790,28 @@ def pay_online_now(
     )
 
 
+def _try_fulfill_pending_registration(db: Session, reg: Registration) -> Registration:
+    """If a PENDING entry has a Stripe session, attempt fulfillment (webhook race / missed hook)."""
+    if reg.status != PaymentStatus.PENDING.value:
+        return reg
+    session_id = (reg.stripe_session_id or "").strip()
+    if not session_id.startswith("cs_"):
+        return reg
+    from app.services.payments import fulfill_checkout_session
+
+    try:
+        fulfilled = fulfill_checkout_session(db, session_id)
+    except HTTPException:
+        db.rollback()
+        refreshed = db.get(Registration, reg.id)
+        return refreshed or reg
+    except Exception:
+        db.rollback()
+        refreshed = db.get(Registration, reg.id)
+        return refreshed or reg
+    return fulfilled or reg
+
+
 @router.get("/registrations/{registration_id}")
 def get_registration(
     registration_id: UUID,
@@ -1751,6 +1821,8 @@ def get_registration(
     reg = db.get(Registration, registration_id)
     if not reg:
         raise HTTPException(404, "Registration not found")
+    # Native return-from-Stripe often lands here before/without the webhook finishing
+    reg = _try_fulfill_pending_registration(db, reg)
     return _registration_payload(db, reg, user)
 
 
@@ -1821,6 +1893,9 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
 @router.post("/webhooks/stripe")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """Stripe webhook - signature verification required (see Stripe webhook docs)."""
+    import logging
+
+    logger = logging.getLogger(__name__)
     settings = get_settings()
     if not settings.stripe_secret_key:
         raise HTTPException(400, "Stripe not configured")
@@ -1850,11 +1925,34 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
         if session_id:
             try:
-                fulfill_checkout_session(db, session_id)
-            except HTTPException:
-                # Cancelled/withdrawn/full/mismatch - ack so Stripe stops retrying.
+                reg = fulfill_checkout_session(db, session_id)
+            except HTTPException as exc:
+                # Business rejection (withdrawn/full/mismatch) - ack so Stripe stops retrying.
                 # Player may have been charged; organiser handles refund manually.
+                logger.warning(
+                    "Stripe webhook fulfill rejected for %s: %s",
+                    session_id,
+                    getattr(exc, "detail", exc),
+                )
                 db.rollback()
+            except Exception:
+                logger.exception("Stripe webhook fulfill crashed for %s", session_id)
+                db.rollback()
+                # 500 → Stripe retries
+                raise HTTPException(500, "Fulfillment failed") from None
+            else:
+                if reg is None:
+                    # Paid session with no matching registration - keep retrying briefly
+                    logger.error("Stripe webhook: paid session %s matched no registration", session_id)
+                    raise HTTPException(500, "Registration not found for paid session")
+                if reg.status != PaymentStatus.PAID.value:
+                    logger.error(
+                        "Stripe webhook: session %s fulfilled but registration %s status=%s",
+                        session_id,
+                        reg.id,
+                        reg.status,
+                    )
+                    raise HTTPException(500, "Registration not marked paid")
     return {"received": True}
 
 
@@ -3278,6 +3376,9 @@ def player_view(
                 .first()
             )
             if my_team and my_team.registration:
+                # Recover stuck Checkout payments when the player re-opens the event
+                if my_team.registration.status == PaymentStatus.PENDING.value:
+                    my_team.registration = _try_fulfill_pending_registration(db, my_team.registration)
                 my_payment_status = my_team.registration.status
             if my_team:
                 my_teammates = [

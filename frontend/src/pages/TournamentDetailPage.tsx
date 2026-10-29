@@ -208,6 +208,8 @@ export default function TournamentDetailPage() {
           <p className="tour-format-hint muted">{bracketFormatHint(tournament.format)}</p>
         )}
 
+        <SponsorStrip sponsors={sponsors} placement="hero" />
+
         {(isListedPartner ||
           hasPendingCaptain ||
           (tournament.status === 'REGISTRATION_OPEN' &&
@@ -389,8 +391,6 @@ export default function TournamentDetailPage() {
             Register by {formatDate(tournament.registration_deadline, { day: 'numeric', month: 'short' })}
           </p>
         )}
-
-        <SponsorStrip sponsors={sponsors} />
 
         {(knockoutActive || live.length > 0 || upcoming.length > 0) && (
           <nav className="tour-jump" aria-label="Jump to section">

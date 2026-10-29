@@ -253,6 +253,12 @@ class RegisterTeamRequest(BaseModel):
     student_number: Optional[str] = None
     # When tournament is pay-on-arrival, captain can still choose Stripe checkout for the full team fee
     pay_online_now: bool = False
+    # Browser origin (e.g. https://www.studentpadel.ie) so Stripe returns to the same host
+    return_origin: Optional[str] = Field(default=None, max_length=200)
+
+
+class PayOnlineNowRequest(BaseModel):
+    return_origin: Optional[str] = Field(default=None, max_length=200)
 
 
 class OrganiserAddTeamRequest(BaseModel):

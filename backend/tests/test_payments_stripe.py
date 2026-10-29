@@ -83,20 +83,30 @@ def test_payment_intent_id_string_or_object():
 
 
 def test_assert_session_matches_registration_amount_and_currency():
-    reg = SimpleNamespace(amount_cents=2500, currency="EUR")
+    reg = SimpleNamespace(amount_cents=2500, currency="EUR", stripe_session_id="cs_other")
     _assert_session_matches_registration(
-        SimpleNamespace(amount_total=2500, currency="eur"), reg
+        SimpleNamespace(id="cs_1", amount_total=2500, currency="eur"), reg
     )
     with pytest.raises(HTTPException) as amount_err:
         _assert_session_matches_registration(
-            SimpleNamespace(amount_total=1, currency="eur"), reg
+            SimpleNamespace(id="cs_1", amount_total=1, currency="eur"), reg
         )
     assert amount_err.value.status_code == 400
     with pytest.raises(HTTPException) as currency_err:
         _assert_session_matches_registration(
-            SimpleNamespace(amount_total=2500, currency="usd"), reg
+            SimpleNamespace(id="cs_1", amount_total=2500, currency="usd"), reg
         )
     assert currency_err.value.status_code == 400
+
+
+def test_assert_session_matches_bound_session_syncs_amount():
+    """Fee edits after Checkout create must not block a paid bound session."""
+    reg = SimpleNamespace(amount_cents=200, currency="EUR", stripe_session_id="cs_live_abc")
+    _assert_session_matches_registration(
+        SimpleNamespace(id="cs_live_abc", amount_total=400, currency="eur"), reg
+    )
+    assert reg.amount_cents == 400
+    assert reg.currency == "EUR"
 
 
 def test_registration_id_uuid_roundtrip_shape():

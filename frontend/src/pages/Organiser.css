@@ -567,6 +567,31 @@ html.native-app.has-native-tabs .org-toast {
   font-size: 0.9rem;
 }
 
+.org-sponsor-preview {
+  margin: 0 0 1rem;
+  padding: 0.85rem 0.9rem 0.35rem;
+  border-radius: 14px;
+  border: 1px dashed rgba(11, 61, 46, 0.18);
+  background: rgba(246, 250, 247, 0.65);
+}
+
+.org-sponsor-preview-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.org-sponsor-preview .sponsor-strip--hero {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .org-sponsor-list {
   list-style: none;
   margin: 0 0 1rem;

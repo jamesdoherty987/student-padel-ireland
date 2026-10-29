@@ -6,6 +6,7 @@ import { confirmDialog } from '../components/ConfirmDialog'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import NumberInput from '../components/NumberInput'
+import SponsorStrip from '../components/SponsorStrip'
 import TournamentBracket from '../components/TournamentBracket'
 import { useAuth } from '../context/AuthContext'
 import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
@@ -296,6 +297,12 @@ export default function PlayerLivePage() {
     enabled: !!slug,
     refetchInterval: 12000,
   })
+  const { data: sponsors = [] } = useQuery({
+    queryKey: ['sponsors', slug],
+    queryFn: async () => (await tournamentApi.sponsors(slug)).data,
+    enabled: !!slug,
+    staleTime: 60_000,
+  })
 
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ['player-view', slug] })
@@ -552,6 +559,7 @@ export default function PlayerLivePage() {
                   : 'Courts, calls, and scores - updates every few seconds.'}
             </p>
           )}
+          <SponsorStrip sponsors={sponsors} placement="hero" compact />
           {payNote && (
             <p className="pl-pay-venue" role="status">
               {payNote}

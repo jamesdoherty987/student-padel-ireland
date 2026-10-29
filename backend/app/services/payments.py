@@ -208,9 +208,26 @@ def _resolve_registration_for_session(db: Session, session: Any) -> Registration
 
 
 def _assert_session_matches_registration(session: Any, reg: Registration) -> None:
-    """Reject mismatched amount/currency so a wrong session can't fulfill an entry."""
-    amount_total = getattr(session, "amount_total", None)
-    currency = getattr(session, "currency", None)
+    """Reject mismatched amount/currency so a wrong session can't fulfill an entry.
+
+    If this Checkout Session id is already bound on the registration (set when we
+    created Checkout), trust that binding — sync amount/currency from Stripe so a
+    later fee edit cannot block fulfillment after the player has paid.
+    """
+    session_id = _session_field(session, "id")
+    bound = bool(
+        session_id
+        and reg.stripe_session_id
+        and str(session_id) == str(reg.stripe_session_id)
+    )
+    amount_total = _session_field(session, "amount_total")
+    currency = _session_field(session, "currency")
+    if bound:
+        if amount_total is not None:
+            reg.amount_cents = int(amount_total)
+        if currency:
+            reg.currency = str(currency).upper()
+        return
     if amount_total is not None and int(amount_total) != int(reg.amount_cents):
         raise HTTPException(400, "Paid amount does not match this registration")
     if currency and str(currency).lower() != str(reg.currency or "").lower():
@@ -223,6 +240,9 @@ def fulfill_checkout_session(db: Session, session_id: str) -> Registration | Non
     Retrieves the session from Stripe, checks payment_status, then marks the
     linked registration paid. Returns None if not paid yet / unknown session.
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
     settings = get_settings()
     if not settings.stripe_secret_key:
         # Demo / no Stripe
@@ -237,10 +257,15 @@ def fulfill_checkout_session(db: Session, session_id: str) -> Registration | Non
         raise HTTPException(400, f"Could not verify Stripe session: {exc}") from exc
 
     if not _session_is_paid(session):
+        logger.info("Stripe session %s not paid yet (status=%s)", session_id, _session_field(session, "payment_status"))
         return None
 
     reg = _resolve_registration_for_session(db, session)
     if not reg:
+        logger.error(
+            "Stripe session %s is paid but no registration matched (metadata/client_reference_id/session_id)",
+            session_id,
+        )
         return None
 
     team = db.get(Team, reg.team_id)
