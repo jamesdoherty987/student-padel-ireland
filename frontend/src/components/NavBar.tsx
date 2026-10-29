@@ -168,7 +168,7 @@ export default function NavBar() {
         match: (p) => p.startsWith('/admin'),
       })
     }
-    // Profile is on the native tab bar — don't duplicate in the drawer
+    // Profile is on the native tab bar - don't duplicate in the drawer
     if (!tabsVisible) {
       secondary.push({
         to: `/players/${user.id}`,

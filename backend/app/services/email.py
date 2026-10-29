@@ -10,7 +10,7 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Court green — matches the product brand
+# Court green - matches the product brand
 _BRAND = "#0b3d2e"
 _INK = "#14201b"
 _MUTED = "#5c6b64"

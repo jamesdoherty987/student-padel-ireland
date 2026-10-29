@@ -85,7 +85,7 @@ export default function PlayerProfilePage() {
   const reportMut = useMutation({
     mutationFn: () => reportApi.create(reportTarget!.type, reportTarget!.id, reportReason.trim()),
     onSuccess: () => {
-      setReportMsg('Thanks — your report has been sent. We will review it promptly.')
+      setReportMsg('Thanks - your report has been sent. We will review it promptly.')
       setReportReason('')
     },
     onError: (e) => setReportMsg(apiErrorMessage(e)),
@@ -379,7 +379,7 @@ export default function PlayerProfilePage() {
         )}
         {player && (
           <>
-            {/* Own profile is a tab root — no Back. Other profiles need an exit. */}
+            {/* Own profile is a tab root - no Back. Other profiles need an exit. */}
             {!(isOwn && tabsVisible) && <BackButton fallbackTo="/rankings" />}
 
             <header className="profile-hero">
@@ -993,7 +993,7 @@ export default function PlayerProfilePage() {
                     ) : (
                       <p className="lightbox-caption is-muted">
                         {lightbox.media_type === 'video'
-                          ? 'Video — use controls to unmute'
+                          ? 'Video - use controls to unmute'
                           : 'Photo'}
                         {media.length > 1 ? ` · ${lightboxIndex + 1} of ${media.length}` : ''}
                       </p>

@@ -13,13 +13,13 @@ import { communityApi, tournamentApi } from './services/api'
 import { clearQueryCachePersist, restoreQueryCache, schedulePersistQueryCache } from './utils/queryPersist'
 import { homeForRole } from './utils/navigation'
 
-/** Marketing / SEO pages stay on the website — never inside the iOS/Android shell. */
+/** Marketing / SEO pages stay on the website - never inside the iOS/Android shell. */
 function WebOnly({ children }: { children: ReactNode }) {
   if (isNativeApp()) return <Navigate to="/tournaments" replace />
   return <>{children}</>
 }
 
-// Landing stays eager — first paint for web home. Everything else is code-split.
+// Landing stays eager - first paint for web home. Everything else is code-split.
 import Landing from './pages/Landing'
 import NativeWelcomePage from './pages/NativeWelcomePage'
 
@@ -80,7 +80,7 @@ function PrefetchWarmup() {
   useEffect(() => {
     wakeApiEarly()
 
-    // Align with Landing / Tournaments upcoming queries — not a dead ['tournaments'] key
+    // Align with Landing / Tournaments upcoming queries - not a dead ['tournaments'] key
     if (pathname === '/' || pathname.startsWith('/tournaments')) {
       void queryClient.prefetchQuery({
         queryKey: ['tournaments', 'upcoming'],
@@ -160,7 +160,7 @@ function RootRoute() {
     if (user) return <Navigate to={homeForRole(user.role)} replace />
     return <Navigate to="/login" replace />
   }
-  // Marketing site for guests only — logged-in users go straight into the app
+  // Marketing site for guests only - logged-in users go straight into the app
   if (loading) return <RouteFallback />
   if (user) return <Navigate to={homeForRole(user.role)} replace />
   return <Landing />

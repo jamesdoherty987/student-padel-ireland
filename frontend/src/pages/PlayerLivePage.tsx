@@ -169,7 +169,7 @@ function NextMatchCard({
       </div>
       <div className="pl-time">{when}</div>
       {next.status === 'SCHEDULED' && (
-        <p className="pl-next-hint">Head to this court when called — keep this page open.</p>
+        <p className="pl-next-hint">Head to this court when called - keep this page open.</p>
       )}
 
       {opp ? (
@@ -462,7 +462,7 @@ export default function PlayerLivePage() {
       (myTeam?.players || []).find((n) => n && n !== user?.full_name) ||
       null
     if (!full) return null
-    // First name only — keeps the next-match card readable on narrow phones
+    // First name only - keeps the next-match card readable on narrow phones
     return full.trim().split(/\s+/)[0] || full
   })()
   const liveMatches = (data.live_matches || []) as Match[]
@@ -483,7 +483,7 @@ export default function PlayerLivePage() {
     t.status !== 'CANCELLED'
   const reminderNote = waitingOnDraw ? reminderPromiseCopy(t.event_date) : ''
   const matchDayLive = hasPaidEntry && (t.status === 'LIVE' || drawReady)
-  // Only hide venue board when you're actually on court — still show it while waiting to confirm
+  // Only hide venue board when you're actually on court - still show it while waiting to confirm
   const myOnCourt =
     hasPaidEntry && next && (next.status === 'LIVE' || next.status === 'CALLED')
   // Pre-start: don't drown “you're in” with empty venue chrome
@@ -548,8 +548,8 @@ export default function PlayerLivePage() {
                   ? `You’re registered. ${reminderNote} Your next court appears here when the draw goes live.`
                   : 'You’re registered. We’ll show your next court here when the draw goes live.'
                 : matchDayLive
-                  ? 'Next court, opponent, and score — updates live.'
-                  : 'Courts, calls, and scores — updates every few seconds.'}
+                  ? 'Next court, opponent, and score - updates live.'
+                  : 'Courts, calls, and scores - updates every few seconds.'}
             </p>
           )}
           {payNote && (
@@ -563,7 +563,7 @@ export default function PlayerLivePage() {
               {t.entry_fee_cents > 0
                 ? ` (${formatMoney(t.entry_fee_cents, t.currency)})`
                 : ''}{' '}
-              — pay the organiser at the venue
+              - pay the organiser at the venue
               {(mySlot === 1 || mySlot == null) ? (
                 <>
                   {' '}
@@ -596,7 +596,7 @@ export default function PlayerLivePage() {
               <p className="pl-youre-in-badge">Partner needed</p>
               <p className="pl-empty" style={{ marginBottom: 12 }}>
                 Your partner left <strong>{myTeam?.name}</strong>. Add someone new to stay in the
-                draw — your entry stays paid.
+                draw - your entry stays paid.
               </p>
               <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block">
                 Add partner
@@ -673,7 +673,7 @@ export default function PlayerLivePage() {
                 )}
               </p>
               <p className="muted-note" style={{ marginBottom: 12 }}>
-                Waiting for the draw. This page updates automatically — no need to refresh.
+                Waiting for the draw. This page updates automatically - no need to refresh.
               </p>
               <div className="pl-youre-in-meta">
                 <span>{t.venue}</span>
@@ -708,7 +708,7 @@ export default function PlayerLivePage() {
                     : 'No upcoming matches for you right now.'
                   : !user
                     ? liveMatches.length > 0 || calledMatches.length > 0
-                      ? 'Courts and calls update below — no login needed.'
+                      ? 'Courts and calls update below - no login needed.'
                       : 'Courts and scores will show here when play starts.'
                     : 'Register for this tournament to see your next match here.'}
               </p>

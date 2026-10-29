@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-// Solid icons only — avoid brands/regular webfonts on the critical path
+// Solid icons only - avoid brands/regular webfonts on the critical path
 import '@fortawesome/fontawesome-free/css/fontawesome.min.css'
 import '@fortawesome/fontawesome-free/css/solid.min.css'
 import './index.css'
@@ -47,7 +47,7 @@ function registerServiceWorker() {
 }
 
 wakeApi()
-// Mount React immediately — never block the UI on native plugin init
+// Mount React immediately - never block the UI on native plugin init
 mount()
 registerServiceWorker()
 

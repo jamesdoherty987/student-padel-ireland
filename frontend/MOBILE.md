@@ -14,7 +14,7 @@ The web app is wrapped with **Capacitor 8** so the same React UI ships as:
 - Xcode 16+ (iOS) + Apple Developer Program ($99/yr) for TestFlight / App Store
 - Android Studio (optional, for Play Store)
 - A **live HTTPS API** (`VITE_API_URL`) - the native shell cannot use Vite’s local proxy
-- No committed `.env` — set `VITE_API_URL` / `VITE_WEB_ORIGIN` in your shell (or a local `.env`) before `build:native`
+- No committed `.env` - set `VITE_API_URL` / `VITE_WEB_ORIGIN` in your shell (or a local `.env`) before `build:native`
 
 ## Build & open
 

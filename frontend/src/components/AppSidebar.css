@@ -374,7 +374,7 @@ html.native-app.has-app-sidebar .org-layout {
   padding-left: 0;
 }
 
-/* Match NativeTabBar.css — banner owns notch; don't double-count safe-area */
+/* Match NativeTabBar.css - banner owns notch; don't double-count safe-area */
 html:has(.offline-banner) .app-topbar {
   top: var(--offline-banner-clearance, calc(2.35rem + env(safe-area-inset-top, 0px)));
   padding-top: 0.7rem;

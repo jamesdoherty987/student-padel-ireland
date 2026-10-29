@@ -30,7 +30,7 @@ class UserCreate(BaseModel):
     def player_only_signup(cls, v: UserRole) -> UserRole:
         if v == UserRole.ADMIN:
             raise ValueError("Cannot self-register as ADMIN")
-        # ORGANISER account type removed — everyone signs up as a player
+        # ORGANISER account type removed - everyone signs up as a player
         return UserRole.PLAYER
 
 
@@ -170,9 +170,9 @@ class TournamentUpdate(BaseModel):
     championship_size: Optional[int] = Field(default=None, ge=2, le=64)
     plate_size: Optional[int] = Field(default=None, ge=2, le=64)
     tie_break_order: Optional[str] = None
-    # Platform ADMIN only — list on landing / public browse
+    # Platform ADMIN only - list on landing / public browse
     is_official: Optional[bool] = None
-    # Transfer ownership — only current owner or platform ADMIN may set this
+    # Transfer ownership - only current owner or platform ADMIN may set this
     organiser_id: Optional[UUID] = None
 
     @field_validator("championship_size", "plate_size")
@@ -294,12 +294,12 @@ class ScoreUpdate(BaseModel):
     current_set: int = Field(default=1, ge=1, le=3)
     status: MatchStatus = MatchStatus.LIVE
     winner_id: Optional[UUID] = None
-    # Allow correcting a finished match (standings/bracket only — ratings stay as first applied)
+    # Allow correcting a finished match (standings/bracket only - ratings stay as first applied)
     force: bool = False
 
 
 class PlayerScoreSubmit(BaseModel):
-    """Final result proposed by a player — opponent (or organiser) must confirm."""
+    """Final result proposed by a player - opponent (or organiser) must confirm."""
 
     set1_a: int = Field(ge=0, le=20)
     set1_b: int = Field(ge=0, le=20)

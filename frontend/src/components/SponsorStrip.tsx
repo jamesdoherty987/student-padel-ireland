@@ -10,7 +10,7 @@ type Props = {
   compact?: boolean
 }
 
-/** Clean “Supported by” logo band — hidden when empty. */
+/** Clean “Supported by” logo band - hidden when empty. */
 export default function SponsorStrip({ sponsors, compact = false }: Props) {
   if (!sponsors.length) return null
 

@@ -11,7 +11,7 @@ export function LazyGlobe({ className = '' }: { className?: string }) {
     const el = hostRef.current
     if (!el) return
 
-    // Skip WebGL on very small screens / data-saver — keeps mobile first paint light
+    // Skip WebGL on very small screens / data-saver - keeps mobile first paint light
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
       ?.saveData
     const narrow = window.matchMedia('(max-width: 640px)').matches

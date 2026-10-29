@@ -53,7 +53,7 @@ def _warn_production_config() -> None:
         print("INFO: Stripe not configured - tournament registration will use demo (free) payments.")
     elif not settings.stripe_webhook_secret:
         print(
-            "WARNING: STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is missing — "
+            "WARNING: STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is missing - "
             "webhooks will fail. Add a Checkout webhook for checkout.session.completed "
             "(and async_payment_succeeded) to /api/webhooks/stripe."
         )
@@ -61,7 +61,7 @@ def _warn_production_config() -> None:
         print("WARNING: SEED_DEMO_DATA is enabled in production - demo passwords will be created.")
     if settings.resend_api_key and not settings.cron_secret:
         print(
-            "WARNING: RESEND_API_KEY is set but CRON_SECRET is missing — "
+            "WARNING: RESEND_API_KEY is set but CRON_SECRET is missing - "
             "day-before tournament reminder cron cannot authenticate."
         )
 

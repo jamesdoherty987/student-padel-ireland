@@ -1,4 +1,4 @@
-"""Stripe Checkout helpers — create/confirm/expire sessions and mark registrations paid.
+"""Stripe Checkout helpers - create/confirm/expire sessions and mark registrations paid.
 
 Aligned with Stripe hosted Checkout fulfillment guidance:
 https://docs.stripe.com/checkout/fulfillment?payment-ui=stripe-hosted
@@ -30,7 +30,7 @@ def expire_checkout_session(session_id: str | None) -> None:
         stripe.api_key = settings.stripe_secret_key
         stripe.checkout.Session.expire(session_id)
     except Exception:
-        # Already expired/paid/complete — ignore
+        # Already expired/paid/complete - ignore
         pass
 
 
@@ -95,7 +95,7 @@ def mark_registration_paid(
         if paid_count >= t.max_teams:
             raise HTTPException(
                 400,
-                "This event is full — payment cannot be completed. Contact the organiser for a refund if you were charged.",
+                "This event is full - payment cannot be completed. Contact the organiser for a refund if you were charged.",
             )
 
     player_ids = [
@@ -153,17 +153,55 @@ def mark_registration_paid(
     return reg
 
 
+def _as_mapping(value: Any) -> dict[str, Any]:
+    """Normalize Stripe metadata / webhook payloads to a plain dict.
+
+    stripe-python returns StripeObject for Session.metadata - it is mapping-like
+    but must not be treated as a dict (``.get`` raises AttributeError).
+    """
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        try:
+            converted = to_dict()
+            if isinstance(converted, dict):
+                return converted
+        except Exception:
+            pass
+    try:
+        return dict(value)
+    except Exception:
+        pass
+    out: dict[str, Any] = {}
+    for key in ("registration_id", "tournament_id"):
+        try:
+            item = value[key]
+        except Exception:
+            continue
+        if item is not None:
+            out[key] = item
+    return out
+
+
+def _session_field(session: Any, key: str) -> Any:
+    if isinstance(session, dict):
+        return session.get(key)
+    return getattr(session, key, None)
+
+
 def _resolve_registration_for_session(db: Session, session: Any) -> Registration | None:
-    reg_id = (getattr(session, "metadata", None) or {}).get("registration_id")
-    if not reg_id and isinstance(session, dict):
-        reg_id = (session.get("metadata") or {}).get("registration_id")
+    meta = _as_mapping(_session_field(session, "metadata"))
+    reg_id = meta.get("registration_id") or _session_field(session, "client_reference_id")
     reg: Registration | None = None
     if reg_id:
         try:
             reg = db.get(Registration, UUID(str(reg_id)))
         except (ValueError, TypeError):
             reg = None
-    session_id = getattr(session, "id", None) or (session.get("id") if isinstance(session, dict) else None)
+    session_id = _session_field(session, "id")
     if not reg and session_id:
         reg = db.query(Registration).filter(Registration.stripe_session_id == session_id).first()
     return reg
@@ -215,7 +253,7 @@ def fulfill_checkout_session(db: Session, session_id: str) -> Registration | Non
     _assert_session_matches_registration(session, reg)
     pi = _payment_intent_id(session)
 
-    # Already confirmed pay-on-arrival — upgrade metadata when they pay online later
+    # Already confirmed pay-on-arrival - upgrade metadata when they pay online later
     if reg.status == PaymentStatus.PAID.value:
         via = (reg.stripe_payment_intent_id or "").strip().lower()
         if via == "pay_on_arrival":
@@ -316,6 +354,6 @@ def create_checkout_session(
     if customer_email:
         params["customer_email"] = customer_email.strip().lower()
 
-    # Fresh UUID per attempt — extracted as a request option by the Stripe SDK
+    # Fresh UUID per attempt - extracted as a request option by the Stripe SDK
     params["idempotency_key"] = str(uuid4())
     return stripe.checkout.Session.create(**params)

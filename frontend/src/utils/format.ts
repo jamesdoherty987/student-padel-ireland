@@ -23,7 +23,7 @@ export function formatPerPlayerFee(entryFeeCents: number, currency = 'EUR', play
   return `${formatMoney(Math.round(perPlayerFeeCents(entryFeeCents, playFormat)), currency)}/player`
 }
 
-/** e.g. "12/48 teams · €35/player" — works for singles & doubles (always per player) */
+/** e.g. "12/48 teams · €35/player" - works for singles & doubles (always per player) */
 export function formatEntrySummary(
   registered: number,
   maxTeams: number,
@@ -96,7 +96,7 @@ export function playFormatHint(playFormat?: string | null) {
 
 export function bracketFormatHint(format?: string | null, enablePlate?: boolean) {
   if (format === 'ROUND_ROBIN') {
-    return 'Everyone plays everyone in the draw. Standings decide the winner — no knockout stage.'
+    return 'Everyone plays everyone in the draw. Standings decide the winner - no knockout stage.'
   }
   if (enablePlate) {
     return 'Groups first, then a Championship knockout for the top finishers and a Plate knockout for the next tier.'

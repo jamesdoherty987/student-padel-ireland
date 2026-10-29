@@ -116,7 +116,7 @@ def _build_reminder(tournament: Tournament, user: User) -> tuple[str, str, str]:
         title=title,
         greeting=f"Hi {first},",
         paragraphs=[
-            f"Quick reminder — you're registered for {tournament.name}.",
+            f"Quick reminder - you're registered for {tournament.name}.",
             "Log in to check your entry, draw, and court updates.",
         ],
         detail_lines=[

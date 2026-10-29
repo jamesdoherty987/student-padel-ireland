@@ -38,7 +38,7 @@ class TimestampMixin:
 class UserRole(StrEnum):
     PLAYER = "PLAYER"
     ADMIN = "ADMIN"
-    # Deprecated account type — existing rows are migrated to PLAYER
+    # Deprecated account type - existing rows are migrated to PLAYER
     ORGANISER = "ORGANISER"
 
 

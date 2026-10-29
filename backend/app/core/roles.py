@@ -4,7 +4,7 @@ from enum import StrEnum
 class Role(StrEnum):
     PLAYER = "PLAYER"
     ADMIN = "ADMIN"
-    # Legacy — migrated to PLAYER on startup; kept so old tokens/rows don't explode
+    # Legacy - migrated to PLAYER on startup; kept so old tokens/rows don't explode
     ORGANISER = "ORGANISER"
 
 

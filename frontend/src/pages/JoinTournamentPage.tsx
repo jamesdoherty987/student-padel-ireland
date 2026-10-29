@@ -76,14 +76,14 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
               <>
                 <div>
                   <span>{singles ? 'Entry' : 'Team'}</span>
-                  <strong>{teamLabel || '—'}</strong>
+                  <strong>{teamLabel || '-'}</strong>
                 </div>
                 {!singlesSameName && (
                   <div>
                     <span>{singles ? 'Player' : 'Players'}</span>
                     <strong>
                       {names.length === 0
-                        ? '—'
+                        ? '-'
                         : names.map((p, i) => (
                             <span key={`${p}-${i}`} style={{ display: 'block' }}>
                               {p}
@@ -127,7 +127,7 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
               </Link>
             ) : (
               <p className="muted-note">
-                You’re on this team already. Your teammate needs to finish payment — or leave below if
+                You’re on this team already. Your teammate needs to finish payment - or leave below if
                 you want out.
               </p>
             )}
@@ -347,7 +347,7 @@ export default function JoinTournamentPage() {
     }
   }, [])
 
-  // Prefill from profile whenever /me catches up — only fills empty fields so typing isn’t overwritten
+  // Prefill from profile whenever /me catches up - only fills empty fields so typing isn’t overwritten
   useEffect(() => {
     if (!user) return
     const singlesPrefill = tournament?.play_format === 'SINGLES'
@@ -638,8 +638,8 @@ export default function JoinTournamentPage() {
               <p className="muted-note entry-leave-note">
                 Need to pull out before the event starts? You can leave below.
                 {myTeam.payment_via === 'pay_on_arrival'
-                  ? ' You haven’t paid online — this just frees your spot.'
-                  : ' Fees aren’t refunded automatically — message the organiser if you need one.'}
+                  ? ' You haven’t paid online - this just frees your spot.'
+                  : ' Fees aren’t refunded automatically - message the organiser if you need one.'}
               </p>
               <LeaveTournamentButton
                 tournamentId={tournament.id}
@@ -666,7 +666,7 @@ export default function JoinTournamentPage() {
           <h1 className="page-title">You’re on this team</h1>
           <p className="page-sub">
             You’re already on <strong>{myTeam.name}</strong>
-            {myTeam.players?.length ? ` (${myTeam.players.join(' / ')})` : ''}. No invite to accept —
+            {myTeam.players?.length ? ` (${myTeam.players.join(' / ')})` : ''}. No invite to accept -
             your teammate just needs to finish payment. If you can’t play, leave below so they can
             re-enter with someone else.
           </p>
@@ -876,7 +876,7 @@ export default function JoinTournamentPage() {
         }
       }
 
-      // Partner declined / missing — captain re-adds without re-paying
+      // Partner declined / missing - captain re-adds without re-paying
       if (needsPartner) {
         const { data } = await tournamentApi.replacePartner(tournament.id, payload)
         void qc.invalidateQueries({ queryKey: ['player-view', slug] })
@@ -917,7 +917,7 @@ export default function JoinTournamentPage() {
           <p className="tour-youre-in" role="status" style={{ marginTop: 0 }}>
             <span className="tour-youre-in-kicker">Partner needed</span>
             <span className="tour-youre-in-body">
-              Your previous partner left the team. Pick someone new — your entry stays paid.
+              Your previous partner left the team. Pick someone new - your entry stays paid.
             </span>
           </p>
         )}
@@ -931,7 +931,7 @@ export default function JoinTournamentPage() {
             You already started <strong>{myTeam?.name}</strong>. Update details if needed and{' '}
             {tournament.pay_on_arrival ? 'confirm your entry' : 'finish payment'}
             {tournament.status !== 'REGISTRATION_OPEN' || deadlineGone || isFull
-              ? ' — registration may be closed or full for new entries, but you can still complete yours if a spot remains.'
+              ? ' - registration may be closed or full for new entries, but you can still complete yours if a spot remains.'
               : '.'}
           </p>
         )}
@@ -942,19 +942,19 @@ export default function JoinTournamentPage() {
                 <>
                   Team entry is <strong>{teamFee}</strong> (you cover both players). Confirm now and pay
                   at the venue, or pay the full amount online below. Your partner is added
-                  automatically — they can leave the team if they can’t play.
+                  automatically - they can leave the team if they can’t play.
                 </>
               ) : (
                 <>
                   You pay the full team entry of <strong>{teamFee}</strong>. Your partner is added
-                  automatically and is not charged separately — they can leave if they can’t play.
+                  automatically and is not charged separately - they can leave if they can’t play.
                 </>
               )}
             </p>
           )}
           {singles && tournament.pay_on_arrival && (
             <p className="muted-note join-pay-note">
-              Entry is <strong>{teamFee}</strong> — confirm now and pay at the venue, or pay online
+              Entry is <strong>{teamFee}</strong> - confirm now and pay at the venue, or pay online
               below.
             </p>
           )}
@@ -1091,7 +1091,7 @@ export default function JoinTournamentPage() {
                   {friendsBusyElsewhere.length > 0 && (
                     <p className="muted-note">
                       {friendsBusyElsewhere.length} friend
-                      {friendsBusyElsewhere.length === 1 ? '' : 's'} already entered — hidden from
+                      {friendsBusyElsewhere.length === 1 ? '' : 's'} already entered - hidden from
                       this list.
                     </p>
                   )}
@@ -1139,7 +1139,7 @@ export default function JoinTournamentPage() {
                                   <div className="partner-find-meta">
                                     <strong>{p.full_name}</strong>
                                     <span className="rank-meta">
-                                      {p.university_short || '—'}
+                                      {p.university_short || '-'}
                                       {busy
                                         ? ' · already entered'
                                         : isFriend

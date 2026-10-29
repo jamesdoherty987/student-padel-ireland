@@ -25,7 +25,7 @@ function formatCourtHours(hours: number) {
 }
 
 /**
- * Live summary of how the draw will look — mirrors official open structure
+ * Live summary of how the draw will look - mirrors official open structure
  * (groups → Championship + optional Plate).
  */
 export default function FormatDrawPreview({ form, teamCount }: Props) {
@@ -70,7 +70,7 @@ export default function FormatDrawPreview({ form, teamCount }: Props) {
   const groupLabel =
     preview.groupSizes.length > 0
       ? `${preview.groupCount} group${preview.groupCount === 1 ? '' : 's'} (${formatGroupSizes(preview.groupSizes)})`
-      : '—'
+      : '-'
 
   return (
     <aside className="tf-draw-preview" aria-live="polite">

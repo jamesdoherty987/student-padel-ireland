@@ -10,7 +10,7 @@ Ireland's student padel competition platform. Contained in this folder so you ca
 | Backend | FastAPI (Render) |
 | Database | SQLite locally · **Supabase Postgres** in production |
 | Payments | Stripe Checkout (demo mode without keys) |
-| Email | Resend (optional) — includes day-before tournament reminders |
+| Email | Resend (optional) - includes day-before tournament reminders |
 
 UI: simple tournament-first site (Outfit, court green). Payments via Stripe when keys are set; local demo mode otherwise.
 

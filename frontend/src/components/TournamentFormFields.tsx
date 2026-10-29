@@ -380,7 +380,7 @@ export default function TournamentFormFields({
             id="tf-desc"
             className="form-textarea"
             rows={2}
-            placeholder="Short note players see — level, prizes, what to bring"
+            placeholder="Short note players see - level, prizes, what to bring"
             value={form.description}
             onChange={(e) => onChange({ description: e.target.value })}
           />
@@ -395,7 +395,7 @@ export default function TournamentFormFields({
             className="form-textarea"
             rows={5}
             placeholder={
-              'How scoring works, check-in, and house rules.\n\nExamples:\n• Best of 3 sets to 6, golden point on deuce\n• No-ad scoring — sudden death at deuce\n• Timed matches — 15 min, leading team wins'
+              'How scoring works, check-in, and house rules.\n\nExamples:\n• Best of 3 sets to 6, golden point on deuce\n• No-ad scoring - sudden death at deuce\n• Timed matches - 15 min, leading team wins'
             }
             value={form.rules}
             onChange={(e) => onChange({ rules: e.target.value })}
@@ -407,7 +407,7 @@ export default function TournamentFormFields({
             {(
               [
                 'Best of 3 sets to 6. Golden point on deuce.',
-                'Best of 3 sets. No-ad scoring — sudden death at deuce.',
+                'Best of 3 sets. No-ad scoring - sudden death at deuce.',
                 'Timed matches: 15 minutes. Leading team wins when time is up.',
               ] as const
             ).map((example) => (

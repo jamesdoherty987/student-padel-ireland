@@ -13,7 +13,7 @@ export function nativeTabsHiddenForPath(pathname: string): boolean {
   if (pathname === '/welcome' || pathname === '/') return true
   if (pathname === '/login' || pathname.startsWith('/login/')) return true
   if (pathname === '/signup' || pathname.startsWith('/signup/')) return true
-  // Match-day live scoring — full focus, no chrome distraction
+  // Match-day live scoring - full focus, no chrome distraction
   if (/^\/t\/[^/]+\/live(\/|$)/.test(pathname)) return true
   // Venue TV display
   if (pathname.startsWith('/tournament/')) return true
@@ -36,7 +36,7 @@ export default function NativeTabBar() {
 
   if (!visible) return null
 
-  // After login, land on role home — guests don't have a profile yet
+  // After login, land on role home - guests don't have a profile yet
   const profileTo = user ? `/players/${user.id}` : '/login'
   const onOwnProfile = Boolean(user && pathname === `/players/${user.id}`)
   const onOtherProfile = pathname.startsWith('/players/') && !onOwnProfile

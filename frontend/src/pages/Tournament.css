@@ -110,7 +110,7 @@
   min-width: 8.25rem;
   min-height: 44px;
   padding: 0.35rem 0.55rem;
-  /* Keep 16px on mobile — smaller text triggers iOS zoom-on-focus */
+  /* Keep 16px on mobile - smaller text triggers iOS zoom-on-focus */
   font-size: 16px;
 }
 

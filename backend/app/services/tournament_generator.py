@@ -220,7 +220,7 @@ def preview_draw(
             "championship_size": 0,
             "plate_size": 0,
             "total_matches": group_matches,
-            "note": "Group stage only — not enough advancers for a knockout.",
+            "note": "Group stage only - not enough advancers for a knockout.",
         }
     bracket_size = _next_power_of_two(advancing)
     bye_slots = bracket_size - advancing
@@ -505,7 +505,7 @@ def _knockout_first_round_placeholders(
     Build first-round KO placeholders.
 
     When advancing is an exact power of two and advance==2, keep classic 1A vs 2B pairing.
-    Otherwise pad with single-side BYEs via standard bracket seeding — never BYE vs BYE.
+    Otherwise pad with single-side BYEs via standard bracket seeding - never BYE vs BYE.
     """
     group_count = len(group_names)
     bracket_size = first_round_count * 2
@@ -539,7 +539,7 @@ def _knockout_first_round_placeholders(
         a, b = placed[i], placed[i + 1]
         if a == "BYE" and b == "BYE":
             raise ValueError(
-                "BYE vs BYE generated — advancing field too small for this bracket"
+                "BYE vs BYE generated - advancing field too small for this bracket"
             )
         pairs.append((a, b))
     return pairs

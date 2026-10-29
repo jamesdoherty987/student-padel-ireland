@@ -4,7 +4,7 @@ import { isNativeApp } from '../native/platform'
 import { homeForRole } from '../utils/navigation'
 
 /**
- * Legacy /welcome route — redirects into login (or role home).
+ * Legacy /welcome route - redirects into login (or role home).
  * Kept so old deep links / bookmarks do not 404.
  */
 export default function NativeWelcomePage() {

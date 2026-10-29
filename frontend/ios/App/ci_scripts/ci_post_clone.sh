@@ -1,5 +1,5 @@
 #!/bin/sh
-# Xcode Cloud — build the Capacitor web bundle before Archive.
+# Xcode Cloud - build the Capacitor web bundle before Archive.
 # Runs on Apple's Macs so you can ship iOS updates from Windows.
 set -euo pipefail
 

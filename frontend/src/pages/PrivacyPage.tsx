@@ -1,4 +1,4 @@
-﻿import BackButton from '../components/BackButton'
+import BackButton from '../components/BackButton'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
@@ -9,7 +9,7 @@ export default function PrivacyPage() {
   const { user } = useAuth()
   usePageSeo({
     title: 'Privacy Policy',
-    description: 'Privacy policy for Student Padel Ireland — how we collect and use personal data.',
+    description: 'Privacy policy for Student Padel Ireland - how we collect and use personal data.',
     path: '/privacy',
   })
   return (

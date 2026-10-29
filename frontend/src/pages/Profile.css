@@ -36,7 +36,7 @@
   border-radius: var(--radius-lg);
 }
 
-/* Hero — banner is a fixed-height strip; copy always sits on white below it */
+/* Hero - banner is a fixed-height strip; copy always sits on white below it */
 .profile-hero {
   position: relative;
   margin: 0.35rem 0 1.15rem;

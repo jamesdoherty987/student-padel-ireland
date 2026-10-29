@@ -387,7 +387,7 @@ export default function OrganiserDashboard() {
       setAnnounce({ title: '', body: '' })
       qc.invalidateQueries({ queryKey: ['player-view', slug] })
       qc.invalidateQueries({ queryKey: ['announcements', slug] })
-      showToast('Announcement posted — visible on player live')
+      showToast('Announcement posted - visible on player live')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not post announcement')),
   })
@@ -414,7 +414,7 @@ export default function OrganiserDashboard() {
       setSponsorForm({ name: '', website: '', featured: false, logo: null })
       setSponsorLogoKey((k) => k + 1)
       qc.invalidateQueries({ queryKey: ['sponsors', slug] })
-      showToast('Sponsor added — shown on the tournament page')
+      showToast('Sponsor added - shown on the tournament page')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not add sponsor')),
   })
@@ -556,7 +556,7 @@ export default function OrganiserDashboard() {
       if (d.sent > 0) {
         showToast(`Reminder sent to ${d.sent} player${d.sent === 1 ? '' : 's'}`)
       } else if (d.failed > 0) {
-        showToast('Could not send reminders — check that email (Resend) is configured')
+        showToast('Could not send reminders - check that email (Resend) is configured')
       } else {
         showToast('Everyone eligible already got a reminder')
       }
@@ -660,7 +660,7 @@ export default function OrganiserDashboard() {
     if (team.payment_status === 'PAID') return 'Paid'
     if (team.payment_status === 'FAILED') return 'Payment failed'
     if (team.payment_status === 'CANCELLED') return 'Cancelled'
-    return team.payment_status || '—'
+    return team.payment_status || '-'
   }
 
   const paymentBadgeClass = (team: TournamentTeam) => {
@@ -708,7 +708,7 @@ export default function OrganiserDashboard() {
       return `${incompleteDoubles} paid team${incompleteDoubles === 1 ? ' is' : 's are'} missing a partner. Ask them to add one, or withdraw those entries.`
     }
     if (drawPreview && !drawPreview.ok) {
-      return drawPreview.error || 'Draw settings look invalid — check group / plate sizes in Edit.'
+      return drawPreview.error || 'Draw settings look invalid - check group / plate sizes in Edit.'
     }
     return null
   })()
@@ -966,7 +966,7 @@ export default function OrganiserDashboard() {
             <div className="org-empty">
               <h1>Running an event?</h1>
               <p>
-                Set up registration, payments, and live scoring. Events you create here are private —
+                Set up registration, payments, and live scoring. Events you create here are private -
                 players join with your invite code (they won’t appear on the landing page).
               </p>
               <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
@@ -1261,7 +1261,7 @@ export default function OrganiserDashboard() {
                           void confirmDialog({
                             title: 'Send reminder emails?',
                             message:
-                              'Emails paid players who haven’t received a reminder yet. Safe to run more than once — nobody gets a duplicate.',
+                              'Emails paid players who haven’t received a reminder yet. Safe to run more than once - nobody gets a duplicate.',
                             confirmLabel: 'Send now',
                           }).then((ok) => {
                             if (ok) remindMut.mutate()
@@ -1318,7 +1318,7 @@ export default function OrganiserDashboard() {
                       <p className="org-pay-hint">
                         {paymentCounts.collect > 0 && (
                           <>
-                            <strong>{paymentCounts.collect}</strong> in the draw — tap{' '}
+                            <strong>{paymentCounts.collect}</strong> in the draw - tap{' '}
                             <strong>Mark paid</strong> when you collect cash/card
                             {paymentCounts.incomplete > 0 ? ' · ' : ''}
                           </>
@@ -1430,7 +1430,7 @@ export default function OrganiserDashboard() {
                                     : `Withdraw ${team.name}?`
                                   const feeNote =
                                     team.payment_via === 'pay_on_arrival'
-                                      ? ' They haven’t paid online — this just frees the spot.'
+                                      ? ' They haven’t paid online - this just frees the spot.'
                                       : ' Entry fees are not refunded automatically.'
                                   void confirmDialog({
                                     title: isSingles ? 'Withdraw player?' : 'Withdraw team?',
@@ -1821,7 +1821,7 @@ export default function OrganiserDashboard() {
                             name.endsWith('.heic') ||
                             name.endsWith('.heif')
                           if (heic) {
-                            showToast('Use JPG or PNG — iPhone HEIC photos aren’t supported yet')
+                            showToast('Use JPG or PNG - iPhone HEIC photos aren’t supported yet')
                             e.target.value = ''
                             return
                           }
@@ -2021,7 +2021,7 @@ export default function OrganiserDashboard() {
               ) : (
                 <>
                   Builds groups, fixtures, and the knockout from <strong>paid</strong> entries only.
-                  Empty spots are skipped — the draw fits whoever has paid. Registration will close.
+                  Empty spots are skipped - the draw fits whoever has paid. Registration will close.
                 </>
               )}
             </p>
@@ -2075,7 +2075,7 @@ export default function OrganiserDashboard() {
             {paidCount > 0 && maxTeams > 0 && paidCount < maxTeams && (
               <p className="org-gen-note">
                 Field isn’t full ({maxTeams - paidCount} spot
-                {maxTeams - paidCount === 1 ? '' : 's'} left). That’s fine — groups will be sized evenly
+                {maxTeams - paidCount === 1 ? '' : 's'} left). That’s fine - groups will be sized evenly
                 from the {paidCount} paid {isSingles ? 'player' : 'team'}
                 {paidCount === 1 ? '' : 's'}.
               </p>

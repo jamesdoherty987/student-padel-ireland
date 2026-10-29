@@ -57,7 +57,7 @@ export default class ErrorBoundary extends Component<Props, State> {
       >
         <h1 style={{ fontSize: '1.25rem', margin: 0 }}>Something went wrong</h1>
         <p style={{ margin: 0, opacity: 0.85, maxWidth: 320, lineHeight: 1.45 }}>
-          The page failed to load. Try again — if it keeps happening, clear the cached app data.
+          The page failed to load. Try again - if it keeps happening, clear the cached app data.
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginTop: 8 }}>
           <button

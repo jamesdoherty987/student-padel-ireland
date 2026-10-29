@@ -77,7 +77,7 @@ html.native-app.has-native-tabs .org-layout {
   padding-bottom: var(--native-tab-clearance);
 }
 
-/* Shell already clears the tab bar — keep page padding modest */
+/* Shell already clears the tab bar - keep page padding modest */
 html.native-app.has-native-tabs .page {
   padding-bottom: 1.25rem;
 }

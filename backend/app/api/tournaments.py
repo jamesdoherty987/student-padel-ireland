@@ -80,7 +80,7 @@ router = APIRouter(tags=["tournaments"])
 
 
 def _dublin_tz():
-    """Europe/Dublin — fall back to fixed +01:00 if tzdata isn't installed (Windows)."""
+    """Europe/Dublin - fall back to fixed +01:00 if tzdata isn't installed (Windows)."""
     try:
         return ZoneInfo("Europe/Dublin")
     except Exception:
@@ -125,7 +125,7 @@ def _ensure_invite_code(db: Session, t: Tournament) -> str:
         return t.invite_code
     t.invite_code = _unique_invite_code(db)
     db.add(t)
-    # Persist immediately — get_db does not auto-commit, and this runs on GET/list
+    # Persist immediately - get_db does not auto-commit, and this runs on GET/list
     db.commit()
     db.refresh(t)
     return t.invite_code
@@ -278,7 +278,7 @@ def _ensure_pending_friendship(db: Session, requester_id: UUID, addressee_id: UU
             return existing
         if existing.status == FriendshipStatus.PENDING.value:
             return existing
-        # Declined / other — reopen as pending from captain
+        # Declined / other - reopen as pending from captain
         existing.requester_id = requester_id
         existing.addressee_id = addressee_id
         existing.status = FriendshipStatus.PENDING.value
@@ -314,7 +314,7 @@ def _notify_email_partner(
             f"Hi {partner.full_name},\n\n"
             f"{captain.full_name} added you as their doubles partner for "
             f"{tournament.name} on Student Padel Ireland.\n\n"
-            f"You're already on the team — create your account with this same email "
+            f"You're already on the team - create your account with this same email "
             f"({partner.email}) to see your matches:\n{signup_url}\n\n"
             f"If you can't play, open the event and leave the team so your partner can re-enter.\n\n"
             f"See you on court,\nStudent Padel Ireland\n"
@@ -497,12 +497,12 @@ def _advance_winner_to_next(db: Session, m: Match, winner_id: UUID) -> None:
         MatchStatus.WALKOVER.value,
         MatchStatus.AWAITING_CONFIRM.value,
     ):
-        # Idempotent: already seated — don't block confirm of the prior match
+        # Idempotent: already seated - don't block confirm of the prior match
         if slot_team == winner_id:
             return
         raise HTTPException(
             400,
-            "Cannot change the winner — the next knockout match has already started or finished",
+            "Cannot change the winner - the next knockout match has already started or finished",
         )
     previous_winner = m.winner_id
     if m.next_match_slot == "A":
@@ -578,7 +578,7 @@ def _tournament_out(
         .all()
     )
     can_manage = bool(viewer and user_can_manage_tournament(viewer, t, db))
-    # Always build plain data — never pass ORM Court objects into the response model
+    # Always build plain data - never pass ORM Court objects into the response model
     return TournamentOut(
         id=t.id,
         name=t.name,
@@ -1014,7 +1014,7 @@ def _assert_organiser(user: User, tournament: Tournament, db: Session) -> None:
 
 
 def _assert_owner(user: User, tournament: Tournament) -> None:
-    """Delete, transfer ownership, and manage admin list — owner or platform ADMIN only."""
+    """Delete, transfer ownership, and manage admin list - owner or platform ADMIN only."""
     if not user_owns_tournament(user, tournament):
         raise HTTPException(403, "Only the tournament owner can do this")
 
@@ -1069,7 +1069,7 @@ def list_tournaments(
     upcoming: bool = False,
     db: Session = Depends(get_db),
 ):
-    """Public catalogue — official (admin) events only. Private events stay invite/link-only."""
+    """Public catalogue - official (admin) events only. Private events stay invite/link-only."""
     q = db.query(Tournament).filter(Tournament.is_official.is_(True))
     if status_filter:
         q = q.filter(Tournament.status == status_filter)
@@ -1329,7 +1329,7 @@ def register_team(
         ):
             raise HTTPException(
                 400,
-                "This event has started — you can’t finish registration. Leave the entry instead.",
+                "This event has started - you can’t finish registration. Leave the entry instead.",
             )
     else:
         if t.status != TournamentStatus.REGISTRATION_OPEN.value:
@@ -1345,7 +1345,7 @@ def register_team(
 
     if singles:
         if body.partner_user_id or body.partner_email:
-            raise HTTPException(400, "This is a singles tournament — no partner needed")
+            raise HTTPException(400, "This is a singles tournament - no partner needed")
     else:
         if body.partner_user_id:
             partner = db.get(User, body.partner_user_id)
@@ -1356,7 +1356,7 @@ def register_team(
             email = body.partner_email.lower().strip()
             partner = db.query(User).filter(User.email == email).first()
             if partner:
-                # Existing account (or prior invite stub) — link that user as partner
+                # Existing account (or prior invite stub) - link that user as partner
                 partner_needs_signup = bool(getattr(partner, "must_set_password", False))
                 if partner_needs_signup:
                     name = (body.partner_name or "").strip()
@@ -1514,7 +1514,7 @@ def organiser_add_team(
     if db.query(Match).filter(Match.tournament_id == t.id).count() > 0:
         raise HTTPException(
             400,
-            "Fixtures already exist — add players before generate, or regenerate the draw afterwards",
+            "Fixtures already exist - add players before generate, or regenerate the draw afterwards",
         )
 
     singles = _is_singles(t)
@@ -1585,7 +1585,7 @@ def _issue_checkout(
     if not team:
         raise HTTPException(404, "Team not found")
 
-    # Free entry — mark paid immediately (Stripe rejects €0 line items)
+    # Free entry - mark paid immediately (Stripe rejects €0 line items)
     if t.entry_fee_cents <= 0:
         from app.services.payments import mark_registration_paid
         from app.services.reminders import maybe_remind_team_after_paid
@@ -1597,10 +1597,10 @@ def _issue_checkout(
             checkout_url=None,
             registration_id=reg.id,
             demo_mode=True,
-            message="Registration confirmed — free entry.",
+            message="Registration confirmed - free entry.",
         )
 
-    # Organiser collects cash/card at the venue — confirm the spot without Stripe
+    # Organiser collects cash/card at the venue - confirm the spot without Stripe
     # (unless the captain chose optional pay-online-now for the full team fee)
     if getattr(t, "pay_on_arrival", False) and not pay_online_now:
         from app.services.payments import mark_registration_paid
@@ -1616,7 +1616,7 @@ def _issue_checkout(
             checkout_url=None,
             registration_id=reg.id,
             demo_mode=False,
-            message=f"You're in — pay {fee} at the venue.",
+            message=f"You're in - pay {fee} at the venue.",
         )
 
     settings = get_settings()
@@ -1776,7 +1776,7 @@ def confirm_payment_session(
         # Session exists locally but Stripe says not paid yet (redirect raced webhook)
         reg = db.query(Registration).filter(Registration.stripe_session_id == session_id).first()
         if reg and reg.status == PaymentStatus.PENDING.value:
-            raise HTTPException(404, "Payment not completed yet — try again in a moment")
+            raise HTTPException(404, "Payment not completed yet - try again in a moment")
         raise HTTPException(404, "Payment session not found or not paid yet")
     return _registration_payload(db, reg, user)
 
@@ -1820,12 +1820,12 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
 
 @router.post("/webhooks/stripe")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
-    """Stripe webhook — signature verification required (see Stripe webhook docs)."""
+    """Stripe webhook - signature verification required (see Stripe webhook docs)."""
     settings = get_settings()
     if not settings.stripe_secret_key:
         raise HTTPException(400, "Stripe not configured")
     if not settings.stripe_webhook_secret:
-        # Never accept unsigned webhook bodies — forged events could mark entries paid
+        # Never accept unsigned webhook bodies - forged events could mark entries paid
         raise HTTPException(500, "STRIPE_WEBHOOK_SECRET is not configured")
 
     import stripe
@@ -1852,7 +1852,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             try:
                 fulfill_checkout_session(db, session_id)
             except HTTPException:
-                # Cancelled/withdrawn/full/mismatch — ack so Stripe stops retrying.
+                # Cancelled/withdrawn/full/mismatch - ack so Stripe stops retrying.
                 # Player may have been charged; organiser handles refund manually.
                 db.rollback()
     return {"received": True}
@@ -1990,7 +1990,7 @@ def _apply_team_withdraw(db: Session, t: Tournament, team: Team, *, as_organiser
     if paid and not as_organiser and _tournament_has_fixtures(db, t.id):
         raise HTTPException(
             400,
-            "You can’t leave after the draw is published — contact the organiser",
+            "You can’t leave after the draw is published - contact the organiser",
         )
     if not as_organiser and not _player_can_leave_entry(db, t, team):
         raise HTTPException(400, "You can no longer leave this tournament")
@@ -2063,7 +2063,7 @@ def leave_tournament(
         ):
             raise HTTPException(
                 400,
-                "You can’t leave after the draw is published or the event has started — contact the organiser",
+                "You can’t leave after the draw is published or the event has started - contact the organiser",
             )
         raise HTTPException(400, "You can no longer leave this tournament")
 
@@ -2241,7 +2241,7 @@ def respond_partner_invite(
     ) or _tournament_has_fixtures(db, t.id):
         raise HTTPException(
             400,
-            "You can’t leave after the draw is published — contact the organiser",
+            "You can’t leave after the draw is published - contact the organiser",
         )
 
     db.delete(tp)
@@ -2476,7 +2476,7 @@ def update_score(
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t, db)
 
-    # Organisers finalise results — never leave a player-confirm limbo
+    # Organisers finalise results - never leave a player-confirm limbo
     if body.status == MatchStatus.AWAITING_CONFIRM:
         body = body.model_copy(update={"status": MatchStatus.COMPLETED})
 
@@ -2548,7 +2548,7 @@ def update_score(
         m.winner_id = winner_id
         m.score.confirmed_by_id = None
     else:
-        # Live / other — clear pending confirm markers
+        # Live / other - clear pending confirm markers
         if body.status == MatchStatus.LIVE:
             m.score.confirmed_by_id = None
             m.winner_id = None
@@ -2583,7 +2583,7 @@ def player_submit_score(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Player proposes a final score — the other team must confirm before it counts."""
+    """Player proposes a final score - the other team must confirm before it counts."""
     m = db.get(Match, match_id)
     if not m:
         raise HTTPException(404, "Match not found")
@@ -2601,7 +2601,7 @@ def player_submit_score(
     if m.status == MatchStatus.AWAITING_CONFIRM.value:
         raise HTTPException(
             400,
-            "A score is already waiting for confirm — cancel it first if you need to change it",
+            "A score is already waiting for confirm - cancel it first if you need to change it",
         )
     if m.status not in (
         MatchStatus.SCHEDULED.value,
@@ -2680,7 +2680,7 @@ def player_confirm_score(
         m.score.set3_b,
     )
     if not winner_id:
-        raise HTTPException(400, "Pending score has no clear winner — ask them to re-enter it")
+        raise HTTPException(400, "Pending score has no clear winner - ask them to re-enter it")
 
     _advance_winner_to_next(db, m, winner_id)
     m.winner_id = winner_id
@@ -2765,7 +2765,7 @@ def move_match(
         data["status"] = data["status"].value
     for k, v in data.items():
         setattr(m, k, v)
-    # Calling/starting a match is day-of activity — mark the tournament live
+    # Calling/starting a match is day-of activity - mark the tournament live
     if (
         t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value)
         and getattr(m, "status", None) in (MatchStatus.LIVE.value, MatchStatus.CALLED.value)
@@ -2936,7 +2936,7 @@ def list_tournament_admins(
     if owner:
         out.append(
             TournamentAdminOut(
-                id=t.id,  # synthetic — owner has no tournament_admins row
+                id=t.id,  # synthetic - owner has no tournament_admins row
                 tournament_id=t.id,
                 user_id=owner.id,
                 full_name=owner.full_name,
@@ -3033,7 +3033,7 @@ def remove_tournament_admin(
         raise HTTPException(404, "Tournament not found")
     _assert_owner(user, t)
     if admin_user_id == t.organiser_id:
-        raise HTTPException(400, "Cannot remove the tournament owner — transfer ownership first")
+        raise HTTPException(400, "Cannot remove the tournament owner - transfer ownership first")
     row = (
         db.query(TournamentAdmin)
         .filter(
@@ -3076,7 +3076,7 @@ def _sponsor_public_url(path: str | None) -> str | None:
 
 
 def _infer_sponsor_image_type(data: bytes, filename: str | None, content_type: str | None) -> str | None:
-    """iOS/WebView often sends empty or octet-stream content types — sniff the bytes."""
+    """iOS/WebView often sends empty or octet-stream content types - sniff the bytes."""
     ctype = (content_type or "").lower().strip()
     if ";" in ctype:
         ctype = ctype.split(";", 1)[0].strip()
@@ -3091,7 +3091,7 @@ def _infer_sponsor_image_type(data: bytes, filename: str | None, content_type: s
         return "image/gif"
     if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
         return "image/webp"
-    # HEIC/HEIF — common from iPhone Photos; we don't decode these
+    # HEIC/HEIF - common from iPhone Photos; we don't decode these
     if b"ftypheic" in head or b"ftypheif" in head or b"ftypmif1" in head or b"ftypmsf1" in head:
         return None
     name = (filename or "").lower()
@@ -3107,7 +3107,7 @@ def _infer_sponsor_image_type(data: bytes, filename: str | None, content_type: s
 
 
 def _sponsor_out(s: Sponsor) -> SponsorOut:
-    # logo_data is deferred — use logo_content_type as the uploaded-logo flag
+    # logo_data is deferred - use logo_content_type as the uploaded-logo flag
     if s.logo_content_type:
         logo = _sponsor_public_url(f"/api/sponsors/{s.id}/logo")
     else:
@@ -3430,7 +3430,7 @@ def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
     unassigned: list = []
     for m in matches:
         if m.court_number is None:
-            # Only surface active matches without a court — don't clutter with scheduled TBCs
+            # Only surface active matches without a court - don't clutter with scheduled TBCs
             if m.status in (MatchStatus.LIVE.value, MatchStatus.CALLED.value):
                 unassigned.append(_match_out(db, m, court_names))
             continue

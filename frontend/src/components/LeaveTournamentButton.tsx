@@ -26,8 +26,8 @@ function confirmMessage(
   const label = teamName ? `“${teamName}”` : singles ? 'your entry' : 'your team'
   const payOnArrival = paymentVia === 'pay_on_arrival'
   const feeNote = payOnArrival
-    ? `You haven’t paid online — this just frees your spot.`
-    : `Entry fees are not refunded automatically — contact the organiser if you need a refund.`
+    ? `You haven’t paid online - this just frees your spot.`
+    : `Entry fees are not refunded automatically - contact the organiser if you need a refund.`
   if (!singles) {
     if (paymentStatus === 'PAID') {
       return (

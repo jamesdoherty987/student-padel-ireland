@@ -36,7 +36,7 @@ export default function RankingsPage() {
 
   useEffect(() => {
     if (authLoading) return
-    // Friends / my-university need an account — keep guests on the public board
+    // Friends / my-university need an account - keep guests on the public board
     if (!user && (scopeParam === 'friends' || scopeParam === 'university')) {
       setScope('all')
       setSearchParams(

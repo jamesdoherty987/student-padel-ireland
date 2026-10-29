@@ -13,7 +13,7 @@ export default function AboutPage() {
   usePageSeo({
     title: 'About Student Padel Ireland',
     description:
-      'About Student Padel Ireland — the platform for student padel tournaments, community games, live scores, and Ireland rankings.',
+      'About Student Padel Ireland - the platform for student padel tournaments, community games, live scores, and Ireland rankings.',
     path: '/about',
   })
 
@@ -31,7 +31,7 @@ export default function AboutPage() {
           <p>
             <strong>Student Padel Ireland</strong> (SPI) is built for university and college padel players across
             Ireland. Find tournaments, join with an invite code, run community ladders with friends, follow live
-            scores, and climb a national ranking — all in one place.
+            scores, and climb a national ranking - all in one place.
           </p>
 
           <h2>What we offer</h2>

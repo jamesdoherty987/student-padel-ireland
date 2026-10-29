@@ -18,7 +18,7 @@ export function homeForRole(role: string | undefined | null): string {
 }
 
 /**
- * Auth / logout destination — never the marketing landing inside the native shell.
+ * Auth / logout destination - never the marketing landing inside the native shell.
  * Guests → login; signed-in → role home.
  */
 export function appHomePath(role?: string | null | undefined): string {
@@ -78,7 +78,7 @@ export function nativeBackFallback(
   ) {
     return null
   }
-  // Admin home is their post-login landing — no back chrome
+  // Admin home is their post-login landing - no back chrome
   if (pathname === '/admin' && role === 'ADMIN') {
     return null
   }

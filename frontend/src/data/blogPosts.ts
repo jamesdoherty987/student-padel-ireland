@@ -27,7 +27,7 @@ export const BLOG_POSTS: BlogPost[] = [
     body: [
       {
         type: 'p',
-        text: 'Student Padel Ireland (SPI) is Ireland’s home for student padel. It brings tournaments, private community ladders, invite codes, live scoring, and an Ireland-wide ranking into one place — so university and college players can find a game without hunting through group chats.',
+        text: 'Student Padel Ireland (SPI) is Ireland’s home for student padel. It brings tournaments, private community ladders, invite codes, live scoring, and an Ireland-wide ranking into one place - so university and college players can find a game without hunting through group chats.',
       },
       {
         type: 'h2',
@@ -52,7 +52,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Community mode lets you invite friends with a code, log singles and doubles matches, and climb a shared ladder — useful when there is no official tournament that weekend.',
+        text: 'Community mode lets you invite friends with a code, log singles and doubles matches, and climb a shared ladder - useful when there is no official tournament that weekend.',
       },
       {
         type: 'cta',
@@ -66,7 +66,7 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: 'how-to-join-a-student-padel-tournament',
     title: 'How to join a student padel tournament in Ireland',
     description:
-      'Step-by-step guide to finding and joining student padel tournaments on Student Padel Ireland — with or without an invite code.',
+      'Step-by-step guide to finding and joining student padel tournaments on Student Padel Ireland - with or without an invite code.',
     publishedAt: '2026-10-02',
     tags: ['tournaments', 'how-to'],
     readingMinutes: 5,
@@ -112,7 +112,7 @@ export const BLOG_POSTS: BlogPost[] = [
         items: [
           'Tournament codes take you to that event’s join flow',
           'Community codes add you to a private ladder or group',
-          'Codes are short — paste carefully and avoid extra spaces',
+          'Codes are short - paste carefully and avoid extra spaces',
         ],
       },
       {
@@ -134,7 +134,7 @@ export const BLOG_POSTS: BlogPost[] = [
     body: [
       {
         type: 'p',
-        text: 'Dublin has the densest cluster of student padel activity in Ireland — campus clubs, social boxes, and one-day tournaments. Student Padel Ireland lists Dublin events in one feed so you are not relying on a single society Instagram story.',
+        text: 'Dublin has the densest cluster of student padel activity in Ireland - campus clubs, social boxes, and one-day tournaments. Student Padel Ireland lists Dublin events in one feed so you are not relying on a single society Instagram story.',
       },
       {
         type: 'h2',
@@ -176,7 +176,7 @@ export const BLOG_POSTS: BlogPost[] = [
     body: [
       {
         type: 'p',
-        text: 'Student padel is not only a Dublin story. Cork, Galway, Limerick, Belfast, and Waterford all have active players — and Student Padel Ireland is built so regional events sit beside the capital in the same rankings.',
+        text: 'Student padel is not only a Dublin story. Cork, Galway, Limerick, Belfast, and Waterford all have active players - and Student Padel Ireland is built so regional events sit beside the capital in the same rankings.',
       },
       {
         type: 'h2',
@@ -238,7 +238,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Doubles is the default format for many student events. Ratings account for partners and opponents as a team average, so beating a strong pair moves you more than beating a mismatched one — and your partner’s level is part of the story.',
+        text: 'Doubles is the default format for many student events. Ratings account for partners and opponents as a team average, so beating a strong pair moves you more than beating a mismatched one - and your partner’s level is part of the story.',
       },
       {
         type: 'h2',
@@ -296,7 +296,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Confirmed results flow into Ireland rankings. Post the event link back to your club so next year’s committee inherits a clear history — not a lost spreadsheet.',
+        text: 'Confirmed results flow into Ireland rankings. Post the event link back to your club so next year’s committee inherits a clear history - not a lost spreadsheet.',
       },
       {
         type: 'cta',
@@ -317,7 +317,7 @@ export const BLOG_POSTS: BlogPost[] = [
     body: [
       {
         type: 'p',
-        text: 'Padel is one of the fastest-growing sports on Irish campuses because it is social, easy to start, and built around doubles. If you are new, you do not need a perfect smash — you need a racket, non-marking shoes, and a way to find a court booking.',
+        text: 'Padel is one of the fastest-growing sports on Irish campuses because it is social, easy to start, and built around doubles. If you are new, you do not need a perfect smash - you need a racket, non-marking shoes, and a way to find a court booking.',
       },
       {
         type: 'h2',
@@ -329,7 +329,7 @@ export const BLOG_POSTS: BlogPost[] = [
           'A padel racket (many venues rent them for first sessions)',
           'Court shoes with non-marking soles',
           'Water and a basic warm-up',
-          'A partner if the event is doubles — or arrive early to meet one',
+          'A partner if the event is doubles - or arrive early to meet one',
         ],
       },
       {
@@ -367,7 +367,7 @@ export const BLOG_POSTS: BlogPost[] = [
     body: [
       {
         type: 'p',
-        text: 'More Irish universities now have padel clubs or informal societies. Student Padel Ireland does not replace your committee — it gives every campus the same rails for invites, draws, scores, and a shared national ranking.',
+        text: 'More Irish universities now have padel clubs or informal societies. Student Padel Ireland does not replace your committee - it gives every campus the same rails for invites, draws, scores, and a shared national ranking.',
       },
       {
         type: 'h2',
@@ -402,7 +402,7 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: 'student-padel-belfast',
     title: 'Student padel in Belfast and across Northern Ireland',
     description:
-      'Find student padel tournaments and community games in Belfast on Student Padel Ireland — and how NI players join the Ireland ranking.',
+      'Find student padel tournaments and community games in Belfast on Student Padel Ireland - and how NI players join the Ireland ranking.',
     publishedAt: '2026-10-09',
     tags: ['Belfast', 'cities'],
     readingMinutes: 4,
@@ -480,14 +480,14 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: 'find-a-padel-partner-at-college',
     title: 'How to find a padel partner at college in Ireland',
     description:
-      'Practical ways Irish students find doubles partners for padel — campus clubs, invite codes, and Student Padel Ireland events.',
+      'Practical ways Irish students find doubles partners for padel - campus clubs, invite codes, and Student Padel Ireland events.',
     publishedAt: '2026-10-11',
     tags: ['beginners', 'doubles'],
     readingMinutes: 4,
     body: [
       {
         type: 'p',
-        text: 'Most student padel events are doubles, so the partner question comes up fast. You do not need a permanent pair — you need a reliable way to meet people at your level.',
+        text: 'Most student padel events are doubles, so the partner question comes up fast. You do not need a permanent pair - you need a reliable way to meet people at your level.',
       },
       {
         type: 'h2',

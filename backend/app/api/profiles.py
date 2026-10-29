@@ -405,7 +405,7 @@ def delete_profile_media(
     clear_avatar = _avatar_refs_media(user, item)
     db.delete(item)
     if clear_avatar:
-        # Do not auto-promote another gallery image — that made "Remove photo" look broken
+        # Do not auto-promote another gallery image - that made "Remove photo" look broken
         db.query(ProfileMedia).filter(
             ProfileMedia.user_id == user.id, ProfileMedia.is_avatar.is_(True)
         ).update({"is_avatar": False})

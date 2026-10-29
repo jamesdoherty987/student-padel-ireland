@@ -212,7 +212,7 @@ export function previewDraw(opts: {
       championshipSize: 0,
       plateSize: 0,
       totalMatches: groupMatches,
-      note: 'Group stage only — not enough advancers for a knockout.',
+      note: 'Group stage only - not enough advancers for a knockout.',
     }
   }
 
@@ -246,7 +246,7 @@ export function previewDraw(opts: {
 }
 
 export function formatGroupSizes(sizes: number[]): string {
-  if (sizes.length === 0) return '—'
+  if (sizes.length === 0) return '-'
   const counts = new Map<number, number>()
   for (const s of sizes) counts.set(s, (counts.get(s) || 0) + 1)
   return [...counts.entries()]

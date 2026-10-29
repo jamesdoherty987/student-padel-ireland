@@ -30,7 +30,7 @@ function Block({ block }: { block: BlogBlock }) {
       </ul>
     )
   }
-  // Quiet CTA — text link only, no promo card
+  // Quiet CTA - text link only, no promo card
   return (
     <p className="blog-inline-cta">
       <Link to={block.to}>{block.label}</Link>
@@ -38,7 +38,7 @@ function Block({ block }: { block: BlogBlock }) {
   )
 }
 
-/** Quiet SEO article — not promoted in the main app UI. */
+/** Quiet SEO article - not promoted in the main app UI. */
 export default function BlogPostPage() {
   const { slug = '' } = useParams()
   const { user } = useAuth()

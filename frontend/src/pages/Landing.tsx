@@ -26,14 +26,14 @@ const CITY_CARDS = [
 
 const STEPS = [
   { n: '1', title: 'Find an event or use a code', body: 'Browse tournaments and tap to join, or use Have a code? / scan a QR if a friend invited you.' },
-  { n: '2', title: 'Register with your partner', body: 'Sign up as a doubles team and pay online — or at the venue if the organiser collects on arrival.' },
+  { n: '2', title: 'Register with your partner', body: 'Sign up as a doubles team and pay online - or at the venue if the organiser collects on arrival.' },
   { n: '3', title: 'Play and climb rankings', body: 'Match results from tournaments and community games update Ireland rankings.' },
 ]
 
 const FAQS: { q: string; a: string }[] = [
   {
     q: 'What is Student Padel Ireland?',
-    a: 'Student Padel Ireland is the platform for student padel in Ireland — browse tournaments, join with an invite code, play community games with friends, and follow live scores and national rankings.',
+    a: 'Student Padel Ireland is the platform for student padel in Ireland - browse tournaments, join with an invite code, play community games with friends, and follow live scores and national rankings.',
   },
   {
     q: 'Where can I play student padel in Ireland?',
@@ -45,7 +45,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'Is Student Padel Ireland only for university students?',
-    a: 'It is built for the student padel community in Ireland. Individual events set their own entry rules — check each tournament page for eligibility.',
+    a: 'It is built for the student padel community in Ireland. Individual events set their own entry rules - check each tournament page for eligibility.',
   },
 ]
 

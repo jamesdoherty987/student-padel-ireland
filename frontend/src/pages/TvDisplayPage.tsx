@@ -52,11 +52,11 @@ function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
         <>
           <div className="tv-row">
             <span title={teamName(current, 'a')}>{teamName(current, 'a')}</span>
-            <strong>{isLive ? games.a : '—'}</strong>
+            <strong>{isLive ? games.a : '-'}</strong>
           </div>
           <div className="tv-row">
             <span title={teamName(current, 'b')}>{teamName(current, 'b')}</span>
-            <strong>{isLive ? games.b : '—'}</strong>
+            <strong>{isLive ? games.b : '-'}</strong>
           </div>
           {isLive && (
             <div className="tv-meta">

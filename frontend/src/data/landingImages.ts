@@ -9,7 +9,7 @@ export const LANDING_IMAGES = {
 }
 
 /**
- * Rotating hero backgrounds — lightest first so LCP is not a 500KB+ image.
+ * Rotating hero backgrounds - lightest first so LCP is not a 500KB+ image.
  * Heavier frames (hero-04/05) are omitted to keep mobile downloads smaller.
  */
 export const HERO_ROTATION = [

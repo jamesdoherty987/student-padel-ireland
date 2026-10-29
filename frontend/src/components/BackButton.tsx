@@ -27,7 +27,7 @@ export default function BackButton({
 }: Props) {
   const navigate = useNavigate()
 
-  // Avoid double backs — NavBar owns navigation chrome on native
+  // Avoid double backs - NavBar owns navigation chrome on native
   if (isNativeApp() && !force) return null
 
   const onBack = () => {

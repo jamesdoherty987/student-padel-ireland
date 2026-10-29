@@ -15,7 +15,7 @@ function formatDate(iso: string) {
   })
 }
 
-/** Quiet SEO index — not linked from the main app UI. */
+/** Quiet SEO index - not linked from the main app UI. */
 export default function BlogPage() {
   const { user } = useAuth()
   const backTo = appHomePath(user?.role)
@@ -23,7 +23,7 @@ export default function BlogPage() {
   usePageSeo({
     title: 'Student Padel Ireland Guides',
     description:
-      'Guides to student padel in Ireland — tournaments, rankings, beginners tips, and campus clubs on Student Padel Ireland.',
+      'Guides to student padel in Ireland - tournaments, rankings, beginners tips, and campus clubs on Student Padel Ireland.',
     path: '/blog',
   })
 

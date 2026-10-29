@@ -34,7 +34,7 @@ jobs:
         run: |
           set +e
           if [ -z "$CRON_SECRET" ]; then
-            echo "CRON_SECRET secret is not set — skip"
+            echo "CRON_SECRET secret is not set - skip"
             exit 1
           fi
 

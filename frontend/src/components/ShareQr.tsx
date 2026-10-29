@@ -104,7 +104,7 @@ export function ShareQr({
               title={url}
             />
           ) : (
-            <p className="qr-fallback muted">QR unavailable — use Copy link or Share instead.</p>
+            <p className="qr-fallback muted">QR unavailable - use Copy link or Share instead.</p>
           )}
         </div>
       )}

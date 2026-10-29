@@ -8,7 +8,7 @@ import { toDatetimeLocalValue } from '../utils/format'
 
 type Props = {
   tournament: Tournament
-  /** True when matches/fixtures already exist — locks format switches. */
+  /** True when matches/fixtures already exist - locks format switches. */
   fixturesExist?: boolean
   onClose: () => void
   onSaved: (msg: string) => void

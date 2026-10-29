@@ -45,7 +45,7 @@ function validateLogo(file: File, onToast?: (msg: string) => void): boolean {
     name.endsWith('.heic') ||
     name.endsWith('.heif')
   if (heic) {
-    onToast?.('Use JPG or PNG — iPhone HEIC photos aren’t supported yet')
+    onToast?.('Use JPG or PNG - iPhone HEIC photos aren’t supported yet')
     return false
   }
   return true

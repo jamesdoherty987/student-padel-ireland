@@ -187,7 +187,6 @@ export function LoginPage() {
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
-              placeholder="you@college.ie"
               aria-invalid={error ? true : undefined}
             />
           </div>

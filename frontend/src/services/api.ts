@@ -35,7 +35,7 @@ api.interceptors.response.use(
         const isTournamentJoin = /\/t\/[^/]+\/(join|confirmed)/.test(path)
         const isCommunityPrivate =
           path.startsWith('/community/') && !path.startsWith('/community/join/')
-        // Live boards are public — don't kick viewers to login on a stale token
+        // Live boards are public - don't kick viewers to login on a stale token
         const needsAuth =
           path.startsWith('/organiser') ||
           path.startsWith('/admin') ||
@@ -90,7 +90,7 @@ export type Tournament = {
   plate_size?: number
   registered_teams: number
   invite_code?: string | null
-  /** Listed on landing / public browse — admin-created events only */
+  /** Listed on landing / public browse - admin-created events only */
   is_official?: boolean
   courts?: Array<{ number: number; name: string; id: string }>
   can_manage?: boolean
@@ -509,7 +509,7 @@ export const platformApi = {
     form.append('file', file)
     if (opts?.caption) form.append('caption', opts.caption)
     if (opts?.set_as_avatar) form.append('set_as_avatar', 'true')
-    // Videos can be up to 25MB — allow a longer timeout than the default 20s
+    // Videos can be up to 25MB - allow a longer timeout than the default 20s
     return api.post<ProfileMedia>('/api/me/profile/media', form, { timeout: 120_000 })
   },
   updateMediaCaption: (id: string, caption: string | null) =>

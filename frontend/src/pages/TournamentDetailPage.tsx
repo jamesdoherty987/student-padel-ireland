@@ -73,7 +73,7 @@ export default function TournamentDetailPage() {
   usePageSeo(
     tournament
       ? {
-          title: `${tournament.name} — ${tournament.location}`,
+          title: `${tournament.name} - ${tournament.location}`,
           description: `${tournament.name} student padel tournament in ${tournament.location} at ${tournament.venue}. Register, follow live scores, and climb the Ireland rankings on Student Padel Ireland.`,
           path: `/t/${tournament.slug}`,
         }
@@ -220,7 +220,7 @@ export default function TournamentDetailPage() {
               <p className="muted-note">
                 You’re listed as a partner on <strong>{myTeamInfo?.name}</strong>
                 {myTeamInfo?.players?.length ? ` (${myTeamInfo.players.join(' / ')})` : ''}. Your
-                teammate needs to finish payment — or cancel the team entry below if you want out.
+                teammate needs to finish payment - or cancel the team entry below if you want out.
               </p>
             )}
             {hasPendingCaptain && (
@@ -258,7 +258,7 @@ export default function TournamentDetailPage() {
           <div className="tour-youre-in" role="status">
             <p className="tour-youre-in-kicker">Partner needed</p>
             <p className="tour-youre-in-body">
-              Your partner left the team. Add someone new to stay in the event — your entry stays
+              Your partner left the team. Add someone new to stay in the event - your entry stays
               paid.
             </p>
           </div>
@@ -331,7 +331,7 @@ export default function TournamentDetailPage() {
         {owesAtVenue && (
           <p className="tour-pay-venue" role="status">
             Pay {formatMoney(tournament.entry_fee_cents, tournament.currency)} to the organiser at the
-            venue — your spot is already reserved.
+            venue - your spot is already reserved.
             {(mySlot === 1 || mySlot == null) && (
               <>
                 {' '}

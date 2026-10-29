@@ -170,7 +170,7 @@ export default function CreateTournamentModal({
           await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
           await qc.invalidateQueries({ queryKey: ['tournaments'] })
           onCreated(
-            'Tournament created, but registration could not be opened — open it from My events',
+            'Tournament created, but registration could not be opened - open it from My events',
             data.id,
           )
           onClose()
@@ -184,15 +184,15 @@ export default function CreateTournamentModal({
 
       let msg = openRegistration
         ? isAdmin
-          ? 'Official tournament created — registration is open'
-          : 'Tournament created — registration is open'
+          ? 'Official tournament created - registration is open'
+          : 'Tournament created - registration is open'
         : isAdmin
           ? 'Official tournament created as draft'
           : 'Tournament created as draft'
       if (sponsors.length && sponsorFails === 0) {
         msg += ` · ${sponsors.length} sponsor${sponsors.length === 1 ? '' : 's'} added`
       } else if (sponsorFails > 0) {
-        msg += ` · ${sponsorFails} sponsor${sponsorFails === 1 ? '' : 's'} failed — add them from Manage`
+        msg += ` · ${sponsorFails} sponsor${sponsorFails === 1 ? '' : 's'} failed - add them from Manage`
       }
       onCreated(msg, data.id)
       onClose()
