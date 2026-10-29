@@ -67,6 +67,9 @@ export default function TournamentDetailPage() {
     queryKey: ['player-view', slug],
     queryFn: async () => (await tournamentApi.playerView(slug)).data,
     enabled: !!slug && !!user,
+    staleTime: 0,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
     refetchInterval: 12000,
   })
 
@@ -274,7 +277,7 @@ export default function TournamentDetailPage() {
             </p>
           </div>
         )}
-        {preStart && !needsPartner && !partnerInvitePending && (
+        {hasPaidEntry && !needsPartner && !partnerInvitePending && !matchDay && (
           <div className="tour-youre-in" role="status">
             <p className="tour-youre-in-kicker">You’re in</p>
             <p className="tour-youre-in-body">
@@ -286,8 +289,14 @@ export default function TournamentDetailPage() {
                 </>
               ) : null}
               {myTeamInfo?.players?.length ? ` · ${myTeamInfo.players.join(' / ')}` : ''}.
-              Waiting for the organiser to publish the draw
-              {reminderNote ? `. ${reminderNote}` : '.'}
+              {owesAtVenue
+                ? ` Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)} at the venue.`
+                : ' Entry paid.'}
+              {preStart
+                ? ` Waiting for the organiser to publish the draw${reminderNote ? `. ${reminderNote}` : '.'}`
+                : reminderNote
+                  ? ` ${reminderNote}`
+                  : ''}
             </p>
           </div>
         )}
@@ -308,7 +317,7 @@ export default function TournamentDetailPage() {
               Add partner
             </Link>
           )}
-          {(partnerInvitePending || (preStart && !needsPartner)) && (
+          {(partnerInvitePending || (hasPaidEntry && !needsPartner && !matchDay)) && (
             <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
               {partnerInvitePending ? 'Respond to invite' : 'View my entry'}
             </Link>

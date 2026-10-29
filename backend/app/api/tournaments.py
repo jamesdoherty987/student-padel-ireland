@@ -1446,6 +1446,7 @@ def register_team(
             customer_email=user.email,
             pay_online_now=bool(body.pay_online_now),
             return_origin=body.return_origin,
+            native_return=bool(body.native_return),
         )
 
     team = Team(
@@ -1493,6 +1494,7 @@ def register_team(
         customer_email=user.email,
         pay_online_now=bool(body.pay_online_now),
         return_origin=body.return_origin,
+        native_return=bool(body.native_return),
     )
 
 
@@ -1592,7 +1594,18 @@ def _checkout_success_cancel_urls(
     *,
     return_origin: str | None = None,
     cancel_path: str | None = None,
+    native_return: bool = False,
 ) -> tuple[str, str]:
+    # Native: custom scheme keeps auth in the WebView. https success URLs are claimed by
+    # Universal Links / open in SFSafariViewController without the app session cookie.
+    if native_return:
+        success = (
+            f"studentpadel://t/{t.slug}/confirmed"
+            f"?session_id={{CHECKOUT_SESSION_ID}}&registration_id={reg.id}"
+        )
+        cancel = f"studentpadel://t/{t.slug}/join?cancelled=1"
+        return success, cancel
+
     origin = _checkout_web_origin(return_origin)
     # Include registration_id so the website can recover if session confirm races
     success = (
@@ -1612,6 +1625,7 @@ def _issue_checkout(
     customer_email: str | None = None,
     pay_online_now: bool = False,
     return_origin: str | None = None,
+    native_return: bool = False,
 ) -> CheckoutResponse:
     if not team:
         raise HTTPException(404, "Team not found")
@@ -1654,7 +1668,12 @@ def _issue_checkout(
     if settings.stripe_secret_key:
         from app.services.payments import create_checkout_session
 
-        success_url, cancel_url = _checkout_success_cancel_urls(t, reg, return_origin=return_origin)
+        success_url, cancel_url = _checkout_success_cancel_urls(
+            t,
+            reg,
+            return_origin=return_origin,
+            native_return=native_return,
+        )
         try:
             session = create_checkout_session(
                 tournament_name=t.name,
@@ -1735,6 +1754,7 @@ def pay_online_now(
             customer_email=user.email,
             pay_online_now=True,
             return_origin=req.return_origin,
+            native_return=bool(req.native_return),
         )
 
     via = (reg.stripe_payment_intent_id or "").strip().lower()
@@ -1752,6 +1772,7 @@ def pay_online_now(
             reg,
             return_origin=req.return_origin,
             cancel_path=f"/t/{t.slug}/live?pay_cancelled=1",
+            native_return=bool(req.native_return),
         )
         try:
             session = create_checkout_session(

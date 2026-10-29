@@ -255,10 +255,13 @@ class RegisterTeamRequest(BaseModel):
     pay_online_now: bool = False
     # Browser origin (e.g. https://www.studentpadel.ie) so Stripe returns to the same host
     return_origin: Optional[str] = Field(default=None, max_length=200)
+    # Capacitor app: use studentpadel:// success URL so return lands in-app (logged in)
+    native_return: bool = False
 
 
 class PayOnlineNowRequest(BaseModel):
     return_origin: Optional[str] = Field(default=None, max_length=200)
+    native_return: bool = False
 
 
 class OrganiserAddTeamRequest(BaseModel):

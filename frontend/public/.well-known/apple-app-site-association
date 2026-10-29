@@ -5,6 +5,8 @@
       {
         "appID": "99WD4RQR95.ie.studentpadel.app",
         "paths": [
+          "NOT /t/*/confirmed",
+          "NOT /t/*/confirmed/*",
           "/t/*",
           "/community/*",
           "/tournaments",

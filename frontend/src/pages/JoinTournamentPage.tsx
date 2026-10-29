@@ -216,6 +216,7 @@ function ConfirmPayOnlineButton({
     try {
       const { data } = await tournamentApi.payOnlineNow(tournamentId, {
         return_origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+        native_return: isNativeApp(),
       })
       if (data.checkout_url) {
         if (isNativeApp()) {
@@ -926,6 +927,7 @@ export default function JoinTournamentPage() {
         student_number: null,
         pay_online_now: payOnlineNow,
         return_origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+        native_return: isNativeApp(),
       }
       if (!singles) {
         if (partnerMode === 'friend' && form.partner_user_id) {

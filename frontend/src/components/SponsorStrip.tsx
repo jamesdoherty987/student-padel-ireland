@@ -16,10 +16,11 @@ type Props = {
 
 function SponsorCard({
   sponsor,
-  featured = false,
+  size = 'tile',
 }: {
   sponsor: TournamentSponsor
-  featured?: boolean
+  /** solo = fills the strip; lead = featured row; tile = grid cell */
+  size?: 'solo' | 'lead' | 'tile'
 }) {
   const src = mediaUrl(sponsor.logo_url)
   const [broken, setBroken] = useState(false)
@@ -33,11 +34,9 @@ function SponsorCard({
 
   const className = [
     'sponsor-strip-item',
-    featured ? 'is-main' : '',
+    `is-${size}`,
     showLogo ? 'has-logo' : 'name-only',
-  ]
-    .filter(Boolean)
-    .join(' ')
+  ].join(' ')
 
   const inner = (
     <>
@@ -54,7 +53,10 @@ function SponsorCard({
           <span className="sponsor-strip-initial">{sponsor.name.slice(0, 1).toUpperCase()}</span>
         )}
       </span>
-      <span className="sponsor-strip-name">{sponsor.name}</span>
+      <span className="sponsor-strip-copy">
+        <span className="sponsor-strip-name">{sponsor.name}</span>
+        {sponsor.website ? <span className="sponsor-strip-link-hint">Visit site</span> : null}
+      </span>
     </>
   )
 
@@ -89,11 +91,19 @@ export default function SponsorStrip({
 }: Props) {
   if (!sponsors.length) return null
 
+  const solo = sponsors.length === 1
   const featured = sponsors.filter((s) => s.level === 'MAIN')
   const rest = sponsors.filter((s) => s.level !== 'MAIN')
-  const showFeatured = featured.length > 0
-  // If nothing is featured, treat the list as one row (still show every name + logo)
-  const rowSponsors = showFeatured ? rest : sponsors
+  // One sponsor always gets the full-width treatment, featured or not
+  const showFeaturedBlock = !solo && featured.length > 0
+  const rowSponsors = showFeaturedBlock ? rest : sponsors
+  const label = solo
+    ? featured.length || sponsors[0]?.level === 'MAIN'
+      ? 'Presented by'
+      : 'Supported by'
+    : showFeaturedBlock
+      ? 'Also supported by'
+      : 'Supported by'
 
   return (
     <section
@@ -102,34 +112,45 @@ export default function SponsorStrip({
         compact ? 'sponsor-strip--compact' : '',
         placement === 'hero' ? 'sponsor-strip--hero' : '',
         tone === 'dark' ? 'sponsor-strip--dark' : '',
-        showFeatured ? 'has-featured' : '',
+        solo ? 'is-solo' : 'is-multi',
+        showFeaturedBlock ? 'has-featured' : '',
+        `count-${Math.min(sponsors.length, 6)}`,
       ]
         .filter(Boolean)
         .join(' ')}
       aria-label="Sponsors"
     >
-      {showFeatured && (
+      {solo && (
+        <div className="sponsor-strip-solo">
+          <p className="sponsor-strip-label">{label}</p>
+          <SponsorCard sponsor={sponsors[0]} size="solo" />
+        </div>
+      )}
+
+      {!solo && showFeaturedBlock && (
         <div className="sponsor-strip-featured">
           <p className="sponsor-strip-label">Presented by</p>
-          <ul className="sponsor-strip-featured-row">
+          <ul
+            className={`sponsor-strip-featured-row count-${Math.min(featured.length, 4)}`}
+          >
             {featured.map((s) => (
               <li key={s.id}>
-                <SponsorCard sponsor={s} featured />
+                <SponsorCard sponsor={s} size={featured.length === 1 ? 'solo' : 'lead'} />
               </li>
             ))}
           </ul>
         </div>
       )}
 
-      {rowSponsors.length > 0 && (
+      {!solo && rowSponsors.length > 0 && (
         <div className="sponsor-strip-partners">
-          <p className="sponsor-strip-label">
-            {showFeatured ? 'Also supported by' : 'Supported by'}
-          </p>
-          <ul className="sponsor-strip-row">
+          <p className="sponsor-strip-label">{label}</p>
+          <ul
+            className={`sponsor-strip-row count-${Math.min(rowSponsors.length, 6)}`}
+          >
             {rowSponsors.map((s) => (
               <li key={s.id}>
-                <SponsorCard sponsor={s} />
+                <SponsorCard sponsor={s} size="tile" />
               </li>
             ))}
           </ul>
