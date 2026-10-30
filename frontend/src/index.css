@@ -1318,7 +1318,8 @@ html.native-app .btn-xs {
   }
 
   .page-header-row--inline .header-actions,
-  .header-actions--compact {
+  .header-actions--compact,
+  .header-actions--tour {
     width: auto;
     flex-wrap: nowrap;
   }
@@ -1330,7 +1331,8 @@ html.native-app .btn-xs {
 
   .page-header-row--inline .header-actions .btn,
   .page-header-row--inline .btn-have-code,
-  .header-actions--compact .btn {
+  .header-actions--compact .btn,
+  .header-actions--tour .btn {
     flex: 0 0 auto;
     min-width: 0;
   }

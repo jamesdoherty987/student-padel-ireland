@@ -150,12 +150,6 @@ export default function NavBar() {
 
   const secondary: NavItem[] = []
   if (user) {
-    secondary.push({
-      to: '/organiser',
-      label: 'My tournaments',
-      icon: 'fa-calendar-check',
-      match: (p) => p.startsWith('/organiser'),
-    })
     if (user.role === 'ADMIN') {
       secondary.push({
         to: '/admin',

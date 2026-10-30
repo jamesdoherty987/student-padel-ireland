@@ -190,7 +190,7 @@ export default function CreateTournamentModal({
           await qc.invalidateQueries({ queryKey: ['tournaments'] })
           await qc.invalidateQueries({ queryKey: ['sponsors', data.slug] })
           let msg =
-            'Tournament created, but registration could not be opened - open it from My events'
+            'Tournament created, but registration could not be opened — open Manage on the tournament page'
           if (sponsorsToUpload.length && sponsorFails === 0) {
             msg += ` · ${sponsorsToUpload.length} sponsor${sponsorsToUpload.length === 1 ? '' : 's'} saved`
           } else if (sponsorFails > 0) {

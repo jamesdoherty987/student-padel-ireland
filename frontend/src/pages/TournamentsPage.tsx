@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
@@ -10,13 +10,17 @@ import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
 import { formatDate, formatPerPlayerFee, statusLabel } from '../utils/format'
 import './Tournament.css'
 
-const STATUS_FILTERS = [
-  { id: 'all', label: 'Any status' },
+const FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'official', label: 'Official' },
+  { id: 'mine', label: 'Owned by me' },
   { id: 'open', label: 'Open to join' },
   { id: 'live', label: 'Live' },
   { id: 'upcoming', label: 'Upcoming' },
   { id: 'past', label: 'Past' },
 ] as const
+
+type FilterId = (typeof FILTERS)[number]['id']
 
 export default function TournamentsPage() {
   usePageSeo({
@@ -27,10 +31,27 @@ export default function TournamentsPage() {
   })
   const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [filter, setFilter] = useState<(typeof STATUS_FILTERS)[number]['id']>('all')
+  const filterParam = searchParams.get('filter')
+  const initialFilter: FilterId =
+    filterParam && FILTERS.some((f) => f.id === filterParam) ? (filterParam as FilterId) : 'all'
+  const [filter, setFilter] = useState<FilterId>(initialFilter)
   const [query, setQuery] = useState('')
   const openJoin = searchParams.get('join') === '1'
   const codeFromSearch = looksLikeInviteCode(query) ? cleanInviteCode(query) : ''
+
+  const setFilterAndUrl = (next: FilterId) => {
+    setFilter(next)
+    const params = new URLSearchParams(searchParams)
+    if (next === 'all') params.delete('filter')
+    else params.set('filter', next)
+    setSearchParams(params, { replace: true })
+  }
+
+  useEffect(() => {
+    const next: FilterId =
+      filterParam && FILTERS.some((f) => f.id === filterParam) ? (filterParam as FilterId) : 'all'
+    setFilter(next)
+  }, [filterParam])
 
   const clearJoinParam = useCallback(() => {
     if (!openJoin) return
@@ -54,6 +75,7 @@ export default function TournamentsPage() {
         status: t.status,
         official: !!t.is_official,
         entered: !!t.viewer_entered,
+        owned: !!user && (t.organiser_id === user.id || !!t.can_manage),
         line: `${t.location} · ${t.venue}`,
         meta: `${formatDate(t.event_date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatPerPlayerFee(t.entry_fee_cents, t.currency, t.play_format)}`,
         sortDate: t.event_date,
@@ -68,18 +90,19 @@ export default function TournamentsPage() {
     }
 
     return list.sort((a, b) => {
-      // Your entered events float up a bit within the same status band
       const ra = statusRank(a.status) - (a.entered ? 0.4 : 0)
       const rb = statusRank(b.status) - (b.entered ? 0.4 : 0)
       if (ra !== rb) return ra - rb
       return b.sortDate.localeCompare(a.sortDate)
     })
-  }, [tournaments])
+  }, [tournaments, user])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (looksLikeInviteCode(query)) return []
     return events.filter((e) => {
+      if (filter === 'official' && !e.official) return false
+      if (filter === 'mine' && !e.owned) return false
       if (filter === 'open' && e.status !== 'REGISTRATION_OPEN') return false
       if (filter === 'live' && e.status !== 'LIVE') return false
       if (filter === 'upcoming' && e.status !== 'REGISTRATION_OPEN' && e.status !== 'REGISTRATION_CLOSED') {
@@ -94,11 +117,15 @@ export default function TournamentsPage() {
   const emptyMessage = (() => {
     if (events.length === 0) {
       return user
-        ? 'No tournaments yet. Join with a code, or create a personal event.'
+        ? 'No tournaments yet. Join with a code, or create one.'
         : 'No tournaments listed yet. Log in or check back soon.'
     }
     if (codeFromSearch) return 'That looks like an invite code — tap below to join.'
     if (query.trim()) return 'No tournaments match that search.'
+    if (filter === 'official') return 'No official tournaments match.'
+    if (filter === 'mine') {
+      return user ? 'You don’t own any tournaments yet.' : 'Log in to see tournaments you own.'
+    }
     if (filter === 'open') return 'No tournaments open to join right now.'
     if (filter === 'live') return 'No live tournaments right now.'
     if (filter === 'upcoming') return 'No upcoming tournaments right now.'
@@ -106,44 +133,54 @@ export default function TournamentsPage() {
     return 'No tournaments to show.'
   })()
 
+  const visibleFilters = FILTERS.filter((f) => f.id !== 'mine' || !!user)
+
   return (
     <div className="app-shell">
       <NavBar />
       <main className="page">
         <div className="page-header-row page-header-row--inline">
           <h1 className="page-title">Tournaments</h1>
-          <HaveCodeButton
-            className="btn-have-code"
-            autoOpen={openJoin}
-            onAutoOpened={clearJoinParam}
-            initialCode={codeFromSearch}
-          >
-            <span className="btn-have-code-full">Have a code?</span>
-            <span className="btn-have-code-short">Code</span>
-          </HaveCodeButton>
+          <div className="header-actions header-actions--tour">
+            <HaveCodeButton
+              className="btn btn-ghost btn-sm"
+              autoOpen={openJoin}
+              onAutoOpened={clearJoinParam}
+              initialCode={codeFromSearch}
+            >
+              Code
+            </HaveCodeButton>
+            <Link
+              to={user ? '/organiser?create=1' : '/login?next=%2Forganiser%3Fcreate%3D1'}
+              className="btn btn-primary btn-sm btn-new-tour"
+            >
+              <i className="fas fa-plus" aria-hidden />
+              New
+            </Link>
+          </div>
         </div>
         <p className="page-sub page-sub-tight">Tap a tournament for courts, opponents, and times</p>
 
         <div className="tour-toolbar">
-          <div className="tour-toolbar-row tour-toolbar-row-solo">
+          <div className="tour-toolbar-row tour-toolbar-inline">
             <select
-              className="form-select tour-status-select"
+              className="form-select tour-filter-select"
               value={filter}
-              onChange={(e) => setFilter(e.target.value as (typeof STATUS_FILTERS)[number]['id'])}
-              aria-label="Filter by status"
+              onChange={(e) => setFilterAndUrl(e.target.value as FilterId)}
+              aria-label="Filter tournaments"
             >
-              {STATUS_FILTERS.map((f) => (
+              {visibleFilters.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.label}
                 </option>
               ))}
             </select>
             <input
-              className="form-input tour-search tour-search-inline"
+              className="form-input tour-search-compact"
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search city, venue, or name"
+              placeholder="Search"
               aria-label="Search tournaments"
             />
           </div>
@@ -171,13 +208,15 @@ export default function TournamentsPage() {
                 <article className={`tour-card tour-card--simple${e.entered ? ' tour-card--entered' : ''}`}>
                   <h2>{e.name}</h2>
                   <p className="tour-card-kind">
-                    {e.entered ? <span className="tour-card-in">You’re in</span> : null}
-                    {e.entered ? <span aria-hidden> · </span> : null}
+                    {e.entered ? (
+                      <span className="tour-card-in">You’re in</span>
+                    ) : e.owned ? (
+                      <span className="tour-card-in">Organiser</span>
+                    ) : null}
+                    {e.entered || e.owned ? <span aria-hidden> · </span> : null}
                     <span>{e.official ? 'Official' : 'Personal'}</span>
                     <span aria-hidden> · </span>
-                    <span className={`tour-card-status is-${e.status.toLowerCase()}`}>
-                      {statusLabel(e.status)}
-                    </span>
+                    <span>{statusLabel(e.status)}</span>
                   </p>
                   <p className="tour-card-line">{e.line}</p>
                   <p className="tour-card-meta">{e.meta}</p>
@@ -202,7 +241,7 @@ export default function TournamentsPage() {
                 className="btn btn-ghost"
                 style={{ marginTop: 12 }}
                 onClick={() => {
-                  setFilter('all')
+                  setFilterAndUrl('all')
                   setQuery('')
                 }}
               >
@@ -210,17 +249,23 @@ export default function TournamentsPage() {
               </button>
             )}
             {events.length === 0 && !codeFromSearch && (
-              <div className="header-actions" style={{ marginTop: 12, justifyContent: 'center' }}>
-                {user ? (
-                  <Link to="/organiser?create=1" className="btn btn-primary">
-                    Create tournament
-                  </Link>
-                ) : (
-                  <Link to="/login?next=%2Ftournaments" className="btn btn-primary">
-                    Log in
-                  </Link>
-                )}
-                <HaveCodeButton className="btn btn-ghost">Have a code?</HaveCodeButton>
+              <div className="header-actions header-actions--tour" style={{ marginTop: 12, justifyContent: 'center' }}>
+                <Link
+                  to={user ? '/organiser?create=1' : '/login?next=%2Forganiser%3Fcreate%3D1'}
+                  className="btn btn-primary btn-sm btn-new-tour"
+                >
+                  <i className="fas fa-plus" aria-hidden />
+                  New
+                </Link>
+                <HaveCodeButton className="btn btn-ghost btn-sm">Code</HaveCodeButton>
+              </div>
+            )}
+            {filter === 'mine' && events.length > 0 && !codeFromSearch && (
+              <div style={{ marginTop: 12 }}>
+                <Link to="/organiser?create=1" className="btn btn-primary btn-sm btn-new-tour">
+                  <i className="fas fa-plus" aria-hidden />
+                  New tournament
+                </Link>
               </div>
             )}
           </div>

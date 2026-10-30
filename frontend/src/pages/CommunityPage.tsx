@@ -249,12 +249,11 @@ export default function CommunityPage() {
           <div className="page-header-row page-header-row--inline">
             <h1 className="page-title">Play</h1>
             <HaveCodeButton
-              className="btn-have-code"
+              className="btn btn-ghost btn-sm"
               autoOpen={openJoin}
               onAutoOpened={clearJoinParam}
             >
-              <span className="btn-have-code-full">Have a code?</span>
-              <span className="btn-have-code-short">Code</span>
+              Code
             </HaveCodeButton>
           </div>
           <p className="page-sub page-sub-tight">Casual games with friends</p>
@@ -296,18 +295,18 @@ export default function CommunityPage() {
       <main className="page">
         <div className="page-header-row page-header-row--inline">
           <h1 className="page-title">Play</h1>
-          <div className="header-actions header-actions--compact">
+          <div className="header-actions header-actions--tour">
             <HaveCodeButton
-              className="btn-have-code"
+              className="btn btn-ghost btn-sm"
               autoOpen={openJoin}
               onAutoOpened={clearJoinParam}
               initialCode={codeFromSearch}
             >
-              <span className="btn-have-code-full">Have a code?</span>
-              <span className="btn-have-code-short">Code</span>
+              Code
             </HaveCodeButton>
             {!createOpen && (
-              <button type="button" className="btn btn-primary btn-sm btn-header-compact" onClick={openCreateForm}>
+              <button type="button" className="btn btn-primary btn-sm btn-new-tour" onClick={openCreateForm}>
+                <i className="fas fa-plus" aria-hidden />
                 New
               </button>
             )}
