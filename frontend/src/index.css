@@ -1411,6 +1411,11 @@ html.native-app .btn-xs {
   overscroll-behavior-x: none;
 }
 
+/* Discard / confirm must sit above create/edit modals (same base z-index otherwise stacks under) */
+.confirm-backdrop {
+  z-index: 520;
+}
+
 .modal {
   background: var(--white);
   width: min(440px, 100%);

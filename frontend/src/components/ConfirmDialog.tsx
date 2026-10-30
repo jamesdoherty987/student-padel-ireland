@@ -81,17 +81,17 @@ export function ConfirmDialogProvider() {
     document.body.style.overflow = 'hidden'
     document.body.classList.add('modal-open')
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !dialogState.isLoading) {
-        dialogState.onCancel()
-        dialogState = { ...initialState }
-        notify()
-      }
+      if (e.key !== 'Escape' || dialogState.isLoading) return
+      e.stopImmediatePropagation()
+      dialogState.onCancel()
+      dialogState = { ...initialState }
+      notify()
     }
-    window.addEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
     return () => {
       document.body.style.overflow = prev
       document.body.classList.remove('modal-open')
-      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onKey, true)
     }
   }, [state.isOpen])
 
@@ -105,7 +105,7 @@ export function ConfirmDialogProvider() {
 
   return (
     <div
-      className="modal-backdrop"
+      className="modal-backdrop confirm-backdrop"
       onClick={() => {
         if (!state.isLoading) closeWith(state.onCancel)
       }}

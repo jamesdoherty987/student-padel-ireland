@@ -42,7 +42,10 @@ export default function ModalShell({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !preventClose) onClose()
+      if (e.key !== 'Escape' || preventClose) return
+      // Confirm dialog sits above this shell — let it own Escape
+      if (document.querySelector('.confirm-backdrop')) return
+      onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

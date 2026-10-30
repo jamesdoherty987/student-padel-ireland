@@ -281,7 +281,7 @@ export default function RegistrationFieldsEditor({
       <div className="tf-reg-fields-actions">
         <button
           type="button"
-          className="btn btn-dark btn-sm"
+          className="btn btn-dark"
           disabled={disabled || fields.length >= 12}
           onClick={() => onChange([...fields, newFieldDraft()])}
         >
@@ -292,7 +292,7 @@ export default function RegistrationFieldsEditor({
             <button
               key={p.label}
               type="button"
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost"
               disabled={disabled || fields.length >= 12}
               onClick={() => addPreset(p.draft)}
             >

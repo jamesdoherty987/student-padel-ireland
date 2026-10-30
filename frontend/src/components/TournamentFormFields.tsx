@@ -4,6 +4,7 @@ import RegistrationFieldsEditor, {
   type RegistrationFieldDraft,
 } from './RegistrationFieldsEditor'
 import { tournamentFormatSummary } from '../utils/format'
+import './TournamentForm.css'
 
 export type { RegistrationFieldDraft }
 
@@ -328,7 +329,7 @@ export default function TournamentFormFields({
 
         <div className="form-group">
           <label className="form-label" htmlFor="tf-max">
-            Max {singles ? 'players' : 'doubles teams'}
+            Max {singles ? 'players' : 'teams'}
           </label>
           <NumberInput
             id="tf-max"
@@ -338,7 +339,13 @@ export default function TournamentFormFields({
             emptyValue={2}
             value={form.max_teams}
             onValueChange={(n) => onChange({ max_teams: n })}
+            aria-describedby="tf-max-hint"
           />
+          <small id="tf-max-hint" className="form-hint">
+            {singles
+              ? 'Number of players who can enter — not matches.'
+              : `Number of doubles teams (pairs) who can enter — ${form.max_teams} teams ≈ ${form.max_teams * 2} players.`}
+          </small>
         </div>
 
         <div className="form-group">
@@ -417,22 +424,34 @@ export default function TournamentFormFields({
           <div className="tf-rules-examples" role="group" aria-label="Insert scoring example">
             {(
               [
-                'Best of 3 sets to 6. Golden point on deuce.',
-                'Best of 3 sets. No-ad scoring - sudden death at deuce.',
-                'Timed matches: 15 minutes. Leading team wins when time is up.',
+                {
+                  label: 'Best of 3 · golden point',
+                  text: 'Best of 3 sets to 6. Golden point on deuce.',
+                },
+                {
+                  label: 'Best of 3 · no-ad',
+                  text: 'Best of 3 sets. No-ad scoring - sudden death at deuce.',
+                },
+                {
+                  label: 'Timed 15 min',
+                  text: 'Timed matches: 15 minutes. Leading team wins when time is up.',
+                },
               ] as const
             ).map((example) => (
               <button
-                key={example}
+                key={example.label}
                 type="button"
                 className="btn btn-ghost btn-sm"
+                title={example.text}
                 onClick={() =>
                   onChange({
-                    rules: form.rules.trim() ? `${form.rules.trim()}\n${example}` : example,
+                    rules: form.rules.trim()
+                      ? `${form.rules.trim()}\n${example.text}`
+                      : example.text,
                   })
                 }
               >
-                {example.length > 42 ? `${example.slice(0, 40)}…` : example}
+                {example.label}
               </button>
             ))}
           </div>

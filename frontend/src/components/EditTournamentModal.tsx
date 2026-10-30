@@ -171,8 +171,9 @@ export default function EditTournamentModal({
       preventClose={saving}
       closeOnBackdrop={false}
       wide
+      className="edit-tournament-modal"
       footer={
-        <div className="modal-actions">
+        <div className="modal-actions tf-step-actions">
           <button type="button" className="btn btn-ghost" onClick={() => void requestClose()} disabled={saving}>
             Cancel
           </button>

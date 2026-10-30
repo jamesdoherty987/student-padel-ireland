@@ -115,13 +115,18 @@ export default function CreateTournamentModal({
       onClose()
       return
     }
-    const ok = await confirmDialog({
-      title: 'Discard tournament?',
-      message: 'You have unsaved details. Close and lose this draft?',
-      confirmLabel: 'Discard',
-      danger: true,
-    })
-    if (ok) onClose()
+    try {
+      const ok = await confirmDialog({
+        title: 'Discard tournament?',
+        message: 'You have unsaved details. Close and lose this draft?',
+        confirmLabel: 'Discard',
+        danger: true,
+      })
+      if (ok) onClose()
+    } catch {
+      // If confirm UI fails, still allow cancel so the modal never freezes
+      onClose()
+    }
   }
 
   const onSubmit = async (e: FormEvent) => {
@@ -248,7 +253,7 @@ export default function CreateTournamentModal({
                 ? 'Creating & uploading…'
                 : 'Creating…'
               : openRegistration
-                ? 'Create & open registration'
+                ? 'Create & open'
                 : 'Create draft'}
           </button>
         </div>

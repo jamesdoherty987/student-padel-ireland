@@ -186,7 +186,6 @@ export default function App() {
             <NativeDeepLinkRouter />
             <RouteSeoFallback />
             <OfflineBanner />
-            <ConfirmDialogProvider />
             <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/" element={<RootRoute />} />
@@ -246,6 +245,8 @@ export default function App() {
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </Suspense>
+            {/* After routes so discard confirms stack above page modals */}
+            <ConfirmDialogProvider />
             <NativeTabBar />
           </AuthPersistBridge>
         </BrowserRouter>

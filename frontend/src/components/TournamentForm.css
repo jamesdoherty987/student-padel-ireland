@@ -1,0 +1,408 @@
+/* Shared create / edit tournament form (ModalShell). Loaded with the form so
+   styles work on Tournaments, Admin, and Organiser — not only Organiser.css. */
+
+.tf-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  margin: 0 0 1.1rem;
+}
+
+.tf-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface, #f6f7f5);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: default;
+}
+
+.tf-step.is-done {
+  cursor: pointer;
+  color: var(--court-deep);
+  background: rgba(11, 61, 46, 0.06);
+}
+
+.tf-step.is-active {
+  color: var(--court-deep);
+  border-color: var(--court-deep);
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--court-deep);
+}
+
+.tf-step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: rgba(11, 61, 46, 0.12);
+  font-size: 0.75rem;
+}
+
+.tf-step.is-active .tf-step-num,
+.tf-step.is-done .tf-step-num {
+  background: var(--court-deep);
+  color: #fff;
+}
+
+.tf-step-label {
+  white-space: nowrap;
+}
+
+.tf-step-summary {
+  margin: 0 0 0.85rem;
+  font-size: 0.9rem;
+}
+
+.tf-step-actions {
+  width: 100%;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.tf-step-actions .btn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tf-create-review {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.tf-review-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.tf-review-list strong {
+  color: var(--court-deep);
+}
+
+.tf-draw-preview {
+  margin-top: 1rem;
+  padding: 0.95rem 1rem;
+  background: rgba(11, 61, 46, 0.05);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.tf-draw-preview-warn {
+  background: rgba(180, 60, 40, 0.06);
+  border-color: rgba(180, 60, 40, 0.25);
+}
+
+.tf-draw-preview .tf-section-title {
+  margin-bottom: 0.15rem;
+}
+
+.tf-draw-preview .tf-section-lead {
+  margin-bottom: 0.55rem;
+}
+
+.tf-draw-preview .muted-note {
+  margin: 0.65rem 0 0;
+}
+
+.tf-section {
+  margin-bottom: 1.35rem;
+  padding-bottom: 1.1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.tf-section:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.tf-section-title {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--court-deep);
+  letter-spacing: -0.01em;
+}
+
+.tf-section-lead {
+  margin: 0 0 0.85rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.tf-rules-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.tf-rules-examples .btn {
+  width: 100%;
+  justify-content: flex-start;
+  font-size: 0.84rem;
+  min-height: 44px;
+  padding: 0.55rem 0.75rem;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.3;
+  max-width: 100%;
+}
+
+.tf-optional {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.tf-format-locked {
+  padding: 0.85rem 1rem;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.85rem;
+}
+
+.tf-format-locked strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--court-deep);
+}
+
+.tf-format-locked .muted {
+  margin: 0 0 0.45rem;
+  font-size: 0.88rem;
+}
+
+.tf-advanced {
+  margin-top: 0.35rem;
+  padding: 0.75rem 0.85rem;
+  background: rgba(11, 61, 46, 0.04);
+  border-radius: var(--radius-sm);
+}
+
+.tf-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 0.25rem 0 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--brand-soft, rgba(200, 230, 0, 0.18));
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.tf-check input {
+  margin-top: 0.2rem;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex-shrink: 0;
+}
+
+.tf-check span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-weight: 600;
+  color: var(--court-deep);
+}
+
+.tf-check .form-hint {
+  font-weight: 500;
+  margin-top: 0;
+}
+
+.tf-reg-fields-lead {
+  margin: 0 0 0.85rem;
+}
+
+.tf-reg-fields-empty {
+  margin: 0 0 0.85rem;
+  font-size: 0.92rem;
+}
+
+.tf-reg-fields-list {
+  list-style: none;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tf-reg-field-card {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 12px);
+  background: var(--surface, #fafcfb);
+}
+
+.tf-reg-field-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.tf-reg-field-num {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--court-deep);
+}
+
+.tf-reg-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.tf-reg-field-warn {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--danger, #b33);
+}
+
+.tf-reg-fields-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.tf-reg-fields-actions > .btn {
+  width: 100%;
+}
+
+.tf-reg-presets {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+}
+
+.tf-reg-presets .btn {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 44px;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.25;
+}
+
+.court-name-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr));
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.court-name-grid .form-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.create-tournament-modal .modal-footer .modal-actions,
+.edit-tournament-modal .modal-footer .modal-actions {
+  gap: 0.55rem;
+}
+
+.create-tournament-modal .modal-footer .btn,
+.edit-tournament-modal .modal-footer .btn {
+  min-width: 0;
+}
+
+@media (min-width: 520px) {
+  .tf-rules-examples {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .tf-rules-examples .btn {
+    width: auto;
+    flex: 1 1 calc(50% - 0.25rem);
+    max-width: 100%;
+  }
+
+  .tf-reg-fields-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .tf-reg-fields-actions > .btn {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .tf-reg-presets {
+    display: flex;
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+  }
+
+  .tf-reg-presets .btn {
+    width: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .tf-reg-field-row {
+    grid-template-columns: 1fr;
+  }
+
+  .tf-step-label {
+    display: none;
+  }
+
+  .tf-step {
+    padding: 0.45rem;
+  }
+
+  .create-tournament-modal .modal-footer .modal-actions,
+  .edit-tournament-modal .modal-footer .modal-actions,
+  .tf-step-actions {
+    flex-direction: column-reverse;
+  }
+
+  .create-tournament-modal .modal-footer .btn,
+  .edit-tournament-modal .modal-footer .btn,
+  .tf-step-actions .btn {
+    width: 100%;
+  }
+
+  .create-tournament-modal.modal.modal-wide,
+  .edit-tournament-modal.modal.modal-wide {
+    width: 100%;
+    max-height: min(96dvh, calc(96vh - var(--keyboard-inset, 0px)));
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    margin-top: auto;
+    margin-bottom: 0;
+  }
+
+  .create-tournament-modal .tf-modal-head,
+  .edit-tournament-modal .tf-modal-head {
+    gap: 0.5rem;
+  }
+
+  .create-tournament-modal .tf-modal-head h2,
+  .edit-tournament-modal .tf-modal-head h2 {
+    font-size: 1.05rem;
+  }
+}
