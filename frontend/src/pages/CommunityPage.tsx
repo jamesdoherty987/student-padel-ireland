@@ -70,11 +70,14 @@ export default function CommunityPage() {
   }, [])
 
   useEffect(() => {
-    if (openCreate && user) {
-      setCreateOpen(true)
-      clearParam('create')
+    if (!openCreate) return
+    if (!user) {
+      navigate('/login?next=%2Fcommunity%3Fcreate%3D1', { replace: true })
+      return
     }
-  }, [openCreate, user, clearParam])
+    setCreateOpen(true)
+    clearParam('create')
+  }, [openCreate, user, clearParam, navigate])
 
   useEffect(() => {
     if (!createOpen) return
@@ -241,7 +244,7 @@ export default function CommunityPage() {
   }
 
   if (!user) {
-    const next = encodeURIComponent('/community')
+    const next = encodeURIComponent(openCreate ? '/community?create=1' : '/community')
     return (
       <div className="app-shell">
         <NavBar />
@@ -333,7 +336,7 @@ export default function CommunityPage() {
             <h2>New open-play group</h2>
             <p className="muted-note" style={{ marginBottom: 12 }}>
               For a full bracket with groups, knockout, and paid entry,{' '}
-              <Link to="/organiser?create=1">run a private tournament</Link>.
+              <Link to="/tournaments?create=1">run a private tournament</Link>.
             </p>
             <div className="form-group">
               <label className="form-label" htmlFor="comp-name">

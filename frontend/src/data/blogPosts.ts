@@ -301,8 +301,8 @@ export const BLOG_POSTS: BlogPost[] = [
       {
         type: 'cta',
         text: 'Create your next event.',
-        to: '/organiser',
-        label: 'Organiser dashboard',
+        to: '/tournaments?create=1',
+        label: 'Create a tournament',
       },
     ],
   },

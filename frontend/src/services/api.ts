@@ -531,9 +531,11 @@ export const platformApi = {
     }>('/api/config/public'),
   universities: () => api.get<University[]>('/api/universities'),
   rankings: (limit = 50) => api.get<RankingRow[]>('/api/rankings', { params: { limit } }),
-  /** Players entered in the same tournaments as the current user */
-  rankingsMyEvents: (limit = 100) =>
-    api.get<RankingRow[]>('/api/rankings/my-events', { params: { limit } }),
+  /** Players entered in the same tournaments as the current user (optional per-event filter) */
+  rankingsMyEvents: (limit = 100, tournamentId?: string) =>
+    api.get<RankingRow[]>('/api/rankings/my-events', {
+      params: { limit, ...(tournamentId ? { tournament_id: tournamentId } : {}) },
+    }),
   resolveInvite: (code: string) =>
     api.get<{
       kind: 'tournament' | 'competition'

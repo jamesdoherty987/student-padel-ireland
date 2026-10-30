@@ -777,7 +777,7 @@ export default function PlayerProfilePage() {
                       Play with friends
                     </Link>
                     <Link to="/tournaments?filter=mine" className="btn btn-ghost btn-block">
-                      Tournaments I own
+                      Owned by me
                     </Link>
                     {user?.role === 'ADMIN' && (
                       <Link to="/admin" className="btn btn-ghost btn-block">

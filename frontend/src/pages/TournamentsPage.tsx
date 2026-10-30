@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
+import CreateTournamentModal from '../components/CreateTournamentModal'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
@@ -30,12 +31,16 @@ export default function TournamentsPage() {
     path: '/tournaments',
   })
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const filterParam = searchParams.get('filter')
   const initialFilter: FilterId =
     filterParam && FILTERS.some((f) => f.id === filterParam) ? (filterParam as FilterId) : 'all'
   const [filter, setFilter] = useState<FilterId>(initialFilter)
   const [query, setQuery] = useState('')
+  const [showCreate, setShowCreate] = useState(searchParams.get('create') === '1')
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimer = useRef<number | null>(null)
   const openJoin = searchParams.get('join') === '1'
   const codeFromSearch = looksLikeInviteCode(query) ? cleanInviteCode(query) : ''
 
@@ -47,11 +52,60 @@ export default function TournamentsPage() {
     setSearchParams(params, { replace: true })
   }
 
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setToast(null), 3200)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    }
+  }, [])
+
   useEffect(() => {
     const next: FilterId =
       filterParam && FILTERS.some((f) => f.id === filterParam) ? (filterParam as FilterId) : 'all'
     setFilter(next)
   }, [filterParam])
+
+  useEffect(() => {
+    if (searchParams.get('create') !== '1') return
+    if (!user) {
+      navigate('/login?next=%2Ftournaments%3Fcreate%3D1', { replace: true })
+      return
+    }
+    setShowCreate(true)
+  }, [searchParams, user, navigate])
+
+  useEffect(() => {
+    if (user || searchParams.get('filter') !== 'mine') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('filter')
+    setSearchParams(next, { replace: true })
+    setFilter('all')
+  }, [user, searchParams, setSearchParams])
+
+  const clearCreateParam = useCallback(() => {
+    if (searchParams.get('create') !== '1') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('create')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams])
+
+  const openCreate = () => {
+    if (!user) {
+      navigate('/login?next=%2Ftournaments%3Fcreate%3D1')
+      return
+    }
+    setShowCreate(true)
+  }
+
+  const closeCreate = () => {
+    setShowCreate(false)
+    clearCreateParam()
+  }
 
   const clearJoinParam = useCallback(() => {
     if (!openJoin) return
@@ -67,7 +121,11 @@ export default function TournamentsPage() {
 
   const events = useMemo(() => {
     const list = tournaments
-      .filter((t) => t.status !== 'DRAFT')
+      .filter((t) => {
+        if (t.status !== 'DRAFT') return true
+        // Owners still see their drafts under Owned by me / All
+        return !!user && (t.organiser_id === user.id || !!t.can_manage)
+      })
       .map((t) => ({
         key: t.id,
         name: t.name,
@@ -139,6 +197,11 @@ export default function TournamentsPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page">
+        {toast && (
+          <div className="org-toast" role="status">
+            {toast}
+          </div>
+        )}
         <div className="page-header-row page-header-row--inline">
           <h1 className="page-title">Tournaments</h1>
           <div className="header-actions header-actions--tour">
@@ -150,13 +213,10 @@ export default function TournamentsPage() {
             >
               Code
             </HaveCodeButton>
-            <Link
-              to={user ? '/organiser?create=1' : '/login?next=%2Forganiser%3Fcreate%3D1'}
-              className="btn btn-primary btn-sm btn-new-tour"
-            >
+            <button type="button" className="btn btn-primary btn-sm btn-new-tour" onClick={openCreate}>
               <i className="fas fa-plus" aria-hidden />
               New
-            </Link>
+            </button>
           </div>
         </div>
         <p className="page-sub page-sub-tight">Tap a tournament for courts, opponents, and times</p>
@@ -250,27 +310,37 @@ export default function TournamentsPage() {
             )}
             {events.length === 0 && !codeFromSearch && (
               <div className="header-actions header-actions--tour" style={{ marginTop: 12, justifyContent: 'center' }}>
-                <Link
-                  to={user ? '/organiser?create=1' : '/login?next=%2Forganiser%3Fcreate%3D1'}
-                  className="btn btn-primary btn-sm btn-new-tour"
-                >
+                <button type="button" className="btn btn-primary btn-sm btn-new-tour" onClick={openCreate}>
                   <i className="fas fa-plus" aria-hidden />
                   New
-                </Link>
+                </button>
                 <HaveCodeButton className="btn btn-ghost btn-sm">Code</HaveCodeButton>
               </div>
             )}
             {filter === 'mine' && events.length > 0 && !codeFromSearch && (
               <div style={{ marginTop: 12 }}>
-                <Link to="/organiser?create=1" className="btn btn-primary btn-sm btn-new-tour">
+                <button type="button" className="btn btn-primary btn-sm btn-new-tour" onClick={openCreate}>
                   <i className="fas fa-plus" aria-hidden />
                   New tournament
-                </Link>
+                </button>
               </div>
             )}
           </div>
         )}
       </main>
+
+      {showCreate && user && (
+        <CreateTournamentModal
+          variant="organiser"
+          onClose={closeCreate}
+          onToast={showToast}
+          onCreated={(msg, id) => {
+            showToast(msg)
+            closeCreate()
+            if (id) navigate(`/organiser?t=${id}`)
+          }}
+        />
+      )}
     </div>
   )
 }

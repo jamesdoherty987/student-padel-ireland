@@ -129,9 +129,17 @@ export function LoginPage() {
     ? 'Log in with the account used at checkout to confirm your registration.'
     : next.includes('/join')
       ? 'Log in to finish joining.'
-      : next.startsWith('/organiser')
-        ? 'Log in to create and run your events.'
-        : 'Log in to join tournaments and see your next match.'
+      : next.includes('create=1')
+        ? 'Log in to create your tournament.'
+        : next.includes('filter=mine')
+          ? 'Log in to see tournaments you own.'
+          : next.startsWith('/organiser')
+            ? 'Log in to manage your event.'
+            : next.includes('/rankings')
+              ? 'Log in to filter rankings by your events, friends, or university.'
+              : next.includes('/community')
+                ? 'Log in to play with friends.'
+                : 'Log in to join tournaments and see your next match.'
 
   if (authLoading) {
     return (
@@ -333,9 +341,13 @@ export function SignupPage() {
             ? 'Create an account to finish joining with your invite.'
             : next.includes('/confirmed') || next.includes('/live')
               ? 'Create an account to continue to your match.'
-              : next.startsWith('/organiser')
-                ? 'Create an account to manage your event.'
-                : 'A few details and you’re ready to play and join events.'}
+              : next.includes('create=1')
+                ? 'Create an account to set up your tournament.'
+                : next.startsWith('/organiser')
+                  ? 'Create an account to manage your event.'
+                  : next.includes('/community')
+                    ? 'Create an account to play with friends.'
+                    : 'A few details and you’re ready to play and join events.'}
         </p>
         <form onSubmit={onSubmit}>
           <div className="form-group">

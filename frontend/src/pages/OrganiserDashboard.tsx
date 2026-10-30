@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
 import { confirmDialog } from '../components/ConfirmDialog'
-import CreateTournamentModal from '../components/CreateTournamentModal'
 import EditTournamentModal from '../components/EditTournamentModal'
 import NumberInput from '../components/NumberInput'
 import SponsorStrip from '../components/SponsorStrip'
@@ -67,6 +66,7 @@ function resolveCurrentSet(form: {
 export default function OrganiserDashboard() {
   const { user, loading: authLoading } = useAuth()
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [params, setSearchParams] = useSearchParams()
   const canOrganise = !!user
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
@@ -77,7 +77,6 @@ export default function OrganiserDashboard() {
 
   const [toast, setToast] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(params.get('t'))
-  const [showCreate, setShowCreate] = useState(params.get('create') === '1')
   const [showEdit, setShowEdit] = useState(false)
   const [showAddTeam, setShowAddTeam] = useState(false)
   const [confirmGenerate, setConfirmGenerate] = useState(false)
@@ -118,10 +117,13 @@ export default function OrganiserDashboard() {
   const [scoreError, setScoreError] = useState('')
 
   useEffect(() => {
+    if (params.get('create') === '1') {
+      navigate('/tournaments?create=1', { replace: true })
+      return
+    }
     const t = params.get('t')
     if (t) setSelectedId(t)
-    if (params.get('create') === '1') setShowCreate(true)
-  }, [params])
+  }, [params, navigate])
 
   useEffect(() => {
     setPaymentFilter('all')
@@ -130,10 +132,10 @@ export default function OrganiserDashboard() {
   }, [selectedId])
 
   useEffect(() => {
-    const open = showCreate || showEdit || confirmGenerate || !!scoreMatch || showAddTeam || !!moveMatch
+    const open = showEdit || confirmGenerate || !!scoreMatch || showAddTeam || !!moveMatch
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [showCreate, showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch])
+  }, [showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch])
 
   useEffect(() => {
     // Edit/create use ModalShell (dirty-confirm). Don't force-close showEdit here.
@@ -165,10 +167,12 @@ export default function OrganiserDashboard() {
   }, [tid])
 
   useEffect(() => {
+    // Don't wipe a freshly created selection while the dashboard cache is still stale
+    if (isLoading || isFetching) return
     if (selectedId && tournaments.length > 0 && !tournaments.some((t) => t.tournament.id === selectedId)) {
       setSelectedId(tournaments[0]?.tournament.id ?? null)
     }
-  }, [selectedId, tournaments])
+  }, [selectedId, tournaments, isLoading, isFetching])
 
   const { data: teams = [] } = useQuery({
     queryKey: ['org-teams', tid],
@@ -904,10 +908,10 @@ export default function OrganiserDashboard() {
           <h1 className="page-title">Host a tournament</h1>
           <p className="page-sub">Create an account or log in to run your own events.</p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
-            <Link to="/signup?next=/organiser" className="btn btn-primary">
+            <Link to="/signup?next=%2Ftournaments%3Fcreate%3D1" className="btn btn-primary">
               Sign up
             </Link>
-            <Link to="/login?next=/organiser" className="btn btn-ghost">
+            <Link to="/login?next=%2Ftournaments%3Fcreate%3D1" className="btn btn-ghost">
               Log in
             </Link>
           </div>
@@ -936,7 +940,11 @@ export default function OrganiserDashboard() {
               <span className="org-nav-item-meta">{statusLabel(t.tournament.status)}</span>
             </button>
           ))}
-          <button className="btn btn-ghost btn-block" onClick={() => setShowCreate(true)}>
+          <button
+            className="btn btn-ghost btn-block"
+            type="button"
+            onClick={() => navigate('/tournaments?create=1')}
+          >
             + New tournament
           </button>
           <div className="org-aside-note">
@@ -970,7 +978,11 @@ export default function OrganiserDashboard() {
                 Set up registration, payments, and live scoring. Tournaments you create here are private -
                 players join with your invite code (they won’t appear on the landing page).
               </p>
-              <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => navigate('/tournaments?create=1')}
+              >
                 Create a tournament
               </button>
             </div>
@@ -1990,18 +2002,6 @@ export default function OrganiserDashboard() {
           )}
         </main>
       </div>
-
-      {showCreate && (
-        <CreateTournamentModal
-          variant="organiser"
-          onClose={() => setShowCreate(false)}
-          onToast={showToast}
-          onCreated={(msg, id) => {
-            showToast(msg)
-            if (id) setSelectedId(id)
-          }}
-        />
-      )}
 
       {showEdit && tournamentDetail && (
         <EditTournamentModal

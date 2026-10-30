@@ -3856,12 +3856,23 @@ def rankings_my_events(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     limit: int = 100,
+    tournament_id: UUID | None = Query(None),
 ):
-    """Rankings for players entered in the same tournaments as the current user."""
+    """Rankings for players entered in the same tournaments as the current user.
+
+    Optional tournament_id limits the board to coplayers from that event only
+    (must be one of the viewer's entered tournaments).
+    """
     my_tournaments = _tournament_ids_for_player(db, user.id)
     if not my_tournaments:
         return []
-    coplayers = _coplayer_ids_for_tournaments(db, my_tournaments)
+    if tournament_id is not None:
+        if tournament_id not in my_tournaments:
+            raise HTTPException(400, "You are not entered in that tournament")
+        target_ids = [tournament_id]
+    else:
+        target_ids = my_tournaments
+    coplayers = _coplayer_ids_for_tournaments(db, target_ids)
     # Always include self even if somehow missing from the join
     if user.id not in coplayers:
         coplayers.append(user.id)

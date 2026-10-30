@@ -4,7 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
-import { communityApi, platformApi } from '../services/api'
+import { communityApi, platformApi, tournamentApi } from '../services/api'
+import { formatDate } from '../utils/format'
 import { mediaUrl } from '../utils/media'
 import './Tournament.css'
 
@@ -32,31 +33,29 @@ export default function RankingsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const scopeParam = searchParams.get('scope')
+  const eventParam = searchParams.get('event') || 'all'
   const lockedScopes: ScopeId[] = ['events', 'friends', 'university']
   const initialScope: ScopeId =
     isScopeId(scopeParam) && (scopeParam === 'all' || user) ? scopeParam : 'all'
   const [scope, setScope] = useState<ScopeId>(initialScope)
   const [uni, setUni] = useState('all')
+  const [eventId, setEventId] = useState(eventParam)
 
   useEffect(() => {
     if (authLoading) return
-    // Locked scopes need an account - keep guests on the public board
+    // Locked scopes need an account — send guests to login (same as chip tap)
     if (!user && isScopeId(scopeParam) && lockedScopes.includes(scopeParam)) {
-      setScope('all')
-      setSearchParams(
-        (prev) => {
-          const params = new URLSearchParams(prev)
-          params.delete('scope')
-          return params
-        },
-        { replace: true },
-      )
+      navigate(`/login?next=${encodeURIComponent(`/rankings?scope=${scopeParam}`)}`, { replace: true })
       return
     }
     if (isScopeId(scopeParam)) {
       setScope(scopeParam)
     }
-  }, [scopeParam, user, authLoading, setSearchParams])
+  }, [scopeParam, user, authLoading, navigate])
+
+  useEffect(() => {
+    setEventId(eventParam)
+  }, [eventParam])
 
   const { data: rankings = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['rankings'],
@@ -64,9 +63,40 @@ export default function RankingsPage() {
     enabled: scope !== 'events',
   })
 
+  const myEnteredEventsQ = useQuery({
+    queryKey: ['tournaments', 'my-entered', user?.id],
+    queryFn: async () => (await tournamentApi.list()).data,
+    enabled: !!user && scope === 'events',
+  })
+
+  const myEnteredEvents = useMemo(() => {
+    const list = (myEnteredEventsQ.data || []).filter((t) => !!t.viewer_entered)
+    return [...list].sort((a, b) => b.event_date.localeCompare(a.event_date))
+  }, [myEnteredEventsQ.data])
+
+  const validEventId =
+    eventId !== 'all' && myEnteredEvents.some((t) => t.id === eventId) ? eventId : 'all'
+
+  useEffect(() => {
+    if (!myEnteredEventsQ.isSuccess || scope !== 'events') return
+    if (eventId !== 'all' && !myEnteredEvents.some((t) => t.id === eventId)) {
+      setEventId('all')
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev)
+          params.delete('event')
+          return params
+        },
+        { replace: true },
+      )
+    }
+  }, [myEnteredEventsQ.isSuccess, myEnteredEvents, eventId, scope, setSearchParams])
+
   const myEventsQ = useQuery({
-    queryKey: ['rankings', 'my-events'],
-    queryFn: async () => (await platformApi.rankingsMyEvents(100)).data,
+    queryKey: ['rankings', 'my-events', validEventId],
+    queryFn: async () =>
+      (await platformApi.rankingsMyEvents(100, validEventId === 'all' ? undefined : validEventId))
+        .data,
     enabled: !!user && scope === 'events',
   })
 
@@ -137,9 +167,22 @@ export default function RankingsPage() {
     const params = new URLSearchParams(searchParams)
     if (next === 'all') params.delete('scope')
     else params.set('scope', next)
+    params.delete('event')
     setSearchParams(params, { replace: true })
     if (next !== 'all') setUni('all')
+    if (next !== 'events') setEventId('all')
   }
+
+  const setEventAndUrl = (next: string) => {
+    setEventId(next)
+    const params = new URLSearchParams(searchParams)
+    params.set('scope', 'events')
+    if (next === 'all') params.delete('event')
+    else params.set('event', next)
+    setSearchParams(params, { replace: true })
+  }
+
+  const selectedEvent = myEnteredEvents.find((t) => t.id === validEventId)
 
   return (
     <div className="app-shell">
@@ -148,7 +191,9 @@ export default function RankingsPage() {
         <h1 className="page-title">Ireland rankings</h1>
         <p className="page-sub">
           {scope === 'events'
-            ? 'Players from tournaments you’re entered in, ordered by rating.'
+            ? selectedEvent
+              ? `Players from ${selectedEvent.name}, ordered by rating.`
+              : 'Players from tournaments you’re entered in, ordered by rating.'
             : 'Rating points from confirmed tournament and community matches. New players start at 1500.'}
         </p>
 
@@ -191,6 +236,25 @@ export default function RankingsPage() {
               ))}
             </select>
           )}
+          {scope === 'events' && user && myEnteredEvents.length > 0 && (
+            <select
+              id="rank-event"
+              className="form-select tour-search"
+              value={validEventId}
+              onChange={(e) => setEventAndUrl(e.target.value)}
+              aria-label="Filter by event"
+            >
+              <option value="all">All my events</option>
+              {myEnteredEvents.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                  {t.event_date
+                    ? ` · ${formatDate(t.event_date, { day: 'numeric', month: 'short', year: 'numeric' })}`
+                    : ''}
+                </option>
+              ))}
+            </select>
+          )}
           {!user && (
             <p className="muted-note" style={{ margin: 0 }}>
               Tap My events, Friends, or My university to log in and filter.
@@ -217,10 +281,36 @@ export default function RankingsPage() {
 
         {!listLoading && !scopeLoading && !listError && sourceRows.length === 0 && scope === 'events' && (
           <div className="empty-state">
-            <p>Join a tournament to see rankings for players in your events.</p>
+            <p>
+              {validEventId !== 'all'
+                ? 'No ranked players from this event yet.'
+                : myEnteredEvents.length > 0
+                  ? 'No ranked players from your events yet.'
+                  : 'Join a tournament to see rankings for players in your events.'}
+            </p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-              <Link to="/tournaments" className="btn btn-primary">
-                Browse tournaments
+              {validEventId !== 'all' ? (
+                <button type="button" className="btn btn-ghost" onClick={() => setEventAndUrl('all')}>
+                  All my events
+                </button>
+              ) : (
+                <Link to="/tournaments" className="btn btn-primary">
+                  Browse tournaments
+                </Link>
+              )}
+              <button type="button" className="btn btn-ghost" onClick={() => setScopeAndUrl('all')}>
+                Show all Ireland
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!listLoading && !scopeLoading && !listError && sourceRows.length === 0 && scope === 'friends' && (
+          <div className="empty-state">
+            <p>No ranked friends yet. Add friends under Play.</p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+              <Link to="/community" className="btn btn-primary">
+                Play with friends
               </Link>
               <button type="button" className="btn btn-ghost" onClick={() => setScopeAndUrl('all')}>
                 Show all Ireland
@@ -229,7 +319,27 @@ export default function RankingsPage() {
           </div>
         )}
 
-        {!listLoading && !scopeLoading && !listError && sourceRows.length === 0 && scope !== 'events' && (
+        {!listLoading && !scopeLoading && !listError && sourceRows.length === 0 && scope === 'university' && (
+          <div className="empty-state">
+            <p>
+              {!myUniShort && !myUniName
+                ? 'Add your university on Profile to see college rankings.'
+                : 'No ranked players from your university yet.'}
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+              {!myUniShort && !myUniName && user && (
+                <Link to={`/players/${user.id}`} className="btn btn-primary">
+                  Edit profile
+                </Link>
+              )}
+              <button type="button" className="btn btn-ghost" onClick={() => setScopeAndUrl('all')}>
+                Show all Ireland
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!listLoading && !scopeLoading && !listError && sourceRows.length === 0 && scope === 'all' && (
           <div className="empty-state">
             <p>No ranked players yet. Play with friends or finish an official tournament match.</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
@@ -237,7 +347,7 @@ export default function RankingsPage() {
                 Play with friends
               </Link>
               <Link to="/tournaments" className="btn btn-ghost">
-                Official tournaments
+                Browse tournaments
               </Link>
             </div>
           </div>

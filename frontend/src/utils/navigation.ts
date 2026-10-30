@@ -94,7 +94,7 @@ export function nativeBackFallback(
     return '/tournaments'
   }
   if (pathname.startsWith('/organiser')) {
-    return userId ? `/players/${userId}` : '/tournaments'
+    return '/tournaments'
   }
   if (pathname.startsWith('/join')) {
     return '/tournaments'

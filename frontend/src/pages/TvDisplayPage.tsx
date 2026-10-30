@@ -123,7 +123,7 @@ export default function TvDisplayPage() {
       navigate(-1)
       return
     }
-    navigate('/organiser')
+    navigate(id ? `/organiser?t=${id}` : '/organiser')
   }
 
   const { data, isLoading, isError, dataUpdatedAt, refetch, isFetching } = useQuery({
