@@ -38,7 +38,7 @@ export default function RouteSeoFallback() {
     enabled: !own,
     title: 'Student Padel Ireland',
     description:
-      'Student Padel Ireland - student padel tournaments, community games, and rankings across Ireland.',
+      'Student Padel Ireland - student padel tournaments, private events, and rankings across Ireland.',
     path: pathname,
     noIndex: true,
   })

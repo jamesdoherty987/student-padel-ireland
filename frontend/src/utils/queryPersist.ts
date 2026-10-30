@@ -5,7 +5,7 @@ const PERSIST_KEYS = new Set([
   'tournaments',
   'rankings',
   'friends',
-  'community-home',
+  'competitions',
   'notifications',
   'universities',
 ])

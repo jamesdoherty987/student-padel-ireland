@@ -139,7 +139,7 @@ export function LoginPage() {
               ? 'Log in to filter rankings by your events, friends, or university.'
               : next.includes('/community')
                 ? 'Log in to add friends and join with a code.'
-                : 'Log in to join tournaments and see your next match.'
+                : 'Log in to join tournaments and manage your entries.'
 
   if (authLoading) {
     return (

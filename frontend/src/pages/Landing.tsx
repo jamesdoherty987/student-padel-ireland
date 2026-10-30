@@ -299,7 +299,7 @@ export default function Landing() {
             <h1>Student Padel Ireland</h1>
             <p className="lp-lead">
               <span className="lp-lead-line">
-                Find a game in <FlipWords words={CITY_WORDS} duration={2400} className="lp-flip" />
+                Find tournaments in <FlipWords words={CITY_WORDS} duration={2400} className="lp-flip" />
               </span>
             </p>
             <div className="lp-actions">

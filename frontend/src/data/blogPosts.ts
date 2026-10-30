@@ -20,7 +20,7 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: 'what-is-student-padel-ireland',
     title: 'What is Student Padel Ireland?',
     description:
-      'Student Padel Ireland is the platform for student padel tournaments, community games, live scores, and national rankings across Ireland.',
+      'Student Padel Ireland is the platform for student padel tournaments, private tournaments, live scores, and national rankings across Ireland.',
     publishedAt: '2026-10-01',
     tags: ['Student Padel Ireland', 'overview'],
     readingMinutes: 4,
@@ -127,7 +127,7 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: 'student-padel-dublin',
     title: 'Student padel in Dublin: find games and tournaments',
     description:
-      'Looking for student padel in Dublin? How students find tournaments, community games, and rankings through Student Padel Ireland.',
+      'Looking for student padel in Dublin? How students find tournaments, private tournaments, and rankings through Student Padel Ireland.',
     publishedAt: '2026-10-03',
     tags: ['Dublin', 'cities'],
     readingMinutes: 4,
@@ -169,7 +169,7 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: 'student-padel-cork-galway-limerick',
     title: 'Student padel outside Dublin: Cork, Galway, Limerick & more',
     description:
-      'Student padel is growing in Cork, Galway, Limerick, Belfast and Waterford. How to find local tournaments and community games on Student Padel Ireland.',
+      'Student padel is growing in Cork, Galway, Limerick, Belfast and Waterford. How to find local tournaments and private tournaments on Student Padel Ireland.',
     publishedAt: '2026-10-04',
     tags: ['Cork', 'Galway', 'Limerick', 'cities'],
     readingMinutes: 4,
@@ -402,7 +402,7 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: 'student-padel-belfast',
     title: 'Student padel in Belfast and across Northern Ireland',
     description:
-      'Find student padel tournaments and community games in Belfast on Student Padel Ireland - and how NI players join the Ireland ranking.',
+      'Find student padel tournaments and private tournaments in Belfast on Student Padel Ireland - and how NI players join the Ireland ranking.',
     publishedAt: '2026-10-09',
     tags: ['Belfast', 'cities'],
     readingMinutes: 4,

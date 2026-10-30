@@ -219,7 +219,7 @@ export default function TournamentsPage() {
             </button>
           </div>
         </div>
-        <p className="page-sub page-sub-tight">Tap a tournament for courts, opponents, and times</p>
+        <p className="page-sub page-sub-tight">Open an event for details — next match shows when you’re entered</p>
 
         <div className="tour-toolbar">
           <div className="tour-toolbar-row tour-toolbar-inline">

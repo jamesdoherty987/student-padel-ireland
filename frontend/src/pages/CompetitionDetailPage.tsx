@@ -210,6 +210,7 @@ export default function CompetitionDetailPage() {
     onSuccess: () => {
       refresh()
       qc.invalidateQueries({ queryKey: ['community-home'] })
+      qc.invalidateQueries({ queryKey: ['competitions'] })
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
@@ -253,7 +254,7 @@ export default function CompetitionDetailPage() {
         if (can.value) {
           await Share.share({
             title: c.name,
-            text: `Join my padel group on Student Padel Ireland (code ${c.invite_code})`,
+            text: `Join my friends group on Student Padel Ireland (code ${c.invite_code})`,
             url,
             dialogTitle: 'Invite friends',
           })
@@ -299,13 +300,16 @@ export default function CompetitionDetailPage() {
         <NavBar />
         <main className="page empty-state">
           <h1 className="page-title">Friends group</h1>
-          <p className="page-sub">Sign up or log in to view this group and join matches.</p>
+          <p className="page-sub">Sign up or log in to view this earlier friend group.</p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
             <Link to={`/signup?next=${next}`} className="btn btn-primary">
               Sign up
             </Link>
             <Link to={`/login?next=${next}`} className="btn btn-ghost">
               Log in
+            </Link>
+            <Link to="/community" className="btn btn-ghost">
+              Back to Friends
             </Link>
           </div>
         </main>

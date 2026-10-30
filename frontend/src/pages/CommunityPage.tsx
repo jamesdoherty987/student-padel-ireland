@@ -10,7 +10,6 @@ import {
   communityApi,
   platformApi,
   type Competition,
-  type CommunityMatch,
   type Friendship,
 } from '../services/api'
 import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
@@ -21,7 +20,7 @@ export default function CommunityPage() {
   usePageSeo({
     title: 'Friends on Student Padel Ireland',
     description:
-      'Add friends, join tournaments with a code, and confirm match results on Student Padel Ireland.',
+      'Add friends and join tournaments with a code on Student Padel Ireland.',
     path: '/community',
   })
   const { user, loading: authLoading } = useAuth()
@@ -55,19 +54,10 @@ export default function CommunityPage() {
     navigate('/tournaments?create=1', { replace: true })
   }, [params, navigate])
 
-  const openNewTournament = () => {
-    if (!user) {
-      navigate('/login?next=%2Ftournaments%3Fcreate%3D1')
-      return
-    }
-    navigate('/tournaments?create=1')
-  }
-
-  const homeQ = useQuery({
-    queryKey: ['community-home'],
-    queryFn: async () => (await communityApi.home()).data,
+  const compsQ = useQuery({
+    queryKey: ['competitions'],
+    queryFn: async () => (await communityApi.competitions()).data,
     enabled: !!user,
-    refetchInterval: 15000,
   })
   const friendsQ = useQuery({
     queryKey: ['friends'],
@@ -98,7 +88,7 @@ export default function CommunityPage() {
     [friendsQ.data],
   )
   const competitions = useMemo(() => {
-    const list = [...(homeQ.data?.competitions || [])]
+    const list = [...(compsQ.data || [])]
     const rank = (status: string) => {
       if (status === 'LIVE') return 0
       if (status === 'OPEN') return 1
@@ -106,15 +96,7 @@ export default function CommunityPage() {
       return 2
     }
     return list.sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name))
-  }, [homeQ.data?.competitions])
-  const needsConfirm = homeQ.data?.needs_confirm || []
-  const needsScore = homeQ.data?.needs_score || []
-  const nextMatches = homeQ.data?.my_next_matches || []
-  const confirmIds = useMemo(
-    () => new Set((homeQ.data?.needs_confirm || []).map((m) => m.id)),
-    [homeQ.data?.needs_confirm],
-  )
-  const nextGame = nextMatches.find((m) => !confirmIds.has(m.id)) || nextMatches[0]
+  }, [compsQ.data])
 
   const filteredComps = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -143,7 +125,7 @@ export default function CommunityPage() {
   }, [incoming.length, friendsAutoOpened])
 
   const refresh = () => {
-    qc.invalidateQueries({ queryKey: ['community-home'] })
+    qc.invalidateQueries({ queryKey: ['competitions'] })
     qc.invalidateQueries({ queryKey: ['friends'] })
     qc.invalidateQueries({ queryKey: ['player-search'] })
     qc.invalidateQueries({ queryKey: ['notifications'] })
@@ -173,17 +155,6 @@ export default function CommunityPage() {
     },
     onError: (e) => setError(apiErrorMessage(e)),
   })
-  const confirmMut = useMutation({
-    mutationFn: (id: string) => communityApi.confirmMatch(id),
-    onSuccess: () => {
-      setError('')
-      refresh()
-      qc.invalidateQueries({ queryKey: ['rankings'] })
-      qc.invalidateQueries({ queryKey: ['notifications'] })
-    },
-    onError: (e) => setError(apiErrorMessage(e)),
-  })
-
   useEffect(() => {
     const code = params.get('code')
     if (code && code.trim().length >= 6) {
@@ -228,7 +199,7 @@ export default function CommunityPage() {
             </li>
             <li>
               <strong>Join with a code</strong>
-              <span>Paste a tournament invite above.</span>
+              <span>Tap Code to paste a tournament invite.</span>
             </li>
             <li>
               <strong>Create a tournament</strong>
@@ -251,15 +222,11 @@ export default function CommunityPage() {
     )
   }
 
-  const confirmCards = needsConfirm.filter((m) => m.id !== nextGame?.id)
-  const scoreCards = needsScore.filter((m) => m.id !== nextGame?.id)
-  const showNeedsYou = confirmCards.length > 0 || scoreCards.length > 0
-
   return (
     <div className="app-shell">
       <NavBar />
       <main className="page">
-          <div className="page-header-row page-header-row--inline">
+        <div className="page-header-row page-header-row--inline">
           <h1 className="page-title">Friends</h1>
           <div className="header-actions header-actions--tour">
             <HaveCodeButton
@@ -280,170 +247,31 @@ export default function CommunityPage() {
           </p>
         )}
 
-        {homeQ.isLoading && (
-          <>
-            <div className="skeleton" style={{ height: 120, marginBottom: 16 }} />
-            <div className="skeleton" style={{ height: 80 }} />
-          </>
+        {codeFromSearch && (
+          <div className="play-empty" style={{ marginBottom: 16 }}>
+            <p>That looks like an invite code — join it below.</p>
+            <HaveCodeButton className="btn btn-primary btn-sm" initialCode={codeFromSearch}>
+              Join with this code
+            </HaveCodeButton>
+          </div>
         )}
 
-        {homeQ.isError && (
-          <div className="empty-state">
-            <p>Could not load your games right now.</p>
+        {friendsQ.isLoading && (
+          <div className="skeleton" style={{ height: 120, marginBottom: 16 }} />
+        )}
+
+        {friendsQ.isError && (
+          <div className="empty-state" style={{ marginBottom: 16 }}>
+            <p>Could not load friends right now.</p>
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn-ghost"
               style={{ marginTop: 12 }}
-              onClick={() => void homeQ.refetch()}
+              onClick={() => void friendsQ.refetch()}
             >
               Retry
             </button>
           </div>
-        )}
-
-        {!homeQ.isLoading && !homeQ.isError && nextGame && (
-          <section className="next-game-hero">
-            <div className="next-game-label">Your next game</div>
-            <div className="next-game-court">
-              {nextGame.court_number ? `Court ${nextGame.court_number}` : 'Court TBC'}
-            </div>
-            <div className="next-game-vs">
-              <span>{sideLabel(nextGame, 'A')}</span>
-              <em>vs</em>
-              <span>{sideLabel(nextGame, 'B')}</span>
-            </div>
-            <div className="next-game-meta">
-              {nextGame.competition_name}
-              {nextGame.status === 'AWAITING_CONFIRM' ? ' · waiting for confirm' : ''}
-            </div>
-            <div className="next-game-actions">
-              {nextGame.needs_my_confirm && (
-                <button
-                  type="button"
-                  className="btn btn-dark btn-sm"
-                  disabled={confirmMut.isPending && confirmMut.variables === nextGame.id}
-                  onClick={() => confirmMut.mutate(nextGame.id)}
-                >
-                  {confirmMut.isPending && confirmMut.variables === nextGame.id
-                    ? 'Confirming…'
-                    : 'Confirm result'}
-                </button>
-              )}
-              {nextGame.can_i_score && !nextGame.needs_my_confirm && (
-                <Link
-                  to={`/community/${nextGame.competition_slug}?score=${nextGame.id}`}
-                  className="btn btn-dark btn-sm"
-                >
-                  Who won?
-                </Link>
-              )}
-              <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-ghost btn-sm">
-                Open group
-              </Link>
-            </div>
-          </section>
-        )}
-
-        {showNeedsYou && (
-          <section className="up-next">
-            <h2>Needs you</h2>
-            {confirmCards.map((m) => (
-              <ActionCard
-                key={m.id}
-                title="Confirm result"
-                match={m}
-                actionLabel={
-                  confirmMut.isPending && confirmMut.variables === m.id ? 'Confirming…' : 'Confirm result'
-                }
-                disabled={confirmMut.isPending && confirmMut.variables === m.id}
-                onAction={() => confirmMut.mutate(m.id)}
-              />
-            ))}
-            {scoreCards.map((m) => (
-              <ActionCard
-                key={m.id}
-                title="Who won?"
-                match={m}
-                actionLabel="Pick winner"
-                onAction={() => navigate(`/community/${m.competition_slug}?score=${m.id}`)}
-              />
-            ))}
-          </section>
-        )}
-
-        {!homeQ.isLoading && !homeQ.isError && competitions.length > 0 && (
-          <section className="community-section">
-            <div className="section-head">
-              <h2>Earlier groups</h2>
-            </div>
-            <p className="muted-note" style={{ marginBottom: 12 }}>
-              New events use tournaments. These older open-play groups still work if you need them.
-            </p>
-
-            {competitions.length > 2 && (
-              <input
-                className="form-input"
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search groups"
-                aria-label="Search groups"
-                style={{ marginBottom: 12 }}
-              />
-            )}
-
-            {filteredComps.length > 0 ? (
-              <div className="tour-list">
-                {filteredComps.map((c) => (
-                  <CompCard key={c.id} c={c} />
-                ))}
-              </div>
-            ) : (
-              <div className="play-empty">
-                <p>
-                  {codeFromSearch
-                    ? 'That looks like an invite code — join it below.'
-                    : query.trim()
-                      ? 'No groups match that search.'
-                      : 'No groups to show.'}
-                </p>
-                {codeFromSearch ? (
-                  <HaveCodeButton className="btn btn-primary btn-sm" initialCode={codeFromSearch}>
-                    Join with this code
-                  </HaveCodeButton>
-                ) : null}
-                {query.trim() && !codeFromSearch && (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQuery('')}>
-                    Clear search
-                  </button>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-
-        {!homeQ.isLoading && !homeQ.isError && competitions.length === 0 && (
-          <section className="community-section">
-            <div className="play-empty">
-              <p>
-                {codeFromSearch
-                  ? 'That looks like an invite code — join it below.'
-                  : 'To run games with a draw and scoring, create a tournament.'}
-              </p>
-              {codeFromSearch ? (
-                <HaveCodeButton className="btn btn-primary btn-sm" initialCode={codeFromSearch}>
-                  Join with this code
-                </HaveCodeButton>
-              ) : (
-                <div className="header-actions">
-                  <button type="button" className="btn btn-primary btn-sm" onClick={openNewTournament}>
-                    New tournament
-                  </button>
-                  <HaveCodeButton className="btn btn-ghost btn-sm">Code</HaveCodeButton>
-                </div>
-              )}
-            </div>
-          </section>
         )}
 
         <section className="community-section community-section-friends">
@@ -607,6 +435,64 @@ export default function CommunityPage() {
             )}
           </section>
         )}
+
+        {compsQ.isLoading && (
+          <div className="skeleton" style={{ height: 80, marginTop: 8 }} />
+        )}
+
+        {compsQ.isError && (
+          <div className="empty-state" style={{ marginTop: 12 }}>
+            <p>Could not load earlier groups.</p>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ marginTop: 12 }}
+              onClick={() => void compsQ.refetch()}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!compsQ.isLoading && !compsQ.isError && competitions.length > 0 && (
+          <section className="community-section">
+            <div className="section-head">
+              <h2>Earlier groups</h2>
+            </div>
+            <p className="muted-note" style={{ marginBottom: 12 }}>
+              New events use tournaments. These older friend groups still work if you need them.
+            </p>
+
+            {competitions.length > 2 && (
+              <input
+                className="form-input"
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search groups"
+                aria-label="Search groups"
+                style={{ marginBottom: 12 }}
+              />
+            )}
+
+            {filteredComps.length > 0 ? (
+              <div className="tour-list">
+                {filteredComps.map((c) => (
+                  <CompCard key={c.id} c={c} />
+                ))}
+              </div>
+            ) : (
+              <div className="play-empty">
+                <p>{query.trim() ? 'No groups match that search.' : 'No groups to show.'}</p>
+                {query.trim() && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQuery('')}>
+                    Clear search
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+        )}
       </main>
     </div>
   )
@@ -631,45 +517,6 @@ function CompCard({ c }: { c: Competition }) {
         </p>
       </article>
     </Link>
-  )
-}
-
-function sideLabel(m: CommunityMatch, side: 'A' | 'B') {
-  if (side === 'A') {
-    return m.player_a2_name ? `${m.player_a1_name} / ${m.player_a2_name}` : m.player_a1_name
-  }
-  return m.player_b2_name ? `${m.player_b1_name} / ${m.player_b2_name}` : m.player_b1_name
-}
-
-function ActionCard({
-  title,
-  match,
-  actionLabel,
-  onAction,
-  disabled,
-}: {
-  title: string
-  match: CommunityMatch
-  actionLabel: string
-  onAction: () => void
-  disabled?: boolean
-}) {
-  return (
-    <div className="action-card">
-      <div>
-        <div className="action-card-kicker">
-          {title}
-          {match.court_number ? ` · Court ${match.court_number}` : ''}
-        </div>
-        <strong>
-          {sideLabel(match, 'A')} vs {sideLabel(match, 'B')}
-        </strong>
-        <div className="rank-meta">{match.competition_name}</div>
-      </div>
-      <button type="button" className="btn btn-dark btn-sm" onClick={onAction} disabled={disabled}>
-        {actionLabel}
-      </button>
-    </div>
   )
 }
 

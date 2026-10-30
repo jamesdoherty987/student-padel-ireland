@@ -28,6 +28,7 @@ export default function JoinCompetitionPage() {
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['community-home'] })
       void qc.invalidateQueries({ queryKey: ['competitions'] })
+      void qc.invalidateQueries({ queryKey: ['competitions'] })
       navigate(`/community/${res.data.slug}`, { replace: true })
     },
     onError: (e) => {

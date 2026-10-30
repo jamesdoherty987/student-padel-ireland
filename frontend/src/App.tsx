@@ -98,11 +98,6 @@ function PrefetchWarmup() {
         staleTime: 60_000,
       })
       void queryClient.prefetchQuery({
-        queryKey: ['community-home'],
-        queryFn: async () => (await communityApi.home()).data,
-        staleTime: 45_000,
-      })
-      void queryClient.prefetchQuery({
         queryKey: ['notifications'],
         queryFn: async () => (await communityApi.notifications()).data,
         staleTime: 30_000,

@@ -26,7 +26,7 @@ export default function RankingsPage() {
   usePageSeo({
     title: 'Ireland Student Padel Rankings',
     description:
-      'Live Ireland student padel rankings on Student Padel Ireland. See standings from tournaments and community matches nationwide.',
+      'Live Ireland student padel rankings on Student Padel Ireland. See standings from confirmed tournament matches nationwide.',
     path: '/rankings',
   })
   const { user, loading: authLoading } = useAuth()
@@ -194,7 +194,7 @@ export default function RankingsPage() {
             ? selectedEvent
               ? `Players from ${selectedEvent.name}, ordered by rating.`
               : 'Players from tournaments you’re entered in, ordered by rating.'
-            : 'Rating points from confirmed tournament and community matches. New players start at 1500.'}
+            : 'Rating points from confirmed tournament matches. New players start at 1500.'}
         </p>
 
         <div className="tour-toolbar">
