@@ -2583,7 +2583,7 @@ function AddTeamModal({
               </div>
             )}
             {friends.length === 0 && options.length === 0 && (
-              <p className="muted-note">Add friends under Play, or search for players above.</p>
+              <p className="muted-note">Add friends under Friends, or search for players above.</p>
             )}
           </div>
           {error && <p className="form-error">{error}</p>}

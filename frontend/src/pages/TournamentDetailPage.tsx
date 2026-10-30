@@ -641,7 +641,7 @@ export default function TournamentDetailPage() {
           {activeShareTab === 'invite' ? (
             <>
               <p>
-                Share the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
+                Share the code or QR. Friends tap <strong>Code</strong> on Tournaments.
               </p>
               {tournament.invite_code && (
                 <p className="invite-code-line">

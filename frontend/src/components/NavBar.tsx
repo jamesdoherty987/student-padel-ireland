@@ -137,7 +137,7 @@ export default function NavBar() {
     },
     {
       to: '/community',
-      label: 'Play',
+      label: 'Friends',
       icon: 'fa-users',
       match: (p) => p.startsWith('/community'),
     },

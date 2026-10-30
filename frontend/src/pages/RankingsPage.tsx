@@ -307,10 +307,10 @@ export default function RankingsPage() {
 
         {!listLoading && !scopeLoading && !listError && sourceRows.length === 0 && scope === 'friends' && (
           <div className="empty-state">
-            <p>No ranked friends yet. Add friends under Play.</p>
+            <p>No ranked friends yet. Add friends under Friends.</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
               <Link to="/community" className="btn btn-primary">
-                Play with friends
+                Friends
               </Link>
               <button type="button" className="btn btn-ghost" onClick={() => setScopeAndUrl('all')}>
                 Show all Ireland
@@ -341,13 +341,13 @@ export default function RankingsPage() {
 
         {!listLoading && !scopeLoading && !listError && sourceRows.length === 0 && scope === 'all' && (
           <div className="empty-state">
-            <p>No ranked players yet. Play with friends or finish an official tournament match.</p>
+            <p>No ranked players yet. Finish a tournament match to appear here.</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-              <Link to="/community" className="btn btn-primary">
-                Play with friends
-              </Link>
-              <Link to="/tournaments" className="btn btn-ghost">
+              <Link to="/tournaments" className="btn btn-primary">
                 Browse tournaments
+              </Link>
+              <Link to="/tournaments?create=1" className="btn btn-ghost">
+                Create a tournament
               </Link>
             </div>
           </div>
@@ -417,7 +417,7 @@ export default function RankingsPage() {
           <div className="empty-state">
             <p>
               {scope === 'friends'
-                ? 'No ranked friends yet. Add friends under Play.'
+                ? 'No ranked friends yet. Add friends under Friends.'
                 : scope === 'university' && !myUniShort && !myUniName
                   ? 'Add your university on Profile to see college rankings.'
                   : scope === 'university'

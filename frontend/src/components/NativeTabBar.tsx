@@ -42,7 +42,7 @@ export default function NativeTabBar() {
   const onOtherProfile = pathname.startsWith('/players/') && !onOwnProfile
   const onTournaments =
     pathname.startsWith('/tournaments') || pathname.startsWith('/t/') || pathname.startsWith('/join')
-  const onPlay = pathname.startsWith('/community')
+  const onFriends = pathname.startsWith('/community')
   const onRankings = pathname.startsWith('/rankings') || onOtherProfile
   const onAccount =
     onOwnProfile || pathname.startsWith('/organiser') || pathname.startsWith('/admin')
@@ -62,13 +62,13 @@ export default function NativeTabBar() {
       </NavLink>
       <NavLink
         to="/community"
-        className={() => `native-tab ${onPlay ? 'is-active' : ''}`}
+        className={() => `native-tab ${onFriends ? 'is-active' : ''}`}
         onClick={() => void hapticLight()}
       >
         <span className="native-tab-icon" aria-hidden>
           <i className="fas fa-users" />
         </span>
-        <span>Play</span>
+        <span>Friends</span>
       </NavLink>
       <NavLink
         to="/rankings"

@@ -298,7 +298,7 @@ export default function CompetitionDetailPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Open play</h1>
+          <h1 className="page-title">Friends group</h1>
           <p className="page-sub">Sign up or log in to view this group and join matches.</p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
             <Link to={`/signup?next=${next}`} className="btn btn-primary">
@@ -338,7 +338,7 @@ export default function CompetitionDetailPage() {
                 : 'Competition not found.'}
             </p>
             <Link to="/community" className="btn btn-primary" style={{ marginTop: 12 }}>
-              Back to community
+              Back to Friends
             </Link>
           </div>
         </main>
@@ -395,7 +395,7 @@ export default function CompetitionDetailPage() {
             <div>
               <h2>Invite friends</h2>
               <p className="muted-note">
-                Send the code or QR. Friends tap <strong>Have a code?</strong> under Play.
+                Send the code or QR. Friends tap <strong>Code</strong> under Friends or Tournaments.
               </p>
               <div className="share-code-row">
                 <code className="share-code">{c.invite_code}</code>

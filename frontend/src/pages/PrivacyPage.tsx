@@ -43,7 +43,7 @@ export default function PrivacyPage() {
           <h2>Why we use it</h2>
           <ul>
             <li>Create and manage your account</li>
-            <li>Run tournaments, community competitions, live scores, and rankings</li>
+            <li>Run tournaments, live scores, friends, and rankings</li>
             <li>
               Process entry fees and send transactional emails when configured (including a day-before
               tournament reminder with a login link)

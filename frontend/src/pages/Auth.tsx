@@ -138,7 +138,7 @@ export function LoginPage() {
             : next.includes('/rankings')
               ? 'Log in to filter rankings by your events, friends, or university.'
               : next.includes('/community')
-                ? 'Log in to play with friends.'
+                ? 'Log in to add friends and join with a code.'
                 : 'Log in to join tournaments and see your next match.'
 
   if (authLoading) {
@@ -346,7 +346,7 @@ export function SignupPage() {
                 : next.startsWith('/organiser')
                   ? 'Create an account to manage your event.'
                   : next.includes('/community')
-                    ? 'Create an account to play with friends.'
+                    ? 'Create an account to add friends and join events.'
                     : 'A few details and you’re ready to play and join events.'}
         </p>
         <form onSubmit={onSubmit}>

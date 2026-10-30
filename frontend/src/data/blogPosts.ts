@@ -27,7 +27,7 @@ export const BLOG_POSTS: BlogPost[] = [
     body: [
       {
         type: 'p',
-        text: 'Student Padel Ireland (SPI) is Ireland’s home for student padel. It brings tournaments, private community ladders, invite codes, live scoring, and an Ireland-wide ranking into one place - so university and college players can find a game without hunting through group chats.',
+        text: 'Student Padel Ireland (SPI) is Ireland’s home for student padel. It brings official and private tournaments, invite codes, live scoring, and an Ireland-wide ranking into one place - so university and college players can find a game without hunting through group chats.',
       },
       {
         type: 'h2',
@@ -37,7 +37,7 @@ export const BLOG_POSTS: BlogPost[] = [
         type: 'ul',
         items: [
           'Students looking for padel tournaments near their campus',
-          'Friends who want a private ladder or community competition',
+          'Friends who want to run a private tournament with a code',
           'Organisers running doubles or singles events',
           'Players who want a clear Ireland ranking from real results',
         ],
@@ -52,7 +52,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Community mode lets you invite friends with a code, log singles and doubles matches, and climb a shared ladder - useful when there is no official tournament that weekend.',
+        text: 'Anyone can create a private tournament, share the invite code with friends, and run a draw with live scoring - useful when there is no official event that weekend.',
       },
       {
         type: 'cta',
@@ -81,7 +81,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Sign up with your name, email, and university. You will use the same account for tournaments, community games, and rankings.',
+        text: 'Sign up with your name, email, and university. You will use the same account for tournaments, friends, and rankings.',
       },
       {
         type: 'h2',
@@ -105,13 +105,13 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'If a friend or organiser shared a code or QR, tap Have a code? (or open the link), enter the code, and you will land on the right tournament or community group.',
+        text: 'If a friend or organiser shared a code or QR, tap Code (or open the link), enter the code, and you will land on the right tournament join flow.',
       },
       {
         type: 'ul',
         items: [
           'Tournament codes take you to that event’s join flow',
-          'Community codes add you to a private ladder or group',
+          'Private events work the same way as official ones',
           'Codes are short - paste carefully and avoid extra spaces',
         ],
       },
@@ -145,7 +145,7 @@ export const BLOG_POSTS: BlogPost[] = [
         items: [
           'Browse Upcoming events filtered by location for Dublin venues',
           'Join with a partner for doubles opens',
-          'Use community competitions for midweek ladders between tournaments',
+          'Create a private midweek tournament with friends when no open is on',
           'Check Ireland rankings after results are posted',
         ],
       },
@@ -193,17 +193,17 @@ export const BLOG_POSTS: BlogPost[] = [
       {
         type: 'ul',
         items: [
-          'Create a community competition and invite your society with a code',
-          'Log friendly matches so ratings move even without a full draw',
+          'Create a private tournament and invite your society with a code',
+          'Add friends so you can find teammates for the next event',
           'Promote your first open tournament on the SPI events list',
           'Link your club Instagram bio to studentpadel.ie so new members find you',
         ],
       },
       {
         type: 'cta',
-        text: 'Start a community group or find an event near you.',
-        to: '/community',
-        label: 'Open community',
+        text: 'Create a tournament or find an event near you.',
+        to: '/tournaments?create=1',
+        label: 'Create a tournament',
       },
     ],
   },
@@ -211,14 +211,14 @@ export const BLOG_POSTS: BlogPost[] = [
     slug: 'how-student-padel-rankings-work',
     title: 'How Student Padel Ireland rankings work',
     description:
-      'Learn how Ireland student padel rankings update from tournament and community match results on Student Padel Ireland.',
+      'Learn how Ireland student padel rankings update from confirmed tournament match results on Student Padel Ireland.',
     publishedAt: '2026-10-05',
     tags: ['rankings', 'ratings'],
     readingMinutes: 5,
     body: [
       {
         type: 'p',
-        text: 'Rankings on Student Padel Ireland are designed for real student play: tournament brackets and community matches both matter, including doubles where partners share the result.',
+        text: 'Rankings on Student Padel Ireland are designed for real student play: official and private tournament brackets both count, including doubles where partners share the result.',
       },
       {
         type: 'h2',
@@ -228,7 +228,7 @@ export const BLOG_POSTS: BlogPost[] = [
         type: 'ul',
         items: [
           'Official tournament match results once scores are confirmed',
-          'Community singles and doubles matches logged in a competition',
+          'Private tournament matches you run with friends',
           'Player profiles that show form over time, not only one weekend',
         ],
       },
@@ -346,7 +346,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Join a community competition with friends from your course or society. Logging matches keeps you sharp and starts building a ranking before the next open.',
+        text: 'Create a small private tournament with friends from your course or society. Playing structured matches keeps you sharp and starts building a ranking before the next open.',
       },
       {
         type: 'cta',
@@ -378,7 +378,7 @@ export const BLOG_POSTS: BlogPost[] = [
         items: [
           'Public tournament pages instead of fragile signup forms',
           'QR / invite codes for Fresher’s week and WhatsApp groups',
-          'Community ladders for weekly social play',
+          'Private tournaments for weekly social play',
           'A single Ireland ranking when clubs play each other',
         ],
       },
@@ -417,7 +417,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Check the tournaments board for Belfast venues, or ask your society for an invite code. Community competitions work well for midweek boxes when a full tournament draw is not needed.',
+        text: 'Check the tournaments board for Belfast venues, or ask your society for an invite code. A small private tournament works well for midweek boxes when a big open is not on.',
       },
       {
         type: 'h2',
@@ -497,7 +497,7 @@ export const BLOG_POSTS: BlogPost[] = [
         type: 'ul',
         items: [
           'Your university padel society or WhatsApp group',
-          'Community competitions on Student Padel Ireland',
+          'Friends and private tournaments on Student Padel Ireland',
           'Mixed-level opens where captains can still register early',
           'Classmates who already play tennis or squash',
         ],
@@ -508,13 +508,13 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Join a community group with a code from a friend, play a few logged matches, then enter a tournament together. Rankings and profiles make it easier to see who is active on your campus.',
+        text: 'Add friends on SPI, join a tournament with a code, and play together. Rankings and profiles make it easier to see who is active on your campus.',
       },
       {
         type: 'cta',
-        text: 'Join the community feed.',
+        text: 'Find friends and your next event.',
         to: '/community',
-        label: 'Open community',
+        label: 'Open Friends',
       },
     ],
   },

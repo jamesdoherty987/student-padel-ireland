@@ -25,23 +25,23 @@ const CITY_CARDS = [
 ]
 
 const STEPS = [
-  { n: '1', title: 'Pick official or with friends', body: 'Browse official SPI tournaments, or open Play to start casual open play with friends.' },
-  { n: '2', title: 'Join with a code or register', body: 'Paste an invite code for either path - or register as a doubles team for official events.' },
-  { n: '3', title: 'Play and climb rankings', body: 'Results from official tournaments and friend games both update Ireland rankings.' },
+  { n: '1', title: 'Browse or create', body: 'Join official SPI tournaments, or create your own private event and share the code.' },
+  { n: '2', title: 'Register with a code', body: 'Paste an invite code, or register as a doubles team for open events.' },
+  { n: '3', title: 'Play and climb rankings', body: 'Confirmed results update Ireland rankings after your matches.' },
 ]
 
 const FAQS: { q: string; a: string }[] = [
   {
     q: 'What is Student Padel Ireland?',
-    a: 'Student Padel Ireland is the platform for student padel in Ireland - browse official tournaments, play casual games with friends, join with an invite code, and follow live scores and national rankings.',
+    a: 'Student Padel Ireland is the platform for student padel in Ireland - browse official tournaments, create private events, join with an invite code, and follow live scores and national rankings.',
   },
   {
     q: 'Where can I play student padel in Ireland?',
-    a: 'Official tournaments run across Ireland including Dublin, Cork, Galway, Limerick, Belfast, and Waterford. Check Upcoming events, or use Play for a local hit with friends.',
+    a: 'Official tournaments run across Ireland including Dublin, Cork, Galway, Limerick, Belfast, and Waterford. Check Upcoming events, or create a private tournament and invite friends with a code.',
   },
   {
     q: 'How do I join a tournament?',
-    a: 'Open Tournaments, pick an official event, and register with your partner. For friend open play, go to Play. Invite codes work for both.',
+    a: 'Open Tournaments, pick an official event, and register with your partner — or paste an invite code for a private event.',
   },
 
   {
@@ -252,7 +252,7 @@ export default function Landing() {
               Tournaments
             </Link>
             <Link to="/community" onClick={close}>
-              Play
+              Friends
             </Link>
             <a href="#how" onClick={close}>
               How it works
@@ -306,8 +306,8 @@ export default function Landing() {
               <a href="#upcoming" className="lp-btn lp-btn-primary">
                 Official tournaments
               </a>
-              <Link to="/community" className="lp-btn lp-btn-ghost">
-                Play with friends
+              <Link to="/tournaments?create=1" className="lp-btn lp-btn-ghost">
+                Create a tournament
               </Link>
             </div>
           </div>
@@ -437,7 +437,7 @@ export default function Landing() {
               <p className="lp-kicker lp-kicker-light">Ireland</p>
               <h2>Student padel, across the country</h2>
               <p>
-                Tournaments, private ladders, and one Ireland ranking. Dublin, Cork, Galway, Limerick, Belfast and
+                Official and private tournaments, and one Ireland ranking. Dublin, Cork, Galway, Limerick, Belfast and
                 Waterford.
               </p>
               <a href="#upcoming" className="lp-btn lp-btn-primary">
@@ -484,7 +484,7 @@ export default function Landing() {
           <BrandLogo to="/" className="lp-footer-brand" size="sm" />
           <div className="lp-footer-links">
             <Link to="/tournaments">Tournaments</Link>
-            <Link to="/community">Play</Link>
+            <Link to="/community">Friends</Link>
             <Link to="/rankings">Rankings</Link>
             <Link to="/privacy">Privacy</Link>
             <Link to="/terms">Terms</Link>

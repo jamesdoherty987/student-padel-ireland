@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState, useCallback, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
-import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { usePageSeo } from '../hooks/usePageSeo'
 import {
   apiErrorMessage,
@@ -18,38 +17,24 @@ import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
 import './Tournament.css'
 import './Community.css'
 
-const FORMATS = [
-  { id: 'DOUBLES', title: 'Doubles', blurb: '2 vs 2' },
-  { id: 'SINGLES', title: 'Singles', blurb: '1 vs 1' },
-  { id: 'MIXED', title: 'Both', blurb: 'Singles and doubles' },
-] as const
-
 export default function CommunityPage() {
   usePageSeo({
-    title: 'Play Padel with Friends',
+    title: 'Friends on Student Padel Ireland',
     description:
-      'Set up open play with friends, join private ladders, log matches, and climb rankings together on Student Padel Ireland.',
+      'Add friends, join tournaments with a code, and confirm match results on Student Padel Ireland.',
     path: '/community',
   })
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [params, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
-  const createFormRef = useRef<HTMLFormElement>(null)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [friendsOpen, setFriendsOpen] = useState(false)
   const [friendsAutoOpened, setFriendsAutoOpened] = useState(false)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [compName, setCompName] = useState('')
-  const [compFormat, setCompFormat] = useState('DOUBLES')
-  const [courts, setCourts] = useState(2)
-  const [selectedFriends, setSelectedFriends] = useState<string[]>([])
   const [query, setQuery] = useState('')
-  useKeyboardInset(createOpen)
 
   const openJoin = params.get('join') === '1'
-  const openCreate = params.get('create') === '1'
   const codeFromSearch = looksLikeInviteCode(query) ? cleanInviteCode(query) : ''
 
   const clearParam = useCallback(
@@ -64,25 +49,19 @@ export default function CommunityPage() {
 
   const clearJoinParam = useCallback(() => clearParam('join'), [clearParam])
 
-  const openCreateForm = useCallback(() => {
-    setCreateOpen(true)
-    setError('')
-  }, [])
-
+  // Legacy open-play create links → tournament create
   useEffect(() => {
-    if (!openCreate) return
+    if (params.get('create') !== '1') return
+    navigate('/tournaments?create=1', { replace: true })
+  }, [params, navigate])
+
+  const openNewTournament = () => {
     if (!user) {
-      navigate('/login?next=%2Fcommunity%3Fcreate%3D1', { replace: true })
+      navigate('/login?next=%2Ftournaments%3Fcreate%3D1')
       return
     }
-    setCreateOpen(true)
-    clearParam('create')
-  }, [openCreate, user, clearParam, navigate])
-
-  useEffect(() => {
-    if (!createOpen) return
-    createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [createOpen])
+    navigate('/tournaments?create=1')
+  }
 
   const homeQ = useQuery({
     queryKey: ['community-home'],
@@ -170,25 +149,6 @@ export default function CommunityPage() {
     qc.invalidateQueries({ queryKey: ['notifications'] })
   }
 
-  const createMut = useMutation({
-    mutationFn: () =>
-      communityApi.createCompetition({
-        name: compName,
-        format: compFormat,
-        number_of_courts: courts,
-        friend_ids: selectedFriends,
-      }),
-    onSuccess: (res) => {
-      setError('')
-      setCreateOpen(false)
-      setCompName('')
-      setSelectedFriends([])
-      qc.invalidateQueries({ queryKey: ['community-home'] })
-      navigate(`/community/${res.data.slug}`)
-    },
-    onError: (e) => setError(apiErrorMessage(e)),
-  })
-
   const requestMut = useMutation({
     mutationFn: (userId: string) => communityApi.requestFriend(userId),
     onSuccess: () => {
@@ -244,13 +204,13 @@ export default function CommunityPage() {
   }
 
   if (!user) {
-    const next = encodeURIComponent(openCreate ? '/community?create=1' : '/community')
+    const next = encodeURIComponent('/community')
     return (
       <div className="app-shell">
         <NavBar />
         <main className="page">
           <div className="page-header-row page-header-row--inline">
-            <h1 className="page-title">Play</h1>
+            <h1 className="page-title">Friends</h1>
             <HaveCodeButton
               className="btn btn-ghost btn-sm"
               autoOpen={openJoin}
@@ -259,28 +219,31 @@ export default function CommunityPage() {
               Code
             </HaveCodeButton>
           </div>
-          <p className="page-sub page-sub-tight">Casual games with friends</p>
+          <p className="page-sub page-sub-tight">Add friends and join tournaments with a code</p>
 
           <ol className="community-guest-steps">
             <li>
-              <strong>Create a group</strong>
-              <span>Invite friends and log games as you play.</span>
+              <strong>Add friends</strong>
+              <span>Find teammates and see them on rankings.</span>
             </li>
             <li>
-              <strong>Or join with a code</strong>
-              <span>Paste an invite above — works for friend groups and tournaments.</span>
+              <strong>Join with a code</strong>
+              <span>Paste a tournament invite above.</span>
             </li>
             <li>
-              <strong>Confirm results</strong>
-              <span>Both sides confirm before ratings update.</span>
+              <strong>Create a tournament</strong>
+              <span>Run your own event from the Tournaments tab.</span>
             </li>
           </ol>
           <div className="community-guest-actions">
             <Link to={`/signup?next=${next}`} className="btn btn-primary">
-              Sign up to play
+              Sign up
             </Link>
             <Link to={`/login?next=${next}`} className="btn btn-ghost">
               Log in
+            </Link>
+            <Link to="/tournaments?create=1" className="btn btn-ghost">
+              New tournament
             </Link>
           </div>
         </main>
@@ -296,8 +259,8 @@ export default function CommunityPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page">
-        <div className="page-header-row page-header-row--inline">
-          <h1 className="page-title">Play</h1>
+          <div className="page-header-row page-header-row--inline">
+          <h1 className="page-title">Friends</h1>
           <div className="header-actions header-actions--tour">
             <HaveCodeButton
               className="btn btn-ghost btn-sm"
@@ -307,122 +270,14 @@ export default function CommunityPage() {
             >
               Code
             </HaveCodeButton>
-            {!createOpen && (
-              <button type="button" className="btn btn-primary btn-sm btn-new-tour" onClick={openCreateForm}>
-                <i className="fas fa-plus" aria-hidden />
-                New
-              </button>
-            )}
           </div>
         </div>
-        <p className="page-sub page-sub-tight">Open play with friends</p>
+        <p className="page-sub page-sub-tight">Add friends and join tournaments with a code</p>
 
         {error && (
           <p className="form-error" role="alert">
             {error}
           </p>
-        )}
-
-        {createOpen && (
-          <form
-            ref={createFormRef}
-            className="community-panel"
-            onSubmit={(e: FormEvent) => {
-              e.preventDefault()
-              setError('')
-              createMut.mutate()
-            }}
-          >
-            <h2>New open-play group</h2>
-            <p className="muted-note" style={{ marginBottom: 12 }}>
-              For a full bracket with groups, knockout, and paid entry,{' '}
-              <Link to="/tournaments?create=1">run a private tournament</Link>.
-            </p>
-            <div className="form-group">
-              <label className="form-label" htmlFor="comp-name">
-                Name
-              </label>
-              <input
-                id="comp-name"
-                className="form-input"
-                value={compName}
-                onChange={(e) => setCompName(e.target.value)}
-                placeholder="Friday padel"
-                required
-                minLength={3}
-                autoFocus
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Play style</label>
-              <div className="format-grid">
-                {FORMATS.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    className={`format-card ${compFormat === f.id ? 'on' : ''}`}
-                    onClick={() => setCompFormat(f.id)}
-                  >
-                    <strong>{f.title}</strong>
-                    <span>{f.blurb}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="comp-courts">
-                Courts available
-              </label>
-              <select
-                id="comp-courts"
-                className="form-select"
-                value={courts}
-                onChange={(e) => setCourts(Number(e.target.value))}
-              >
-                {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <option key={n} value={n}>
-                    {n} court{n === 1 ? '' : 's'}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {accepted.length > 0 && (
-              <div className="form-group">
-                <label className="form-label">Invite friends now</label>
-                <div className="friend-chip-row">
-                  {accepted.map((f) => (
-                    <button
-                      key={f.user_id}
-                      type="button"
-                      className={`friend-chip ${selectedFriends.includes(f.user_id) ? 'on' : ''}`}
-                      onClick={() =>
-                        setSelectedFriends((prev) =>
-                          prev.includes(f.user_id) ? prev.filter((x) => x !== f.user_id) : [...prev, f.user_id],
-                        )
-                      }
-                    >
-                      {f.full_name.split(' ')[0]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="header-actions">
-              <button type="submit" className="btn btn-primary" disabled={createMut.isPending}>
-                {createMut.isPending ? 'Creating…' : 'Create group'}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => {
-                  setCreateOpen(false)
-                  setError('')
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
         )}
 
         {homeQ.isLoading && (
@@ -516,16 +371,14 @@ export default function CommunityPage() {
           </section>
         )}
 
-        {!homeQ.isLoading && !homeQ.isError && (
+        {!homeQ.isLoading && !homeQ.isError && competitions.length > 0 && (
           <section className="community-section">
             <div className="section-head">
-              <h2>Your groups</h2>
-              {!createOpen && competitions.length > 0 && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={openCreateForm}>
-                  New
-                </button>
-              )}
+              <h2>Earlier groups</h2>
             </div>
+            <p className="muted-note" style={{ marginBottom: 12 }}>
+              New events use tournaments. These older open-play groups still work if you need them.
+            </p>
 
             {competitions.length > 2 && (
               <input
@@ -533,7 +386,7 @@ export default function CommunityPage() {
                 type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search your groups"
+                placeholder="Search groups"
                 aria-label="Search groups"
                 style={{ marginBottom: 12 }}
               />
@@ -552,25 +405,13 @@ export default function CommunityPage() {
                     ? 'That looks like an invite code — join it below.'
                     : query.trim()
                       ? 'No groups match that search.'
-                      : createOpen
-                        ? 'Fill in the form above to create your first group.'
-                        : 'No groups yet. Start one for your friends, or join with a code.'}
+                      : 'No groups to show.'}
                 </p>
                 {codeFromSearch ? (
                   <HaveCodeButton className="btn btn-primary btn-sm" initialCode={codeFromSearch}>
                     Join with this code
                   </HaveCodeButton>
-                ) : (
-                  !createOpen &&
-                  !query.trim() && (
-                    <div className="header-actions">
-                      <button type="button" className="btn btn-primary btn-sm" onClick={openCreateForm}>
-                        New group
-                      </button>
-                      <HaveCodeButton className="btn btn-ghost btn-sm">Have a code?</HaveCodeButton>
-                    </div>
-                  )
-                )}
+                ) : null}
                 {query.trim() && !codeFromSearch && (
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQuery('')}>
                     Clear search
@@ -578,6 +419,30 @@ export default function CommunityPage() {
                 )}
               </div>
             )}
+          </section>
+        )}
+
+        {!homeQ.isLoading && !homeQ.isError && competitions.length === 0 && (
+          <section className="community-section">
+            <div className="play-empty">
+              <p>
+                {codeFromSearch
+                  ? 'That looks like an invite code — join it below.'
+                  : 'To run games with a draw and scoring, create a tournament.'}
+              </p>
+              {codeFromSearch ? (
+                <HaveCodeButton className="btn btn-primary btn-sm" initialCode={codeFromSearch}>
+                  Join with this code
+                </HaveCodeButton>
+              ) : (
+                <div className="header-actions">
+                  <button type="button" className="btn btn-primary btn-sm" onClick={openNewTournament}>
+                    New tournament
+                  </button>
+                  <HaveCodeButton className="btn btn-ghost btn-sm">Code</HaveCodeButton>
+                </div>
+              )}
+            </div>
           </section>
         )}
 
@@ -714,7 +579,7 @@ export default function CommunityPage() {
               />
             ))}
             {accepted.length === 0 && outgoing.length === 0 && incoming.length === 0 && (
-              <p className="muted-note">Add friends to invite them into groups and filter rankings.</p>
+              <p className="muted-note">Add friends to invite them to tournaments and filter rankings.</p>
             )}
           </div>
         </section>

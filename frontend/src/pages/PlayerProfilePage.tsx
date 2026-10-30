@@ -774,7 +774,7 @@ export default function PlayerProfilePage() {
                   <h2 id="account-panel-title">Account</h2>
                   <div className="profile-account-actions">
                     <Link to="/community" className="btn btn-primary btn-block">
-                      Play with friends
+                      Friends
                     </Link>
                     <Link to="/tournaments?filter=mine" className="btn btn-ghost btn-block">
                       Owned by me
@@ -869,7 +869,7 @@ export default function PlayerProfilePage() {
             {!isOwn && (
               <div className="profile-footer-links">
                 <Link to="/community" className="btn btn-ghost">
-                  Play
+                  Friends
                 </Link>
                 <Link to="/rankings" className="btn btn-ghost">
                   Rankings

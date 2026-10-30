@@ -13,7 +13,7 @@ export default function AboutPage() {
   usePageSeo({
     title: 'About Student Padel Ireland',
     description:
-      'About Student Padel Ireland - the platform for student padel tournaments, community games, live scores, and Ireland rankings.',
+      'About Student Padel Ireland - the platform for student padel tournaments, friends, live scores, and Ireland rankings.',
     path: '/about',
   })
 
@@ -30,23 +30,23 @@ export default function AboutPage() {
         <div className="legal-body">
           <p>
             <strong>Student Padel Ireland</strong> (SPI) is built for university and college padel players across
-            Ireland. Find tournaments, join with an invite code, run community ladders with friends, follow live
+            Ireland. Find tournaments, join with an invite code, create private events with friends, follow live
             scores, and climb a national ranking - all in one place.
           </p>
 
           <h2>What we offer</h2>
           <ul>
             <li>Public tournament listings with registration and payments</li>
-            <li>Casual open play and friend ladders</li>
+            <li>Friends, invite codes, and private tournaments</li>
             <li>Live scoring for players, organisers, and venue displays</li>
-            <li>Ireland rankings fed by tournament and community results</li>
+            <li>Ireland rankings fed by confirmed tournament results</li>
           </ul>
 
           <h2>Where students play</h2>
           <p>
-            Official tournaments and casual friend games run nationwide, including Dublin, Cork, Galway, Limerick,
-            Belfast, and Waterford. Whether you are in a large Dublin society or starting a new campus group, SPI
-            gives you the same tools.
+            Official and private tournaments run nationwide, including Dublin, Cork, Galway, Limerick, Belfast, and
+            Waterford. Whether you are in a large Dublin society or starting a new campus group, SPI gives you the
+            same tools.
           </p>
 
           <h2>Contact</h2>
@@ -62,8 +62,8 @@ export default function AboutPage() {
             <Link to="/tournaments" className="btn btn-ghost">
               Official tournaments
             </Link>
-            <Link to="/community" className="btn btn-ghost">
-              Play with friends
+            <Link to="/tournaments?create=1" className="btn btn-ghost">
+              Create a tournament
             </Link>
           </div>
         </div>

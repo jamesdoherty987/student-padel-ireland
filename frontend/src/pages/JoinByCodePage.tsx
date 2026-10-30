@@ -26,7 +26,7 @@ export default function JoinByCodePage() {
   usePageSeo({
     title: 'Join with a code',
     description:
-      'Join a Student Padel Ireland tournament or community group with an invite code from a friend or organiser.',
+      'Join a Student Padel Ireland tournament with an invite code from a friend or organiser.',
     path: clean ? `/join/${clean}` : '/join',
   })
 
