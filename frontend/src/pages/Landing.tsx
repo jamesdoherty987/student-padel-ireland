@@ -25,24 +25,25 @@ const CITY_CARDS = [
 ]
 
 const STEPS = [
-  { n: '1', title: 'Find an event or use a code', body: 'Browse tournaments and tap to join, or use Have a code? / scan a QR if a friend invited you.' },
-  { n: '2', title: 'Register with your partner', body: 'Sign up as a doubles team and pay online - or at the venue if the organiser collects on arrival.' },
-  { n: '3', title: 'Play and climb rankings', body: 'Match results from tournaments and community games update Ireland rankings.' },
+  { n: '1', title: 'Pick official or with friends', body: 'Browse official SPI tournaments, or open Play to start casual open play with friends.' },
+  { n: '2', title: 'Join with a code or register', body: 'Paste an invite code for either path - or register as a doubles team for official events.' },
+  { n: '3', title: 'Play and climb rankings', body: 'Results from official tournaments and friend games both update Ireland rankings.' },
 ]
 
 const FAQS: { q: string; a: string }[] = [
   {
     q: 'What is Student Padel Ireland?',
-    a: 'Student Padel Ireland is the platform for student padel in Ireland - browse tournaments, join with an invite code, play community games with friends, and follow live scores and national rankings.',
+    a: 'Student Padel Ireland is the platform for student padel in Ireland - browse official tournaments, play casual games with friends, join with an invite code, and follow live scores and national rankings.',
   },
   {
     q: 'Where can I play student padel in Ireland?',
-    a: 'Events run across Ireland including Dublin, Cork, Galway, Limerick, Belfast, and Waterford. Check Upcoming events for open tournaments near you.',
+    a: 'Official tournaments run across Ireland including Dublin, Cork, Galway, Limerick, Belfast, and Waterford. Check Upcoming events, or use Play for a local hit with friends.',
   },
   {
     q: 'How do I join a tournament?',
-    a: 'Open Tournaments, pick an event, and register with your partner. If a friend invited you, use Have a code? or scan their QR.',
+    a: 'Open Tournaments, pick an official event, and register with your partner. For friend open play, go to Play. Invite codes work for both.',
   },
+
   {
     q: 'Is Student Padel Ireland only for university students?',
     a: 'It is built for the student padel community in Ireland. Individual events set their own entry rules - check each tournament page for eligibility.',
@@ -251,7 +252,7 @@ export default function Landing() {
               Tournaments
             </Link>
             <Link to="/community" onClick={close}>
-              Community
+              Play
             </Link>
             <a href="#how" onClick={close}>
               How it works
@@ -303,10 +304,10 @@ export default function Landing() {
             </p>
             <div className="lp-actions">
               <a href="#upcoming" className="lp-btn lp-btn-primary">
-                Upcoming events
+                Official tournaments
               </a>
-              <Link to="/tournaments?join=1" className="lp-btn lp-btn-ghost">
-                Have a code?
+              <Link to="/community" className="lp-btn lp-btn-ghost">
+                Play with friends
               </Link>
             </div>
           </div>
@@ -321,7 +322,7 @@ export default function Landing() {
             <div className="lp-section-head">
               <div>
                 <p className="lp-kicker">This season</p>
-                <h2>Upcoming events</h2>
+                <h2>Official tournaments</h2>
               </div>
               <Link to="/tournaments" className="lp-link">
                 View all
@@ -483,6 +484,7 @@ export default function Landing() {
           <BrandLogo to="/" className="lp-footer-brand" size="sm" />
           <div className="lp-footer-links">
             <Link to="/tournaments">Tournaments</Link>
+            <Link to="/community">Play</Link>
             <Link to="/rankings">Rankings</Link>
             <Link to="/privacy">Privacy</Link>
             <Link to="/terms">Terms</Link>

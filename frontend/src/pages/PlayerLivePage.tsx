@@ -427,7 +427,7 @@ export default function PlayerLivePage() {
                 {isFetching ? 'Retrying…' : 'Retry'}
               </button>
               <Link to="/tournaments" className="btn btn-ghost">
-                Events
+                Tournaments
               </Link>
             </div>
           </div>

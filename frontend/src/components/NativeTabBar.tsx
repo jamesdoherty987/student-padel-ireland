@@ -41,13 +41,11 @@ export default function NativeTabBar() {
   const onOwnProfile = Boolean(user && pathname === `/players/${user.id}`)
   const onOtherProfile = pathname.startsWith('/players/') && !onOwnProfile
   const onTournaments =
-    pathname.startsWith('/tournaments') ||
-    pathname.startsWith('/t/') ||
-    pathname.startsWith('/join') ||
-    pathname.startsWith('/organiser') ||
-    pathname.startsWith('/admin')
-  const onCommunity = pathname.startsWith('/community')
+    pathname.startsWith('/tournaments') || pathname.startsWith('/t/') || pathname.startsWith('/join')
+  const onPlay = pathname.startsWith('/community')
   const onRankings = pathname.startsWith('/rankings') || onOtherProfile
+  const onAccount =
+    onOwnProfile || pathname.startsWith('/organiser') || pathname.startsWith('/admin')
 
   return (
     <nav className="native-tab-bar" aria-label="Main">
@@ -60,17 +58,17 @@ export default function NativeTabBar() {
         <span className="native-tab-icon" aria-hidden>
           <i className="fas fa-trophy" />
         </span>
-        <span>Events</span>
+        <span>Tournaments</span>
       </NavLink>
       <NavLink
         to="/community"
-        className={() => `native-tab ${onCommunity ? 'is-active' : ''}`}
+        className={() => `native-tab ${onPlay ? 'is-active' : ''}`}
         onClick={() => void hapticLight()}
       >
         <span className="native-tab-icon" aria-hidden>
           <i className="fas fa-users" />
         </span>
-        <span>Community</span>
+        <span>Play</span>
       </NavLink>
       <NavLink
         to="/rankings"
@@ -84,7 +82,7 @@ export default function NativeTabBar() {
       </NavLink>
       <NavLink
         to={profileTo}
-        className={() => `native-tab ${onOwnProfile ? 'is-active' : ''}`}
+        className={() => `native-tab ${onAccount ? 'is-active' : ''}`}
         onClick={() => void hapticLight()}
       >
         <span className="native-tab-icon" aria-hidden>

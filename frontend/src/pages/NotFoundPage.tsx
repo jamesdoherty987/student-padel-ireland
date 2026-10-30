@@ -26,7 +26,7 @@ export default function NotFoundPage() {
         <p className="page-sub">That link doesn&apos;t match a tournament or page.</p>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <Link to={homeTo} className="btn btn-primary">
-            {isNativeApp() ? 'Events' : 'Home'}
+            {isNativeApp() ? 'Tournaments' : 'Home'}
           </Link>
           {!isNativeApp() ? (
             <Link to="/tournaments" className="btn btn-ghost">

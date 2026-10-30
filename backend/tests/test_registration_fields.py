@@ -195,6 +195,30 @@ def test_required_field_rejects_missing():
         assert "Meal" in str(exc.detail)
 
 
+def test_sync_accepts_plain_dicts():
+    """model_dump() turns nested fields into dicts — sync must still work."""
+    db = _session()
+    t = _tournament(db)
+    sync_registration_fields(
+        db,
+        t.id,
+        [
+            {
+                "label": "Jersey size",
+                "field_type": "select",
+                "options": ["S", "M", "L"],
+                "required": True,
+                "scope": "player",
+                "sort_order": 0,
+            }
+        ],
+    )
+    db.commit()
+    fields = list_fields(db, t.id)
+    assert len(fields) == 1
+    assert fields[0].label == "Jersey size"
+
+
 def test_removing_field_deletes_answers():
     db = _session()
     t = _tournament(db)
@@ -241,3 +265,37 @@ def test_removing_field_deletes_answers():
     db.commit()
     assert list_fields(db, t.id) == []
     assert db.query(TournamentRegistrationAnswer).count() == 0
+
+
+def test_sync_can_reuse_key_after_removing_field():
+    """Deleting then re-adding the same label must not hit unique(key) mid-sync."""
+    db = _session()
+    t = _tournament(db)
+    sync_registration_fields(
+        db,
+        t.id,
+        [RegistrationFieldIn(label="Jersey size", field_type="select", options=["S", "M"], required=True)],
+    )
+    db.commit()
+    old = list_fields(db, t.id)[0]
+    assert old.key == "jersey_size"
+
+    sync_registration_fields(
+        db,
+        t.id,
+        [
+            RegistrationFieldIn(
+                label="Jersey size",
+                field_type="select",
+                options=["S", "M", "L"],
+                required=True,
+                scope="player",
+            )
+        ],
+    )
+    db.commit()
+    fields = list_fields(db, t.id)
+    assert len(fields) == 1
+    assert fields[0].key == "jersey_size"
+    assert fields[0].id != old.id
+    assert json.loads(fields[0].options_json) == ["S", "M", "L"]

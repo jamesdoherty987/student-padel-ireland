@@ -132,7 +132,9 @@ def _build_reminder(tournament: Tournament, user: User) -> tuple[str, str, str]:
 def send_reminder_to_user(db: Session, tournament: Tournament, user: User, *, dry_run: bool = False) -> str:
     """
     Send one reminder. Returns status: sent | skipped | dry_run | failed.
-    Records TournamentReminderLog only on successful send.
+
+    Claims a TournamentReminderLog row before sending so concurrent workers cannot
+    double-email. Releases the claim if the send fails.
     """
     existing = (
         db.query(TournamentReminderLog)
@@ -150,22 +152,41 @@ def send_reminder_to_user(db: Session, tournament: Tournament, user: User, *, dr
         logger.info("DRY RUN reminder → %s · %s", user.email, subject)
         return "dry_run"
 
-    ok = send_email(to=user.email, subject=subject, text=text, html_body=html_body)
-    if not ok:
-        return "failed"
-
-    db.add(
-        TournamentReminderLog(
-            tournament_id=tournament.id,
-            user_id=user.id,
-            sent_at=datetime.now(timezone.utc),
-        )
+    claim = TournamentReminderLog(
+        tournament_id=tournament.id,
+        user_id=user.id,
+        sent_at=datetime.now(timezone.utc),
     )
+    db.add(claim)
     try:
         db.commit()
     except Exception:
         db.rollback()
-        logger.exception("Failed to log reminder for %s / %s", tournament.id, user.id)
+        # Another worker claimed this (tournament, user) — treat as already sent
+        again = (
+            db.query(TournamentReminderLog)
+            .filter(
+                TournamentReminderLog.tournament_id == tournament.id,
+                TournamentReminderLog.user_id == user.id,
+            )
+            .first()
+        )
+        if again:
+            return "skipped"
+        logger.exception("Failed to claim reminder for %s / %s", tournament.id, user.id)
+        return "failed"
+
+    ok = send_email(to=user.email, subject=subject, text=text, html_body=html_body)
+    if not ok:
+        try:
+            db.query(TournamentReminderLog).filter(
+                TournamentReminderLog.tournament_id == tournament.id,
+                TournamentReminderLog.user_id == user.id,
+            ).delete(synchronize_session=False)
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to release reminder claim for %s / %s", tournament.id, user.id)
         return "failed"
     return "sent"
 

@@ -1,34 +1,86 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import ModeSwitch from '../components/ModeSwitch'
 import NavBar from '../components/NavBar'
+import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
+import { useKeyboardInset } from '../hooks/useKeyboardInset'
 import { usePageSeo } from '../hooks/usePageSeo'
 import {
   apiErrorMessage,
   communityApi,
   platformApi,
+  type Competition,
   type CommunityMatch,
   type Friendship,
 } from '../services/api'
+import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
 import './Tournament.css'
 import './Community.css'
 
+const FORMATS = [
+  { id: 'DOUBLES', title: 'Doubles', blurb: '2 vs 2' },
+  { id: 'SINGLES', title: 'Singles', blurb: '1 vs 1' },
+  { id: 'MIXED', title: 'Both', blurb: 'Singles and doubles' },
+] as const
+
 export default function CommunityPage() {
   usePageSeo({
-    title: 'Student Padel Community Games',
+    title: 'Play Padel with Friends',
     description:
-      'Play private ladders and community padel games with friends on Student Padel Ireland. Log matches and climb the rankings together.',
+      'Set up open play with friends, join private ladders, log matches, and climb rankings together on Student Padel Ireland.',
     path: '/community',
   })
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
-  const [params] = useSearchParams()
+  const [params, setSearchParams] = useSearchParams()
   const qc = useQueryClient()
+  const createFormRef = useRef<HTMLFormElement>(null)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
   const [friendsOpen, setFriendsOpen] = useState(false)
   const [friendsAutoOpened, setFriendsAutoOpened] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [compName, setCompName] = useState('')
+  const [compFormat, setCompFormat] = useState('DOUBLES')
+  const [courts, setCourts] = useState(2)
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([])
+  const [query, setQuery] = useState('')
+  useKeyboardInset(createOpen)
+
+  const openJoin = params.get('join') === '1'
+  const openCreate = params.get('create') === '1'
+  const codeFromSearch = looksLikeInviteCode(query) ? cleanInviteCode(query) : ''
+
+  const clearParam = useCallback(
+    (key: string) => {
+      if (!params.get(key)) return
+      const next = new URLSearchParams(params)
+      next.delete(key)
+      setSearchParams(next, { replace: true })
+    },
+    [params, setSearchParams],
+  )
+
+  const clearJoinParam = useCallback(() => clearParam('join'), [clearParam])
+
+  const openCreateForm = useCallback(() => {
+    setCreateOpen(true)
+    setError('')
+  }, [])
+
+  useEffect(() => {
+    if (openCreate && user) {
+      setCreateOpen(true)
+      clearParam('create')
+    }
+  }, [openCreate, user, clearParam])
+
+  useEffect(() => {
+    if (!createOpen) return
+    createFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [createOpen])
 
   const homeQ = useQuery({
     queryKey: ['community-home'],
@@ -64,6 +116,16 @@ export default function CommunityPage() {
     () => (friendsQ.data || []).filter((f) => f.direction === 'outgoing'),
     [friendsQ.data],
   )
+  const competitions = useMemo(() => {
+    const list = [...(homeQ.data?.competitions || [])]
+    const rank = (status: string) => {
+      if (status === 'LIVE') return 0
+      if (status === 'OPEN') return 1
+      if (status === 'COMPLETED' || status === 'CANCELLED') return 3
+      return 2
+    }
+    return list.sort((a, b) => rank(a.status) - rank(b.status) || a.name.localeCompare(b.name))
+  }, [homeQ.data?.competitions])
   const needsConfirm = homeQ.data?.needs_confirm || []
   const needsScore = homeQ.data?.needs_score || []
   const nextMatches = homeQ.data?.my_next_matches || []
@@ -72,6 +134,15 @@ export default function CommunityPage() {
     [homeQ.data?.needs_confirm],
   )
   const nextGame = nextMatches.find((m) => !confirmIds.has(m.id)) || nextMatches[0]
+
+  const filteredComps = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (looksLikeInviteCode(query)) return []
+    if (!q) return competitions
+    return competitions.filter((c) =>
+      `${c.name} ${c.created_by_name} ${c.invite_code || ''}`.toLowerCase().includes(q),
+    )
+  }, [competitions, query])
 
   const myUniversity = meQ.data?.university_short || meQ.data?.university_name || ''
   const collegeMates = useMemo(() => {
@@ -96,6 +167,25 @@ export default function CommunityPage() {
     qc.invalidateQueries({ queryKey: ['player-search'] })
     qc.invalidateQueries({ queryKey: ['notifications'] })
   }
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      communityApi.createCompetition({
+        name: compName,
+        format: compFormat,
+        number_of_courts: courts,
+        friend_ids: selectedFriends,
+      }),
+    onSuccess: (res) => {
+      setError('')
+      setCreateOpen(false)
+      setCompName('')
+      setSelectedFriends([])
+      qc.invalidateQueries({ queryKey: ['community-home'] })
+      navigate(`/community/${res.data.slug}`)
+    },
+    onError: (e) => setError(apiErrorMessage(e)),
+  })
 
   const requestMut = useMutation({
     mutationFn: (userId: string) => communityApi.requestFriend(userId),
@@ -157,36 +247,37 @@ export default function CommunityPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page">
-          <h1 className="page-title">Community</h1>
-          <p className="page-sub">
-            Friends and private ladders need an account. You can still browse rankings and
-            tournaments without signing in.
-          </p>
-          <div className="community-guest-actions" style={{ marginBottom: '1.25rem' }}>
-            <Link to="/rankings" className="btn btn-primary">
-              Ireland rankings
-            </Link>
-            <Link to="/tournaments" className="btn btn-ghost">
-              Browse tournaments
-            </Link>
+          <div className="page-header-row">
+            <h1 className="page-title">Play</h1>
+            <div className="header-actions">
+              <HaveCodeButton
+                className="btn btn-ghost btn-sm"
+                autoOpen={openJoin}
+                onAutoOpened={clearJoinParam}
+              />
+            </div>
           </div>
+
+          <ModeSwitch active="play" />
+          <p className="page-sub page-sub-tight">Casual games with friends</p>
+
           <ol className="community-guest-steps">
             <li>
-              <strong>Add friends</strong>
-              <span>Search by name and send a request.</span>
+              <strong>Create a group</strong>
+              <span>Invite friends and log games as you play.</span>
             </li>
             <li>
-              <strong>Find college mates</strong>
-              <span>See who else plays from your university on Rankings.</span>
+              <strong>Or join with a code</strong>
+              <span>Paste an invite above — works for friend groups and tournaments.</span>
             </li>
             <li>
-              <strong>Play and confirm</strong>
-              <span>Both sides confirm the score before ratings update.</span>
+              <strong>Confirm results</strong>
+              <span>Both sides confirm before ratings update.</span>
             </li>
           </ol>
-          <div className="community-guest-actions" style={{ marginTop: '0.25rem' }}>
-            <Link to={`/signup?next=${next}`} className="btn btn-dark">
-              Sign up
+          <div className="community-guest-actions">
+            <Link to={`/signup?next=${next}`} className="btn btn-primary">
+              Sign up to play
             </Link>
             <Link to={`/login?next=${next}`} className="btn btn-ghost">
               Log in
@@ -197,22 +288,140 @@ export default function CommunityPage() {
     )
   }
 
+  const confirmCards = needsConfirm.filter((m) => m.id !== nextGame?.id)
+  const scoreCards = needsScore.filter((m) => m.id !== nextGame?.id)
+  const showNeedsYou = confirmCards.length > 0 || scoreCards.length > 0
+
   return (
     <div className="app-shell">
       <NavBar />
       <main className="page">
         <div className="page-header-row">
-          <h1 className="page-title">Community</h1>
+          <h1 className="page-title">Play</h1>
+          <div className="header-actions">
+            <HaveCodeButton
+              className="btn btn-ghost btn-sm"
+              autoOpen={openJoin}
+              onAutoOpened={clearJoinParam}
+              initialCode={codeFromSearch}
+            />
+            {!createOpen && (
+              <button type="button" className="btn btn-primary btn-sm" onClick={openCreateForm}>
+                New group
+              </button>
+            )}
+          </div>
         </div>
-        <p className="page-sub">
-          Friends and college mates. Create or join events under{' '}
-          <Link to="/tournaments">Tournaments</Link>.
-        </p>
+
+        <ModeSwitch active="play" />
+        <p className="page-sub page-sub-tight">Open play and private ladders with friends</p>
 
         {error && (
           <p className="form-error" role="alert">
             {error}
           </p>
+        )}
+
+        {createOpen && (
+          <form
+            ref={createFormRef}
+            className="community-panel"
+            onSubmit={(e: FormEvent) => {
+              e.preventDefault()
+              setError('')
+              createMut.mutate()
+            }}
+          >
+            <h2>New open-play group</h2>
+            <p className="muted-note" style={{ marginBottom: 12 }}>
+              For a full bracket with groups, knockout, and paid entry,{' '}
+              <Link to="/organiser?create=1">run a private tournament</Link>.
+            </p>
+            <div className="form-group">
+              <label className="form-label" htmlFor="comp-name">
+                Name
+              </label>
+              <input
+                id="comp-name"
+                className="form-input"
+                value={compName}
+                onChange={(e) => setCompName(e.target.value)}
+                placeholder="Friday padel"
+                required
+                minLength={3}
+                autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Play style</label>
+              <div className="format-grid">
+                {FORMATS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`format-card ${compFormat === f.id ? 'on' : ''}`}
+                    onClick={() => setCompFormat(f.id)}
+                  >
+                    <strong>{f.title}</strong>
+                    <span>{f.blurb}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="comp-courts">
+                Courts available
+              </label>
+              <select
+                id="comp-courts"
+                className="form-select"
+                value={courts}
+                onChange={(e) => setCourts(Number(e.target.value))}
+              >
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <option key={n} value={n}>
+                    {n} court{n === 1 ? '' : 's'}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {accepted.length > 0 && (
+              <div className="form-group">
+                <label className="form-label">Invite friends now</label>
+                <div className="friend-chip-row">
+                  {accepted.map((f) => (
+                    <button
+                      key={f.user_id}
+                      type="button"
+                      className={`friend-chip ${selectedFriends.includes(f.user_id) ? 'on' : ''}`}
+                      onClick={() =>
+                        setSelectedFriends((prev) =>
+                          prev.includes(f.user_id) ? prev.filter((x) => x !== f.user_id) : [...prev, f.user_id],
+                        )
+                      }
+                    >
+                      {f.full_name.split(' ')[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="header-actions">
+              <button type="submit" className="btn btn-primary" disabled={createMut.isPending}>
+                {createMut.isPending ? 'Creating…' : 'Create group'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setCreateOpen(false)
+                  setError('')
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         )}
 
         {homeQ.isLoading && (
@@ -224,44 +433,17 @@ export default function CommunityPage() {
 
         {homeQ.isError && (
           <div className="empty-state">
-            <p>Could not load community right now.</p>
-            <p className="muted-note" style={{ marginTop: 8 }}>
-              Check your connection and try again.
-            </p>
+            <p>Could not load your games right now.</p>
             <button
               type="button"
               className="btn btn-primary"
               style={{ marginTop: 12 }}
-              onClick={() => homeQ.refetch()}
+              onClick={() => void homeQ.refetch()}
             >
               Retry
             </button>
           </div>
         )}
-
-        {!homeQ.isLoading &&
-          !homeQ.isError &&
-          !nextGame &&
-          needsConfirm.length === 0 &&
-          needsScore.length === 0 &&
-          accepted.length === 0 &&
-          outgoing.length === 0 &&
-          incoming.length === 0 && (
-            <div className="empty-state surface-card" style={{ padding: '1.75rem 1.25rem', marginBottom: '1.25rem' }}>
-              <p style={{ color: 'var(--ink-soft)', fontWeight: 600, marginBottom: 6 }}>
-                No games lined up yet
-              </p>
-              <p>Add friends here, then create or join an event under Tournaments.</p>
-              <div className="header-actions">
-                <Link to="/tournaments" className="btn btn-primary">
-                  Browse events
-                </Link>
-                <Link to="/tournaments?join=1" className="btn btn-ghost">
-                  Have a code?
-                </Link>
-              </div>
-            </div>
-          )}
 
         {!homeQ.isLoading && !homeQ.isError && nextGame && (
           <section className="next-game-hero">
@@ -300,51 +482,109 @@ export default function CommunityPage() {
                 </Link>
               )}
               <Link to={`/community/${nextGame.competition_slug}`} className="btn btn-ghost btn-sm">
-                Open event
+                Open group
               </Link>
             </div>
           </section>
         )}
 
-        {(() => {
-          const confirmCards = needsConfirm.filter((m) => m.id !== nextGame?.id)
-          const scoreCards = needsScore.filter((m) => m.id !== nextGame?.id)
-          if (confirmCards.length === 0 && scoreCards.length === 0) return null
-          return (
-            <section className="up-next">
-              <h2>Needs you</h2>
-              {confirmCards.map((m) => (
-                <ActionCard
-                  key={m.id}
-                  title="Confirm result"
-                  match={m}
-                  actionLabel={
-                    confirmMut.isPending && confirmMut.variables === m.id ? 'Confirming…' : 'Confirm result'
-                  }
-                  disabled={confirmMut.isPending && confirmMut.variables === m.id}
-                  onAction={() => confirmMut.mutate(m.id)}
-                />
-              ))}
-              {scoreCards.map((m) => (
-                <ActionCard
-                  key={m.id}
-                  title="Who won?"
-                  match={m}
-                  actionLabel="Pick winner"
-                  onAction={() => navigate(`/community/${m.competition_slug}?score=${m.id}`)}
-                />
-              ))}
-            </section>
-          )
-        })()}
+        {showNeedsYou && (
+          <section className="up-next">
+            <h2>Needs you</h2>
+            {confirmCards.map((m) => (
+              <ActionCard
+                key={m.id}
+                title="Confirm result"
+                match={m}
+                actionLabel={
+                  confirmMut.isPending && confirmMut.variables === m.id ? 'Confirming…' : 'Confirm result'
+                }
+                disabled={confirmMut.isPending && confirmMut.variables === m.id}
+                onAction={() => confirmMut.mutate(m.id)}
+              />
+            ))}
+            {scoreCards.map((m) => (
+              <ActionCard
+                key={m.id}
+                title="Who won?"
+                match={m}
+                actionLabel="Pick winner"
+                onAction={() => navigate(`/community/${m.competition_slug}?score=${m.id}`)}
+              />
+            ))}
+          </section>
+        )}
+
+        {!homeQ.isLoading && !homeQ.isError && (
+          <section className="community-section">
+            <div className="section-head">
+              <h2>Your groups</h2>
+              {!createOpen && competitions.length > 0 && (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={openCreateForm}>
+                  New
+                </button>
+              )}
+            </div>
+
+            {competitions.length > 2 && (
+              <input
+                className="form-input"
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search your groups"
+                aria-label="Search groups"
+                style={{ marginBottom: 12 }}
+              />
+            )}
+
+            {filteredComps.length > 0 ? (
+              <div className="tour-list">
+                {filteredComps.map((c) => (
+                  <CompCard key={c.id} c={c} />
+                ))}
+              </div>
+            ) : (
+              <div className="play-empty">
+                <p>
+                  {codeFromSearch
+                    ? 'That looks like an invite code — join it below.'
+                    : query.trim()
+                      ? 'No groups match that search.'
+                      : createOpen
+                        ? 'Fill in the form above to create your first group.'
+                        : 'No groups yet. Start one for your friends, or join with a code.'}
+                </p>
+                {codeFromSearch ? (
+                  <HaveCodeButton className="btn btn-primary btn-sm" initialCode={codeFromSearch}>
+                    Join with this code
+                  </HaveCodeButton>
+                ) : (
+                  !createOpen &&
+                  !query.trim() && (
+                    <div className="header-actions">
+                      <button type="button" className="btn btn-primary btn-sm" onClick={openCreateForm}>
+                        New group
+                      </button>
+                      <HaveCodeButton className="btn btn-ghost btn-sm">Have a code?</HaveCodeButton>
+                    </div>
+                  )
+                )}
+                {query.trim() && !codeFromSearch && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setQuery('')}>
+                    Clear search
+                  </button>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         <section className="community-section community-section-friends">
           <div className="section-head">
             <h2>
               Friends
-              {incoming.length > 0 ? (
-                <span className="count-pill">{incoming.length}</span>
-              ) : null}
+              {incoming.length > 0 ? <span className="count-pill">{incoming.length}</span> : null}
             </h2>
             <button
               type="button"
@@ -452,8 +692,7 @@ export default function CommunityPage() {
                 f={f}
                 actions={[
                   {
-                    label:
-                      removeMut.isPending && removeMut.variables === f.id ? 'Removing…' : 'Remove',
+                    label: removeMut.isPending && removeMut.variables === f.id ? 'Removing…' : 'Remove',
                     disabled: removeMut.isPending && removeMut.variables === f.id,
                     onClick: () => removeMut.mutate(f.id),
                   },
@@ -466,8 +705,7 @@ export default function CommunityPage() {
                 f={f}
                 actions={[
                   {
-                    label:
-                      removeMut.isPending && removeMut.variables === f.id ? 'Cancelling…' : 'Cancel',
+                    label: removeMut.isPending && removeMut.variables === f.id ? 'Cancelling…' : 'Cancel',
                     disabled: removeMut.isPending && removeMut.variables === f.id,
                     onClick: () => removeMut.mutate(f.id),
                   },
@@ -475,7 +713,7 @@ export default function CommunityPage() {
               />
             ))}
             {accepted.length === 0 && outgoing.length === 0 && incoming.length === 0 && (
-              <p className="muted-note">Add friends to invite them into events and filter rankings.</p>
+              <p className="muted-note">Add friends to invite them into groups and filter rankings.</p>
             )}
           </div>
         </section>
@@ -505,6 +743,26 @@ export default function CommunityPage() {
         )}
       </main>
     </div>
+  )
+}
+
+function CompCard({ c }: { c: Competition }) {
+  return (
+    <Link to={`/community/${c.slug}`} className="tour-card-link">
+      <article className="tour-card community-card">
+        <div className="tour-card-top">
+          <h2>{c.name}</h2>
+          <span className={`badge ${compStatusBadge(c.status)}`}>{labelCompStatus(c.status)}</span>
+        </div>
+        <p>
+          {c.member_count} players · {c.number_of_courts || 2} courts · {labelFormat(c.format)}
+        </p>
+        <p className="tour-card-meta">
+          Host {c.created_by_name}
+          {c.invite_code ? ` · code ${c.invite_code}` : ''}
+        </p>
+      </article>
+    </Link>
   )
 }
 
@@ -600,4 +858,25 @@ function friendStatusLabel(s: string) {
   if (s === 'pending_out') return 'pending'
   if (s === 'pending_in') return 'requested you'
   return s
+}
+
+function labelFormat(f: string) {
+  if (f === 'SINGLES') return 'Singles'
+  if (f === 'MIXED') return 'Mixed'
+  return 'Doubles'
+}
+
+function labelCompStatus(s: string) {
+  if (s === 'OPEN') return 'Open'
+  if (s === 'LIVE') return 'Live'
+  if (s === 'COMPLETED') return 'Past'
+  if (s === 'CANCELLED') return 'Cancelled'
+  return s.charAt(0) + s.slice(1).toLowerCase()
+}
+
+function compStatusBadge(s: string) {
+  if (s === 'OPEN') return 'badge-open'
+  if (s === 'LIVE') return 'badge-live'
+  if (s === 'COMPLETED' || s === 'CANCELLED') return 'badge-past'
+  return 'badge-draft'
 }

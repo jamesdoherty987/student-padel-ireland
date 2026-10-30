@@ -232,9 +232,11 @@ def _resolve_registration_for_session(db: Session, session: Any) -> Registration
 def _assert_session_matches_registration(session: Any, reg: Registration) -> None:
     """Reject mismatched amount/currency so a wrong session can't fulfill an entry.
 
-    If this Checkout Session id is already bound on the registration (set when we
-    created Checkout), trust that binding — sync amount/currency from Stripe so a
-    later fee edit cannot block fulfillment after the player has paid.
+    Trust the session when (a) its id is already bound on the registration, or
+    (b) Checkout metadata/client_reference_id points at this registration — the
+    latter covers the race where the webhook arrives before we finish committing
+    ``stripe_session_id``. Sync amount/currency from Stripe so a later fee edit
+    cannot block fulfillment after the player has paid.
     """
     session_id = _session_field(session, "id")
     bound = bool(
@@ -242,9 +244,12 @@ def _assert_session_matches_registration(session: Any, reg: Registration) -> Non
         and reg.stripe_session_id
         and str(session_id) == str(reg.stripe_session_id)
     )
+    meta = _as_mapping(_session_field(session, "metadata"))
+    meta_reg = meta.get("registration_id") or _session_field(session, "client_reference_id")
+    metadata_match = bool(meta_reg and str(meta_reg) == str(reg.id))
     amount_total = _session_field(session, "amount_total")
     currency = _session_field(session, "currency")
-    if bound:
+    if bound or metadata_match:
         if amount_total is not None:
             reg.amount_cents = int(amount_total)
         if currency:

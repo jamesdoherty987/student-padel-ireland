@@ -68,13 +68,14 @@ function parseOptionsText(text: string) {
 export function validateRegistrationFields(fields: RegistrationFieldDraft[]): string | null {
   for (const f of fields) {
     const label = f.label.trim()
-    if (!label) continue
+    if (!label) {
+      return 'Each question needs a label — fill it in or remove the question'
+    }
     if (f.field_type === 'select' && parseOptionsText(f.optionsText).length < 2) {
       return `“${label}” needs at least 2 dropdown options (e.g. S, M, L)`
     }
   }
-  const labeled = fields.filter((f) => f.label.trim())
-  if (labeled.length > 12) return 'At most 12 custom signup questions'
+  if (fields.length > 12) return 'At most 12 custom signup questions'
   return null
 }
 

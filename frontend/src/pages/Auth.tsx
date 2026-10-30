@@ -223,7 +223,7 @@ export function LoginPage() {
         </p>
         {native && (
           <p className="auth-foot auth-foot--browse">
-            <Link to="/tournaments">Browse events without an account</Link>
+            <Link to="/tournaments">Browse tournaments without an account</Link>
           </p>
         )}
         {import.meta.env.DEV && (
@@ -495,7 +495,7 @@ export function SignupPage() {
         </p>
         {native && (
           <p className="auth-foot auth-foot--browse">
-            <Link to="/tournaments">Browse events without an account</Link>
+            <Link to="/tournaments">Browse tournaments without an account</Link>
           </p>
         )}
       </div>

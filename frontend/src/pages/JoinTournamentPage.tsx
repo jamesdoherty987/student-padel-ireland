@@ -1126,7 +1126,7 @@ export default function JoinTournamentPage() {
       }
     }
 
-    if (!needsPartner) {
+    {
       const customErr = validateCustomAnswers()
       if (customErr) {
         setError(customErr)
@@ -1151,7 +1151,7 @@ export default function JoinTournamentPage() {
         pay_online_now: payOnlineNow,
         return_origin: typeof window !== 'undefined' ? window.location.origin : undefined,
         native_return: isNativeApp(),
-        custom_answers: needsPartner ? [] : buildCustomAnswersPayload(),
+        custom_answers: buildCustomAnswersPayload(),
       }
       if (!singles) {
         if (partnerMode === 'friend' && form.partner_user_id) {
@@ -1535,9 +1535,11 @@ export default function JoinTournamentPage() {
               )}
             </div>
           )}
-          {!needsPartner && signupFields.length > 0 && (
+          {signupFields.length > 0 && (
             <div className="join-custom-fields" id="join-custom-fields">
-              <h3 className="join-custom-title">A few more details</h3>
+              <h3 className="join-custom-title">
+                {needsPartner ? 'Partner details' : 'A few more details'}
+              </h3>
               {(() => {
                 const renderControl = (field: TournamentRegistrationField, slot?: number) => {
                   const key = answerKey(field.id, slot)

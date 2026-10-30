@@ -136,18 +136,18 @@ export default function OrganiserDashboard() {
   }, [showCreate, showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch])
 
   useEffect(() => {
-    if (!confirmGenerate && !scoreMatch && !showAddTeam && !moveMatch && !showEdit) return
+    // Edit/create use ModalShell (dirty-confirm). Don't force-close showEdit here.
+    if (!confirmGenerate && !scoreMatch && !showAddTeam && !moveMatch) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setConfirmGenerate(false)
       setScoreMatch(null)
       setShowAddTeam(false)
       setMoveMatch(null)
-      setShowEdit(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [confirmGenerate, scoreMatch, showAddTeam, moveMatch, showEdit])
+  }, [confirmGenerate, scoreMatch, showAddTeam, moveMatch])
 
   const tournaments: OrganiserDashRow[] = data?.tournaments || []
 
@@ -967,7 +967,7 @@ export default function OrganiserDashboard() {
             <div className="org-empty">
               <h1>Running an event?</h1>
               <p>
-                Set up registration, payments, and live scoring. Events you create here are private -
+                Set up registration, payments, and live scoring. Tournaments you create here are private -
                 players join with your invite code (they won’t appear on the landing page).
               </p>
               <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
@@ -2583,7 +2583,7 @@ function AddTeamModal({
               </div>
             )}
             {friends.length === 0 && options.length === 0 && (
-              <p className="muted-note">Add friends in Community, or search for players above.</p>
+              <p className="muted-note">Add friends under Play, or search for players above.</p>
             )}
           </div>
           {error && <p className="form-error">{error}</p>}

@@ -145,12 +145,20 @@ export function HaveCodeButton({
   onAutoOpened,
 }: HaveCodeButtonProps) {
   const [open, setOpen] = useState(false)
+  const onAutoOpenedRef = useRef(onAutoOpened)
+  onAutoOpenedRef.current = onAutoOpened
+  const openedForAutoRef = useRef(false)
 
   useEffect(() => {
-    if (!autoOpen) return
+    if (!autoOpen) {
+      openedForAutoRef.current = false
+      return
+    }
+    if (openedForAutoRef.current) return
+    openedForAutoRef.current = true
     setOpen(true)
-    onAutoOpened?.()
-  }, [autoOpen, onAutoOpened])
+    onAutoOpenedRef.current?.()
+  }, [autoOpen])
 
   return (
     <>

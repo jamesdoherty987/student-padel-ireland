@@ -30,7 +30,7 @@ export function appHomePath(role?: string | null | undefined): string {
 
 /**
  * Where the brand mark / “browse” CTAs should go for guests inside the app chrome.
- * Cold start still opens login; once browsing, stay in Events.
+ * Cold start still opens login; once browsing, stay in Tournaments.
  */
 export function guestBrowsePath(): string {
   return isNativeApp() ? '/tournaments' : '/'
@@ -93,11 +93,14 @@ export function nativeBackFallback(
     if (nested) return `/t/${nested[1]}`
     return '/tournaments'
   }
-  if (pathname.startsWith('/join') || pathname.startsWith('/organiser')) {
+  if (pathname.startsWith('/organiser')) {
+    return userId ? `/players/${userId}` : '/tournaments'
+  }
+  if (pathname.startsWith('/join')) {
     return '/tournaments'
   }
   if (pathname.startsWith('/admin')) {
-    return '/tournaments'
+    return userId ? `/players/${userId}` : '/tournaments'
   }
   if (pathname.startsWith('/privacy') || pathname.startsWith('/terms') || pathname.startsWith('/404')) {
     return role ? homeForRole(role) : '/tournaments'

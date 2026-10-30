@@ -123,25 +123,20 @@ export default function NavBar() {
     navigate(appHomePath())
   }
 
-  // Guests browsing the app: brand stays on Events (cold start still opens login)
+  // Guests browsing the app: brand stays on Tournaments (cold start still opens login)
   const brandTo = user ? appHomePath(user.role) : guestBrowsePath()
   const backFallback = native ? nativeBackFallback(pathname, user?.id, user?.role) : null
 
   const primary: NavItem[] = [
     {
       to: '/tournaments',
-      label: 'Events',
+      label: 'Tournaments',
       icon: 'fa-trophy',
-      match: (p) =>
-        p.startsWith('/tournaments') ||
-        p.startsWith('/t/') ||
-        p.startsWith('/join') ||
-        p.startsWith('/organiser') ||
-        p.startsWith('/admin'),
+      match: (p) => p.startsWith('/tournaments') || p.startsWith('/t/') || p.startsWith('/join'),
     },
     {
       to: '/community',
-      label: 'Community',
+      label: 'Play',
       icon: 'fa-users',
       match: (p) => p.startsWith('/community'),
     },
@@ -156,7 +151,7 @@ export default function NavBar() {
   if (user) {
     secondary.push({
       to: '/organiser',
-      label: 'My events',
+      label: 'My tournaments',
       icon: 'fa-calendar-check',
       match: (p) => p.startsWith('/organiser'),
     })
@@ -290,7 +285,7 @@ export default function NavBar() {
           ) : (
             <Link to={guestBrowsePath()} className="app-sidebar-link" onClick={close}>
               <i className={`fas ${native ? 'fa-trophy' : 'fa-house'}`} aria-hidden />
-              <span>{native ? 'Browse events' : 'Home'}</span>
+              <span>{native ? 'Browse tournaments' : 'Home'}</span>
             </Link>
           )}
         </div>

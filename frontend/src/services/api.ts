@@ -177,6 +177,7 @@ export type OrganiserDashRow = {
   paid_registrations: number
   live_matches: number
   completed_matches: number
+  has_fixtures?: boolean
   checked_in: number
   is_owner?: boolean
   can_manage_admins?: boolean

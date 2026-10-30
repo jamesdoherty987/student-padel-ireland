@@ -41,6 +41,7 @@ export default function AdminDashboard() {
   const [showCreate, setShowCreate] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [editing, setEditing] = useState<Tournament | null>(null)
+  const [editingFixturesExist, setEditingFixturesExist] = useState(false)
   const toastTimer = useRef<number | null>(null)
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -142,7 +143,7 @@ export default function AdminDashboard() {
           <div className="admin-stats">
             <div>
               <strong>{rows.length}</strong>
-              <span>Events</span>
+              <span>Tournaments</span>
             </div>
             <div>
               <strong>{openCount}</strong>
@@ -192,7 +193,10 @@ export default function AdminDashboard() {
                 onOpenRegistration={() =>
                   statusMut.mutate({ id: row.tournament.id, status: 'REGISTRATION_OPEN' })
                 }
-                onEdit={() => setEditing(row.tournament)}
+                onEdit={() => {
+                  setEditing(row.tournament)
+                  setEditingFixturesExist(!!row.has_fixtures)
+                }}
                 onDelete={() => {
                   void confirmDialog({
                     title: 'Delete tournament?',
@@ -222,7 +226,11 @@ export default function AdminDashboard() {
       {editing && (
         <EditTournamentModal
           tournament={editing}
-          onClose={() => setEditing(null)}
+          fixturesExist={editingFixturesExist}
+          onClose={() => {
+            setEditing(null)
+            setEditingFixturesExist(false)
+          }}
           onSaved={(msg) => showToast(msg)}
         />
       )}

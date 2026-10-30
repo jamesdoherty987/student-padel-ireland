@@ -197,13 +197,13 @@ export default function RankingsPage() {
 
         {!isLoading && !scopeLoading && !isError && rankings.length === 0 && (
           <div className="empty-state">
-            <p>No ranked players yet. Play a community match or finish a tournament match.</p>
+            <p>No ranked players yet. Play with friends or finish an official tournament match.</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
               <Link to="/community" className="btn btn-primary">
-                Community
+                Play with friends
               </Link>
               <Link to="/tournaments" className="btn btn-ghost">
-                Browse tournaments
+                Official tournaments
               </Link>
             </div>
           </div>
@@ -272,7 +272,7 @@ export default function RankingsPage() {
           <div className="empty-state">
             <p>
               {scope === 'friends'
-                ? 'No ranked friends yet. Add friends in Community.'
+                ? 'No ranked friends yet. Add friends under Play.'
                 : scope === 'university' && !myUniShort && !myUniName
                   ? 'Add your university on Profile to see college rankings.'
                   : scope === 'university'

@@ -29,10 +29,11 @@
   border-radius: 12px;
   background: transparent;
   color: var(--muted-icon);
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 650;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   text-decoration: none;
+  max-width: 100%;
   -webkit-tap-highlight-color: transparent;
   transition: color 0.15s ease, background 0.15s ease;
 }
@@ -50,6 +51,14 @@
 .native-tab i {
   font-size: 1.28rem;
   line-height: 1;
+}
+
+.native-tab > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-inline: 0.1rem;
 }
 
 .native-tab.is-active {

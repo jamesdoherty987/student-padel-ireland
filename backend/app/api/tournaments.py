@@ -1198,7 +1198,11 @@ def update_tournament(
     _assert_organiser(user, t, db)
     data = body.model_dump(exclude_unset=True)
     court_names = data.pop("court_names", None)
-    registration_fields = data.pop("registration_fields", None)
+    # Keep as Pydantic models — model_dump() turns nested fields into dicts
+    data.pop("registration_fields", None)
+    registration_fields = (
+        body.registration_fields if "registration_fields" in body.model_fields_set else None
+    )
     new_organiser_id = data.pop("organiser_id", None)
     # Only platform admins can promote/demote public listing
     if "is_official" in data:
@@ -1474,14 +1478,7 @@ def register_team(
                 answers=body.custom_answers or [],
                 singles=singles,
             )
-        if notify_email_partner and partner:
-            _notify_email_partner(
-                captain=user,
-                partner=partner,
-                tournament=t,
-                needs_signup=partner_needs_signup,
-            )
-        return _issue_checkout(
+        checkout = _issue_checkout(
             db,
             t,
             team,
@@ -1491,6 +1488,14 @@ def register_team(
             return_origin=body.return_origin,
             native_return=bool(body.native_return),
         )
+        if notify_email_partner and partner:
+            _notify_email_partner(
+                captain=user,
+                partner=partner,
+                tournament=t,
+                needs_signup=partner_needs_signup,
+            )
+        return checkout
 
     team = Team(
         tournament_id=t.id,
@@ -1530,15 +1535,7 @@ def register_team(
         singles=singles,
     )
 
-    if notify_email_partner and partner:
-        _notify_email_partner(
-            captain=user,
-            partner=partner,
-            tournament=t,
-            needs_signup=partner_needs_signup,
-        )
-
-    return _issue_checkout(
+    checkout = _issue_checkout(
         db,
         t,
         team,
@@ -1548,6 +1545,14 @@ def register_team(
         return_origin=body.return_origin,
         native_return=bool(body.native_return),
     )
+    if notify_email_partner and partner:
+        _notify_email_partner(
+            captain=user,
+            partner=partner,
+            tournament=t,
+            needs_signup=partner_needs_signup,
+        )
+    return checkout
 
 
 @router.post("/tournaments/{tournament_id}/organiser-add-team", response_model=TeamOut)
@@ -1727,6 +1732,10 @@ def _issue_checkout(
             native_return=native_return,
         )
         charge_cents = stripe_checkout_total_cents(t.entry_fee_cents)
+        # Persist expected charge before creating Checkout so a fast webhook can match
+        reg.amount_cents = charge_cents
+        reg.currency = t.currency
+        db.commit()
         try:
             session = create_checkout_session(
                 tournament_name=t.name,
@@ -1744,9 +1753,6 @@ def _issue_checkout(
             raise HTTPException(502, f"Could not start Stripe Checkout: {exc}") from exc
 
         reg.stripe_session_id = session.id
-        # Keep amount in sync with what Checkout will charge (entry + service fee)
-        reg.amount_cents = charge_cents
-        reg.currency = t.currency
         db.commit()
         return CheckoutResponse(
             checkout_url=session.url,
@@ -1821,6 +1827,7 @@ def pay_online_now(
         charge_cents = stripe_checkout_total_cents(t.entry_fee_cents)
         reg.amount_cents = charge_cents
         reg.currency = t.currency
+        db.commit()
         success_url, cancel_url = _checkout_success_cancel_urls(
             t,
             reg,
@@ -2342,6 +2349,15 @@ def replace_partner(
             )
         )
     _ensure_pending_friendship(db, user.id, partner.id)
+    save_answers_for_registration(
+        db,
+        tournament=t,
+        registration_id=reg.id,
+        team_id=team.id,
+        answers=body.custom_answers or [],
+        singles=False,
+    )
+    db.commit()
     if notify_email_partner:
         _notify_email_partner(
             captain=user,
@@ -2349,7 +2365,6 @@ def replace_partner(
             tournament=t,
             needs_signup=partner_needs_signup,
         )
-    db.commit()
     return {
         "ok": True,
         "registration_id": str(reg.id),
@@ -3773,6 +3788,9 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
             .filter(Match.tournament_id == t.id, Match.status == MatchStatus.COMPLETED.value)
             .count()
         )
+        has_fixtures = (
+            db.query(Match.id).filter(Match.tournament_id == t.id).limit(1).first() is not None
+        )
         checked = (
             db.query(Team)
             .join(Registration, Registration.team_id == Team.id)
@@ -3801,6 +3819,7 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
                 ),
                 "live_matches": live,
                 "completed_matches": completed,
+                "has_fixtures": has_fixtures,
                 "checked_in": checked,
                 "is_owner": is_owner,
                 "can_manage_admins": is_owner,

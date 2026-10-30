@@ -65,22 +65,36 @@ def list_fields(db: Session, tournament_id: UUID) -> list[TournamentRegistration
     )
 
 
+def _as_field_in(item: RegistrationFieldIn | dict) -> RegistrationFieldIn:
+    if isinstance(item, RegistrationFieldIn):
+        return item
+    if isinstance(item, dict):
+        return RegistrationFieldIn.model_validate(item)
+    raise HTTPException(400, "Invalid signup field")
+
+
 def sync_registration_fields(
     db: Session,
     tournament_id: UUID,
-    fields: list[RegistrationFieldIn],
+    fields: list[RegistrationFieldIn] | list[dict],
 ) -> None:
-    """Replace tournament custom fields with the provided list (matched by id when present)."""
+    """Replace tournament custom fields with the provided list (matched by id when present).
+
+    Deletes removed fields first (and flushes) so new rows can reuse keys without
+    hitting the unique (tournament_id, key) constraint.
+    """
     existing = {
         f.id: f
         for f in db.query(TournamentRegistrationField)
         .filter(TournamentRegistrationField.tournament_id == tournament_id)
         .all()
     }
-    keep_ids: set[UUID] = set()
-    used_keys: set[str] = set()
 
-    for idx, item in enumerate(fields):
+    # Validate + plan before mutating so we never leave a half-applied sync
+    planned: list[tuple[int, RegistrationFieldIn, str, list[str], str, str]] = []
+    keep_ids: set[UUID] = set()
+    for idx, raw in enumerate(fields or []):
+        item = _as_field_in(raw)
         label = (item.label or "").strip()
         if not label:
             raise HTTPException(400, "Signup field label is required")
@@ -91,20 +105,35 @@ def sync_registration_fields(
             raise HTTPException(400, f"“{label}” needs at least 2 options")
         if ftype != "select":
             options = []
+        if item.id and item.id in existing:
+            keep_ids.add(item.id)
+        planned.append((idx, item, label, options, ftype, scope))
 
-        row: TournamentRegistrationField | None = None
+    for fid, row in existing.items():
+        if fid not in keep_ids:
+            db.delete(row)
+    if keep_ids != set(existing.keys()):
+        db.flush()
+
+    used_keys: set[str] = set()
+
+    def _unique_key(base: str) -> str:
+        key = base
+        n = 2
+        while key in used_keys:
+            key = f"{base}_{n}"
+            n += 1
+        used_keys.add(key)
+        return key
+
+    for idx, item, label, options, ftype, scope in planned:
         if item.id and item.id in existing:
             row = existing[item.id]
-            keep_ids.add(row.id)
             key = row.key
             if key in used_keys:
-                base_key = _slug_key(label)
-                key = base_key
-                n = 2
-                while key in used_keys:
-                    key = f"{base_key}_{n}"
-                    n += 1
-            used_keys.add(key)
+                key = _unique_key(_slug_key(label))
+            else:
+                used_keys.add(key)
             row.label = label
             row.key = key
             row.field_type = ftype
@@ -113,13 +142,7 @@ def sync_registration_fields(
             row.scope = scope
             row.sort_order = item.sort_order if item.sort_order else idx
         else:
-            base_key = _slug_key(label)
-            key = base_key
-            n = 2
-            while key in used_keys:
-                key = f"{base_key}_{n}"
-                n += 1
-            used_keys.add(key)
+            key = _unique_key(_slug_key(label))
             row = TournamentRegistrationField(
                 tournament_id=tournament_id,
                 key=key,
@@ -132,11 +155,6 @@ def sync_registration_fields(
             )
             db.add(row)
             db.flush()
-            keep_ids.add(row.id)
-
-    for fid, row in existing.items():
-        if fid not in keep_ids:
-            db.delete(row)
 
 
 def _normalize_value(field: TournamentRegistrationField, raw: str) -> str:

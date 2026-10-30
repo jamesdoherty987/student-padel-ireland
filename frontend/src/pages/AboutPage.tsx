@@ -37,16 +37,16 @@ export default function AboutPage() {
           <h2>What we offer</h2>
           <ul>
             <li>Public tournament listings with registration and payments</li>
-            <li>Community competitions and friend ladders</li>
+            <li>Casual open play and friend ladders</li>
             <li>Live scoring for players, organisers, and venue displays</li>
             <li>Ireland rankings fed by tournament and community results</li>
           </ul>
 
           <h2>Where students play</h2>
           <p>
-            Events and community games run nationwide, including Dublin, Cork, Galway, Limerick, Belfast, and
-            Waterford. Whether you are in a large Dublin society or starting a new campus group, SPI gives you the
-            same tools.
+            Official tournaments and casual friend games run nationwide, including Dublin, Cork, Galway, Limerick,
+            Belfast, and Waterford. Whether you are in a large Dublin society or starting a new campus group, SPI
+            gives you the same tools.
           </p>
 
           <h2>Contact</h2>
@@ -60,7 +60,10 @@ export default function AboutPage() {
               Create an account
             </Link>
             <Link to="/tournaments" className="btn btn-ghost">
-              Browse tournaments
+              Official tournaments
+            </Link>
+            <Link to="/community" className="btn btn-ghost">
+              Play with friends
             </Link>
           </div>
         </div>

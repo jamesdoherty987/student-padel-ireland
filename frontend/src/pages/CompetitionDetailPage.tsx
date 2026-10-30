@@ -298,8 +298,8 @@ export default function CompetitionDetailPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Community event</h1>
-          <p className="page-sub">Sign up or log in to view this competition and join matches.</p>
+          <h1 className="page-title">Open play</h1>
+          <p className="page-sub">Sign up or log in to view this group and join matches.</p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
             <Link to={`/signup?next=${next}`} className="btn btn-primary">
               Sign up
@@ -395,7 +395,7 @@ export default function CompetitionDetailPage() {
             <div>
               <h2>Invite friends</h2>
               <p className="muted-note">
-                Send the code or QR. Friends tap <strong>Have a code?</strong> on Tournaments.
+                Send the code or QR. Friends tap <strong>Have a code?</strong> under Play.
               </p>
               <div className="share-code-row">
                 <code className="share-code">{c.invite_code}</code>

@@ -104,12 +104,34 @@ def test_assert_session_matches_registration_amount_and_currency():
 
 def test_assert_session_matches_bound_session_syncs_amount():
     """Fee edits after Checkout create must not block a paid bound session."""
-    reg = SimpleNamespace(amount_cents=200, currency="EUR", stripe_session_id="cs_live_abc")
+    from uuid import uuid4
+
+    reg_id = uuid4()
+    reg = SimpleNamespace(id=reg_id, amount_cents=200, currency="EUR", stripe_session_id="cs_live_abc")
     _assert_session_matches_registration(
-        SimpleNamespace(id="cs_live_abc", amount_total=400, currency="eur"), reg
+        SimpleNamespace(id="cs_live_abc", amount_total=400, currency="eur", metadata={}), reg
     )
     assert reg.amount_cents == 400
     assert reg.currency == "EUR"
+
+
+def test_assert_session_matches_metadata_before_session_id_commit():
+    """Webhook can arrive before stripe_session_id is committed — trust metadata."""
+    from uuid import uuid4
+
+    reg_id = uuid4()
+    reg = SimpleNamespace(id=reg_id, amount_cents=1500, currency="EUR", stripe_session_id=None)
+    _assert_session_matches_registration(
+        SimpleNamespace(
+            id="cs_new",
+            amount_total=1650,
+            currency="eur",
+            metadata={"registration_id": str(reg_id)},
+            client_reference_id=str(reg_id),
+        ),
+        reg,
+    )
+    assert reg.amount_cents == 1650
 
 
 def test_stripe_checkout_total_includes_service_fee(monkeypatch):

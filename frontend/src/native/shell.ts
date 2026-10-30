@@ -78,8 +78,13 @@ export async function whenExternalBrowserCloses(onReturn: () => void): Promise<(
   let sawBackground = false
   let finished: PluginListenerHandle | undefined
   let state: PluginListenerHandle | undefined
+  let armTimer: number | null = null
 
   const cleanup = () => {
+    if (armTimer != null) {
+      window.clearTimeout(armTimer)
+      armTimer = null
+    }
     void finished?.remove()
     void state?.remove()
     finished = undefined
@@ -95,13 +100,24 @@ export async function whenExternalBrowserCloses(onReturn: () => void): Promise<(
   }
 
   finished = await Browser.addListener('browserFinished', finish)
-  state = await App.addListener('appStateChange', ({ isActive }) => {
-    if (!isActive) {
-      sawBackground = true
-      return
-    }
-    if (sawBackground) finish()
-  })
+  // Arm appState fallback after a beat so opening the in-app browser
+  // (brief inactive→active) does not look like a return from Checkout.
+  armTimer = window.setTimeout(() => {
+    armTimer = null
+    void App.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive) {
+        sawBackground = true
+        return
+      }
+      if (sawBackground) finish()
+    }).then((handle) => {
+      if (done) {
+        void handle.remove()
+        return
+      }
+      state = handle
+    })
+  }, 750)
 
   return () => {
     done = true

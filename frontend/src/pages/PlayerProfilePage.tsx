@@ -521,7 +521,7 @@ export default function PlayerProfilePage() {
               </div>
               <div role="listitem">
                 <strong>{player.tournaments_played}</strong>
-                <span>Events</span>
+                <span>Tournaments</span>
               </div>
             </div>
 
@@ -773,11 +773,11 @@ export default function PlayerProfilePage() {
                 <section className="profile-account-panel" aria-labelledby="account-panel-title">
                   <h2 id="account-panel-title">Account</h2>
                   <div className="profile-account-actions">
-                    <Link to="/organiser" className="btn btn-primary btn-block">
-                      My events
+                    <Link to="/community" className="btn btn-primary btn-block">
+                      Play with friends
                     </Link>
-                    <Link to="/organiser?create=1" className="btn btn-ghost btn-block">
-                      Create a tournament
+                    <Link to="/organiser" className="btn btn-ghost btn-block">
+                      My private tournaments
                     </Link>
                     {user?.role === 'ADMIN' && (
                       <Link to="/admin" className="btn btn-ghost btn-block">
@@ -869,7 +869,7 @@ export default function PlayerProfilePage() {
             {!isOwn && (
               <div className="profile-footer-links">
                 <Link to="/community" className="btn btn-ghost">
-                  Community
+                  Play
                 </Link>
                 <Link to="/rankings" className="btn btn-ghost">
                   Rankings
