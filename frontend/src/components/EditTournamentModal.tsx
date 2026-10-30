@@ -3,6 +3,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from './ConfirmDialog'
 import ModalShell from './ModalShell'
 import TournamentFormFields, { type TournamentFormState } from './TournamentFormFields'
+import {
+  draftsFromApi,
+  draftsToPayload,
+  validateRegistrationFields,
+  type RegistrationFieldDraft,
+} from './RegistrationFieldsEditor'
 import { apiErrorMessage, tournamentApi, type Tournament } from '../services/api'
 import { toDatetimeLocalValue } from '../utils/format'
 
@@ -59,6 +65,9 @@ export default function EditTournamentModal({
   const qc = useQueryClient()
   const [form, setForm] = useState(() => toForm(tournament))
   const [courtNames, setCourtNames] = useState(() => initialCourtNames(tournament))
+  const [registrationFields, setRegistrationFields] = useState<RegistrationFieldDraft[]>(() =>
+    draftsFromApi(tournament.registration_fields || []),
+  )
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -101,6 +110,11 @@ export default function EditTournamentModal({
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    const fieldsErr = validateRegistrationFields(registrationFields)
+    if (fieldsErr) {
+      setError(fieldsErr)
+      return
+    }
     setError('')
     setSaving(true)
     try {
@@ -126,6 +140,7 @@ export default function EditTournamentModal({
           : null,
         description: form.description.trim() || null,
         rules: form.rules.trim() || null,
+        registration_fields: draftsToPayload(registrationFields),
       }
       if (!formatLocked) {
         payload.format = form.format
@@ -175,6 +190,11 @@ export default function EditTournamentModal({
           onCourtCountChange={setCourtCount}
           mode="edit"
           formatLocked={formatLocked}
+          registrationFields={registrationFields}
+          onRegistrationFieldsChange={(next) => {
+            setDirty(true)
+            setRegistrationFields(next)
+          }}
         />
 
         {error && <p className="auth-error">{error}</p>}

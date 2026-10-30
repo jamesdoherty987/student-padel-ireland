@@ -1352,6 +1352,28 @@ export default function OrganiserDashboard() {
                           <strong>{team.name}</strong>
                           <span>{team.player_names?.join(' / ')}</span>
                           <span className={paymentBadgeClass(team)}>{paymentLabel(team)}</span>
+                          {!!team.custom_answers?.length && (
+                            <ul className="org-custom-answers">
+                              {team.custom_answers.map((a, i) => {
+                                const who =
+                                  a.scope === 'player' && a.player_name
+                                    ? a.player_name
+                                    : a.scope === 'player' && a.slot === 2
+                                      ? 'Partner'
+                                      : null
+                                const display =
+                                  a.value === 'yes' ? 'Yes' : a.value === 'no' ? 'No' : a.value
+                                return (
+                                  <li key={`${a.field_id}-${a.slot ?? 't'}-${i}`}>
+                                    <span className="org-custom-label">
+                                      {who ? `${who} · ${a.label}` : a.label}
+                                    </span>
+                                    <span className="org-custom-value">{display}</span>
+                                  </li>
+                                )
+                              })}
+                            </ul>
+                          )}
                         </div>
                         <div className="org-row-right org-pay-actions">
                           {canCollect && (

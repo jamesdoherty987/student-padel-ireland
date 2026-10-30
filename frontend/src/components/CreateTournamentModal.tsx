@@ -7,6 +7,11 @@ import DraftSponsorsField, {
 } from './DraftSponsorsField'
 import ModalShell from './ModalShell'
 import TournamentFormFields, { type TournamentFormState } from './TournamentFormFields'
+import {
+  draftsToPayload,
+  validateRegistrationFields,
+  type RegistrationFieldDraft,
+} from './RegistrationFieldsEditor'
 import { apiErrorMessage, tournamentApi } from '../services/api'
 
 export type CreateTournamentVariant = 'admin' | 'organiser'
@@ -79,6 +84,7 @@ export default function CreateTournamentModal({
     courtNamesFor(defaultForm(variant).number_of_courts),
   )
   const [sponsors, setSponsors] = useState<DraftSponsor[]>([])
+  const [registrationFields, setRegistrationFields] = useState<RegistrationFieldDraft[]>([])
   const sponsorsFieldRef = useRef<DraftSponsorsFieldHandle>(null)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -119,7 +125,7 @@ export default function CreateTournamentModal({
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const err = validateForm(form)
+    const err = validateForm(form) || validateRegistrationFields(registrationFields)
     if (err) {
       setError(err)
       return
@@ -154,6 +160,7 @@ export default function CreateTournamentModal({
           : null,
         description: form.description.trim() || null,
         rules: form.rules.trim() || null,
+        registration_fields: draftsToPayload(registrationFields),
       })
 
       let sponsorFails = 0
@@ -258,6 +265,11 @@ export default function CreateTournamentModal({
           onOpenRegistrationChange={(v) => {
             markDirty()
             setOpenRegistration(v)
+          }}
+          registrationFields={registrationFields}
+          onRegistrationFieldsChange={(next) => {
+            markDirty()
+            setRegistrationFields(next)
           }}
         />
 

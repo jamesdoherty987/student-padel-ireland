@@ -1,6 +1,11 @@
 import FormatDrawPreview from './FormatDrawPreview'
 import NumberInput from './NumberInput'
+import RegistrationFieldsEditor, {
+  type RegistrationFieldDraft,
+} from './RegistrationFieldsEditor'
 import { tournamentFormatSummary } from '../utils/format'
+
+export type { RegistrationFieldDraft }
 
 export type TournamentFormState = {
   name: string
@@ -31,6 +36,7 @@ export type TournamentFormSection =
   | 'courts'
   | 'fee'
   | 'info'
+  | 'signup_fields'
   | 'registration'
   | 'preview'
 
@@ -40,6 +46,7 @@ const ALL_SECTIONS: TournamentFormSection[] = [
   'courts',
   'fee',
   'info',
+  'signup_fields',
   'registration',
 ]
 
@@ -54,6 +61,8 @@ type Props = {
   formatLocked?: boolean
   openRegistration?: boolean
   onOpenRegistrationChange?: (v: boolean) => void
+  registrationFields?: RegistrationFieldDraft[]
+  onRegistrationFieldsChange?: (fields: RegistrationFieldDraft[]) => void
   /** Limit which blocks render (used by stepped create flow). */
   sections?: TournamentFormSection[]
 }
@@ -68,6 +77,8 @@ export default function TournamentFormFields({
   formatLocked = false,
   openRegistration = false,
   onOpenRegistrationChange,
+  registrationFields = [],
+  onRegistrationFieldsChange,
   sections = ALL_SECTIONS,
 }: Props) {
   const singles = form.play_format === 'SINGLES'
@@ -427,6 +438,18 @@ export default function TournamentFormFields({
           </div>
         </div>
       </section>
+      )}
+
+      {show('signup_fields') && onRegistrationFieldsChange && (
+        <section className="tf-section">
+          <h3 className="tf-section-title">Signup questions</h3>
+          <RegistrationFieldsEditor
+            fields={registrationFields}
+            onChange={onRegistrationFieldsChange}
+            singles={singles}
+            mode={mode}
+          />
+        </section>
       )}
 
       {show('registration') && mode === 'create' && onOpenRegistrationChange && (

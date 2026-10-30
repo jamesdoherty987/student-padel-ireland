@@ -188,6 +188,63 @@ class Tournament(Base, TimestampMixin):
     admins: Mapped[list["TournamentAdmin"]] = relationship(
         back_populates="tournament", cascade="all, delete-orphan"
     )
+    registration_fields: Mapped[list["TournamentRegistrationField"]] = relationship(
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+        order_by="TournamentRegistrationField.sort_order",
+    )
+
+
+class TournamentRegistrationField(Base, TimestampMixin):
+    """Custom signup question defined by the organiser (e.g. jersey size)."""
+
+    __tablename__ = "tournament_registration_fields"
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "key", name="uq_tournament_registration_field_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    key: Mapped[str] = mapped_column(String(80), nullable=False)
+    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    # text | select | boolean
+    field_type: Mapped[str] = mapped_column(String(20), default="text")
+    # JSON array of option strings for select fields
+    options_json: Mapped[str] = mapped_column(Text, default="[]")
+    required: Mapped[bool] = mapped_column(Boolean, default=False)
+    # player = each team member answers; team = one answer for the entry
+    scope: Mapped[str] = mapped_column(String(20), default="player")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+
+    tournament: Mapped[Tournament] = relationship(back_populates="registration_fields")
+    answers: Mapped[list["TournamentRegistrationAnswer"]] = relationship(
+        back_populates="field", cascade="all, delete-orphan"
+    )
+
+
+class TournamentRegistrationAnswer(Base, TimestampMixin):
+    """Answer to a custom signup field for one registration (and optionally one player)."""
+
+    __tablename__ = "tournament_registration_answers"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    field_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tournament_registration_fields.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    registration_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("registrations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Set when field.scope == player; null for team-scoped answers
+    team_player_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("team_players.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    value: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+
+    field: Mapped[TournamentRegistrationField] = relationship(back_populates="answers")
 
 
 class TournamentAdmin(Base, TimestampMixin):

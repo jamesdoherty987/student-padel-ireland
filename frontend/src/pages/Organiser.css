@@ -1051,6 +1051,119 @@ html.native-app.has-native-tabs .org-toast {
   margin-top: 0;
 }
 
+.tf-reg-fields-lead {
+  margin: 0 0 0.85rem;
+}
+
+.tf-reg-fields-empty {
+  margin: 0 0 0.85rem;
+  font-size: 0.92rem;
+}
+
+.tf-reg-fields-list {
+  list-style: none;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tf-reg-field-card {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 12px);
+  background: var(--surface, #fafcfb);
+}
+
+.tf-reg-field-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.tf-reg-field-num {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--court-deep);
+}
+
+.tf-reg-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+@media (max-width: 560px) {
+  .tf-reg-field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tf-reg-fields-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.tf-reg-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.org-custom-answers {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0.55rem 0.65rem;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: rgba(11, 61, 46, 0.05);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.org-custom-answers li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.org-custom-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.org-custom-value {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.tf-reg-field-card .tf-check {
+  margin: 0.15rem 0 0;
+  padding: 0.55rem 0.75rem;
+  background: rgba(11, 61, 46, 0.05);
+  min-height: 44px;
+}
+
+.tf-reg-field-warn {
+  margin: -0.35rem 0 0.65rem;
+  font-size: 0.82rem;
+  color: #b45309;
+}
+
 .tf-edit-note {
   margin: 0 0 0.75rem;
   font-size: 0.88rem;

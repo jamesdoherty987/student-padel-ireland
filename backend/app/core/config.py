@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
     stripe_publishable_key: str = ""
+    # Platform fee added on top of the entry fee for Stripe Checkout only (cents).
+    # e.g. 150 = €1.50 → player pays "€15 + €1.50 service fee". 0 = no fee.
+    service_fee_cents: int = 0
 
     resend_api_key: str = ""
     email_from: str = "Student Padel Ireland <noreply@studentpadel.ie>"

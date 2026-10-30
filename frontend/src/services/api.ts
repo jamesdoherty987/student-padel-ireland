@@ -98,7 +98,29 @@ export type Tournament = {
   /** Listed on landing / public browse - admin-created events only */
   is_official?: boolean
   courts?: Array<{ number: number; name: string; id: string }>
+  registration_fields?: TournamentRegistrationField[]
   can_manage?: boolean
+}
+
+export type TournamentRegistrationField = {
+  id: string
+  key: string
+  label: string
+  field_type: 'text' | 'select' | 'boolean' | string
+  options: string[]
+  required: boolean
+  scope: 'player' | 'team' | string
+  sort_order: number
+}
+
+export type CustomAnswer = {
+  field_id: string
+  field_key: string
+  label: string
+  scope: string
+  slot?: number | null
+  player_name?: string | null
+  value: string
 }
 
 export type TournamentAdmin = {
@@ -143,6 +165,7 @@ export type TournamentTeam = {
   player_names: string[]
   payment_status?: string | null
   payment_via?: string | null
+  custom_answers?: CustomAnswer[]
 }
 
 /** Row from GET /api/organiser/dashboard */
@@ -497,7 +520,12 @@ export const tournamentApi = {
 
 export const platformApi = {
   publicConfig: () =>
-    api.get<{ demo_payments: boolean; stripe_publishable_key: string | null }>('/api/config/public'),
+    api.get<{
+      demo_payments: boolean
+      stripe_publishable_key: string | null
+      /** Platform fee added on Stripe Checkout only (0 when Stripe off / unset) */
+      service_fee_cents?: number
+    }>('/api/config/public'),
   universities: () => api.get<University[]>('/api/universities'),
   rankings: (limit = 50) => api.get<RankingRow[]>('/api/rankings', { params: { limit } }),
   resolveInvite: (code: string) =>

@@ -17,6 +17,28 @@ from app.core.config import get_settings
 from app.models import Payment, PaymentStatus, Registration, Team, TeamPlayer, Tournament
 
 
+def platform_service_fee_cents() -> int:
+    """Fixed platform fee (cents) added to Stripe Checkout when entry fee > 0."""
+    return max(0, int(get_settings().service_fee_cents or 0))
+
+
+def stripe_checkout_total_cents(entry_fee_cents: int) -> int:
+    """Total charged via Stripe = entry fee + platform service fee (when entry > 0)."""
+    entry = max(0, int(entry_fee_cents or 0))
+    if entry <= 0:
+        return 0
+    return entry + platform_service_fee_cents()
+
+
+def entry_revenue_cents(amount_cents: int, *, stripe_session_id: str | None = None) -> int:
+    """Organiser revenue excludes the platform service fee on Stripe charges."""
+    amount = max(0, int(amount_cents or 0))
+    session = (stripe_session_id or "").strip()
+    if session.startswith("cs_"):
+        return max(0, amount - platform_service_fee_cents())
+    return amount
+
+
 def expire_checkout_session(session_id: str | None) -> None:
     """Best-effort expire of an open Stripe Checkout session after leave/re-checkout."""
     if not session_id:
@@ -342,8 +364,14 @@ def create_checkout_session(
     tournament_id: UUID,
     customer_email: str | None = None,
     previous_session_id: str | None = None,
+    service_fee_cents: int | None = None,
 ) -> Any:
-    """Create a hosted Checkout Session; expires any prior open session for this entry."""
+    """Create a hosted Checkout Session; expires any prior open session for this entry.
+
+    ``amount_cents`` is the tournament entry fee. When ``service_fee_cents`` (or the
+    platform default) is > 0, Checkout shows a second line item so players see
+    e.g. €15 entry + €1.50 service fee.
+    """
     settings = get_settings()
     if not settings.stripe_secret_key:
         raise RuntimeError("Stripe is not configured")
@@ -356,24 +384,47 @@ def create_checkout_session(
     if previous_session_id:
         expire_checkout_session(previous_session_id)
 
-    params: dict[str, Any] = {
-        "mode": "payment",
-        "line_items": [
+    entry = max(0, int(amount_cents or 0))
+    fee = platform_service_fee_cents() if service_fee_cents is None else max(0, int(service_fee_cents))
+    if entry <= 0:
+        fee = 0
+
+    line_items: list[dict[str, Any]] = [
+        {
+            "price_data": {
+                "currency": currency.lower(),
+                "product_data": {"name": f"{tournament_name} - {team_name}"},
+                "unit_amount": entry,
+            },
+            "quantity": 1,
+        }
+    ]
+    if fee > 0:
+        line_items.append(
             {
                 "price_data": {
                     "currency": currency.lower(),
-                    "product_data": {"name": f"{tournament_name} - {team_name}"},
-                    "unit_amount": amount_cents,
+                    "product_data": {
+                        "name": "Service fee",
+                        "description": "Platform processing fee",
+                    },
+                    "unit_amount": fee,
                 },
                 "quantity": 1,
             }
-        ],
+        )
+
+    params: dict[str, Any] = {
+        "mode": "payment",
+        "line_items": line_items,
         "success_url": success_url,
         "cancel_url": cancel_url,
         "client_reference_id": str(registration_id),
         "metadata": {
             "registration_id": str(registration_id),
             "tournament_id": str(tournament_id),
+            "entry_fee_cents": str(entry),
+            "service_fee_cents": str(fee),
         },
     }
     if customer_email:

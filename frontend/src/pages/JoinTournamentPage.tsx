@@ -18,13 +18,18 @@ import {
   communityApi,
   platformApi,
   tournamentApi,
+  type CustomAnswer,
   type PlayerSearch,
   type RegistrationConfirm,
+  type TournamentRegistrationField,
 } from '../services/api'
 import {
   formatMoney,
+  formatOnlineFee,
+  formatOnlineTotal,
   formatPerPlayerFee,
   isPastCalendarDate,
+  onlineTotalCents,
   reminderPromiseCopy,
   tournamentFormatSummary,
 } from '../utils/format'
@@ -89,6 +94,16 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
   const singles = data.tournament?.play_format === 'SINGLES'
   const canLeave = !!data.can_leave
   const reminderNote = confirmed ? reminderPromiseCopy(data.tournament?.event_date) : ''
+  const { data: publicConfig } = useQuery({
+    queryKey: ['public-config'],
+    queryFn: async () => (await platformApi.publicConfig()).data,
+    staleTime: 60_000,
+  })
+  const entryFeeCents = data.tournament?.entry_fee_cents ?? data.amount_cents
+  const serviceFeeCents = publicConfig?.service_fee_cents ?? 0
+  const onlineTotalLabel = formatOnlineTotal(entryFeeCents, serviceFeeCents, data.currency)
+  const paidOnlineWithFee =
+    confirmed && !payOnArrival && serviceFeeCents > 0 && data.amount_cents > entryFeeCents
 
   useEffect(() => {
     if (confirmed) void hapticSuccess()
@@ -117,12 +132,15 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
             <p className="tour-entry-tour-name">{data.tournament?.name}</p>
             <ul className="tour-entry-facts">
               <li>
-                {formatMoney(data.amount_cents, data.currency)} ·{' '}
-                {paymentLabel(data.status, data.payment_via)}
+                {payOnArrival
+                  ? `${formatMoney(entryFeeCents, data.currency)} · ${paymentLabel(data.status, data.payment_via)}`
+                  : paidOnlineWithFee
+                    ? `${formatMoney(data.amount_cents, data.currency)} paid · includes service fee`
+                    : `${formatMoney(data.amount_cents, data.currency)} · ${paymentLabel(data.status, data.payment_via)}`}
               </li>
               {payOnArrival ? (
                 <li>
-                  Spot reserved - bring payment to the organiser at the venue
+                  Spot reserved - bring {formatMoney(entryFeeCents, data.currency)} to the organiser
                   {!singles ? ' (full team fee)' : ''}
                 </li>
               ) : (
@@ -139,7 +157,12 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
                   <ConfirmPayOnlineButton
                     tournamentId={tournamentId}
                     slug={slug}
-                    feeLabel={formatMoney(data.amount_cents, data.currency)}
+                    totalLabel={onlineTotalLabel}
+                    feeHint={
+                      serviceFeeCents > 0
+                        ? formatOnlineFee(entryFeeCents, serviceFeeCents, data.currency)
+                        : undefined
+                    }
                   />
                 )}
                 <Link to={`/t/${slug}`} className="btn btn-ghost tour-entry-btn-ghost">
@@ -228,11 +251,15 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
 function ConfirmPayOnlineButton({
   tournamentId,
   slug,
-  feeLabel,
+  totalLabel,
+  feeHint,
 }: {
   tournamentId: string
   slug: string
-  feeLabel: string
+  /** Short total for the button, e.g. "€16.50" */
+  totalLabel: string
+  /** Optional breakdown shown under the button on narrow screens */
+  feeHint?: string
 }) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
@@ -288,12 +315,48 @@ function ConfirmPayOnlineButton({
   }
 
   return (
-    <>
+    <div className="pay-online-wrap">
       <button type="button" className="btn btn-ghost btn-block" disabled={busy} onClick={() => void onClick()}>
-        {busy ? 'Opening…' : `Pay ${feeLabel} online now`}
+        {busy ? 'Opening…' : `Pay online · ${totalLabel}`}
       </button>
+      {feeHint ? <p className="pay-online-hint">{feeHint}</p> : null}
       {err && <p className="auth-error">{err}</p>}
-    </>
+    </div>
+  )
+}
+
+function JoinFeeBreakdown({
+  entryFeeCents,
+  serviceFeeCents,
+  currency,
+  singles,
+  caption,
+}: {
+  entryFeeCents: number
+  serviceFeeCents: number
+  currency: string
+  singles: boolean
+  /** Optional context line, e.g. when venue pay is the default */
+  caption?: string
+}) {
+  if (entryFeeCents <= 0 || serviceFeeCents <= 0) return null
+  const total = onlineTotalCents(entryFeeCents, serviceFeeCents)
+  return (
+    <div className="join-fee-breakdown" aria-label="Online payment breakdown">
+      {caption ? <p className="join-fee-caption">{caption}</p> : null}
+      <div className="join-fee-row">
+        <span>{singles ? 'Entry fee' : 'Team entry'}</span>
+        <strong>{formatMoney(entryFeeCents, currency)}</strong>
+      </div>
+      <div className="join-fee-row">
+        <span>Service fee</span>
+        <strong>{formatMoney(serviceFeeCents, currency)}</strong>
+      </div>
+      <div className="join-fee-row join-fee-row--total">
+        <span>Total online</span>
+        <strong>{formatMoney(total, currency)}</strong>
+      </div>
+    </div>
   )
 }
 
@@ -310,6 +373,7 @@ type MyTeamInfo = {
   can_leave?: boolean
   needs_partner?: boolean
   partner_invite_pending?: boolean
+  custom_answers?: CustomAnswer[]
 }
 
 export default function JoinTournamentPage() {
@@ -427,6 +491,8 @@ export default function JoinTournamentPage() {
     phone: '',
     university_id: '',
   })
+  /** Answers keyed as fieldId or fieldId:slot for player-scoped fields */
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({})
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const checkoutDisposeRef = useRef<(() => void) | null>(null)
@@ -450,6 +516,22 @@ export default function JoinTournamentPage() {
       team_name: f.team_name || (singlesPrefill ? user.full_name || '' : ''),
     }))
   }, [user, tournament?.play_format])
+
+  // Prefill custom answers when resuming a pending entry
+  useEffect(() => {
+    const answers = (playerView?.my_team as MyTeamInfo | null)?.custom_answers
+    if (!answers?.length) return
+    setCustomAnswers((prev) => {
+      if (Object.keys(prev).length > 0) return prev
+      const next: Record<string, string> = {}
+      for (const a of answers) {
+        const key =
+          a.scope === 'player' && a.slot != null ? `${a.field_id}:${a.slot}` : a.field_id
+        next[key] = a.value
+      }
+      return next
+    })
+  }, [playerView?.my_team])
 
   const myTeamEarly = (playerView?.my_team || null) as MyTeamInfo | null
   const resumePartnerId = myTeamEarly?.partner_user_id || ''
@@ -732,7 +814,20 @@ export default function JoinTournamentPage() {
                   <ConfirmPayOnlineButton
                     tournamentId={tournament.id}
                     slug={tournament.slug}
-                    feeLabel={formatMoney(tournament.entry_fee_cents, tournament.currency)}
+                    totalLabel={formatOnlineTotal(
+                      tournament.entry_fee_cents,
+                      publicConfig?.service_fee_cents ?? 0,
+                      tournament.currency,
+                    )}
+                    feeHint={
+                      (publicConfig?.service_fee_cents ?? 0) > 0
+                        ? formatOnlineFee(
+                            tournament.entry_fee_cents,
+                            publicConfig?.service_fee_cents ?? 0,
+                            tournament.currency,
+                          )
+                        : undefined
+                    }
                   />
                 )}
               <Link to={`/t/${tournament.slug}`} className="btn btn-ghost tour-entry-btn-ghost">
@@ -886,6 +981,14 @@ export default function JoinTournamentPage() {
     )
   }
   const teamFee = formatMoney(tournament.entry_fee_cents, tournament.currency)
+  const serviceFeeCents = publicConfig?.service_fee_cents ?? 0
+  const onlineTotal = formatOnlineTotal(
+    tournament.entry_fee_cents,
+    serviceFeeCents,
+    tournament.currency,
+  )
+  const showOnlineFeeBreakdown =
+    !publicConfig?.demo_payments && serviceFeeCents > 0 && tournament.entry_fee_cents > 0
   const perPlayer = formatPerPlayerFee(
     tournament.entry_fee_cents,
     tournament.currency,
@@ -928,6 +1031,74 @@ export default function JoinTournamentPage() {
     return true
   }
 
+  const signupFields = (tournament?.registration_fields || []) as TournamentRegistrationField[]
+
+  const answerKey = (fieldId: string, slot?: number) =>
+    slot != null ? `${fieldId}:${slot}` : fieldId
+
+  const setAnswer = (fieldId: string, value: string, slot?: number) => {
+    const key = answerKey(fieldId, slot)
+    setCustomAnswers((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const buildCustomAnswersPayload = () => {
+    const out: Array<{ field_id: string; value: string; slot?: number }> = []
+    for (const field of signupFields) {
+      if (field.scope === 'team') {
+        const value = (customAnswers[answerKey(field.id)] || '').trim()
+        if (field.field_type === 'boolean') {
+          if (customAnswers[answerKey(field.id)] != null && customAnswers[answerKey(field.id)] !== '') {
+            out.push({ field_id: field.id, value: customAnswers[answerKey(field.id)] })
+          }
+        } else if (value) {
+          out.push({ field_id: field.id, value })
+        }
+        continue
+      }
+      const slots = singles ? [1] : [1, 2]
+      for (const slot of slots) {
+        const key = answerKey(field.id, slot)
+        const raw = customAnswers[key]
+        if (field.field_type === 'boolean') {
+          if (raw != null && raw !== '') out.push({ field_id: field.id, value: raw, slot })
+        } else if ((raw || '').trim()) {
+          out.push({ field_id: field.id, value: (raw || '').trim(), slot })
+        }
+      }
+    }
+    return out
+  }
+
+  const validateCustomAnswers = (): string | null => {
+    for (const field of signupFields) {
+      if (!field.required) continue
+      if (field.scope === 'team') {
+        const key = answerKey(field.id)
+        if (field.field_type === 'boolean') {
+          if (customAnswers[key] !== 'yes' && customAnswers[key] !== 'no') {
+            return `Answer “${field.label}”`
+          }
+        } else if (!(customAnswers[key] || '').trim()) {
+          return `Enter “${field.label}”`
+        }
+        continue
+      }
+      const slots = singles ? [1] : [1, 2]
+      for (const slot of slots) {
+        const key = answerKey(field.id, slot)
+        const who = slot === 2 ? ' for your partner' : ''
+        if (field.field_type === 'boolean') {
+          if (customAnswers[key] !== 'yes' && customAnswers[key] !== 'no') {
+            return `Answer “${field.label}”${who}`
+          }
+        } else if (!(customAnswers[key] || '').trim()) {
+          return `Enter “${field.label}”${who}`
+        }
+      }
+    }
+    return null
+  }
+
   const submitJoin = async (payOnlineNow: boolean) => {
     setLoading(true)
     setError('')
@@ -955,6 +1126,21 @@ export default function JoinTournamentPage() {
       }
     }
 
+    if (!needsPartner) {
+      const customErr = validateCustomAnswers()
+      if (customErr) {
+        setError(customErr)
+        setLoading(false)
+        requestAnimationFrame(() => {
+          document.getElementById('join-custom-fields')?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+          })
+        })
+        return
+      }
+    }
+
     try {
       const payload: Record<string, unknown> = {
         tournament_id: tournament.id,
@@ -965,6 +1151,7 @@ export default function JoinTournamentPage() {
         pay_online_now: payOnlineNow,
         return_origin: typeof window !== 'undefined' ? window.location.origin : undefined,
         native_return: isNativeApp(),
+        custom_answers: needsPartner ? [] : buildCustomAnswersPayload(),
       }
       if (!singles) {
         if (partnerMode === 'friend' && form.partner_user_id) {
@@ -1044,13 +1231,20 @@ export default function JoinTournamentPage() {
               {tournament.pay_on_arrival ? (
                 <>
                   Team entry is <strong>{teamFee}</strong> (you cover both players). Confirm now and pay
-                  at the venue, or pay the full amount online below. Your partner is added
-                  automatically - they can leave the team if they can’t play.
+                  at the venue, or pay online below. Your partner is added automatically - they can
+                  leave the team if they can’t play.
                 </>
               ) : (
                 <>
-                  You pay the full team entry of <strong>{teamFee}</strong>. Your partner is added
-                  automatically and is not charged separately - they can leave if they can’t play.
+                  You pay the full team entry of <strong>{teamFee}</strong>
+                  {showOnlineFeeBreakdown ? (
+                    <>
+                      {' '}
+                      online (<strong>{onlineTotal}</strong> incl. service fee)
+                    </>
+                  ) : null}
+                  . Your partner is added automatically and is not charged separately - they can leave
+                  if they can’t play.
                 </>
               )}
             </p>
@@ -1341,6 +1535,113 @@ export default function JoinTournamentPage() {
               )}
             </div>
           )}
+          {!needsPartner && signupFields.length > 0 && (
+            <div className="join-custom-fields" id="join-custom-fields">
+              <h3 className="join-custom-title">A few more details</h3>
+              {(() => {
+                const renderControl = (field: TournamentRegistrationField, slot?: number) => {
+                  const key = answerKey(field.id, slot)
+                  const id = `join-cf-${field.id}${slot != null ? `-${slot}` : ''}`
+                  const label = field.label
+                  if (field.field_type === 'boolean') {
+                    return (
+                      <div className="form-group" key={key}>
+                        <span className="form-label" id={`${id}-label`}>
+                          {label}
+                          {field.required ? '' : <span className="muted"> (optional)</span>}
+                        </span>
+                        <div className="join-yesno" role="group" aria-labelledby={`${id}-label`}>
+                          {(
+                            [
+                              ['yes', 'Yes'],
+                              ['no', 'No'],
+                            ] as const
+                          ).map(([val, lab]) => (
+                            <button
+                              key={val}
+                              type="button"
+                              className={`filter-chip join-yesno-btn ${customAnswers[key] === val ? 'on' : ''}`}
+                              aria-pressed={customAnswers[key] === val}
+                              onClick={() => setAnswer(field.id, val, slot)}
+                            >
+                              {lab}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  }
+                  if (field.field_type === 'select') {
+                    return (
+                      <div className="form-group" key={key}>
+                        <label className="form-label" htmlFor={id}>
+                          {label}
+                          {field.required ? '' : <span className="muted"> (optional)</span>}
+                        </label>
+                        <select
+                          id={id}
+                          className="form-input"
+                          value={customAnswers[key] || ''}
+                          required={field.required}
+                          onChange={(e) => setAnswer(field.id, e.target.value, slot)}
+                        >
+                          <option value="">Select…</option>
+                          {(field.options || []).map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="form-group" key={key}>
+                      <label className="form-label" htmlFor={id}>
+                        {label}
+                        {field.required ? '' : <span className="muted"> (optional)</span>}
+                      </label>
+                      <input
+                        id={id}
+                        className="form-input"
+                        value={customAnswers[key] || ''}
+                        required={field.required}
+                        maxLength={500}
+                        enterKeyHint="next"
+                        autoCapitalize="sentences"
+                        onChange={(e) => setAnswer(field.id, e.target.value, slot)}
+                        placeholder={field.required ? undefined : 'Optional'}
+                      />
+                    </div>
+                  )
+                }
+
+                const teamFields = signupFields.filter((f) => f.scope === 'team')
+                const playerFields = signupFields.filter((f) => f.scope !== 'team')
+
+                return (
+                  <>
+                    {teamFields.map((field) => renderControl(field))}
+                    {playerFields.length > 0 &&
+                      (singles ? (
+                        playerFields.map((field) => renderControl(field, 1))
+                      ) : (
+                        <>
+                          <div className="join-custom-person">
+                            <p className="join-custom-person-label">You</p>
+                            {playerFields.map((field) => renderControl(field, 1))}
+                          </div>
+                          <div className="join-custom-person">
+                            <p className="join-custom-person-label">Partner</p>
+                            {playerFields.map((field) => renderControl(field, 2))}
+                          </div>
+                        </>
+                      ))}
+                  </>
+                )
+              })()}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label" htmlFor="join-phone">
               Phone <span className="muted">(optional)</span>
@@ -1390,6 +1691,14 @@ export default function JoinTournamentPage() {
           ) : publicConfig?.demo_payments ? (
             <p className="muted-note">Demo checkout. No card will be charged.</p>
           ) : null}
+          {!needsPartner && showOnlineFeeBreakdown && !tournament.pay_on_arrival && (
+            <JoinFeeBreakdown
+              entryFeeCents={tournament.entry_fee_cents}
+              serviceFeeCents={serviceFeeCents}
+              currency={tournament.currency}
+              singles={singles}
+            />
+          )}
           <button className="btn btn-primary btn-block" disabled={loading || tLoading}>
             {loading
               ? needsPartner
@@ -1403,21 +1712,28 @@ export default function JoinTournamentPage() {
                     : `Confirm entry · pay ${teamFee} at venue`
                   : publicConfig?.demo_payments
                     ? `${resumingPending ? 'Finish' : 'Confirm'} ${teamFee} (demo)`
-                    : `${resumingPending ? 'Pay' : 'Pay'} ${teamFee}`}
+                    : `${resumingPending ? 'Pay' : 'Pay'} ${onlineTotal}`}
           </button>
           {!needsPartner && tournament.pay_on_arrival && tournament.entry_fee_cents > 0 && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-block"
-              disabled={loading || tLoading}
-              onClick={() => void submitJoin(true)}
-            >
-              {loading
-                ? 'Processing…'
-                : singles
-                  ? `Pay ${teamFee} online now`
-                  : `Pay ${teamFee} online now (full team)`}
-            </button>
+            <>
+              {showOnlineFeeBreakdown ? (
+                <JoinFeeBreakdown
+                  entryFeeCents={tournament.entry_fee_cents}
+                  serviceFeeCents={serviceFeeCents}
+                  currency={tournament.currency}
+                  singles={singles}
+                  caption="Or pay by card now"
+                />
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-ghost btn-block"
+                disabled={loading || tLoading}
+                onClick={() => void submitJoin(true)}
+              >
+                {loading ? 'Processing…' : `Pay online · ${onlineTotal}`}
+              </button>
+            </>
           )}
           {resumingPending && myTeam?.can_leave ? (
             <LeaveTournamentButton

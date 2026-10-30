@@ -23,6 +23,33 @@ export function formatPerPlayerFee(entryFeeCents: number, currency = 'EUR', play
   return `${formatMoney(Math.round(perPlayerFeeCents(entryFeeCents, playFormat)), currency)}/player`
 }
 
+/** Total charged via Stripe Checkout (entry + platform service fee). */
+export function onlineTotalCents(entryFeeCents: number, serviceFeeCents = 0) {
+  const entry = Math.max(0, entryFeeCents)
+  if (entry <= 0) return 0
+  return entry + Math.max(0, serviceFeeCents)
+}
+
+/** Compact total for buttons, e.g. "€16.50". */
+export function formatOnlineTotal(
+  entryFeeCents: number,
+  serviceFeeCents = 0,
+  currency = 'EUR',
+) {
+  return formatMoney(onlineTotalCents(entryFeeCents, serviceFeeCents), currency)
+}
+
+/** Prose breakdown, e.g. "€15 + €1.50 service fee" (or just "€15" when fee is 0). */
+export function formatOnlineFee(
+  entryFeeCents: number,
+  serviceFeeCents = 0,
+  currency = 'EUR',
+) {
+  const base = formatMoney(entryFeeCents, currency)
+  if (serviceFeeCents <= 0 || entryFeeCents <= 0) return base
+  return `${base} + ${formatMoney(serviceFeeCents, currency)} service fee`
+}
+
 /** e.g. "12/48 teams · €35/player" - works for singles & doubles (always per player) */
 export function formatEntrySummary(
   registered: number,

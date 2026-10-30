@@ -1,12 +1,65 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models import MatchStatus, PlayFormat, TournamentFormat, TournamentStatus, UserRole
+
+
+class RegistrationFieldIn(BaseModel):
+    """Organiser-defined signup question (create/update tournament)."""
+
+    id: Optional[UUID] = None
+    label: str = Field(min_length=1, max_length=200)
+    field_type: Literal["text", "select", "boolean"] = "text"
+    options: list[str] = Field(default_factory=list)
+    required: bool = False
+    scope: Literal["player", "team"] = "player"
+    sort_order: int = 0
+
+    @field_validator("options")
+    @classmethod
+    def _clean_options(cls, v: list[str]) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in v:
+            s = (raw or "").strip()
+            if not s or s.lower() in seen:
+                continue
+            seen.add(s.lower())
+            out.append(s[:80])
+        return out[:20]
+
+
+class RegistrationFieldOut(BaseModel):
+    id: UUID
+    key: str
+    label: str
+    field_type: str
+    options: list[str] = Field(default_factory=list)
+    required: bool = False
+    scope: str = "player"
+    sort_order: int = 0
+
+
+class CustomAnswerIn(BaseModel):
+    field_id: UUID
+    value: str = Field(default="", max_length=500)
+    # 1 = captain / singles player, 2 = partner (player-scoped fields)
+    slot: Optional[int] = Field(default=None, ge=1, le=2)
+
+
+class CustomAnswerOut(BaseModel):
+    field_id: UUID
+    field_key: str
+    label: str
+    scope: str
+    slot: Optional[int] = None
+    player_name: Optional[str] = None
+    value: str
 
 
 class TokenResponse(BaseModel):
@@ -129,6 +182,7 @@ class TournamentCreate(BaseModel):
     championship_size: int = Field(default=16, ge=2, le=64)
     plate_size: int = Field(default=16, ge=2, le=64)
     tie_break_order: Optional[str] = None
+    registration_fields: list[RegistrationFieldIn] = Field(default_factory=list)
 
     @field_validator("court_names")
     @classmethod
@@ -143,6 +197,13 @@ class TournamentCreate(BaseModel):
     def _power_of_two_bracket(cls, v: int) -> int:
         if v < 2 or (v & (v - 1)) != 0:
             raise ValueError("Bracket size must be a power of 2 (2, 4, 8, 16, 32, 64)")
+        return v
+
+    @field_validator("registration_fields")
+    @classmethod
+    def _limit_registration_fields(cls, v: list[RegistrationFieldIn]) -> list[RegistrationFieldIn]:
+        if len(v) > 12:
+            raise ValueError("At most 12 custom signup fields")
         return v
 
 
@@ -174,6 +235,8 @@ class TournamentUpdate(BaseModel):
     is_official: Optional[bool] = None
     # Transfer ownership - only current owner or platform ADMIN may set this
     organiser_id: Optional[UUID] = None
+    # When set, replaces the tournament's custom signup fields (pass [] to clear)
+    registration_fields: Optional[list[RegistrationFieldIn]] = None
 
     @field_validator("championship_size", "plate_size")
     @classmethod
@@ -182,6 +245,15 @@ class TournamentUpdate(BaseModel):
             return v
         if v < 2 or (v & (v - 1)) != 0:
             raise ValueError("Bracket size must be a power of 2 (2, 4, 8, 16, 32, 64)")
+        return v
+
+    @field_validator("registration_fields")
+    @classmethod
+    def _limit_registration_fields_update(
+        cls, v: Optional[list[RegistrationFieldIn]]
+    ) -> Optional[list[RegistrationFieldIn]]:
+        if v is not None and len(v) > 12:
+            raise ValueError("At most 12 custom signup fields")
         return v
 
 
@@ -221,6 +293,7 @@ class TournamentOut(BaseModel):
     invite_code: Optional[str] = None
     is_official: bool = False
     courts: list[CourtOut] = Field(default_factory=list)
+    registration_fields: list[RegistrationFieldOut] = Field(default_factory=list)
     can_manage: bool = False
 
     model_config = {"from_attributes": True}
@@ -238,6 +311,7 @@ class TeamOut(BaseModel):
     payment_status: Optional[str] = None
     # free_entry | pay_on_arrival | demo_payment | online | None
     payment_via: Optional[str] = None
+    custom_answers: list[CustomAnswerOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -257,6 +331,7 @@ class RegisterTeamRequest(BaseModel):
     return_origin: Optional[str] = Field(default=None, max_length=200)
     # Capacitor app: use studentpadel:// success URL so return lands in-app (logged in)
     native_return: bool = False
+    custom_answers: list[CustomAnswerIn] = Field(default_factory=list)
 
 
 class PayOnlineNowRequest(BaseModel):

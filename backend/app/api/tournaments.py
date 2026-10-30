@@ -40,6 +40,8 @@ from app.models import (
     TeamPlayer,
     Tournament,
     TournamentAdmin,
+    TournamentRegistrationAnswer,
+    TournamentRegistrationField,
     TournamentStatus,
     University,
     User,
@@ -47,6 +49,13 @@ from app.models import (
 
 from app.services.email import send_email
 from app.services.rating import INITIAL_RATING, rate_match
+from app.services.registration_fields import (
+    answers_for_team,
+    field_to_out,
+    list_fields,
+    save_answers_for_registration,
+    sync_registration_fields,
+)
 from app.schemas import (
     AnnouncementCreate,
     AnnouncementOut,
@@ -174,8 +183,9 @@ def _unique_player_names(members) -> list[str]:
     return names
 
 
-def _team_out(team: Team) -> TeamOut:
+def _team_out(team: Team, db: Session | None = None) -> TeamOut:
     names = _unique_player_names(team.members)
+    custom = answers_for_team(db, team) if db is not None else []
     return TeamOut(
         id=team.id,
         tournament_id=team.tournament_id,
@@ -187,6 +197,7 @@ def _team_out(team: Team) -> TeamOut:
         player_names=names,
         payment_status=team.registration.status if team.registration else None,
         payment_via=_payment_via(team.registration),
+        custom_answers=custom,
     )
 
 
@@ -579,6 +590,7 @@ def _tournament_out(
         .all()
     )
     can_manage = bool(viewer and user_can_manage_tournament(viewer, t, db))
+    reg_fields = [field_to_out(f) for f in list_fields(db, t.id)]
     # Always build plain data - never pass ORM Court objects into the response model
     return TournamentOut(
         id=t.id,
@@ -612,6 +624,7 @@ def _tournament_out(
         courts=[
             {"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts
         ],
+        registration_fields=reg_fields,
         can_manage=can_manage,
     )
 
@@ -1038,7 +1051,20 @@ def _purge_tournament(db: Session, t: Tournament) -> None:
 
     team_ids = [row[0] for row in db.query(Team.id).filter(Team.tournament_id == tid).all()]
     reg_ids = [row[0] for row in db.query(Registration.id).filter(Registration.tournament_id == tid).all()]
+    field_ids = [
+        row[0]
+        for row in db.query(TournamentRegistrationField.id)
+        .filter(TournamentRegistrationField.tournament_id == tid)
+        .all()
+    ]
+    if field_ids:
+        db.query(TournamentRegistrationAnswer).filter(
+            TournamentRegistrationAnswer.field_id.in_(field_ids)
+        ).delete(synchronize_session=False)
     if reg_ids:
+        db.query(TournamentRegistrationAnswer).filter(
+            TournamentRegistrationAnswer.registration_id.in_(reg_ids)
+        ).delete(synchronize_session=False)
         db.query(Payment).filter(Payment.registration_id.in_(reg_ids)).delete(synchronize_session=False)
     db.query(Payment).filter(Payment.tournament_id == tid).delete(synchronize_session=False)
     db.query(Registration).filter(Registration.tournament_id == tid).delete(synchronize_session=False)
@@ -1046,6 +1072,9 @@ def _purge_tournament(db: Session, t: Tournament) -> None:
         db.query(TeamPlayer).filter(TeamPlayer.team_id.in_(team_ids)).delete(synchronize_session=False)
         db.query(Team).filter(Team.tournament_id == tid).delete(synchronize_session=False)
 
+    db.query(TournamentRegistrationField).filter(
+        TournamentRegistrationField.tournament_id == tid
+    ).delete(synchronize_session=False)
     db.query(Announcement).filter(Announcement.tournament_id == tid).delete(synchronize_session=False)
     db.query(Sponsor).filter(Sponsor.tournament_id == tid).delete(synchronize_session=False)
     db.query(Court).filter(Court.tournament_id == tid).delete(synchronize_session=False)
@@ -1149,6 +1178,8 @@ def create_tournament(
     db.add(t)
     db.flush()
     _sync_courts(db, t.id, body.number_of_courts, body.court_names)
+    if body.registration_fields:
+        sync_registration_fields(db, t.id, body.registration_fields)
     db.commit()
     db.refresh(t)
     return _tournament_out(db, t, viewer=user)
@@ -1167,6 +1198,7 @@ def update_tournament(
     _assert_organiser(user, t, db)
     data = body.model_dump(exclude_unset=True)
     court_names = data.pop("court_names", None)
+    registration_fields = data.pop("registration_fields", None)
     new_organiser_id = data.pop("organiser_id", None)
     # Only platform admins can promote/demote public listing
     if "is_official" in data:
@@ -1234,6 +1266,8 @@ def update_tournament(
             t.number_of_courts,
             court_names if court_names is not None else None,
         )
+    if registration_fields is not None:
+        sync_registration_fields(db, t.id, registration_fields)
     db.commit()
     db.refresh(t)
     return _tournament_out(db, t, viewer=user)
@@ -1431,6 +1465,15 @@ def register_team(
                         )
                     )
                     _ensure_pending_friendship(db, user.id, partner.id)
+        if team:
+            save_answers_for_registration(
+                db,
+                tournament=t,
+                registration_id=resume_reg.id,
+                team_id=team.id,
+                answers=body.custom_answers or [],
+                singles=singles,
+            )
         if notify_email_partner and partner:
             _notify_email_partner(
                 captain=user,
@@ -1477,6 +1520,15 @@ def register_team(
     )
     db.add(reg)
     db.flush()
+
+    save_answers_for_registration(
+        db,
+        tournament=t,
+        registration_id=reg.id,
+        team_id=team.id,
+        answers=body.custom_answers or [],
+        singles=singles,
+    )
 
     if notify_email_partner and partner:
         _notify_email_partner(
@@ -1575,7 +1627,7 @@ def organiser_add_team(
         .filter(Team.id == team.id)
         .first()
     )
-    return _team_out(team)
+    return _team_out(team, db)
 
 
 def _checkout_web_origin(return_origin: str | None) -> str:
@@ -1666,7 +1718,7 @@ def _issue_checkout(
 
     settings = get_settings()
     if settings.stripe_secret_key:
-        from app.services.payments import create_checkout_session
+        from app.services.payments import create_checkout_session, stripe_checkout_total_cents
 
         success_url, cancel_url = _checkout_success_cancel_urls(
             t,
@@ -1674,6 +1726,7 @@ def _issue_checkout(
             return_origin=return_origin,
             native_return=native_return,
         )
+        charge_cents = stripe_checkout_total_cents(t.entry_fee_cents)
         try:
             session = create_checkout_session(
                 tournament_name=t.name,
@@ -1691,8 +1744,8 @@ def _issue_checkout(
             raise HTTPException(502, f"Could not start Stripe Checkout: {exc}") from exc
 
         reg.stripe_session_id = session.id
-        # Keep amount in sync with what Checkout will charge
-        reg.amount_cents = t.entry_fee_cents
+        # Keep amount in sync with what Checkout will charge (entry + service fee)
+        reg.amount_cents = charge_cents
         reg.currency = t.currency
         db.commit()
         return CheckoutResponse(
@@ -1761,12 +1814,13 @@ def pay_online_now(
     if via != "pay_on_arrival":
         raise HTTPException(400, "This entry is already paid online")
 
-    reg.amount_cents = t.entry_fee_cents
-    reg.currency = t.currency
     settings = get_settings()
     if settings.stripe_secret_key:
-        from app.services.payments import create_checkout_session
+        from app.services.payments import create_checkout_session, stripe_checkout_total_cents
 
+        charge_cents = stripe_checkout_total_cents(t.entry_fee_cents)
+        reg.amount_cents = charge_cents
+        reg.currency = t.currency
         success_url, cancel_url = _checkout_success_cancel_urls(
             t,
             reg,
@@ -1797,6 +1851,9 @@ def pay_online_now(
             demo_mode=False,
             message="Redirect to Stripe Checkout",
         )
+
+    reg.amount_cents = t.entry_fee_cents
+    reg.currency = t.currency
 
     # Demo: treat as online paid immediately
     reg.stripe_payment_intent_id = "demo_payment"
@@ -1986,7 +2043,7 @@ def list_teams(tournament_id: UUID, db: Session = Depends(get_db)):
         .order_by(Team.name)
         .all()
     )
-    return [_team_out(team) for team in teams]
+    return [_team_out(team, db) for team in teams]
 
 
 @router.post("/tournaments/{tournament_id}/teams/{team_id}/check-in", response_model=TeamOut)
@@ -2018,7 +2075,7 @@ def check_in_team(
         team.checked_in = body.player1_present and body.player2_present
     db.commit()
     db.refresh(team)
-    return _team_out(team)
+    return _team_out(team, db)
 
 
 @router.post("/tournaments/{tournament_id}/teams/{team_id}/mark-fee-collected", response_model=TeamOut)
@@ -2062,7 +2119,7 @@ def mark_fee_collected(
         payment_row.stripe_payment_id = "collected_on_arrival"
     db.commit()
     db.refresh(team)
-    return _team_out(team)
+    return _team_out(team, db)
 
 
 def _entry_is_paid(team: Team) -> bool:
@@ -2131,7 +2188,7 @@ def _apply_team_withdraw(db: Session, t: Tournament, team: Team, *, as_organiser
         from app.services.payments import expire_checkout_session
 
         expire_checkout_session(old_session_id)
-    return _team_out(team)
+    return _team_out(team, db)
 
 
 @router.post("/tournaments/{tournament_id}/teams/{team_id}/withdraw", response_model=TeamOut)
@@ -3510,6 +3567,7 @@ def player_view(
                 "can_leave": _player_can_leave_entry(db, t, my_team),
                 "partner_invite_pending": partner_invite_pending,
                 "needs_partner": needs_partner,
+                "custom_answers": answers_for_team(db, my_team),
             }
             if my_team
             else None
@@ -3728,13 +3786,19 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
         )
         per_team = 1 if _is_singles(t) else 2
         is_owner = t.organiser_id == user.id or user.role == Role.ADMIN.value
+        from app.services.payments import entry_revenue_cents
+
         stats.append(
             {
                 "tournament": _tournament_out(db, t),
                 "teams": teams,
                 "players": teams * per_team,
                 "paid_registrations": paid,
-                "revenue_cents": sum(r.amount_cents for r in collected_revenue),
+                # Entry fees only — platform service fee is excluded from organiser revenue
+                "revenue_cents": sum(
+                    entry_revenue_cents(r.amount_cents, stripe_session_id=r.stripe_session_id)
+                    for r in collected_revenue
+                ),
                 "live_matches": live,
                 "completed_matches": completed,
                 "checked_in": checked,

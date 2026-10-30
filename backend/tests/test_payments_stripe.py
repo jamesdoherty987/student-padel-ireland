@@ -12,6 +12,9 @@ from app.services.payments import (
     _payment_intent_id,
     _session_field,
     _session_is_paid,
+    entry_revenue_cents,
+    platform_service_fee_cents,
+    stripe_checkout_total_cents,
 )
 
 
@@ -107,6 +110,19 @@ def test_assert_session_matches_bound_session_syncs_amount():
     )
     assert reg.amount_cents == 400
     assert reg.currency == "EUR"
+
+
+def test_stripe_checkout_total_includes_service_fee(monkeypatch):
+    monkeypatch.setattr(
+        "app.services.payments.get_settings",
+        lambda: SimpleNamespace(service_fee_cents=150, stripe_secret_key="sk_test"),
+    )
+    assert platform_service_fee_cents() == 150
+    assert stripe_checkout_total_cents(1500) == 1650
+    assert stripe_checkout_total_cents(0) == 0
+    assert entry_revenue_cents(1650, stripe_session_id="cs_test_abc") == 1500
+    assert entry_revenue_cents(1500, stripe_session_id=None) == 1500
+    assert entry_revenue_cents(1500, stripe_session_id="pay_on_arrival") == 1500
 
 
 def test_registration_id_uuid_roundtrip_shape():

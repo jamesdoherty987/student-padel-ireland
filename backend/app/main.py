@@ -93,9 +93,12 @@ def health():
 
 @app.get("/api/config/public")
 def public_config():
+    fee = max(0, int(settings.service_fee_cents or 0))
     return {
         "stripe_publishable_key": settings.stripe_publishable_key or None,
         "frontend_url": settings.frontend_url,
         "demo_payments": not bool(settings.stripe_secret_key),
         "environment": settings.environment,
+        # Charged on Stripe Checkout only (not pay-on-arrival)
+        "service_fee_cents": fee if settings.stripe_secret_key else 0,
     }

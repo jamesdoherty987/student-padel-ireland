@@ -288,6 +288,85 @@
   line-height: 1.45;
 }
 
+.join-fee-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.85rem 0;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface, #fff);
+  border: 1px solid var(--line, rgba(11, 61, 46, 0.14));
+}
+
+.join-form .muted-note + .join-fee-breakdown,
+.join-form .join-fee-breakdown:first-of-type {
+  margin-top: 0.35rem;
+}
+
+.join-fee-caption {
+  margin: 0 0 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-soft, #3d4f48);
+}
+
+.join-fee-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.92rem;
+  color: var(--ink-soft, #3d4f48);
+  line-height: 1.35;
+}
+
+.join-fee-row strong {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  color: var(--ink, #12241c);
+  text-align: right;
+}
+
+.join-fee-row--total {
+  margin-top: 0.15rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--line, rgba(11, 61, 46, 0.14));
+  font-size: 0.98rem;
+  color: var(--ink, #12241c);
+  font-weight: 600;
+}
+
+.join-fee-row--total strong {
+  font-weight: 750;
+  color: var(--court-deep, #0b3d2e);
+}
+
+.pay-online-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.pay-online-hint {
+  margin: 0;
+  padding: 0 0.15rem;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.72);
+  text-align: center;
+}
+
+/* Outside dark entry banners, hint uses soft ink */
+.page > .pay-online-wrap .pay-online-hint,
+.join-form .pay-online-hint {
+  color: var(--ink-soft, #3d4f48);
+}
+
 .leave-tour-wrap {
   display: flex;
   flex-direction: column;
@@ -716,6 +795,14 @@
   gap: 0.55rem;
 }
 
+.tour-entry-actions .pay-online-wrap {
+  flex: 1 1 100%;
+}
+
+.tour-entry-actions .pay-online-wrap .btn {
+  width: 100%;
+}
+
 .tour-entry-actions .btn-primary {
   background: var(--ball, #c8e600);
   color: var(--court-deep, #0b3d2e);
@@ -1035,6 +1122,55 @@
   margin-top: 0.75rem;
 }
 
+.join-custom-fields {
+  margin: 0.25rem 0 1rem;
+  padding: 1rem 1.05rem;
+  border-radius: var(--radius-md, 12px);
+  background: linear-gradient(145deg, rgba(11, 61, 46, 0.06), rgba(200, 230, 0, 0.08));
+  border: 1px solid rgba(11, 61, 46, 0.1);
+}
+
+.join-custom-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--court-deep);
+}
+
+.join-custom-person {
+  margin: 0.35rem 0 0.85rem;
+  padding: 0.75rem 0.8rem 0.15rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(11, 61, 46, 0.08);
+}
+
+.join-custom-person:last-child {
+  margin-bottom: 0.15rem;
+}
+
+.join-custom-person-label {
+  margin: 0 0 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--court-deep);
+}
+
+.join-yesno {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.join-yesno-btn {
+  width: 100%;
+  justify-content: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .confirm-page .confirm-tour {
   font-family: var(--font-display);
   font-size: 1.4rem;
@@ -1201,6 +1337,19 @@
 }
 
 @media (max-width: 640px) {
+  .tour-entry-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tour-entry-actions .btn,
+  .join-form .btn-block {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+    line-height: 1.25;
+  }
+
   .tour-actions {
     flex-direction: column;
     position: sticky;

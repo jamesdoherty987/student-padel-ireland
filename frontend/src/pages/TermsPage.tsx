@@ -49,7 +49,8 @@ export default function TermsPage() {
 
           <h2>Payments</h2>
           <p>
-            Tournament entry fees are charged by organisers via Stripe Checkout when enabled. Fees, refunds, and
+            Tournament entry fees are charged by organisers via Stripe Checkout when enabled. Online card payments may
+            include a small platform service fee shown at checkout (e.g. entry fee + service fee). Fees, refunds, and
             cancellations for a specific event are set by that event&apos;s organiser unless we state otherwise.
             Stripe&apos;s terms also apply to card payments.
           </p>
