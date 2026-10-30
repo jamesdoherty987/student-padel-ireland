@@ -506,6 +506,16 @@ html.native-app .btn-xs {
   color: var(--court-deep);
 }
 
+.badge-personal {
+  background: rgba(20, 102, 68, 0.1);
+  color: var(--court-mid);
+}
+
+.badge-in {
+  background: rgba(200, 230, 0, 0.35);
+  color: var(--court-deep);
+}
+
 .badge-past {
   background: rgba(90, 106, 122, 0.1);
   color: var(--muted);
@@ -623,11 +633,73 @@ html.native-app .btn-xs {
   flex-shrink: 0;
 }
 
+.page-header-row--inline {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.page-header-row--inline .page-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.page-header-row--inline > .btn-have-code,
+.page-header-row--inline .header-actions {
+  flex: 0 0 auto;
+  width: auto;
+}
+
 .header-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.65rem;
   align-items: center;
+}
+
+.header-actions--compact {
+  flex-wrap: nowrap;
+  gap: 0.4rem;
+}
+
+.btn-have-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--white);
+  color: var(--court-deep);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-have-code-short {
+  display: none;
+}
+
+.btn-have-code:hover {
+  background: rgba(11, 61, 46, 0.06);
+}
+
+.btn-have-code:focus-visible {
+  outline: 2px solid var(--court-mid);
+  outline-offset: 2px;
+}
+
+.btn-header-compact {
+  min-height: 34px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
 }
 
 .page-sub {
@@ -1233,6 +1305,11 @@ html.native-app .btn-xs {
     align-items: flex-start;
   }
 
+  .page-header-row--inline {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
   .header-actions {
     width: 100%;
     display: flex;
@@ -1240,9 +1317,51 @@ html.native-app .btn-xs {
     gap: 0.5rem;
   }
 
+  .page-header-row--inline .header-actions,
+  .header-actions--compact {
+    width: auto;
+    flex-wrap: nowrap;
+  }
+
   .header-actions .btn {
     flex: 1 1 auto;
     min-width: min(100%, 140px);
+  }
+
+  .page-header-row--inline .header-actions .btn,
+  .page-header-row--inline .btn-have-code,
+  .header-actions--compact .btn {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .btn-have-code {
+    padding: 0.3rem 0.55rem;
+    min-height: 32px;
+    font-size: 0.72rem;
+  }
+
+  .btn-have-code-full {
+    display: none;
+  }
+
+  .btn-have-code-short {
+    display: inline;
+  }
+
+  .btn-header-compact {
+    min-height: 32px;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.72rem;
+  }
+
+  .page-title {
+    font-size: clamp(1.45rem, 7vw, 1.85rem);
+  }
+
+  .page-sub-tight {
+    margin: 0.3rem 0 0.75rem;
+    font-size: 0.88rem;
   }
 
   /* Prefer tap over hover on phones */

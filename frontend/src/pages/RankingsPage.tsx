@@ -10,9 +10,16 @@ import './Tournament.css'
 
 const SCOPE_FILTERS = [
   { id: 'all', label: 'All' },
+  { id: 'events', label: 'My events' },
   { id: 'friends', label: 'Friends' },
   { id: 'university', label: 'My university' },
 ] as const
+
+type ScopeId = (typeof SCOPE_FILTERS)[number]['id']
+
+function isScopeId(value: string | null): value is ScopeId {
+  return value === 'all' || value === 'events' || value === 'friends' || value === 'university'
+}
 
 export default function RankingsPage() {
   usePageSeo({
@@ -25,19 +32,16 @@ export default function RankingsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const scopeParam = searchParams.get('scope')
-  const initialScope =
-    scopeParam === 'friends' || scopeParam === 'university' || scopeParam === 'all'
-      ? scopeParam === 'all' || user
-        ? scopeParam
-        : 'all'
-      : 'all'
-  const [scope, setScope] = useState<(typeof SCOPE_FILTERS)[number]['id']>(initialScope)
+  const lockedScopes: ScopeId[] = ['events', 'friends', 'university']
+  const initialScope: ScopeId =
+    isScopeId(scopeParam) && (scopeParam === 'all' || user) ? scopeParam : 'all'
+  const [scope, setScope] = useState<ScopeId>(initialScope)
   const [uni, setUni] = useState('all')
 
   useEffect(() => {
     if (authLoading) return
-    // Friends / my-university need an account - keep guests on the public board
-    if (!user && (scopeParam === 'friends' || scopeParam === 'university')) {
+    // Locked scopes need an account - keep guests on the public board
+    if (!user && isScopeId(scopeParam) && lockedScopes.includes(scopeParam)) {
       setScope('all')
       setSearchParams(
         (prev) => {
@@ -49,7 +53,7 @@ export default function RankingsPage() {
       )
       return
     }
-    if (scopeParam === 'friends' || scopeParam === 'university' || scopeParam === 'all') {
+    if (isScopeId(scopeParam)) {
       setScope(scopeParam)
     }
   }, [scopeParam, user, authLoading, setSearchParams])
@@ -57,6 +61,13 @@ export default function RankingsPage() {
   const { data: rankings = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['rankings'],
     queryFn: async () => (await platformApi.rankings(100)).data,
+    enabled: scope !== 'events',
+  })
+
+  const myEventsQ = useQuery({
+    queryKey: ['rankings', 'my-events'],
+    queryFn: async () => (await platformApi.rankingsMyEvents(100)).data,
+    enabled: !!user && scope === 'events',
   })
 
   const friendsQ = useQuery({
@@ -83,17 +94,19 @@ export default function RankingsPage() {
   const myUniShort = meQ.data?.university_short || ''
   const myUniName = meQ.data?.university_name || ''
 
+  const sourceRows = scope === 'events' ? myEventsQ.data || [] : rankings
+
   const universities = useMemo(() => {
     const names = new Set<string>()
-    for (const r of rankings) {
+    for (const r of sourceRows) {
       const label = r.university_short || r.university_name
       if (label) names.add(label)
     }
     return [...names].sort()
-  }, [rankings])
+  }, [sourceRows])
 
   const visible = useMemo(() => {
-    let rows = rankings
+    let rows = sourceRows
     if (scope === 'friends') {
       if (!user) return []
       rows = rows.filter((r) => friendIds.has(r.id))
@@ -104,23 +117,28 @@ export default function RankingsPage() {
         return label === myUniShort || label === myUniName
       })
     }
-    if (uni !== 'all') {
+    if (uni !== 'all' && scope === 'all') {
       rows = rows.filter((r) => (r.university_short || r.university_name) === uni)
     }
     return rows
-  }, [rankings, scope, uni, friendIds, user, myUniShort, myUniName])
+  }, [sourceRows, scope, uni, friendIds, user, myUniShort, myUniName])
 
   const scopeLoading =
+    (scope === 'events' && !!user && myEventsQ.isLoading) ||
     (scope === 'friends' && !!user && friendsQ.isLoading) ||
     (scope === 'university' && !!user && meQ.isLoading)
 
-  const setScopeAndUrl = (next: (typeof SCOPE_FILTERS)[number]['id']) => {
+  const listLoading = scope === 'events' ? myEventsQ.isLoading : isLoading
+  const listError = scope === 'events' ? myEventsQ.isError : isError
+  const listRefetch = scope === 'events' ? () => void myEventsQ.refetch() : () => void refetch()
+
+  const setScopeAndUrl = (next: ScopeId) => {
     setScope(next)
     const params = new URLSearchParams(searchParams)
     if (next === 'all') params.delete('scope')
     else params.set('scope', next)
     setSearchParams(params, { replace: true })
-    if (next === 'university') setUni('all')
+    if (next !== 'all') setUni('all')
   }
 
   return (
@@ -129,7 +147,9 @@ export default function RankingsPage() {
       <main className="page">
         <h1 className="page-title">Ireland rankings</h1>
         <p className="page-sub">
-          Rating points from confirmed tournament and community matches. New players start at 1500.
+          {scope === 'events'
+            ? 'Players from tournaments you’re entered in, ordered by rating.'
+            : 'Rating points from confirmed tournament and community matches. New players start at 1500.'}
         </p>
 
         <div className="tour-toolbar">
@@ -173,12 +193,12 @@ export default function RankingsPage() {
           )}
           {!user && (
             <p className="muted-note" style={{ margin: 0 }}>
-              Tap Friends or My university to log in and filter.
+              Tap My events, Friends, or My university to log in and filter.
             </p>
           )}
         </div>
 
-        {(isLoading || scopeLoading) && (
+        {(listLoading || scopeLoading) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="skeleton" style={{ height: 56, borderRadius: 12 }} />
@@ -186,16 +206,30 @@ export default function RankingsPage() {
           </div>
         )}
 
-        {isError && (
+        {listError && (
           <div className="empty-state">
             <p>Could not load rankings.</p>
-            <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => refetch()}>
+            <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={listRefetch}>
               Retry
             </button>
           </div>
         )}
 
-        {!isLoading && !scopeLoading && !isError && rankings.length === 0 && (
+        {!listLoading && !scopeLoading && !listError && sourceRows.length === 0 && scope === 'events' && (
+          <div className="empty-state">
+            <p>Join a tournament to see rankings for players in your events.</p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+              <Link to="/tournaments" className="btn btn-primary">
+                Browse tournaments
+              </Link>
+              <button type="button" className="btn btn-ghost" onClick={() => setScopeAndUrl('all')}>
+                Show all Ireland
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!listLoading && !scopeLoading && !listError && sourceRows.length === 0 && scope !== 'events' && (
           <div className="empty-state">
             <p>No ranked players yet. Play with friends or finish an official tournament match.</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
@@ -209,7 +243,7 @@ export default function RankingsPage() {
           </div>
         )}
 
-        {!isLoading && !scopeLoading && visible.length > 0 && (
+        {!listLoading && !scopeLoading && visible.length > 0 && (
           <ol className="rank-page-list">
             {visible.map((r, idx) => {
               const avatar = mediaUrl(r.avatar_url)
@@ -220,10 +254,11 @@ export default function RankingsPage() {
                 .slice(0, 2)
                 .toUpperCase()
               const isMe = Boolean(user && user.id === r.id)
+              const showIrelandRank = scope === 'all' && uni === 'all'
               return (
                 <li key={r.id}>
                   <Link to={`/players/${r.id}`} className={`rank-page-row ${isMe ? 'is-me' : ''}`}>
-                    <span className="rank-num">#{scope === 'all' && uni === 'all' ? (r.rank_ireland ?? '-') : idx + 1}</span>
+                    <span className="rank-num">#{showIrelandRank ? (r.rank_ireland ?? '-') : idx + 1}</span>
                     {avatar ? (
                       <img src={avatar} alt="" className="rank-avatar" />
                     ) : (
@@ -249,7 +284,7 @@ export default function RankingsPage() {
           </ol>
         )}
 
-        {!isLoading && !scopeLoading && !isError && scope === 'friends' && friendsQ.isError && (
+        {!listLoading && !scopeLoading && !listError && scope === 'friends' && friendsQ.isError && (
           <div className="empty-state">
             <p>Could not load your friends list.</p>
             <button
@@ -263,11 +298,11 @@ export default function RankingsPage() {
           </div>
         )}
 
-        {!isLoading &&
+        {!listLoading &&
           !scopeLoading &&
-          !isError &&
+          !listError &&
           !(scope === 'friends' && friendsQ.isError) &&
-          rankings.length > 0 &&
+          sourceRows.length > 0 &&
           visible.length === 0 && (
           <div className="empty-state">
             <p>

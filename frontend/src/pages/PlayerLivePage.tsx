@@ -16,6 +16,7 @@ import {
   formatLiveBoardScore,
   formatMatchScore,
   formatMoney,
+  formatRelativeStart,
   formatTime,
   courtLabel,
   isKnockoutActive,
@@ -113,7 +114,34 @@ function scheduleWhen(m: Match) {
   if (m.status === 'AWAITING_CONFIRM') return 'Score waiting'
   if (m.status === 'CALLED') return 'Called now'
   if (m.status === 'LIVE') return 'Live now'
-  return formatTime(m.scheduled_start)
+  const clock = formatTime(m.scheduled_start)
+  const relative = formatRelativeStart(m.scheduled_start)
+  return relative ? `${clock} · ${relative}` : clock
+}
+
+function nextStatusChip(m: Match): { label: string; soft?: boolean } {
+  if (m.status === 'CALLED') return { label: 'Go to court now' }
+  if (m.status === 'LIVE') return { label: 'Playing now' }
+  if (m.status === 'AWAITING_CONFIRM' && m.needs_my_confirm) return { label: 'Confirm this score' }
+  if (m.status === 'AWAITING_CONFIRM' && m.score_submitted_by_me) {
+    return { label: 'Waiting on opponent', soft: true }
+  }
+  if (m.status === 'AWAITING_CONFIRM') return { label: 'Score pending', soft: true }
+  return { label: 'Up next', soft: true }
+}
+
+function nextWhenParts(m: Match): { primary: string; secondary?: string } {
+  if (m.status === 'CALLED') return { primary: 'Now', secondary: 'Called to court' }
+  if (m.status === 'LIVE') return { primary: 'Now', secondary: 'Match in progress' }
+  if (m.status === 'AWAITING_CONFIRM') {
+    return {
+      primary: m.needs_my_confirm ? 'Confirm score' : 'Waiting',
+      secondary: formatTime(m.scheduled_start) !== 'TBC' ? formatTime(m.scheduled_start) : undefined,
+    }
+  }
+  const clock = formatTime(m.scheduled_start)
+  const relative = formatRelativeStart(m.scheduled_start)
+  return { primary: clock, secondary: relative || undefined }
 }
 
 type NextActions = {
@@ -142,56 +170,43 @@ function NextMatchCard({
   const opp = opponentName(next, myTeamId)
   const mine = mySideName(next, myTeamId)
   const court = courtLabel(next.court_name, next.court_number)
-  const when =
-    next.status === 'CALLED'
-      ? 'Called to court'
-      : next.status === 'LIVE'
-        ? 'Playing now'
-        : next.status === 'AWAITING_CONFIRM'
-          ? 'Waiting for confirmation'
-          : formatTime(next.scheduled_start)
+  const chip = nextStatusChip(next)
+  const when = nextWhenParts(next)
+  const round = knockoutRoundLabel(next.round, next.stage)
+  const sideA = next.team_a_name || next.team_a_placeholder || 'TBD'
+  const sideB = next.team_b_name || next.team_b_placeholder || 'TBD'
 
   return (
     <div
-      className={`pl-next-card ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''} ${next.status === 'AWAITING_CONFIRM' ? 'is-pending' : ''}`}
+      className={`pl-next-card pl-next-card--glance ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''} ${next.status === 'AWAITING_CONFIRM' ? 'is-pending' : ''}`}
     >
-      {next.status === 'CALLED' && <p className="pl-go-now">Go to court now</p>}
-      {next.status === 'LIVE' && <p className="pl-go-now">Your match is live</p>}
-      {next.status === 'AWAITING_CONFIRM' && next.needs_my_confirm && (
-        <p className="pl-go-now">Confirm this score</p>
-      )}
-      {next.status === 'AWAITING_CONFIRM' && next.score_submitted_by_me && (
-        <p className="pl-go-now pl-go-now--soft">Waiting on opponent</p>
-      )}
-
-      <p className="pl-round">{knockoutRoundLabel(next.round, next.stage)}</p>
-      <div className="pl-court" aria-label="Court">
-        {court}
+      <div className="pl-next-top">
+        <p className={`pl-go-now${chip.soft ? ' pl-go-now--soft' : ''}`}>{chip.label}</p>
+        <p className="pl-round">{round}</p>
       </div>
-      <div className="pl-time">{when}</div>
-      {next.status === 'SCHEDULED' && (
-        <p className="pl-next-hint">Head to this court when called - keep this page open.</p>
-      )}
 
-      {opp ? (
-        <div className="pl-vs pl-vs--you">
-          <div className="pl-side">
-            <span className="pl-side-label">You{partnerLabel ? ` + ${partnerLabel}` : ''}</span>
-            <strong>{mine}</strong>
-          </div>
-          <span className="pl-vs-sep">VS</span>
-          <div className="pl-side">
-            <span className="pl-side-label">Opponent</span>
-            <strong>{opp}</strong>
-          </div>
+      <div className="pl-next-facts" aria-label="Court and time">
+        <div className="pl-fact">
+          <span className="pl-fact-label">Court</span>
+          <span className="pl-fact-value pl-fact-court">{court}</span>
         </div>
-      ) : (
-        <div className="pl-vs">
-          <div>{next.team_a_name || next.team_a_placeholder || 'TBD'}</div>
-          <span>VS</span>
-          <div>{next.team_b_name || next.team_b_placeholder || 'TBD'}</div>
+        <div className="pl-fact">
+          <span className="pl-fact-label">When</span>
+          <span className="pl-fact-value">{when.primary}</span>
+          {when.secondary ? <span className="pl-fact-sub">{when.secondary}</span> : null}
         </div>
-      )}
+      </div>
+
+      <div className="pl-next-opponent">
+        <span className="pl-fact-label">{opp ? 'Playing against' : 'Match'}</span>
+        <strong className="pl-opponent-name">{opp || `${sideA} vs ${sideB}`}</strong>
+        {opp ? (
+          <span className="pl-you-line">
+            You{partnerLabel ? ` + ${partnerLabel}` : ''}
+            {mine && mine !== 'You' ? ` · ${mine}` : ''}
+          </span>
+        ) : null}
+      </div>
 
       {board && (
         <p className="pl-next-score">
@@ -202,6 +217,10 @@ function NextMatchCard({
 
       {next.status === 'AWAITING_CONFIRM' && next.score && (
         <p className="pl-next-score">Proposed · {formatMatchScore(next.score)}</p>
+      )}
+
+      {next.status === 'SCHEDULED' && (
+        <p className="pl-next-hint">Keep this page open — we’ll flash when you’re called.</p>
       )}
 
       <div className="pl-next-actions">
@@ -615,14 +634,14 @@ export default function PlayerLivePage() {
             <div className="pl-next-card">
               <p className="pl-youre-in-badge">Team invite</p>
               <p className="pl-empty" style={{ marginBottom: 12 }}>
-                You’re on <strong>{myTeam?.name}</strong>
-                {myTeam?.partner_name ? (
+                <strong>{myTeam?.partner_name || 'Your teammate'}</strong> registered your team
+                {myTeam?.name ? (
                   <>
                     {' '}
-                    with <strong>{myTeam.partner_name}</strong>
+                    (<strong>{myTeam.name}</strong>)
                   </>
                 ) : null}
-                . Accept to become friends, or decline to leave the team.
+                . They pay for both of you — you just Accept or Decline.
               </p>
               <div className="pl-next-actions">
                 <button
@@ -647,18 +666,20 @@ export default function PlayerLivePage() {
           ) : hasPendingCaptain ? (
             <div className="pl-next-card">
               <p className="pl-empty" style={{ marginBottom: 12 }}>
-                Your registration is waiting for payment.
+                {t.play_format === 'SINGLES'
+                  ? 'Your registration is waiting for payment.'
+                  : 'You registered the team — finish payment for both players. Your partner is invited and isn’t charged.'}
               </p>
               <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block">
-                Complete payment
+                {t.play_format === 'SINGLES' ? 'Complete payment' : 'Pay for both players'}
               </Link>
               {leaveBtn}
             </div>
           ) : isListedPartner ? (
             <div className="pl-next-card">
               <p className="pl-empty" style={{ marginBottom: 12 }}>
-                You’re on <strong>{myTeam?.name}</strong>. Your teammate still needs to finish
-                payment.
+                You’re on <strong>{myTeam?.name}</strong>. Your teammate registered first and still
+                needs to finish paying for both of you — you don’t pay separately.
               </p>
               <Link to={`/t/${slug}`} className="btn btn-primary btn-block">
                 View tournament
@@ -783,19 +804,19 @@ export default function PlayerLivePage() {
                 .map((m) => {
                   const opp = opponentName(m, myTeamId)
                   return (
-                    <li key={m.id}>
-                      <strong>{courtLabel(m.court_name, m.court_number)}</strong>
-                      <span>{scheduleWhen(m)}</span>
-                      <span>
+                    <li key={m.id} className="pl-sched-row">
+                      <div className="pl-sched-court">{courtLabel(m.court_name, m.court_number)}</div>
+                      <div className="pl-sched-when">{scheduleWhen(m)}</div>
+                      <div className="pl-sched-vs">
                         {opp ? (
                           <>
-                            vs {opp}
-                            <span className="pl-sched-round"> · {knockoutRoundLabel(m.round, m.stage)}</span>
+                            <span className="pl-sched-vs-label">vs</span> {opp}
                           </>
                         ) : (
                           <MatchNames m={m} />
                         )}
-                      </span>
+                      </div>
+                      <div className="pl-sched-round">{knockoutRoundLabel(m.round, m.stage)}</div>
                     </li>
                   )
                 })}

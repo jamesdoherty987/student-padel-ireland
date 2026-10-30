@@ -1,14 +1,13 @@
 import { useMemo, useState, useCallback } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import ModeSwitch from '../components/ModeSwitch'
 import NavBar from '../components/NavBar'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { tournamentApi } from '../services/api'
 import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
-import { formatDate, formatPerPlayerFee, statusBadgeClass, statusLabel } from '../utils/format'
+import { formatDate, formatPerPlayerFee, statusLabel } from '../utils/format'
 import './Tournament.css'
 
 const STATUS_FILTERS = [
@@ -21,9 +20,9 @@ const STATUS_FILTERS = [
 
 export default function TournamentsPage() {
   usePageSeo({
-    title: 'Official Student Padel Tournaments in Ireland',
+    title: 'Student Padel Tournaments in Ireland',
     description:
-      'Browse official Student Padel Ireland tournaments across the country. Register as a doubles team, join with a code, and follow live scores.',
+      'Browse official and personal student padel tournaments across Ireland. Open an event to see your entry, next match, court, and time.',
     path: '/tournaments',
   })
   const { user } = useAuth()
@@ -41,7 +40,7 @@ export default function TournamentsPage() {
   }, [openJoin, searchParams, setSearchParams])
 
   const { data: tournaments = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['tournaments'],
+    queryKey: ['tournaments', user?.id || 'guest'],
     queryFn: async () => (await tournamentApi.list()).data,
   })
 
@@ -53,6 +52,8 @@ export default function TournamentsPage() {
         name: t.name,
         href: `/t/${t.slug}`,
         status: t.status,
+        official: !!t.is_official,
+        entered: !!t.viewer_entered,
         line: `${t.location} · ${t.venue}`,
         meta: `${formatDate(t.event_date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatPerPlayerFee(t.entry_fee_cents, t.currency, t.play_format)}`,
         sortDate: t.event_date,
@@ -67,8 +68,9 @@ export default function TournamentsPage() {
     }
 
     return list.sort((a, b) => {
-      const ra = statusRank(a.status)
-      const rb = statusRank(b.status)
+      // Your entered events float up a bit within the same status band
+      const ra = statusRank(a.status) - (a.entered ? 0.4 : 0)
+      const rb = statusRank(b.status) - (b.entered ? 0.4 : 0)
       if (ra !== rb) return ra - rb
       return b.sortDate.localeCompare(a.sortDate)
     })
@@ -90,7 +92,11 @@ export default function TournamentsPage() {
   }, [events, filter, query])
 
   const emptyMessage = (() => {
-    if (events.length === 0) return 'No official tournaments listed yet. Check back soon.'
+    if (events.length === 0) {
+      return user
+        ? 'No tournaments yet. Join with a code, or create a personal event.'
+        : 'No tournaments listed yet. Log in or check back soon.'
+    }
     if (codeFromSearch) return 'That looks like an invite code — tap below to join.'
     if (query.trim()) return 'No tournaments match that search.'
     if (filter === 'open') return 'No tournaments open to join right now.'
@@ -104,20 +110,19 @@ export default function TournamentsPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page">
-        <div className="page-header-row">
+        <div className="page-header-row page-header-row--inline">
           <h1 className="page-title">Tournaments</h1>
-          <div className="header-actions">
-            <HaveCodeButton
-              className="btn btn-ghost btn-sm"
-              autoOpen={openJoin}
-              onAutoOpened={clearJoinParam}
-              initialCode={codeFromSearch}
-            />
-          </div>
+          <HaveCodeButton
+            className="btn-have-code"
+            autoOpen={openJoin}
+            onAutoOpened={clearJoinParam}
+            initialCode={codeFromSearch}
+          >
+            <span className="btn-have-code-full">Have a code?</span>
+            <span className="btn-have-code-short">Code</span>
+          </HaveCodeButton>
         </div>
-
-        <ModeSwitch active="tournaments" />
-        <p className="page-sub page-sub-tight">Official Student Padel Ireland events</p>
+        <p className="page-sub page-sub-tight">Tap a tournament for courts, opponents, and times</p>
 
         <div className="tour-toolbar">
           <div className="tour-toolbar-row tour-toolbar-row-solo">
@@ -163,12 +168,18 @@ export default function TournamentsPage() {
           <div className="tour-list">
             {filtered.map((e) => (
               <Link key={e.key} to={e.href} className="tour-card-link">
-                <article className="tour-card">
-                  <div className="tour-card-top">
-                    <h2>{e.name}</h2>
-                    <span className={`badge ${statusBadgeClass(e.status)}`}>{statusLabel(e.status)}</span>
-                  </div>
-                  <p>{e.line}</p>
+                <article className={`tour-card tour-card--simple${e.entered ? ' tour-card--entered' : ''}`}>
+                  <h2>{e.name}</h2>
+                  <p className="tour-card-kind">
+                    {e.entered ? <span className="tour-card-in">You’re in</span> : null}
+                    {e.entered ? <span aria-hidden> · </span> : null}
+                    <span>{e.official ? 'Official' : 'Personal'}</span>
+                    <span aria-hidden> · </span>
+                    <span className={`tour-card-status is-${e.status.toLowerCase()}`}>
+                      {statusLabel(e.status)}
+                    </span>
+                  </p>
+                  <p className="tour-card-line">{e.line}</p>
                   <p className="tour-card-meta">{e.meta}</p>
                 </article>
               </Link>
@@ -200,18 +211,16 @@ export default function TournamentsPage() {
             )}
             {events.length === 0 && !codeFromSearch && (
               <div className="header-actions" style={{ marginTop: 12, justifyContent: 'center' }}>
-                <Link to="/community" className="btn btn-primary">
-                  Play with friends
-                </Link>
                 {user ? (
-                  <Link to="/organiser?create=1" className="btn btn-ghost">
-                    Private tournament
+                  <Link to="/organiser?create=1" className="btn btn-primary">
+                    Create tournament
                   </Link>
                 ) : (
-                  <Link to="/login?next=%2Ftournaments" className="btn btn-ghost">
+                  <Link to="/login?next=%2Ftournaments" className="btn btn-primary">
                     Log in
                   </Link>
                 )}
+                <HaveCodeButton className="btn btn-ghost">Have a code?</HaveCodeButton>
               </div>
             )}
           </div>

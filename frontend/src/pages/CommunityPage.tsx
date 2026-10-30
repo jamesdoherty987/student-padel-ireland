@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import ModeSwitch from '../components/ModeSwitch'
 import NavBar from '../components/NavBar'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import { useAuth } from '../context/AuthContext'
@@ -247,18 +246,17 @@ export default function CommunityPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page">
-          <div className="page-header-row">
+          <div className="page-header-row page-header-row--inline">
             <h1 className="page-title">Play</h1>
-            <div className="header-actions">
-              <HaveCodeButton
-                className="btn btn-ghost btn-sm"
-                autoOpen={openJoin}
-                onAutoOpened={clearJoinParam}
-              />
-            </div>
+            <HaveCodeButton
+              className="btn-have-code"
+              autoOpen={openJoin}
+              onAutoOpened={clearJoinParam}
+            >
+              <span className="btn-have-code-full">Have a code?</span>
+              <span className="btn-have-code-short">Code</span>
+            </HaveCodeButton>
           </div>
-
-          <ModeSwitch active="play" />
           <p className="page-sub page-sub-tight">Casual games with friends</p>
 
           <ol className="community-guest-steps">
@@ -296,25 +294,26 @@ export default function CommunityPage() {
     <div className="app-shell">
       <NavBar />
       <main className="page">
-        <div className="page-header-row">
+        <div className="page-header-row page-header-row--inline">
           <h1 className="page-title">Play</h1>
-          <div className="header-actions">
+          <div className="header-actions header-actions--compact">
             <HaveCodeButton
-              className="btn btn-ghost btn-sm"
+              className="btn-have-code"
               autoOpen={openJoin}
               onAutoOpened={clearJoinParam}
               initialCode={codeFromSearch}
-            />
+            >
+              <span className="btn-have-code-full">Have a code?</span>
+              <span className="btn-have-code-short">Code</span>
+            </HaveCodeButton>
             {!createOpen && (
-              <button type="button" className="btn btn-primary btn-sm" onClick={openCreateForm}>
-                New group
+              <button type="button" className="btn btn-primary btn-sm btn-header-compact" onClick={openCreateForm}>
+                New
               </button>
             )}
           </div>
         </div>
-
-        <ModeSwitch active="play" />
-        <p className="page-sub page-sub-tight">Open play and private ladders with friends</p>
+        <p className="page-sub page-sub-tight">Open play with friends</p>
 
         {error && (
           <p className="form-error" role="alert">
@@ -749,12 +748,14 @@ export default function CommunityPage() {
 function CompCard({ c }: { c: Competition }) {
   return (
     <Link to={`/community/${c.slug}`} className="tour-card-link">
-      <article className="tour-card community-card">
-        <div className="tour-card-top">
-          <h2>{c.name}</h2>
-          <span className={`badge ${compStatusBadge(c.status)}`}>{labelCompStatus(c.status)}</span>
-        </div>
-        <p>
+      <article className="tour-card tour-card--simple community-card">
+        <h2>{c.name}</h2>
+        <p className="tour-card-kind">
+          <span>Personal</span>
+          <span aria-hidden> · </span>
+          <span>{labelCompStatus(c.status)}</span>
+        </p>
+        <p className="tour-card-line">
           {c.member_count} players · {c.number_of_courts || 2} courts · {labelFormat(c.format)}
         </p>
         <p className="tour-card-meta">
@@ -874,9 +875,3 @@ function labelCompStatus(s: string) {
   return s.charAt(0) + s.slice(1).toLowerCase()
 }
 
-function compStatusBadge(s: string) {
-  if (s === 'OPEN') return 'badge-open'
-  if (s === 'LIVE') return 'badge-live'
-  if (s === 'COMPLETED' || s === 'CANCELLED') return 'badge-past'
-  return 'badge-draft'
-}

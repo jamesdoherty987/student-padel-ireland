@@ -9,7 +9,7 @@ import SponsorStrip from '../components/SponsorStrip'
 import TournamentBracket from '../components/TournamentBracket'
 import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
-import { tournamentApi } from '../services/api'
+import { tournamentApi, type Match } from '../services/api'
 import { publicPathUrl } from '../native/platform'
 import {
   bracketFormatHint,
@@ -18,12 +18,13 @@ import {
   formatDate,
   formatMatchScore,
   formatMoney,
+  formatRelativeStart,
   perPlayerFeeCents,
   formatTime,
   isKnockoutActive,
   isPastCalendarDate,
+  knockoutRoundLabel,
   reminderPromiseCopy,
-  statusBadgeClass,
   statusLabel,
   tournamentFormatSummary,
 } from '../utils/format'
@@ -146,10 +147,30 @@ export default function TournamentDetailPage() {
         partner_invite_pending?: boolean
       }
     | null
+  const nextMatch = (playerView?.next_match as Match | null | undefined) || null
   const myPayment = myTeamInfo?.payment_status
   const myPaymentVia = myTeamInfo?.payment_via
   const mySlot = myTeamInfo?.slot ?? null
   const hasPaidEntry = !!myTeamInfo && myPayment === 'PAID'
+  const nextOpponent = (() => {
+    if (!nextMatch || !myTeamInfo?.id) return null
+    if (nextMatch.team_a_id === myTeamInfo.id) {
+      return nextMatch.team_b_name || nextMatch.team_b_placeholder || 'Opponent'
+    }
+    if (nextMatch.team_b_id === myTeamInfo.id) {
+      return nextMatch.team_a_name || nextMatch.team_a_placeholder || 'Opponent'
+    }
+    return null
+  })()
+  const nextWhenLabel = (() => {
+    if (!nextMatch) return ''
+    if (nextMatch.status === 'CALLED') return 'Called now'
+    if (nextMatch.status === 'LIVE') return 'Playing now'
+    if (nextMatch.status === 'AWAITING_CONFIRM') return 'Confirm score'
+    const clock = formatTime(nextMatch.scheduled_start)
+    const relative = formatRelativeStart(nextMatch.scheduled_start)
+    return relative ? `${clock} · ${relative}` : clock
+  })()
   const needsPartner = !!myTeamInfo?.needs_partner && mySlot === 1
   const partnerInvitePending = !!myTeamInfo?.partner_invite_pending && mySlot === 2
   const owesAtVenue = hasPaidEntry && myPaymentVia === 'pay_on_arrival'
@@ -195,13 +216,16 @@ export default function TournamentDetailPage() {
       <NavBar />
       <main className="page tourney-detail">
         <BackButton fallbackTo="/tournaments" />
-        <div className="tour-title-row">
-          <p className="eyebrow">{tournament.location}</p>
-          <span className={`badge ${statusBadgeClass(tournament.status)}`}>{statusLabel(tournament.status)}</span>
-        </div>
+        <p className="tour-card-kind tour-detail-kind">
+          {tournament.is_official ? 'Official' : 'Personal'}
+          <span aria-hidden> · </span>
+          {statusLabel(tournament.status)}
+          <span aria-hidden> · </span>
+          {tournament.location}
+        </p>
         <h1 className="page-title">{tournament.name}</h1>
-        <p className="page-sub">
-          {tournament.venue} · {formatDate(tournament.event_date, { day: 'numeric', month: 'long', year: 'numeric' })} ·{' '}
+        <p className="page-sub page-sub-tight">
+          {tournament.venue} · {formatDate(tournament.event_date, { day: 'numeric', month: 'short' })} ·{' '}
           {formatTime(tournament.start_time)}
         </p>
         <p className="tour-format-line">{tournamentFormatSummary(tournament.play_format, tournament.format)}</p>
@@ -230,7 +254,8 @@ export default function TournamentDetailPage() {
             <p className="tour-entry-badge">Team invite</p>
             <h2 className="tour-entry-title">You’re on {myTeamInfo?.name || 'a team'}</h2>
             <p className="tour-entry-body">
-              Open your entry to Accept (become friends) or Decline (leave the team).
+              Your teammate registered and pays for both of you. Accept to stay on the team, or
+              Decline to leave.
             </p>
             <div className="tour-entry-actions">
               <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
@@ -242,35 +267,75 @@ export default function TournamentDetailPage() {
 
         {hasPaidEntry && !needsPartner && !partnerInvitePending && (
           <div
-            className={`tour-entry-banner${matchDay ? ' tour-entry-banner--live' : ''}`}
+            className={`tour-entry-banner${matchDay ? ' tour-entry-banner--live' : ''}${nextMatch ? ' tour-entry-banner--next' : ''}`}
             role="status"
           >
             <p className="tour-entry-badge">You’re in</p>
-            <h2 className="tour-entry-title">
-              {myTeamInfo?.name || (singles ? 'Your entry' : 'Your team')}
-            </h2>
-            {myTeamInfo?.players?.length ? (
-              <p className="tour-entry-players">{myTeamInfo.players.join(' · ')}</p>
-            ) : null}
-            <ul className="tour-entry-facts">
-              <li>
-                {owesAtVenue
-                  ? `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)} at the venue`
-                  : 'Entry paid'}
-              </li>
-              <li>
-                {matchDay
-                  ? 'Match day - courts & scores are live'
-                  : preStart
-                    ? reminderNote
-                      ? `Draw not published yet · ${reminderNote}`
-                      : 'Waiting for the organiser to publish the draw'
-                    : reminderNote || 'Your spot is confirmed'}
-              </li>
-            </ul>
+            {nextMatch ? (
+              <>
+                <p className="tour-entry-next-kicker">
+                  {nextMatch.status === 'CALLED'
+                    ? 'Go to court now'
+                    : nextMatch.status === 'LIVE'
+                      ? 'Playing now'
+                      : nextMatch.status === 'AWAITING_CONFIRM'
+                        ? 'Confirm your score'
+                        : 'Your next match'}
+                </p>
+                <div className="tour-next-glance" aria-label="Your next match">
+                  <div className="tour-next-glance-fact">
+                    <span className="tour-next-glance-label">Court</span>
+                    <strong>{courtLabel(nextMatch.court_name, nextMatch.court_number)}</strong>
+                  </div>
+                  <div className="tour-next-glance-fact">
+                    <span className="tour-next-glance-label">When</span>
+                    <strong>{nextWhenLabel}</strong>
+                  </div>
+                </div>
+                <h2 className="tour-entry-title tour-entry-title--vs">
+                  vs {nextOpponent || 'TBD'}
+                </h2>
+                <p className="tour-entry-players">
+                  {knockoutRoundLabel(nextMatch.round, nextMatch.stage)}
+                  {myTeamInfo?.name ? ` · ${myTeamInfo.name}` : ''}
+                  {myTeamInfo?.players?.length ? ` · ${myTeamInfo.players.join(' / ')}` : ''}
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="tour-entry-title">
+                  {myTeamInfo?.name || (singles ? 'Your entry' : 'Your team')}
+                </h2>
+                {myTeamInfo?.players?.length ? (
+                  <p className="tour-entry-players">{myTeamInfo.players.join(' · ')}</p>
+                ) : null}
+                <ul className="tour-entry-facts">
+                  <li>
+                    {owesAtVenue
+                      ? `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)} at the venue`
+                      : 'Entry paid'}
+                  </li>
+                  <li>
+                    {matchDay
+                      ? 'Match day - your court and opponent will show here when set'
+                      : preStart
+                        ? reminderNote
+                          ? `Draw not published yet · ${reminderNote}`
+                          : 'Waiting for the organiser to publish the draw'
+                        : reminderNote || 'Your spot is confirmed'}
+                  </li>
+                </ul>
+              </>
+            )}
             <div className="tour-entry-actions">
               <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
-                {matchDay ? 'My matches' : 'View my entry'}
+                {nextMatch
+                  ? nextMatch.status === 'CALLED' || nextMatch.status === 'LIVE'
+                    ? 'Open live match'
+                    : 'Open my matches'
+                  : matchDay
+                    ? 'My matches'
+                    : 'View my entry'}
               </Link>
               {owesAtVenue && (mySlot === 1 || mySlot == null) && (
                 <Link to={`/t/${tournament.slug}/join`} className="btn btn-ghost tour-entry-btn-ghost">
@@ -294,13 +359,15 @@ export default function TournamentDetailPage() {
             ) : null}
             <p className="tour-entry-body">
               {hasPendingCaptain
-                ? 'You’ve started this entry. Finish payment to lock your spot, or cancel below if you’ve changed your mind.'
-                : 'You’re listed as a partner. Your teammate still needs to finish payment - or cancel below if you want out.'}
+                ? singles
+                  ? 'You’ve started this entry. Finish payment to lock your spot, or cancel below if you’ve changed your mind.'
+                  : 'You registered the team. Finish payment for both players to lock the spot — your partner is invited and isn’t charged.'
+                : 'Your teammate registered first and still needs to finish paying for both of you — or leave below if you want out.'}
             </p>
             {hasPendingCaptain && (
               <div className="tour-entry-actions">
                 <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
-                  Complete payment
+                  {singles ? 'Complete payment' : 'Pay for both players'}
                 </Link>
               </div>
             )}
@@ -337,7 +404,7 @@ export default function TournamentDetailPage() {
         <div className="tour-actions">
           {canJoin && (
             <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
-              Join tournament
+              {singles ? 'Join tournament' : 'Register your team'}
             </Link>
           )}
           {!hasPaidEntry && !canJoin && !canResumePayment && !isListedPartner && tournament.status === 'LIVE' && (
@@ -351,6 +418,11 @@ export default function TournamentDetailPage() {
             </Link>
           )}
         </div>
+        {canJoin && !singles && (
+          <p className="tour-join-hint">
+            One of you signs up and pays for you + your friend — they get an invite, no separate charge
+          </p>
+        )}
 
         {(canLeave || isOps) && (
           <div className="tour-actions-secondary">

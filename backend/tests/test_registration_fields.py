@@ -267,6 +267,24 @@ def test_removing_field_deletes_answers():
     assert db.query(TournamentRegistrationAnswer).count() == 0
 
 
+def test_sync_rejects_duplicate_labels():
+    db = _session()
+    t = _tournament(db)
+    try:
+        sync_registration_fields(
+            db,
+            t.id,
+            [
+                RegistrationFieldIn(label="Jersey size", field_type="text"),
+                RegistrationFieldIn(label="jersey size", field_type="text"),
+            ],
+        )
+        assert False, "expected HTTPException"
+    except HTTPException as exc:
+        assert exc.status_code == 400
+        assert "twice" in str(exc.detail).lower()
+
+
 def test_sync_can_reuse_key_after_removing_field():
     """Deleting then re-adding the same label must not hit unique(key) mid-sync."""
     db = _session()

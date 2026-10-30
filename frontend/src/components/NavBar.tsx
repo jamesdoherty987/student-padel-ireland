@@ -132,7 +132,8 @@ export default function NavBar() {
       to: '/tournaments',
       label: 'Tournaments',
       icon: 'fa-trophy',
-      match: (p) => p.startsWith('/tournaments') || p.startsWith('/t/') || p.startsWith('/join'),
+      match: (p) =>
+        p.startsWith('/tournaments') || p.startsWith('/t/') || p.startsWith('/join'),
     },
     {
       to: '/community',

@@ -86,6 +86,7 @@ export default function CreateTournamentModal({
   const [sponsors, setSponsors] = useState<DraftSponsor[]>([])
   const [registrationFields, setRegistrationFields] = useState<RegistrationFieldDraft[]>([])
   const sponsorsFieldRef = useRef<DraftSponsorsFieldHandle>(null)
+  const savingRef = useRef(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -125,12 +126,14 @@ export default function CreateTournamentModal({
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (savingRef.current) return
     const err = validateForm(form) || validateRegistrationFields(registrationFields)
     if (err) {
       setError(err)
       return
     }
     setError('')
+    savingRef.current = true
     setSaving(true)
     try {
       // Include a filled-in sponsor row even if "Add to list" wasn't clicked
@@ -220,6 +223,7 @@ export default function CreateTournamentModal({
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Could not create tournament'))
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }

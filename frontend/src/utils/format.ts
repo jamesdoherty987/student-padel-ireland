@@ -255,6 +255,24 @@ export function formatTime(iso: string | null | undefined) {
   return new Date(iso).toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' })
 }
 
+/** Relative cue for a scheduled start, e.g. "in 25 min" / "about now". Null if unknown. */
+export function formatRelativeStart(iso: string | null | undefined, nowMs = Date.now()): string | null {
+  if (!iso) return null
+  // Bare clock times need the event date - skip relative copy
+  if (/^\d{2}:\d{2}/.test(iso) && !iso.includes('T') && !iso.includes(' ')) return null
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return null
+  const diffMin = Math.round((t - nowMs) / 60000)
+  if (diffMin <= -45) return null
+  if (diffMin <= 2) return 'about now'
+  if (diffMin < 60) return `in ${diffMin} min`
+  const hours = Math.floor(diffMin / 60)
+  const mins = diffMin % 60
+  if (hours >= 12) return null
+  if (mins === 0) return `in ${hours}h`
+  return `in ${hours}h ${mins}m`
+}
+
 export function statusLabel(status: string) {
   const labels: Record<string, string> = {
     DRAFT: 'Draft',

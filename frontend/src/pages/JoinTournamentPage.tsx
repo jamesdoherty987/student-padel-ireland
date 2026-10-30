@@ -140,12 +140,23 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
               </li>
               {payOnArrival ? (
                 <li>
-                  Spot reserved - bring {formatMoney(entryFeeCents, data.currency)} to the organiser
-                  {!singles ? ' (full team fee)' : ''}
+                  Spot reserved — bring {formatMoney(entryFeeCents, data.currency)} to the organiser
+                  {!singles ? ' for both players' : ''}
                 </li>
               ) : (
-                <li>Your spot is locked in</li>
+                <li>
+                  {singles
+                    ? 'Your spot is locked in'
+                    : 'Team spot locked in — you paid for both players'}
+                </li>
               )}
+              {!singles ? (
+                <li>
+                  {isCaptain
+                    ? 'Your partner was invited — they don’t pay separately'
+                    : 'Your teammate registered the pair — you don’t need to pay'}
+                </li>
+              ) : null}
               {reminderNote ? <li>{reminderNote}</li> : null}
             </ul>
             {slug && (
@@ -163,6 +174,7 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
                         ? formatOnlineFee(entryFeeCents, serviceFeeCents, data.currency)
                         : undefined
                     }
+                    coversBothPlayers={!singles}
                   />
                 )}
                 <Link to={`/t/${slug}`} className="btn btn-ghost tour-entry-btn-ghost">
@@ -253,6 +265,7 @@ function ConfirmPayOnlineButton({
   slug,
   totalLabel,
   feeHint,
+  coversBothPlayers = false,
 }: {
   tournamentId: string
   slug: string
@@ -260,6 +273,7 @@ function ConfirmPayOnlineButton({
   totalLabel: string
   /** Optional breakdown shown under the button on narrow screens */
   feeHint?: string
+  coversBothPlayers?: boolean
 }) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
@@ -317,11 +331,80 @@ function ConfirmPayOnlineButton({
   return (
     <div className="pay-online-wrap">
       <button type="button" className="btn btn-ghost btn-block" disabled={busy} onClick={() => void onClick()}>
-        {busy ? 'Opening…' : `Pay online · ${totalLabel}`}
+        {busy
+          ? 'Opening…'
+          : coversBothPlayers
+            ? `Pay online · ${totalLabel} for both`
+            : `Pay online · ${totalLabel}`}
       </button>
-      {feeHint ? <p className="pay-online-hint">{feeHint}</p> : null}
+      {coversBothPlayers ? (
+        <p className="pay-online-hint">Pays for you and your friend — they aren’t charged separately</p>
+      ) : feeHint ? (
+        <p className="pay-online-hint">{feeHint}</p>
+      ) : null}
+      {coversBothPlayers && feeHint ? <p className="pay-online-hint">{feeHint}</p> : null}
       {err && <p className="auth-error">{err}</p>}
     </div>
+  )
+}
+
+function JoinDoublesHowItWorks({
+  teamFee,
+  payOnArrival,
+  partnerFirstName,
+}: {
+  teamFee: string
+  payOnArrival: boolean
+  partnerFirstName?: string
+}) {
+  const friend = partnerFirstName?.trim() || 'your friend'
+  return (
+    <section className="join-how" aria-label="How doubles entry works">
+      <div className="join-how-pay-callout" role="status">
+        <p className="join-how-pay-kicker">One payment</p>
+        <p className="join-how-pay-main">
+          You’re paying for <strong>you and {friend}</strong>
+        </p>
+        <p className="join-how-pay-sub">
+          {friend === 'your friend' ? 'They aren’t charged' : `${friend} isn’t charged`} — team fee{' '}
+          <strong>{teamFee}</strong>
+        </p>
+      </div>
+      <h2 className="join-how-title">How it works</h2>
+      <ol className="join-how-steps">
+        <li className="join-how-step">
+          <span className="join-how-num" aria-hidden="true">
+            1
+          </span>
+          <div>
+            <strong>You sign up first</strong>
+            <p>Enter your details and add {friend}</p>
+          </div>
+        </li>
+        <li className="join-how-step">
+          <span className="join-how-num" aria-hidden="true">
+            2
+          </span>
+          <div>
+            <strong>You pay for you + {friend}</strong>
+            <p>
+              {payOnArrival
+                ? `One team fee of ${teamFee} — online or at the venue`
+                : `One team fee of ${teamFee} covers both of you`}
+            </p>
+          </div>
+        </li>
+        <li className="join-how-step">
+          <span className="join-how-num" aria-hidden="true">
+            3
+          </span>
+          <div>
+            <strong>{friend === 'your friend' ? 'They get an invite' : `${friend} gets an invite`}</strong>
+            <p>No separate payment — they just join your team</p>
+          </div>
+        </li>
+      </ol>
+    </section>
   )
 }
 
@@ -339,21 +422,27 @@ function JoinFeeBreakdown({
   /** Optional context line, e.g. when venue pay is the default */
   caption?: string
 }) {
-  if (entryFeeCents <= 0 || serviceFeeCents <= 0) return null
+  if (entryFeeCents <= 0) return null
   const total = onlineTotalCents(entryFeeCents, serviceFeeCents)
+  const showFee = serviceFeeCents > 0
   return (
-    <div className="join-fee-breakdown" aria-label="Online payment breakdown">
+    <div className="join-fee-breakdown" aria-label="Payment breakdown">
       {caption ? <p className="join-fee-caption">{caption}</p> : null}
+      {!singles ? (
+        <p className="join-fee-covers">This checkout covers you and your friend.</p>
+      ) : null}
       <div className="join-fee-row">
-        <span>{singles ? 'Entry fee' : 'Team entry'}</span>
+        <span>{singles ? 'Entry fee' : 'You + friend (team entry)'}</span>
         <strong>{formatMoney(entryFeeCents, currency)}</strong>
       </div>
-      <div className="join-fee-row">
-        <span>Service fee</span>
-        <strong>{formatMoney(serviceFeeCents, currency)}</strong>
-      </div>
+      {showFee ? (
+        <div className="join-fee-row">
+          <span>Service fee</span>
+          <strong>{formatMoney(serviceFeeCents, currency)}</strong>
+        </div>
+      ) : null}
       <div className="join-fee-row join-fee-row--total">
-        <span>Total online</span>
+        <span>{singles ? 'Total' : 'You pay for both'}</span>
         <strong>{formatMoney(total, currency)}</strong>
       </div>
     </div>
@@ -799,8 +888,12 @@ export default function JoinTournamentPage() {
             <ul className="tour-entry-facts">
               <li>
                 {payAtVenue
-                  ? `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)} at the venue${!singles ? ' (full team fee)' : ''}`
-                  : 'Entry paid · spot confirmed'}
+                  ? singles
+                    ? `Pay ${formatMoney(tournament.entry_fee_cents, tournament.currency)} at the venue`
+                    : `You owe ${formatMoney(tournament.entry_fee_cents, tournament.currency)} at the venue for both players`
+                  : singles
+                    ? 'Entry paid · spot confirmed'
+                    : 'Team entry paid · covers both players'}
               </li>
               <li>You’re already registered for this tournament</li>
             </ul>
@@ -828,6 +921,7 @@ export default function JoinTournamentPage() {
                           )
                         : undefined
                     }
+                    coversBothPlayers={!singles}
                   />
                 )}
               <Link to={`/t/${tournament.slug}`} className="btn btn-ghost tour-entry-btn-ghost">
@@ -987,8 +1081,13 @@ export default function JoinTournamentPage() {
     serviceFeeCents,
     tournament.currency,
   )
+  // Show breakdown for service fee, and always for doubles so “both players” is obvious
   const showOnlineFeeBreakdown =
-    !publicConfig?.demo_payments && serviceFeeCents > 0 && tournament.entry_fee_cents > 0
+    !publicConfig?.demo_payments &&
+    tournament.entry_fee_cents > 0 &&
+    (serviceFeeCents > 0 || !singles)
+  const partnerFirstName = (form.partner_name || '').trim().split(/\s+/)[0] || ''
+  const bothLabel = partnerFirstName ? `you & ${partnerFirstName}` : 'you & your friend'
   const perPlayer = formatPerPlayerFee(
     tournament.entry_fee_cents,
     tournament.currency,
@@ -1200,19 +1299,26 @@ export default function JoinTournamentPage() {
       <main className="page">
         <BackButton fallbackTo={slug ? `/t/${slug}` : '/tournaments'} />
         <h1 className="page-title">
-          {needsPartner ? `Add a partner · ${tournament.name}` : `Join ${tournament.name}`}
+          {needsPartner
+            ? `Add a partner · ${tournament.name}`
+            : singles
+              ? `Join ${tournament.name}`
+              : `Register your team`}
         </h1>
+        {!needsPartner && !singles ? (
+          <p className="page-sub join-page-sub">{tournament.name}</p>
+        ) : null}
         {needsPartner && (
           <p className="tour-youre-in" role="status" style={{ marginTop: 0 }}>
             <span className="tour-youre-in-kicker">Partner needed</span>
             <span className="tour-youre-in-body">
-              Your previous partner left the team. Pick someone new - your entry stays paid.
+              Your previous partner left the team. Pick someone new — your entry stays paid.
             </span>
           </p>
         )}
         <p className="page-sub">
           {tournamentFormatSummary(tournament.play_format, tournament.format)} · {perPlayer}
-          {!singles ? ` · team fee ${teamFee}` : ''}
+          {!singles ? ` · team ${teamFee}` : ''}
         </p>
         <SponsorStrip sponsors={sponsors} placement="hero" compact />
 
@@ -1226,32 +1332,16 @@ export default function JoinTournamentPage() {
           </p>
         )}
 
-          {!singles && (
-            <p className="muted-note join-pay-note">
-              {tournament.pay_on_arrival ? (
-                <>
-                  Team entry is <strong>{teamFee}</strong> (you cover both players). Confirm now and pay
-                  at the venue, or pay online below. Your partner is added automatically - they can
-                  leave the team if they can’t play.
-                </>
-              ) : (
-                <>
-                  You pay the full team entry of <strong>{teamFee}</strong>
-                  {showOnlineFeeBreakdown ? (
-                    <>
-                      {' '}
-                      online (<strong>{onlineTotal}</strong> incl. service fee)
-                    </>
-                  ) : null}
-                  . Your partner is added automatically and is not charged separately - they can leave
-                  if they can’t play.
-                </>
-              )}
-            </p>
+          {!singles && !needsPartner && (
+            <JoinDoublesHowItWorks
+              teamFee={teamFee}
+              payOnArrival={tournament.pay_on_arrival}
+              partnerFirstName={partnerFirstName}
+            />
           )}
           {singles && tournament.pay_on_arrival && (
             <p className="muted-note join-pay-note">
-              Entry is <strong>{teamFee}</strong> - confirm now and pay at the venue, or pay online
+              Entry is <strong>{teamFee}</strong> — confirm now and pay at the venue, or pay online
               below.
             </p>
           )}
@@ -1292,8 +1382,11 @@ export default function JoinTournamentPage() {
           {!singles && (
             <div className="form-group">
               <label className="form-label" id="join-partner-label">
-                Partner
+                Your partner
               </label>
+              <p className="form-hint join-partner-hint">
+                Add your friend here. You’ll pay for both of you — they get an invite and don’t pay.
+              </p>
               <div className="partner-mode-row" role="tablist" aria-label="How to add partner">
                 <button
                   type="button"
@@ -1486,8 +1579,8 @@ export default function JoinTournamentPage() {
                           </div>
                         )}
                         <p className="muted-note">
-                          They’re on your team immediately. They get one Accept / Decline for
-                          friends + the team.
+                          They’re invited onto your team straight away. They can Accept or Decline —
+                          you still pay the team fee.
                         </p>
                       </div>
                     )}
@@ -1528,8 +1621,8 @@ export default function JoinTournamentPage() {
                     enterKeyHint="next"
                   />
                   <p className="muted-note">
-                    They’re added to your team now. If they’re new, we email them to create an
-                    account with this address. They won’t be charged.
+                    We invite them by email. If they’re new, they create an account with that
+                    address. They won’t be charged — you pay for both.
                   </p>
                 </>
               )}
@@ -1537,14 +1630,30 @@ export default function JoinTournamentPage() {
           )}
           {signupFields.length > 0 && (
             <div className="join-custom-fields" id="join-custom-fields">
-              <h3 className="join-custom-title">
-                {needsPartner ? 'Partner details' : 'A few more details'}
-              </h3>
               {(() => {
-                const renderControl = (field: TournamentRegistrationField, slot?: number) => {
+                const teamFields = signupFields.filter((f) => f.scope === 'team')
+                const playerFields = signupFields.filter((f) => f.scope !== 'team')
+                const splitByPerson = !singles && playerFields.length > 0
+                const partnerLabel =
+                  (form.partner_name || '').trim() ||
+                  (partnerMode === 'friend'
+                    ? friendPartners.find((f) => f.user_id === form.partner_user_id)?.full_name
+                    : '') ||
+                  'your partner'
+
+                const renderControl = (
+                  field: TournamentRegistrationField,
+                  slot?: number,
+                  who?: 'you' | 'partner',
+                ) => {
                   const key = answerKey(field.id, slot)
                   const id = `join-cf-${field.id}${slot != null ? `-${slot}` : ''}`
-                  const label = field.label
+                  const label =
+                    who === 'you'
+                      ? `Your · ${field.label}`
+                      : who === 'partner'
+                        ? `${partnerLabel} · ${field.label}`
+                        : field.label
                   if (field.field_type === 'boolean') {
                     return (
                       <div className="form-group" key={key}>
@@ -1618,26 +1727,40 @@ export default function JoinTournamentPage() {
                   )
                 }
 
-                const teamFields = signupFields.filter((f) => f.scope === 'team')
-                const playerFields = signupFields.filter((f) => f.scope !== 'team')
-
                 return (
                   <>
+                    <h3 className="join-custom-title">
+                      {splitByPerson ? 'Answers for each of you' : 'A few more details'}
+                    </h3>
+                    {splitByPerson && (
+                      <p className="join-custom-hint">
+                        Same questions twice — once for <strong>you</strong>, once for{' '}
+                        <strong>{partnerLabel}</strong>.
+                      </p>
+                    )}
                     {teamFields.map((field) => renderControl(field))}
                     {playerFields.length > 0 &&
                       (singles ? (
                         playerFields.map((field) => renderControl(field, 1))
                       ) : (
-                        <>
+                        <div className="join-custom-people">
                           <div className="join-custom-person">
-                            <p className="join-custom-person-label">You</p>
-                            {playerFields.map((field) => renderControl(field, 1))}
+                            <p className="join-custom-person-label">
+                              <span className="join-custom-person-step">1</span>
+                              Your answers
+                            </p>
+                            {playerFields.map((field) => renderControl(field, 1, 'you'))}
                           </div>
                           <div className="join-custom-person">
-                            <p className="join-custom-person-label">Partner</p>
-                            {playerFields.map((field) => renderControl(field, 2))}
+                            <p className="join-custom-person-label">
+                              <span className="join-custom-person-step">2</span>
+                              {partnerLabel === 'your partner'
+                                ? "Partner's answers"
+                                : `${partnerLabel}'s answers`}
+                            </p>
+                            {playerFields.map((field) => renderControl(field, 2, 'partner'))}
                           </div>
-                        </>
+                        </div>
                       ))}
                   </>
                 )
@@ -1688,7 +1811,7 @@ export default function JoinTournamentPage() {
           {tournament.pay_on_arrival ? (
             <p className="muted-note">
               Default: reserve your spot now and pay {teamFee} at the venue
-              {!singles ? ' (full team fee)' : ''}.
+              {!singles ? ' for both players' : ''}.
             </p>
           ) : publicConfig?.demo_payments ? (
             <p className="muted-note">Demo checkout. No card will be charged.</p>
@@ -1711,10 +1834,16 @@ export default function JoinTournamentPage() {
                 : tournament.pay_on_arrival
                   ? resumingPending
                     ? 'Confirm entry · pay at venue'
-                    : `Confirm entry · pay ${teamFee} at venue`
+                    : singles
+                      ? `Confirm entry · pay ${teamFee} at venue`
+                      : `Confirm · pay ${teamFee} for ${bothLabel} at venue`
                   : publicConfig?.demo_payments
-                    ? `${resumingPending ? 'Finish' : 'Confirm'} ${teamFee} (demo)`
-                    : `${resumingPending ? 'Pay' : 'Pay'} ${onlineTotal}`}
+                    ? singles
+                      ? `${resumingPending ? 'Finish' : 'Confirm'} ${teamFee} (demo)`
+                      : `${resumingPending ? 'Finish' : 'Confirm'} ${teamFee} for ${bothLabel} (demo)`
+                    : singles
+                      ? `${resumingPending ? 'Pay' : 'Pay'} ${onlineTotal}`
+                      : `${resumingPending ? 'Pay' : 'Pay'} ${onlineTotal} for ${bothLabel}`}
           </button>
           {!needsPartner && tournament.pay_on_arrival && tournament.entry_fee_cents > 0 && (
             <>
@@ -1733,7 +1862,11 @@ export default function JoinTournamentPage() {
                 disabled={loading || tLoading}
                 onClick={() => void submitJoin(true)}
               >
-                {loading ? 'Processing…' : `Pay online · ${onlineTotal}`}
+                {loading
+                  ? 'Processing…'
+                  : singles
+                    ? `Pay online · ${onlineTotal}`
+                    : `Pay online · ${onlineTotal} for ${bothLabel}`}
               </button>
             </>
           )}

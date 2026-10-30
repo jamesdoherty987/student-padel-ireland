@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from './ConfirmDialog'
 import ModalShell from './ModalShell'
@@ -71,6 +71,7 @@ export default function EditTournamentModal({
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const savingRef = useRef(false)
 
   const formatLocked =
     fixturesExist ||
@@ -110,12 +111,14 @@ export default function EditTournamentModal({
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (savingRef.current) return
     const fieldsErr = validateRegistrationFields(registrationFields)
     if (fieldsErr) {
       setError(fieldsErr)
       return
     }
     setError('')
+    savingRef.current = true
     setSaving(true)
     try {
       const payload: Record<string, unknown> = {
@@ -155,6 +158,7 @@ export default function EditTournamentModal({
     } catch (err: unknown) {
       setError(apiErrorMessage(err, 'Could not save changes'))
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }

@@ -66,11 +66,17 @@ function parseOptionsText(text: string) {
 }
 
 export function validateRegistrationFields(fields: RegistrationFieldDraft[]): string | null {
+  const seenLabels = new Set<string>()
   for (const f of fields) {
     const label = f.label.trim()
     if (!label) {
       return 'Each question needs a label — fill it in or remove the question'
     }
+    const labelKey = label.toLowerCase()
+    if (seenLabels.has(labelKey)) {
+      return `“${label}” is listed twice — remove the duplicate`
+    }
+    seenLabels.add(labelKey)
     if (f.field_type === 'select' && parseOptionsText(f.optionsText).length < 2) {
       return `“${label}” needs at least 2 dropdown options (e.g. S, M, L)`
     }
@@ -151,8 +157,10 @@ export default function RegistrationFieldsEditor({
   return (
     <div className="tf-reg-fields">
       <p className="form-hint tf-reg-fields-lead">
-        Extra questions players answer when they join
-        {singles ? '' : ' — player questions are asked for each teammate'}.
+        Extra questions players answer when they join.
+        {singles
+          ? ''
+          : ' “Each teammate” shows the same question twice on the join form — once for the captain, once for their partner.'}
         {mode === 'create'
           ? ' You can add or change these later from Edit.'
           : ' New questions only apply to new signups.'}
@@ -228,8 +236,10 @@ export default function RegistrationFieldsEditor({
                     })
                   }
                 >
-                  <option value="player">{singles ? 'Each player' : 'Each teammate'}</option>
-                  <option value="team">Once per entry</option>
+                  <option value="player">
+                    {singles ? 'Each player' : 'Each teammate (you + partner)'}
+                  </option>
+                  <option value="team">Once for the whole team</option>
                 </select>
               </div>
             </div>

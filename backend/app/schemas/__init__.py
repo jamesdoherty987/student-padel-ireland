@@ -295,6 +295,8 @@ class TournamentOut(BaseModel):
     courts: list[CourtOut] = Field(default_factory=list)
     registration_fields: list[RegistrationFieldOut] = Field(default_factory=list)
     can_manage: bool = False
+    # Set when a logged-in viewer is on a non-withdrawn team for this event
+    viewer_entered: bool = False
 
     model_config = {"from_attributes": True}
 

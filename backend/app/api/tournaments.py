@@ -581,6 +581,7 @@ def _tournament_out(
     t: Tournament,
     *,
     viewer: User | None = None,
+    viewer_entered: bool | None = None,
 ) -> TournamentOut:
     _ensure_invite_code(db, t)
     courts = (
@@ -591,6 +592,20 @@ def _tournament_out(
     )
     can_manage = bool(viewer and user_can_manage_tournament(viewer, t, db))
     reg_fields = [field_to_out(f) for f in list_fields(db, t.id)]
+    entered = bool(viewer_entered) if viewer_entered is not None else False
+    if viewer and viewer_entered is None:
+        entered = (
+            db.query(TeamPlayer.id)
+            .join(Team, Team.id == TeamPlayer.team_id)
+            .filter(
+                Team.tournament_id == t.id,
+                Team.withdrawn.is_(False),
+                TeamPlayer.user_id == viewer.id,
+            )
+            .limit(1)
+            .first()
+            is not None
+        )
     # Always build plain data - never pass ORM Court objects into the response model
     return TournamentOut(
         id=t.id,
@@ -626,6 +641,7 @@ def _tournament_out(
         ],
         registration_fields=reg_fields,
         can_manage=can_manage,
+        viewer_entered=entered,
     )
 
 
@@ -1097,24 +1113,92 @@ def list_universities(db: Session = Depends(get_db)):
 def list_tournaments(
     status_filter: str | None = Query(None, alias="status"),
     upcoming: bool = False,
+    user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    """Public catalogue - official (admin) events only. Private events stay invite/link-only."""
+    """
+    Tournament catalogue for the app.
+    - Guests / landing (`upcoming`): official events only.
+    - Logged-in players: official events plus personal events they organise,
+      admin, or are entered in (private events stay off the public landing).
+    """
+    status_values = None
+    if upcoming:
+        status_values = [
+            TournamentStatus.REGISTRATION_OPEN.value,
+            TournamentStatus.REGISTRATION_CLOSED.value,
+            TournamentStatus.LIVE.value,
+        ]
+
     q = db.query(Tournament).filter(Tournament.is_official.is_(True))
     if status_filter:
         q = q.filter(Tournament.status == status_filter)
-    if upcoming:
-        q = q.filter(
-            Tournament.status.in_(
-                [
-                    TournamentStatus.REGISTRATION_OPEN.value,
-                    TournamentStatus.REGISTRATION_CLOSED.value,
-                    TournamentStatus.LIVE.value,
-                ]
+    if status_values:
+        q = q.filter(Tournament.status.in_(status_values))
+    by_id: dict = {t.id: t for t in q.all()}
+
+    # Include personal (non-official) events the viewer is involved in
+    if user and not upcoming:
+        admin_ids = [
+            row[0]
+            for row in db.query(TournamentAdmin.tournament_id)
+            .filter(TournamentAdmin.user_id == user.id)
+            .all()
+        ]
+        personal_filters = [Tournament.organiser_id == user.id]
+        if admin_ids:
+            personal_filters.append(Tournament.id.in_(admin_ids))
+        entered_ids = [
+            row[0]
+            for row in (
+                db.query(Team.tournament_id)
+                .join(TeamPlayer, TeamPlayer.team_id == Team.id)
+                .filter(
+                    TeamPlayer.user_id == user.id,
+                    Team.withdrawn.is_(False),
+                )
+                .distinct()
+                .all()
             )
+        ]
+        if entered_ids:
+            personal_filters.append(Tournament.id.in_(entered_ids))
+        pq = db.query(Tournament).filter(
+            Tournament.is_official.is_(False),
+            or_(*personal_filters),
         )
-    tournaments = q.order_by(Tournament.event_date.desc()).all()
-    return [_tournament_out(db, t) for t in tournaments]
+        if status_filter:
+            pq = pq.filter(Tournament.status == status_filter)
+        for t in pq.all():
+            by_id[t.id] = t
+
+    tournaments = sorted(
+        by_id.values(),
+        key=lambda t: (t.event_date or date.min, t.name or ""),
+        reverse=True,
+    )
+
+    entered_set: set = set()
+    if user and tournaments:
+        entered_set = {
+            row[0]
+            for row in (
+                db.query(Team.tournament_id)
+                .join(TeamPlayer, TeamPlayer.team_id == Team.id)
+                .filter(
+                    TeamPlayer.user_id == user.id,
+                    Team.withdrawn.is_(False),
+                    Team.tournament_id.in_([t.id for t in tournaments]),
+                )
+                .distinct()
+                .all()
+            )
+        }
+
+    return [
+        _tournament_out(db, t, viewer=user, viewer_entered=(t.id in entered_set))
+        for t in tournaments
+    ]
 
 
 @router.get("/tournaments/{slug_or_id}", response_model=TournamentOut)
@@ -1748,6 +1832,7 @@ def _issue_checkout(
                 tournament_id=t.id,
                 customer_email=customer_email,
                 previous_session_id=reg.stripe_session_id,
+                covers_both_players=not _is_singles(t),
             )
         except Exception as exc:
             raise HTTPException(502, f"Could not start Stripe Checkout: {exc}") from exc
@@ -1847,6 +1932,7 @@ def pay_online_now(
                 tournament_id=t.id,
                 customer_email=user.email,
                 previous_session_id=reg.stripe_session_id,
+                covers_both_players=not _is_singles(t),
             )
         except Exception as exc:
             raise HTTPException(502, f"Could not start Stripe Checkout: {exc}") from exc
@@ -3670,14 +3756,19 @@ def seed_knockout(
     return {"filled": filled}
 
 
-@router.get("/rankings")
-def rankings(limit: int = 50, db: Session = Depends(get_db)):
-    from app.models import ProfileMedia, Ranking
+def _ranking_board_rows(
+    db: Session,
+    *,
+    limit: int | None = 50,
+    user_ids: list[UUID] | None = None,
+) -> list:
+    """Build public ranking rows, optionally limited to a set of user ids."""
+    from app.models import ProfileMedia
     from app.api.profiles import _api_media_path, _public_url
     from sqlalchemy.orm import aliased
 
     AvatarMedia = aliased(ProfileMedia)
-    rows = (
+    q = (
         db.query(Ranking, User, University, AvatarMedia)
         .join(User, Ranking.user_id == User.id)
         .outerjoin(University, User.university_id == University.id)
@@ -3686,10 +3777,15 @@ def rankings(limit: int = 50, db: Session = Depends(get_db)):
             (AvatarMedia.user_id == User.id) & (AvatarMedia.is_avatar.is_(True)),
         )
         .filter(or_(Ranking.matches_played > 0, Ranking.tournaments_played > 0))
-        .order_by(Ranking.points.desc(), Ranking.wins.desc())
-        .limit(limit)
-        .all()
     )
+    if user_ids is not None:
+        if not user_ids:
+            return []
+        q = q.filter(Ranking.user_id.in_(user_ids))
+    q = q.order_by(Ranking.points.desc(), Ranking.wins.desc())
+    if limit is not None:
+        q = q.limit(limit)
+    rows = q.all()
     out = []
     for i, (r, u, uni, avatar_m) in enumerate(rows):
         if avatar_m is not None:
@@ -3713,6 +3809,63 @@ def rankings(limit: int = 50, db: Session = Depends(get_db)):
             )
         )
     return out
+
+
+def _tournament_ids_for_player(db: Session, user_id: UUID) -> list[UUID]:
+    """Tournaments where the user has an active (pending/paid) non-withdrawn entry."""
+    rows = (
+        db.query(Team.tournament_id)
+        .join(TeamPlayer, TeamPlayer.team_id == Team.id)
+        .join(Registration, Registration.team_id == Team.id)
+        .filter(
+            TeamPlayer.user_id == user_id,
+            Team.withdrawn.is_(False),
+            Registration.status.in_(_active_entry_statuses()),
+        )
+        .distinct()
+        .all()
+    )
+    return [tid for (tid,) in rows]
+
+
+def _coplayer_ids_for_tournaments(db: Session, tournament_ids: list[UUID]) -> list[UUID]:
+    if not tournament_ids:
+        return []
+    rows = (
+        db.query(TeamPlayer.user_id)
+        .join(Team, Team.id == TeamPlayer.team_id)
+        .join(Registration, Registration.team_id == Team.id)
+        .filter(
+            Team.tournament_id.in_(tournament_ids),
+            Team.withdrawn.is_(False),
+            Registration.status.in_(_active_entry_statuses()),
+        )
+        .distinct()
+        .all()
+    )
+    return [uid for (uid,) in rows]
+
+
+@router.get("/rankings")
+def rankings(limit: int = 50, db: Session = Depends(get_db)):
+    return _ranking_board_rows(db, limit=limit)
+
+
+@router.get("/rankings/my-events")
+def rankings_my_events(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    limit: int = 100,
+):
+    """Rankings for players entered in the same tournaments as the current user."""
+    my_tournaments = _tournament_ids_for_player(db, user.id)
+    if not my_tournaments:
+        return []
+    coplayers = _coplayer_ids_for_tournaments(db, my_tournaments)
+    # Always include self even if somehow missing from the join
+    if user.id not in coplayers:
+        coplayers.append(user.id)
+    return _ranking_board_rows(db, limit=max(1, min(limit, 200)), user_ids=coplayers)
 
 
 @router.get("/players/{user_id}", response_model=UserProfilePublic)

@@ -93,11 +93,16 @@ def sync_registration_fields(
     # Validate + plan before mutating so we never leave a half-applied sync
     planned: list[tuple[int, RegistrationFieldIn, str, list[str], str, str]] = []
     keep_ids: set[UUID] = set()
+    seen_labels: set[str] = set()
     for idx, raw in enumerate(fields or []):
         item = _as_field_in(raw)
         label = (item.label or "").strip()
         if not label:
             raise HTTPException(400, "Signup field label is required")
+        label_key = label.lower()
+        if label_key in seen_labels:
+            raise HTTPException(400, f"“{label}” is listed twice — remove the duplicate")
+        seen_labels.add(label_key)
         ftype = item.field_type if item.field_type in _VALID_TYPES else "text"
         scope = item.scope if item.scope in _VALID_SCOPES else "player"
         options = list(item.options or [])
@@ -140,7 +145,7 @@ def sync_registration_fields(
             row.options_json = dump_options(options)
             row.required = bool(item.required)
             row.scope = scope
-            row.sort_order = item.sort_order if item.sort_order else idx
+            row.sort_order = item.sort_order if item.sort_order is not None else idx
         else:
             key = _unique_key(_slug_key(label))
             row = TournamentRegistrationField(
@@ -151,7 +156,7 @@ def sync_registration_fields(
                 options_json=dump_options(options),
                 required=bool(item.required),
                 scope=scope,
-                sort_order=item.sort_order if item.sort_order else idx,
+                sort_order=item.sort_order if item.sort_order is not None else idx,
             )
             db.add(row)
             db.flush()

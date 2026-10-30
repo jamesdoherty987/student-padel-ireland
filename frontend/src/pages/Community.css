@@ -418,14 +418,33 @@
 }
 
 .community-section {
-  margin-top: 1.75rem;
-  padding-top: 0.25rem;
+  margin-top: 1.35rem;
+  padding-top: 0.15rem;
 }
 
 .community-section-friends {
-  margin-top: 2rem;
-  padding-top: 1.25rem;
+  margin-top: 1.5rem;
+  padding-top: 1.1rem;
   border-top: 1px solid var(--line);
+}
+
+@media (max-width: 640px) {
+  .community-section {
+    margin-top: 1.15rem;
+  }
+
+  .community-section-friends {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+  }
+
+  .play-empty {
+    padding: 1rem 1rem;
+  }
+
+  .next-game-hero {
+    margin-bottom: 1rem;
+  }
 }
 
 .community-section .community-card {

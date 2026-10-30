@@ -100,6 +100,8 @@ export type Tournament = {
   courts?: Array<{ number: number; name: string; id: string }>
   registration_fields?: TournamentRegistrationField[]
   can_manage?: boolean
+  /** True when the logged-in viewer is on a team for this tournament */
+  viewer_entered?: boolean
 }
 
 export type TournamentRegistrationField = {
@@ -529,6 +531,9 @@ export const platformApi = {
     }>('/api/config/public'),
   universities: () => api.get<University[]>('/api/universities'),
   rankings: (limit = 50) => api.get<RankingRow[]>('/api/rankings', { params: { limit } }),
+  /** Players entered in the same tournaments as the current user */
+  rankingsMyEvents: (limit = 100) =>
+    api.get<RankingRow[]>('/api/rankings/my-events', { params: { limit } }),
   resolveInvite: (code: string) =>
     api.get<{
       kind: 'tournament' | 'competition'

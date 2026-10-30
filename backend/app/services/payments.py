@@ -370,6 +370,7 @@ def create_checkout_session(
     customer_email: str | None = None,
     previous_session_id: str | None = None,
     service_fee_cents: int | None = None,
+    covers_both_players: bool = False,
 ) -> Any:
     """Create a hosted Checkout Session; expires any prior open session for this entry.
 
@@ -394,11 +395,19 @@ def create_checkout_session(
     if entry <= 0:
         fee = 0
 
+    entry_product: dict[str, Any] = {
+        "name": f"{tournament_name} — {team_name}",
+        "description": (
+            "Doubles team entry — one payment covers both players"
+            if covers_both_players
+            else "Singles entry"
+        ),
+    }
     line_items: list[dict[str, Any]] = [
         {
             "price_data": {
                 "currency": currency.lower(),
-                "product_data": {"name": f"{tournament_name} - {team_name}"},
+                "product_data": entry_product,
                 "unit_amount": entry,
             },
             "quantity": 1,
