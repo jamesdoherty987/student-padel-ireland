@@ -3,10 +3,12 @@
 Mostly Irish names, with a minority from other countries. Each player gets a
 university and a mid-range Elo (nothing extreme). Idempotent by email.
 
+Emails look like real Gmail addresses: firstname.lastnameNN@gmail.com
+
 Usage (from backend/ with venv active):
 
     PYTHONPATH=. python scripts/seed_players.py
-    PYTHONPATH=. python scripts/seed_players.py -n 120
+    PYTHONPATH=. python scripts/seed_players.py -n 120 --replace
     PYTHONPATH=. python scripts/seed_players.py --password player12345
 """
 
@@ -16,16 +18,20 @@ import argparse
 import random
 import re
 
+from sqlalchemy.orm import Session
+
 from app.core.security import hash_password
 from app.db.seed import IRISH_UNIVERSITIES, _ensure_universities
 from app.db.session import SessionLocal, init_db
 from app.models import Ranking, University, User, UserRole
+from app.services.accounts import purge_user
 from app.services.rating import INITIAL_RATING, _recompute_ireland_ranks
 
 # Shared login for every seeded player (local demo only).
 DEFAULT_PASSWORD = "player12345"
-EMAIL_DOMAIN = "seed.studentpadel.ie"
-EMAIL_PREFIX = "seed."
+EMAIL_DOMAIN = "gmail.com"
+# Marker so we can find & replace prior runs (not shown as a profile bio).
+DEMO_SEED_BIO = "demo-seed"
 
 # ~75% Irish; rest from countries common among Irish uni students / padel scenes.
 IRISH_FIRST = (
@@ -50,7 +56,7 @@ IRISH_LAST = (
     "Smyth", "Tobin", "Whelan", "White", "Doherty", "Dunne", "Collins",
 )
 
-# (first, last, country_tag used only for email uniqueness flavour)
+# (first, last, country_tag used only for variety)
 INTL_NAMES = (
     ("Carlos", "Garcia", "es"),
     ("Lucia", "Fernandez", "es"),
@@ -97,26 +103,25 @@ INTL_NAMES = (
 UNI_SLUGS = [slug for _, _, slug in IRISH_UNIVERSITIES]
 
 # Mid-pack Elo: beginners / casuals around 1400, solid club ~1550, strong ~1620.
-# Stays clear of extremes (<1350 or >1680).
 RATING_MIN = 1380
 RATING_MAX = 1620
 
 
-def _slugify(name: str) -> str:
-    s = name.lower().replace("'", "").replace(" ", "")
-    s = re.sub(r"[^a-z0-9]", "", s)
-    return s or "player"
+def _local_part(full_name: str) -> str:
+    """firstname.lastname — strip accents-ish punctuation, keep dots between parts."""
+    parts = [re.sub(r"[^a-z0-9]", "", p.lower().replace("'", "")) for p in full_name.split()]
+    parts = [p for p in parts if p]
+    return ".".join(parts) or "player"
 
 
-def _email_for(index: int, full_name: str) -> str:
-    return f"{EMAIL_PREFIX}{_slugify(full_name)}{index:03d}@{EMAIL_DOMAIN}"
+def _email_for(full_name: str, number: int) -> str:
+    return f"{_local_part(full_name)}{number}@{EMAIL_DOMAIN}"
 
 
 def _pick_names(rng: random.Random, count: int) -> list[tuple[str, str]]:
     """Return (full_name, origin) where origin is 'ie' or a country tag."""
     names: list[tuple[str, str]] = []
     irish_n = max(1, int(count * 0.78))
-    intl_n = count - irish_n
 
     used: set[str] = set()
     while len(names) < irish_n:
@@ -134,7 +139,6 @@ def _pick_names(rng: random.Random, count: int) -> list[tuple[str, str]]:
     while len(names) < count:
         first, last, tag = intl_pool[i % len(intl_pool)]
         full = f"{first} {last}"
-        # Allow a suffix if the same intl name repeats beyond the pool
         if full in used:
             full = f"{first} {last} {i // len(intl_pool) + 2}"
         used.add(full)
@@ -142,25 +146,55 @@ def _pick_names(rng: random.Random, count: int) -> list[tuple[str, str]]:
         i += 1
 
     rng.shuffle(names)
-    # Trim if irish loop overshot (shouldn't) - keep exactly count
     return names[:count]
 
 
 def _rating_bundle(rng: random.Random) -> tuple[int, int, int, int]:
-    """points, matches_played, wins, losses - correlated so stronger players have more wins."""
-    # Bell-ish around INITIAL_RATING without going extreme
+    """points, matches_played, wins, losses — correlated so stronger players have more wins."""
     points = int(rng.gauss(INITIAL_RATING, 55))
     points = max(RATING_MIN, min(RATING_MAX, points))
 
     matches = rng.randint(2, 28)
-    # Win rate drifts with rating vs 1500
     win_p = 0.35 + (points - RATING_MIN) / (RATING_MAX - RATING_MIN) * 0.35
     wins = sum(1 for _ in range(matches) if rng.random() < win_p)
     losses = matches - wins
     return points, matches, wins, losses
 
 
-def seed_players(count: int, password: str, seed: int | None) -> None:
+def _reassign_anchor(db: Session) -> User:
+    """Any non-demo user to reassign FK ownership when purging seed accounts."""
+    anchor = (
+        db.query(User)
+        .filter(User.bio.is_(None) | (User.bio != DEMO_SEED_BIO))
+        .filter(~User.email.like("%@seed.studentpadel.ie"))
+        .order_by(User.created_at.asc())
+        .first()
+    )
+    if not anchor:
+        raise SystemExit("No non-seed user found to reassign ownership when purging.")
+    return anchor
+
+
+def _remove_previous_seeds(db: Session) -> int:
+    """Delete old seed.studentpadel.ie accounts and any prior demo-seed Gmail batch."""
+    old = (
+        db.query(User)
+        .filter(
+            (User.email.like("%@seed.studentpadel.ie"))
+            | (User.bio == DEMO_SEED_BIO)
+        )
+        .all()
+    )
+    if not old:
+        return 0
+    anchor = _reassign_anchor(db)
+    for user in old:
+        purge_user(db, user, reassign_to=anchor)
+    db.commit()
+    return len(old)
+
+
+def seed_players(count: int, password: str, seed: int | None, *, replace: bool) -> None:
     init_db()
     db = SessionLocal()
     rng = random.Random(seed)
@@ -169,15 +203,31 @@ def seed_players(count: int, password: str, seed: int | None) -> None:
         _ensure_universities(db)
         unis = {u.slug: u for u in db.query(University).all()}
         if not unis:
-            raise SystemExit("No universities found - seed failed.")
+            raise SystemExit("No universities found — seed failed.")
+
+        removed = 0
+        if replace:
+            removed = _remove_previous_seeds(db)
+            print(f"Removed {removed} previous seed players.")
 
         pw_hash = hash_password(password)
         names = _pick_names(rng, count)
         created = 0
         skipped = 0
+        used_emails: set[str] = {e for (e,) in db.query(User.email).all()}
 
-        for i, (full_name, _origin) in enumerate(names, start=1):
-            email = _email_for(i, full_name)
+        for full_name, _origin in names:
+            # Try a few number suffixes until the Gmail local-part is free
+            email = None
+            for _ in range(40):
+                number = rng.randint(1, 9999)
+                candidate = _email_for(full_name, number)
+                if candidate not in used_emails:
+                    email = candidate
+                    break
+            if email is None:
+                skipped += 1
+                continue
             if db.query(User).filter(User.email == email).first():
                 skipped += 1
                 continue
@@ -194,6 +244,7 @@ def seed_players(count: int, password: str, seed: int | None) -> None:
                 university_id=uni.id,
                 phone=f"+35387{rng.randint(1000000, 9999999)}",
                 student_number=str(rng.randint(20180000, 20259999)),
+                bio=DEMO_SEED_BIO,
             )
             db.add(user)
             db.flush()
@@ -207,6 +258,7 @@ def seed_players(count: int, password: str, seed: int | None) -> None:
                     tournaments_played=tournaments,
                 )
             )
+            used_emails.add(email)
             created += 1
 
         if created:
@@ -215,13 +267,13 @@ def seed_players(count: int, password: str, seed: int | None) -> None:
 
         print(
             f"Seeded {created} players "
-            f"({skipped} already present). "
+            f"({skipped} skipped). "
             f"Password for all: {password}"
         )
         if created:
             sample = (
                 db.query(User)
-                .filter(User.email.like(f"{EMAIL_PREFIX}%@{EMAIL_DOMAIN}"))
+                .filter(User.bio == DEMO_SEED_BIO)
                 .order_by(User.email)
                 .limit(3)
                 .all()
@@ -242,7 +294,12 @@ if __name__ == "__main__":
     p.add_argument("-n", type=int, default=80, help="Number of players to ensure (default 80)")
     p.add_argument("--password", default=DEFAULT_PASSWORD, help="Shared password for seeded users")
     p.add_argument("--seed", type=int, default=42, help="RNG seed for reproducible names/ratings")
+    p.add_argument(
+        "--replace",
+        action="store_true",
+        help="Delete previous seed.studentpadel.ie / demo-seed players first",
+    )
     args = p.parse_args()
     if args.n < 1:
         raise SystemExit("-n must be at least 1")
-    seed_players(args.n, args.password, args.seed)
+    seed_players(args.n, args.password, args.seed, replace=args.replace)

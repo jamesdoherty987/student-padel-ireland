@@ -483,7 +483,7 @@ export default function JoinTournamentPage() {
   )
   const [friendSearch, setFriendSearch] = useState('')
   const [friendFindOpen, setFriendFindOpen] = useState(false)
-  const [partnerMode, setPartnerMode] = useState<'friend' | 'email'>('friend')
+  const [partnerMode, setPartnerMode] = useState<'friend' | 'email'>('email')
   useKeyboardInset(!isConfirmRoute)
 
   useEffect(() => {
@@ -1391,19 +1391,6 @@ export default function JoinTournamentPage() {
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={partnerMode === 'friend'}
-                  className={`filter-chip ${partnerMode === 'friend' ? 'on' : ''}`}
-                  onClick={() => {
-                    setPartnerMode('friend')
-                    setForm((f) => ({ ...f, partner_name: '', partner_email: '' }))
-                    setFriendFindOpen(friendPartners.length === 0)
-                  }}
-                >
-                  Find player
-                </button>
-                <button
-                  type="button"
-                  role="tab"
                   aria-selected={partnerMode === 'email'}
                   className={`filter-chip ${partnerMode === 'email' ? 'on' : ''}`}
                   onClick={() => {
@@ -1413,6 +1400,19 @@ export default function JoinTournamentPage() {
                   }}
                 >
                   Email invite
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={partnerMode === 'friend'}
+                  className={`filter-chip ${partnerMode === 'friend' ? 'on' : ''}`}
+                  onClick={() => {
+                    setPartnerMode('friend')
+                    setForm((f) => ({ ...f, partner_name: '', partner_email: '' }))
+                    setFriendFindOpen(friendPartners.length === 0)
+                  }}
+                >
+                  Find player
                 </button>
               </div>
               {partnerMode === 'friend' ? (
