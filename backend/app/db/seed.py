@@ -22,18 +22,23 @@ from app.models import (
 )
 from app.services.rating import INITIAL_RATING
 
+# Signup / browse order: Limerick campuses first, then the rest A–Z by name in the API.
 IRISH_UNIVERSITIES = [
     ("University of Limerick", "UL", "ul"),
-    ("University College Cork", "UCC", "ucc"),
-    ("University College Dublin", "UCD", "ucd"),
-    ("Trinity College Dublin", "Trinity", "trinity"),
     ("Technological University of the Shannon", "TUS", "tus"),
+    ("Mary Immaculate College", "MIC", "mic"),
     ("Dublin City University", "DCU", "dcu"),
     ("Maynooth University", "MU", "maynooth"),
-    ("University of Galway", "UG", "galway"),
-    ("Technological University Dublin", "TU Dublin", "tud"),
     ("South East Technological University", "SETU", "setu"),
+    ("Technological University Dublin", "TU Dublin", "tud"),
+    ("Trinity College Dublin", "Trinity", "trinity"),
+    ("University College Cork", "UCC", "ucc"),
+    ("University College Dublin", "UCD", "ucd"),
+    ("University of Galway", "UG", "galway"),
 ]
+
+# Shown first on signup (by slug). Keep in sync with IRISH_UNIVERSITIES order above.
+PREFERRED_UNIVERSITY_SLUGS = ("ul", "tus", "mic")
 
 DEMO_MATES = (
     ("sara@ucc.ie", "Sara Buckley", 1540, "ucc"),
@@ -47,12 +52,17 @@ _DEMO_ADMIN_PASSWORD = "admin12345"
 
 
 def _ensure_universities(db: Session) -> None:
-    if db.query(University).count() > 0:
-        return
+    """Insert any missing universities (idempotent - safe on existing DBs)."""
+    existing = {u.slug for u in db.query(University).all()}
+    added = 0
     for name, short, slug in IRISH_UNIVERSITIES:
+        if slug in existing:
+            continue
         db.add(University(name=name, short_name=short, slug=slug))
-    db.commit()
-    print("Seeded Irish universities.")
+        added += 1
+    if added:
+        db.commit()
+        print(f"Seeded {added} Irish universit{'y' if added == 1 else 'ies'}.")
 
 
 def _ensure_demo_friends(db: Session) -> None:

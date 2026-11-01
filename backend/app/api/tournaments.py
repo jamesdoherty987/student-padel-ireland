@@ -47,6 +47,7 @@ from app.models import (
     User,
 )
 
+from app.db.seed import PREFERRED_UNIVERSITY_SLUGS
 from app.services.email import send_email
 from app.services.rating import INITIAL_RATING, rate_match
 from app.services.registration_fields import (
@@ -1119,7 +1120,10 @@ def _purge_tournament(db: Session, t: Tournament) -> None:
 
 @router.get("/universities", response_model=list[UniversityOut])
 def list_universities(db: Session = Depends(get_db)):
-    return db.query(University).filter(University.is_active.is_(True)).order_by(University.name).all()
+    rows = db.query(University).filter(University.is_active.is_(True)).all()
+    priority = {slug: i for i, slug in enumerate(PREFERRED_UNIVERSITY_SLUGS)}
+    rows.sort(key=lambda u: (priority.get(u.slug, len(priority)), u.name.lower()))
+    return rows
 
 
 # ── Tournaments ───────────────────────────────────────────────
