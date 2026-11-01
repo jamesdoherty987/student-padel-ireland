@@ -488,6 +488,13 @@ export default function Landing() {
             <Link to="/rankings">Rankings</Link>
             <Link to="/privacy">Privacy</Link>
             <Link to="/terms">Terms</Link>
+            <a
+              href="https://www.instagram.com/studentpadelireland"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Instagram
+            </a>
             <a href="mailto:jkdoherty123@gmail.com">Contact</a>
           </div>
         </div>
