@@ -600,20 +600,35 @@ function AdminAccountsPanel({ onToast }: { onToast: (msg: string) => void }) {
     onError: (e: unknown) => onToast(apiErrorMessage(e, 'Could not remove from tournament')),
   })
 
+  const requestDelete = (u: { id: string; full_name: string; email: string }) => {
+    void confirmDialog({
+      title: 'Delete account from database?',
+      message: `Permanently delete ${u.full_name} (${u.email})? They are removed from the database, withdrawn from active tournaments, and cannot sign in again.`,
+      confirmLabel: 'Delete from database',
+      danger: true,
+    }).then((ok) => {
+      if (ok) deleteMut.mutate(u.id)
+    })
+  }
+
   return (
     <div className="admin-accounts">
+      <p className="muted-note admin-accounts-lead">
+        Search anyone on the platform, remove them from tournaments, or delete their account from the database.
+      </p>
       <div className="admin-accounts-search">
         <label className="form-label" htmlFor="admin-user-search">
-          Search accounts
+          Search anyone
         </label>
         <input
           id="admin-user-search"
           className="form-input"
           type="search"
-          placeholder="Name, email, or student number"
+          placeholder="Name, email, phone, or student number"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           autoComplete="off"
+          autoFocus
         />
       </div>
 
@@ -648,16 +663,7 @@ function AdminAccountsPanel({ onToast }: { onToast: (msg: string) => void }) {
               selected={selectedId === u.id}
               isSelf={u.id === user?.id}
               onSelect={() => setSelectedId(u.id === selectedId ? null : u.id)}
-              onDelete={() => {
-                void confirmDialog({
-                  title: 'Delete account?',
-                  message: `Permanently delete ${u.full_name} (${u.email})? Their personal data is wiped; tournament history stays anonymised.`,
-                  confirmLabel: 'Delete account',
-                  danger: true,
-                }).then((ok) => {
-                  if (ok) deleteMut.mutate(u.id)
-                })
-              }}
+              onDelete={() => requestDelete(u)}
               deleting={deleteMut.isPending && deleteMut.variables === u.id}
             />
           ))}
@@ -670,6 +676,11 @@ function AdminAccountsPanel({ onToast }: { onToast: (msg: string) => void }) {
             error={detailQuery.isError}
             onRetry={() => detailQuery.refetch()}
             busyRemove={removeMut.isPending}
+            deleting={deleteMut.isPending && deleteMut.variables === selectedId}
+            canDelete={!!detailQuery.data && detailQuery.data.id !== user?.id && detailQuery.data.role !== 'ADMIN'}
+            onDelete={() => {
+              if (detailQuery.data) requestDelete(detailQuery.data)
+            }}
             onRemove={(tournamentId, tournamentName) => {
               const name = detailQuery.data?.full_name || 'this player'
               void confirmDialog({
@@ -735,6 +746,9 @@ function AdminUserDetailPanel({
   error,
   onRetry,
   busyRemove,
+  deleting,
+  canDelete,
+  onDelete,
   onRemove,
 }: {
   detail: AdminUserDetail | undefined
@@ -742,6 +756,9 @@ function AdminUserDetailPanel({
   error: boolean
   onRetry: () => void
   busyRemove: boolean
+  deleting: boolean
+  canDelete: boolean
+  onDelete: () => void
   onRemove: (tournamentId: string, tournamentName: string) => void
 }) {
   if (loading) {
@@ -767,6 +784,7 @@ function AdminUserDetailPanel({
       <p>{detail.email}</p>
       <p className="admin-user-meta">
         {[detail.university_short, detail.phone, detail.student_number].filter(Boolean).join(' · ') || 'No extra details'}
+        {!detail.is_active ? ' · Inactive' : ''}
       </p>
 
       <h3>Tournament entries</h3>
@@ -802,6 +820,19 @@ function AdminUserDetailPanel({
         <p className="muted-note">
           {pastEntries.length} withdrawn entr{pastEntries.length === 1 ? 'y' : 'ies'} hidden.
         </p>
+      )}
+
+      {canDelete && (
+        <div className="admin-user-danger">
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            disabled={deleting}
+            onClick={onDelete}
+          >
+            {deleting ? 'Deleting…' : 'Delete account from database'}
+          </button>
+        </div>
       )}
     </div>
   )

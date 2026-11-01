@@ -22,7 +22,7 @@ from app.schemas import (
     AdminUserTournamentEntry,
     TeamOut,
 )
-from app.services.accounts import anonymise_user, is_deleted_placeholder_email, user_is_sole_admin
+from app.services.accounts import is_deleted_placeholder_email, purge_user, user_is_sole_admin
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -77,16 +77,20 @@ def list_users(
     _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    query = db.query(User)
-    if not include_inactive:
-        query = query.filter(User.is_active.is_(True))
+    """Search any account by name, email, phone, or student number."""
+    query = db.query(User).filter(~User.email.ilike("%@deleted.studentpadelireland.ie"))
     term = (q or "").strip()
+    # Searching should find everyone (active or not); browse-without-q stays active-only
+    # unless include_inactive is set.
+    if not term and not include_inactive:
+        query = query.filter(User.is_active.is_(True))
     if term:
         like = f"%{term}%"
         query = query.filter(
             or_(
                 User.full_name.ilike(like),
                 User.email.ilike(like),
+                User.phone.ilike(like),
                 User.student_number.ilike(like),
             )
         )
@@ -158,7 +162,11 @@ def delete_user(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Anonymise any account. Cannot delete the sole platform admin (yourself)."""
+    """Permanently delete an account from the database.
+
+    Withdraws active tournament entries first. Tournaments / announcements they
+    organised are reassigned to the admin. Cannot delete yourself / sole admin.
+    """
     user = db.get(User, user_id)
     if not user or is_deleted_placeholder_email(user.email):
         raise HTTPException(404, "User not found")
@@ -167,7 +175,7 @@ def delete_user(
     if user.role == UserRole.ADMIN.value and user_is_sole_admin(db, user.id):
         raise HTTPException(400, "Cannot delete the sole platform admin account")
 
-    # Pull them out of active tournament entries before wiping the account
+    # Pull them out of active tournament entries before removing seats
     memberships = (
         db.query(TeamPlayer)
         .options(joinedload(TeamPlayer.team).joinedload(Team.registration))
@@ -186,8 +194,12 @@ def delete_user(
             continue
         _apply_team_withdraw(db, t, team, as_organiser=True, force=True)
 
-    anonymise_user(db, user)
-    db.commit()
+    try:
+        purge_user(db, user, reassign_to=admin)
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 - surface FK surprises cleanly
+        db.rollback()
+        raise HTTPException(400, f"Could not delete account: {exc}") from exc
     return None
 
 
