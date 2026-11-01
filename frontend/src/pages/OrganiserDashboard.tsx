@@ -266,6 +266,7 @@ export default function OrganiserDashboard() {
     onSuccess: (res) => {
       setConfirmGenerate(false)
       qc.invalidateQueries({ queryKey: ['org-matches'] })
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
       invalidateTournamentPublic()
       const d = res.data as {
         matches?: number
@@ -926,7 +927,7 @@ export default function OrganiserDashboard() {
       {toast && <div className="org-toast">{toast}</div>}
       <div className="org-shell">
         <aside className="org-nav">
-          <p className="org-nav-label">My events</p>
+          <p className="org-nav-label">{user?.role === 'ADMIN' ? 'All events' : 'My events'}</p>
           {tournaments.map((t) => (
             <button
               key={t.tournament.id}
@@ -937,19 +938,32 @@ export default function OrganiserDashboard() {
               }}
             >
               <span className="org-nav-item-name">{t.tournament.name}</span>
-              <span className="org-nav-item-meta">{statusLabel(t.tournament.status)}</span>
+              <span className="org-nav-item-meta">
+                {statusLabel(t.tournament.status)}
+                {user?.role === 'ADMIN'
+                  ? t.tournament.is_official
+                    ? ' · Official'
+                    : ' · Private'
+                  : ''}
+              </span>
             </button>
           ))}
           <button
             className="btn btn-ghost btn-block"
             type="button"
-            onClick={() => navigate('/tournaments?create=1')}
+            onClick={() =>
+              navigate(user?.role === 'ADMIN' ? '/admin' : '/tournaments?create=1')
+            }
           >
             + New tournament
           </button>
           <div className="org-aside-note">
-            <strong>Running an event?</strong>
-            <p>Registration, payments, and live scoring in one place.</p>
+            <strong>{user?.role === 'ADMIN' ? 'Platform admin' : 'Running an event?'}</strong>
+            <p>
+              {user?.role === 'ADMIN'
+                ? 'Open registration, generate the draw, go live, and score from here.'
+                : 'Registration, payments, and live scoring in one place.'}
+            </p>
           </div>
         </aside>
 
@@ -973,17 +987,20 @@ export default function OrganiserDashboard() {
           )}
           {!active && !isLoading && !isError && (
             <div className="org-empty">
-              <h1>Running an event?</h1>
+              <h1>{user?.role === 'ADMIN' ? 'No tournaments yet' : 'Running an event?'}</h1>
               <p>
-                Set up registration, payments, and live scoring. Tournaments you create here are private -
-                players join with your invite code (they won’t appear on the landing page).
+                {user?.role === 'ADMIN'
+                  ? 'Create an official tournament from the admin portal, then manage the draw and live scoring here.'
+                  : 'Set up registration, payments, and live scoring. Tournaments you create here are private - players join with your invite code (they won’t appear on the landing page).'}
               </p>
               <button
                 className="btn btn-primary"
                 type="button"
-                onClick={() => navigate('/tournaments?create=1')}
+                onClick={() =>
+                  navigate(user?.role === 'ADMIN' ? '/admin' : '/tournaments?create=1')
+                }
               >
-                Create a tournament
+                {user?.role === 'ADMIN' ? 'Go to admin' : 'Create a tournament'}
               </button>
             </div>
           )}

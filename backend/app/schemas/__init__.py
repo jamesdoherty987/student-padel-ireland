@@ -681,3 +681,60 @@ class InviteResolveOut(BaseModel):
     invite_code: str
     join_path: str
     hint: str = ""
+
+
+class AdminUserOut(BaseModel):
+    """Platform admin view of an account (includes email)."""
+
+    id: UUID
+    email: str
+    full_name: str
+    phone: Optional[str] = None
+    role: str
+    university_id: Optional[UUID] = None
+    university_short: Optional[str] = None
+    student_number: Optional[str] = None
+    is_active: bool
+    is_suspended: bool
+    created_at: Optional[datetime] = None
+    tournament_entries: int = 0
+
+
+class AdminUserTournamentEntry(BaseModel):
+    tournament_id: UUID
+    tournament_name: str
+    tournament_slug: str
+    tournament_status: str
+    event_date: date
+    team_id: UUID
+    team_name: str
+    payment_status: Optional[str] = None
+    withdrawn: bool = False
+    players: list[str] = Field(default_factory=list)
+
+
+class AdminUserDetailOut(AdminUserOut):
+    entries: list[AdminUserTournamentEntry] = Field(default_factory=list)
+
+
+class AdminTournamentEntryPlayer(BaseModel):
+    user_id: UUID
+    full_name: str
+    email: str
+    slot: int
+
+
+class AdminTournamentTeamOut(BaseModel):
+    team_id: UUID
+    team_name: str
+    payment_status: Optional[str] = None
+    withdrawn: bool = False
+    checked_in: bool = False
+    players: list[AdminTournamentEntryPlayer] = Field(default_factory=list)
+
+
+class AdminTournamentEntriesOut(BaseModel):
+    tournament_id: UUID
+    tournament_name: str
+    status: str
+    teams: list[AdminTournamentTeamOut] = Field(default_factory=list)

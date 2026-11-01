@@ -9,6 +9,7 @@ import {
   validateRegistrationFields,
   type RegistrationFieldDraft,
 } from './RegistrationFieldsEditor'
+import { useAuth } from '../context/AuthContext'
 import { apiErrorMessage, tournamentApi, type Tournament } from '../services/api'
 import { toDatetimeLocalValue } from '../utils/format'
 
@@ -62,12 +63,15 @@ export default function EditTournamentModal({
   onClose,
   onSaved,
 }: Props) {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
   const qc = useQueryClient()
   const [form, setForm] = useState(() => toForm(tournament))
   const [courtNames, setCourtNames] = useState(() => initialCourtNames(tournament))
   const [registrationFields, setRegistrationFields] = useState<RegistrationFieldDraft[]>(() =>
     draftsFromApi(tournament.registration_fields || []),
   )
+  const [isOfficial, setIsOfficial] = useState(() => tournament.is_official !== false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -149,6 +153,9 @@ export default function EditTournamentModal({
         payload.format = form.format
         payload.play_format = form.play_format
       }
+      if (isAdmin) {
+        payload.is_official = isOfficial
+      }
       await tournamentApi.update(tournament.id, payload)
       await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
       await qc.invalidateQueries({ queryKey: ['tournament', tournament.slug] })
@@ -201,6 +208,20 @@ export default function EditTournamentModal({
             setRegistrationFields(next)
           }}
         />
+
+        {isAdmin && (
+          <label className="tf-check" style={{ marginTop: '0.75rem' }}>
+            <input
+              type="checkbox"
+              checked={isOfficial}
+              onChange={(e) => {
+                setDirty(true)
+                setIsOfficial(e.target.checked)
+              }}
+            />
+            <span>List as official (public on landing / tournaments browse)</span>
+          </label>
+        )}
 
         {error && <p className="auth-error">{error}</p>}
       </form>

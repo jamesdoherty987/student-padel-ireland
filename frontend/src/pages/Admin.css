@@ -1,6 +1,218 @@
 .admin-page .page-header-row {
   align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.admin-flow-hint {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+
+.admin-filter-check {
+  margin: 0 0 1rem;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 0.35rem;
   margin-bottom: 1.25rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.35rem;
+}
+
+.admin-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 650;
+  min-height: 40px;
+  padding: 0.45rem 0.85rem;
+}
+
+.admin-tab.is-active {
+  background: color-mix(in srgb, var(--court) 12%, transparent);
+  color: var(--court-deep);
+}
+
+.admin-accounts-search {
+  margin-bottom: 1rem;
+  max-width: 28rem;
+}
+
+.admin-accounts-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+@media (min-width: 900px) {
+  .admin-accounts-layout {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    align-items: start;
+  }
+}
+
+.admin-user-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-user-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.65rem;
+}
+
+.admin-user-row.is-selected {
+  border-color: color-mix(in srgb, var(--court) 45%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--court) 25%, transparent);
+}
+
+.admin-user-main {
+  appearance: none;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.25rem 0.2rem;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.admin-user-main strong {
+  color: var(--court-deep);
+  font-size: 0.98rem;
+}
+
+.admin-user-main > span {
+  color: var(--muted);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-user-meta {
+  color: var(--ink-soft) !important;
+  font-size: 0.8rem !important;
+}
+
+.admin-user-detail {
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+}
+
+.admin-user-detail h2 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  margin: 0 0 0.2rem;
+  color: var(--court-deep);
+}
+
+.admin-user-detail h3 {
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 1rem 0 0.5rem;
+}
+
+.admin-user-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.admin-user-entries li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.admin-user-entries li:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.admin-user-entries li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.admin-user-entries a {
+  font-weight: 650;
+  color: var(--court-deep);
+}
+
+.admin-user-entries span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.admin-entries-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.admin-entry-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.admin-entry-row:last-child {
+  border-bottom: none;
+}
+
+.admin-entry-row strong {
+  display: block;
+  color: var(--court-deep);
+  margin-bottom: 0.15rem;
+}
+
+.admin-entry-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.admin-entry-emails {
+  font-size: 0.8rem !important;
+  overflow-wrap: anywhere;
 }
 
 .admin-page .page-header-row .page-sub {

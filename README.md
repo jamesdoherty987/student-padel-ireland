@@ -42,9 +42,9 @@ Open http://localhost:5173
 | Role | Email | Password |
 |------|--------|----------|
 | Player | james@ul.ie | player12345 |
-| Admin | admin@studentpadelireland.ie | admin12345 |
+| Admin | `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `backend/.env` (defaults: admin@studentpadelireland.ie / admin12345) |
 
-Demo seed creates users only (no sample tournament). Create official events from **`/admin`**. Player-created events are private (invite/link only).
+There is a single platform admin. Credentials are read from env on every API startup (create/update + demote any extra ADMIN rows). Demo seed creates player accounts only besides that admin. Create official events from **`/admin`**. Player-created events are private (invite/link only).
 
 ## Tests
 
@@ -83,7 +83,7 @@ You can launch for **€0/month** on free tiers. Expect cold starts on Render fr
    - `DATABASE_URL` - Supabase URI
    - `FRONTEND_URL` - your Vercel URL (no trailing slash)
    - `BACKEND_URL` - your Render API URL
-   - `ADMIN_EMAIL` / `ADMIN_PASSWORD` - first admin (demo accounts are **not** created in production)
+   - `ADMIN_EMAIL` / `ADMIN_PASSWORD` - sole platform admin (synced on startup; demo accounts are **not** created in production)
 4. Stripe keys optional until you charge fees (demo payments until then)
 
 ### Frontend (Vercel)

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Set SEED_DEMO_DATA=true to force demo seed on a prod DB (not recommended).
     seed_demo_data: bool | None = None
 
-    # Optional first admin when demo seed is off (production bootstrap)
+    # Sole platform admin - synced on startup from ADMIN_EMAIL / ADMIN_PASSWORD
     admin_email: str = ""
     admin_password: str = ""
     admin_name: str = "Platform Admin"

@@ -237,7 +237,7 @@ export function LoginPage() {
         {import.meta.env.DEV && (
           <p className="auth-demo">
             Dev: james@ul.ie / player12345 · organiser@studentpadelireland.ie / organiser123 ·
-            admin@studentpadelireland.ie / admin12345
+            admin from ADMIN_EMAIL / ADMIN_PASSWORD
           </p>
         )}
       </div>
@@ -271,6 +271,10 @@ export function SignupPage() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = safeNextPath(params.get('next'))
+  // Partner-invite emails prefill ?email=&name= so they claim the stub already on the team
+  const inviteEmail = (params.get('email') || '').trim().toLowerCase()
+  const inviteName = (params.get('name') || '').trim()
+  const emailFromInvite = inviteEmail.includes('@')
   const {
     data: universities = [],
     isLoading: unisLoading,
@@ -282,8 +286,8 @@ export function SignupPage() {
   })
 
   const [form, setForm] = useState({
-    full_name: '',
-    email: '',
+    full_name: inviteName,
+    email: emailFromInvite ? inviteEmail : '',
     password: '',
     phone: '',
     university_id: '',
@@ -317,6 +321,8 @@ export function SignupPage() {
       const u = await register(
         {
           ...form,
+          // Never let a partner-invite claim use a different email than the stub on the team
+          email: emailFromInvite ? inviteEmail : form.email,
           university_id: form.university_id || null,
           phone: form.phone || null,
           student_number: form.student_number || null,
@@ -337,17 +343,19 @@ export function SignupPage() {
         <BrandLogo to={native ? null : appHomePath()} className="auth-brand" size="md" />
         <h1>Create your account</h1>
         <p className="auth-lead">
-          {next.includes('/join')
-            ? 'Create an account to finish joining with your invite.'
-            : next.includes('/confirmed') || next.includes('/live')
-              ? 'Create an account to continue to your match.'
-              : next.includes('create=1')
-                ? 'Create an account to set up your tournament.'
-                : next.startsWith('/organiser')
-                  ? 'Create an account to manage your event.'
-                  : next.includes('/community')
-                    ? 'Create an account to add friends and join events.'
-                    : 'A few details and you’re ready to play and join events.'}
+          {emailFromInvite
+            ? 'Your teammate already added you — finish signup with this email to see your team.'
+            : next.includes('/join')
+              ? 'Create an account to finish joining with your invite.'
+              : next.includes('/confirmed') || next.includes('/live')
+                ? 'Create an account to continue to your match.'
+                : next.includes('create=1')
+                  ? 'Create an account to set up your tournament.'
+                  : next.startsWith('/organiser')
+                    ? 'Create an account to manage your event.'
+                    : next.includes('/community')
+                      ? 'Create an account to add friends and join events.'
+                      : 'A few details and you’re ready to play and join events.'}
         </p>
         <form onSubmit={onSubmit}>
           <div className="form-group">
@@ -383,13 +391,20 @@ export function SignupPage() {
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               required
+              readOnly={emailFromInvite}
               autoComplete="email"
               inputMode="email"
               enterKeyHint="next"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck={false}
+              aria-describedby={emailFromInvite ? 'signup-email-hint' : undefined}
             />
+            {emailFromInvite && (
+              <p id="signup-email-hint" className="auth-field-hint">
+                Locked to the invite email so you stay on your teammate’s entry
+              </p>
+            )}
           </div>
           <PasswordField
             id="signup-password"

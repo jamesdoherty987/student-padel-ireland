@@ -1,22 +1,29 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from '../components/ConfirmDialog'
 import CreateTournamentModal from '../components/CreateTournamentModal'
 import EditTournamentModal from '../components/EditTournamentModal'
+import ModalShell from '../components/ModalShell'
 import NavBar from '../components/NavBar'
 import { useAuth } from '../context/AuthContext'
 import { publicPathUrl, publicWebOrigin } from '../native/platform'
 import {
+  adminApi,
   apiErrorMessage,
   platformApi,
   tournamentApi,
+  type AdminTournamentEntries,
+  type AdminUser,
+  type AdminUserDetail,
   type OrganiserDashRow,
   type Tournament,
 } from '../services/api'
 import { formatDate, formatEntrySummary, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
 import './Organiser.css'
 import './Admin.css'
+
+type AdminTab = 'tournaments' | 'accounts'
 
 async function copyText(text: string) {
   if (navigator.clipboard?.writeText) {
@@ -36,12 +43,16 @@ async function copyText(text: string) {
 
 export default function AdminDashboard() {
   const { user, loading: authLoading } = useAuth()
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const isAdmin = user?.role === 'ADMIN'
+  const [tab, setTab] = useState<AdminTab>('tournaments')
+  const [showPrivate, setShowPrivate] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [editing, setEditing] = useState<Tournament | null>(null)
   const [editingFixturesExist, setEditingFixturesExist] = useState(false)
+  const [entriesFor, setEntriesFor] = useState<Tournament | null>(null)
   const toastTimer = useRef<number | null>(null)
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -50,7 +61,12 @@ export default function AdminDashboard() {
     enabled: isAdmin,
   })
 
-  const rows: OrganiserDashRow[] = data?.tournaments || []
+  const allRows: OrganiserDashRow[] = data?.tournaments || []
+  const privateCount = allRows.filter((r) => !r.tournament.is_official).length
+  const rows = useMemo(
+    () => (showPrivate ? allRows : allRows.filter((r) => r.tournament.is_official !== false)),
+    [allRows, showPrivate],
+  )
 
   const openCount = rows.filter((r) => r.tournament.status === 'REGISTRATION_OPEN').length
   const liveCount = rows.filter((r) => r.tournament.status === 'LIVE').length
@@ -63,10 +79,10 @@ export default function AdminDashboard() {
   }, [])
 
   useEffect(() => {
-    const open = showCreate || !!editing
+    const open = showCreate || !!editing || !!entriesFor
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [showCreate, editing])
+  }, [showCreate, editing, entriesFor])
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -79,7 +95,7 @@ export default function AdminDashboard() {
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
       qc.invalidateQueries({ queryKey: ['tournaments'] })
-      showToast(`Status â†’ ${statusLabel(vars.status)}`)
+      showToast(`Status → ${statusLabel(vars.status)}`)
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not update status')),
   })
@@ -105,7 +121,7 @@ export default function AdminDashboard() {
   const pendingStatusId = statusMut.isPending ? statusMut.variables?.id : null
   const pendingDeleteId = deleteMut.isPending ? deleteMut.variables : null
 
-  if (authLoading || (isLoading && isAdmin)) {
+  if (authLoading || (isLoading && isAdmin && tab === 'tournaments')) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -130,88 +146,142 @@ export default function AdminDashboard() {
         <div className="page-header-row">
           <div>
             <p className="eyebrow">Admin</p>
-            <h1 className="page-title">Official tournaments</h1>
+            <h1 className="page-title">Platform control</h1>
+            <p className="page-sub">
+              Create official events, open registration, generate draws, go live, and manage accounts.
+            </p>
           </div>
-          <div className="header-actions">
-            <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
-              New tournament
-            </button>
-          </div>
+          {tab === 'tournaments' && (
+            <div className="header-actions">
+              <button type="button" className="btn btn-primary" onClick={() => setShowCreate(true)}>
+                New tournament
+              </button>
+            </div>
+          )}
         </div>
 
-        {rows.length > 0 && (
-          <div className="admin-stats">
-            <div>
-              <strong>{rows.length}</strong>
-              <span>Tournaments</span>
-            </div>
-            <div>
-              <strong>{openCount}</strong>
-              <span>Open for entry</span>
-            </div>
-            <div>
-              <strong>{liveCount}</strong>
-              <span>Live</span>
-            </div>
-            <div>
-              <strong>{formatMoney(totalRevenue)}</strong>
-              <span>Revenue</span>
-            </div>
-          </div>
+        <div className="admin-tabs" role="tablist" aria-label="Admin sections">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'tournaments'}
+            className={`admin-tab${tab === 'tournaments' ? ' is-active' : ''}`}
+            onClick={() => setTab('tournaments')}
+          >
+            Tournaments
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'accounts'}
+            className={`admin-tab${tab === 'accounts' ? ' is-active' : ''}`}
+            onClick={() => setTab('accounts')}
+          >
+            Accounts
+          </button>
+        </div>
+
+        {tab === 'tournaments' && (
+          <>
+            <p className="admin-flow-hint muted-note">
+              Flow: create → open registration → <strong>Manage event</strong> → generate draw → go live → score.
+            </p>
+
+            {allRows.length > 0 && (
+              <div className="admin-stats">
+                <div>
+                  <strong>{rows.length}</strong>
+                  <span>{showPrivate ? 'Shown' : 'Official'}</span>
+                </div>
+                <div>
+                  <strong>{openCount}</strong>
+                  <span>Open for entry</span>
+                </div>
+                <div>
+                  <strong>{liveCount}</strong>
+                  <span>Live</span>
+                </div>
+                <div>
+                  <strong>{formatMoney(totalRevenue)}</strong>
+                  <span>Revenue</span>
+                </div>
+              </div>
+            )}
+
+            {privateCount > 0 && (
+              <label className="admin-check admin-filter-check">
+                <input
+                  type="checkbox"
+                  checked={showPrivate}
+                  onChange={(e) => setShowPrivate(e.target.checked)}
+                />
+                Show private player events ({privateCount})
+              </label>
+            )}
+
+            {isError && (
+              <div className="empty-state">
+                <p>Could not load tournaments.</p>
+                <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => refetch()}>
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {!isError && rows.length === 0 && (
+              <div className="empty-state">
+                <p>
+                  {showPrivate
+                    ? 'No tournaments yet.'
+                    : privateCount > 0
+                      ? 'No official tournaments yet. Create one, or show private player events.'
+                      : 'No official tournaments yet. Create one to get started.'}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ marginTop: 12 }}
+                  onClick={() => setShowCreate(true)}
+                >
+                  Create tournament
+                </button>
+              </div>
+            )}
+
+            {!isError && rows.length > 0 && (
+              <ul className="admin-list">
+                {rows.map((row) => (
+                  <AdminTournamentCard
+                    key={row.tournament.id}
+                    row={row}
+                    busy={pendingStatusId === row.tournament.id || pendingDeleteId === row.tournament.id}
+                    onOpenRegistration={() =>
+                      statusMut.mutate({ id: row.tournament.id, status: 'REGISTRATION_OPEN' })
+                    }
+                    onEdit={() => {
+                      setEditing(row.tournament)
+                      setEditingFixturesExist(!!row.has_fixtures)
+                    }}
+                    onEntries={() => setEntriesFor(row.tournament)}
+                    onDelete={() => {
+                      void confirmDialog({
+                        title: 'Delete tournament?',
+                        message: `Permanently delete "${row.tournament.name}"? This removes teams, matches, and scores.`,
+                        confirmLabel: 'Delete',
+                        danger: true,
+                      }).then((ok) => {
+                        if (ok) deleteMut.mutate(row.tournament.id)
+                      })
+                    }}
+                    onCopied={(msg) => showToast(msg)}
+                  />
+                ))}
+              </ul>
+            )}
+          </>
         )}
 
-        {isError && (
-          <div className="empty-state">
-            <p>Could not load tournaments.</p>
-            <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => refetch()}>
-              Retry
-            </button>
-          </div>
-        )}
-
-        {!isError && rows.length === 0 && (
-          <div className="empty-state">
-            <p>No tournaments yet. Create an official event to get started.</p>
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ marginTop: 12 }}
-              onClick={() => setShowCreate(true)}
-            >
-              Create tournament
-            </button>
-          </div>
-        )}
-
-        {!isError && rows.length > 0 && (
-          <ul className="admin-list">
-            {rows.map((row) => (
-              <AdminTournamentCard
-                key={row.tournament.id}
-                row={row}
-                busy={pendingStatusId === row.tournament.id || pendingDeleteId === row.tournament.id}
-                onOpenRegistration={() =>
-                  statusMut.mutate({ id: row.tournament.id, status: 'REGISTRATION_OPEN' })
-                }
-                onEdit={() => {
-                  setEditing(row.tournament)
-                  setEditingFixturesExist(!!row.has_fixtures)
-                }}
-                onDelete={() => {
-                  void confirmDialog({
-                    title: 'Delete tournament?',
-                    message: `Permanently delete "${row.tournament.name}"? This removes teams, matches, and scores.`,
-                    confirmLabel: 'Delete',
-                    danger: true,
-                  }).then((ok) => {
-                    if (ok) deleteMut.mutate(row.tournament.id)
-                  })
-                }}
-                onCopied={(msg) => showToast(msg)}
-              />
-            ))}
-          </ul>
-        )}
+        {tab === 'accounts' && <AdminAccountsPanel onToast={showToast} />}
       </main>
 
       {showCreate && (
@@ -219,7 +289,10 @@ export default function AdminDashboard() {
           variant="admin"
           onClose={() => setShowCreate(false)}
           onToast={showToast}
-          onCreated={(msg) => showToast(msg)}
+          onCreated={(msg, id) => {
+            showToast(msg)
+            if (id) navigate(`/organiser?t=${id}`)
+          }}
         />
       )}
 
@@ -234,6 +307,14 @@ export default function AdminDashboard() {
           onSaved={(msg) => showToast(msg)}
         />
       )}
+
+      {entriesFor && (
+        <AdminEntriesModal
+          tournament={entriesFor}
+          onClose={() => setEntriesFor(null)}
+          onToast={showToast}
+        />
+      )}
     </div>
   )
 }
@@ -243,6 +324,7 @@ function AdminTournamentCard({
   busy,
   onOpenRegistration,
   onEdit,
+  onEntries,
   onDelete,
   onCopied,
 }: {
@@ -250,6 +332,7 @@ function AdminTournamentCard({
   busy: boolean
   onOpenRegistration: () => void
   onEdit: () => void
+  onEntries: () => void
   onDelete: () => void
   onCopied: (msg: string) => void
 }) {
@@ -281,6 +364,7 @@ function AdminTournamentCard({
             {t.start_time ? ` · ${t.start_time.slice(0, 5)}` : ''}
           </p>
           <p className="admin-meta">
+            {t.is_official === false ? 'Private · ' : 'Official · '}
             {formatEntrySummary(row.paid_registrations, t.max_teams, t.entry_fee_cents, t.currency, t.play_format)} · Revenue{' '}
             {formatMoney(row.revenue_cents)}
           </p>
@@ -292,6 +376,9 @@ function AdminTournamentCard({
         <Link to={`/organiser?t=${t.id}`} className="btn btn-primary btn-sm">
           Manage event
         </Link>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onEntries}>
+          Entries
+        </button>
         {(t.status === 'DRAFT' || t.status === 'REGISTRATION_CLOSED') && (
           <button
             type="button"
@@ -318,7 +405,8 @@ function AdminTournamentCard({
       {moreOpen && (
         <div className="admin-actions-more">
           <p className="muted-note admin-manage-hint">
-            Draw, scoring, go live, and complete are under <strong>Manage event</strong>.
+            Draw, scoring, go live, and complete are under <strong>Manage event</strong>. Use{' '}
+            <strong>Entries</strong> to remove players quickly.
           </p>
           <div className="admin-actions-group">
             <span className="admin-actions-label">Links</span>
@@ -345,3 +433,376 @@ function AdminTournamentCard({
   )
 }
 
+function AdminEntriesModal({
+  tournament,
+  onClose,
+  onToast,
+}: {
+  tournament: Tournament
+  onClose: () => void
+  onToast: (msg: string) => void
+}) {
+  const qc = useQueryClient()
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: ['admin-tournament-entries', tournament.id],
+    queryFn: async () => (await adminApi.tournamentEntries(tournament.id)).data,
+  })
+
+  const removeMut = useMutation({
+    mutationFn: (userId: string) => adminApi.removePlayerFromTournament(tournament.id, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-tournament-entries', tournament.id] })
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      onToast('Player removed from tournament')
+    },
+    onError: (e: unknown) => onToast(apiErrorMessage(e, 'Could not remove player')),
+  })
+
+  return (
+    <ModalShell
+      title={`Entries · ${tournament.name}`}
+      titleId="admin-entries-title"
+      subtitle="Remove a team by withdrawing any player on it."
+      onClose={onClose}
+      wide
+      className="admin-modal"
+    >
+      {isLoading && <div className="skeleton" style={{ height: 120 }} />}
+      {isError && (
+        <div className="empty-state">
+          <p>Could not load entries.</p>
+          <button type="button" className="btn btn-ghost" onClick={() => refetch()}>
+            Retry
+          </button>
+        </div>
+      )}
+      {data && (
+        <AdminEntriesList
+          data={data}
+          busyUserId={removeMut.isPending ? removeMut.variables : null}
+          onRemove={(userId, name) => {
+            void confirmDialog({
+              title: 'Remove from tournament?',
+              message: `Withdraw ${name}'s team from "${tournament.name}"?`,
+              confirmLabel: 'Remove',
+              danger: true,
+            }).then((ok) => {
+              if (ok) removeMut.mutate(userId)
+            })
+          }}
+        />
+      )}
+    </ModalShell>
+  )
+}
+
+function AdminEntriesList({
+  data,
+  busyUserId,
+  onRemove,
+}: {
+  data: AdminTournamentEntries
+  busyUserId: string | null
+  onRemove: (userId: string, name: string) => void
+}) {
+  if (data.teams.length === 0) {
+    return (
+      <div className="empty-state">
+        <p>No active entries.</p>
+      </div>
+    )
+  }
+
+  return (
+    <ul className="admin-entries-list">
+      {data.teams.map((team) => (
+        <li key={team.team_id} className="admin-entry-row">
+          <div>
+            <strong>{team.team_name}</strong>
+            <p>
+              {team.players.map((p) => p.full_name).join(' · ')}
+              {team.payment_status ? ` · ${team.payment_status}` : ''}
+            </p>
+            <p className="admin-entry-emails">
+              {team.players.map((p) => p.email).join(' · ')}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            disabled={removeBusy(busyUserId, team.players)}
+            onClick={() => {
+              const first = team.players[0]
+              if (first) onRemove(first.user_id, first.full_name)
+            }}
+          >
+            Remove
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function removeBusy(
+  busyUserId: string | null,
+  players: Array<{ user_id: string }>,
+): boolean {
+  if (!busyUserId) return false
+  return players.some((p) => p.user_id === busyUserId)
+}
+
+function AdminAccountsPanel({ onToast }: { onToast: (msg: string) => void }) {
+  const { user } = useAuth()
+  const qc = useQueryClient()
+  const [q, setQ] = useState('')
+  const [debouncedQ, setDebouncedQ] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(q.trim()), 250)
+    return () => window.clearTimeout(t)
+  }, [q])
+
+  const { data: users, isLoading, isError, refetch } = useQuery({
+    queryKey: ['admin-users', debouncedQ],
+    queryFn: async () =>
+      (await adminApi.listUsers(debouncedQ ? { q: debouncedQ, limit: 100 } : { limit: 100 })).data,
+  })
+
+  const detailQuery = useQuery({
+    queryKey: ['admin-user', selectedId],
+    queryFn: async () => (await adminApi.getUser(selectedId!)).data,
+    enabled: !!selectedId,
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: (userId: string) => adminApi.deleteUser(userId),
+    onSuccess: (_, userId) => {
+      if (selectedId === userId) setSelectedId(null)
+      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      qc.removeQueries({ queryKey: ['admin-user', userId] })
+      onToast('Account deleted')
+    },
+    onError: (e: unknown) => onToast(apiErrorMessage(e, 'Could not delete account')),
+  })
+
+  const removeMut = useMutation({
+    mutationFn: ({ tournamentId, userId }: { tournamentId: string; userId: string }) =>
+      adminApi.removePlayerFromTournament(tournamentId, userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-user', selectedId] })
+      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      onToast('Removed from tournament')
+    },
+    onError: (e: unknown) => onToast(apiErrorMessage(e, 'Could not remove from tournament')),
+  })
+
+  return (
+    <div className="admin-accounts">
+      <div className="admin-accounts-search">
+        <label className="form-label" htmlFor="admin-user-search">
+          Search accounts
+        </label>
+        <input
+          id="admin-user-search"
+          className="form-input"
+          type="search"
+          placeholder="Name, email, or student number"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          autoComplete="off"
+        />
+      </div>
+
+      {isLoading && (
+        <>
+          <div className="skeleton" style={{ height: 64, marginBottom: 8 }} />
+          <div className="skeleton" style={{ height: 64 }} />
+        </>
+      )}
+
+      {isError && (
+        <div className="empty-state">
+          <p>Could not load accounts.</p>
+          <button type="button" className="btn btn-ghost" style={{ marginTop: 12 }} onClick={() => refetch()}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {!isLoading && !isError && (users?.length ?? 0) === 0 && (
+        <div className="empty-state">
+          <p>{debouncedQ ? 'No accounts match that search.' : 'No accounts yet.'}</p>
+        </div>
+      )}
+
+      <div className="admin-accounts-layout">
+        <ul className="admin-user-list">
+          {(users || []).map((u) => (
+            <AdminUserRow
+              key={u.id}
+              user={u}
+              selected={selectedId === u.id}
+              isSelf={u.id === user?.id}
+              onSelect={() => setSelectedId(u.id === selectedId ? null : u.id)}
+              onDelete={() => {
+                void confirmDialog({
+                  title: 'Delete account?',
+                  message: `Permanently delete ${u.full_name} (${u.email})? Their personal data is wiped; tournament history stays anonymised.`,
+                  confirmLabel: 'Delete account',
+                  danger: true,
+                }).then((ok) => {
+                  if (ok) deleteMut.mutate(u.id)
+                })
+              }}
+              deleting={deleteMut.isPending && deleteMut.variables === u.id}
+            />
+          ))}
+        </ul>
+
+        {selectedId && (
+          <AdminUserDetailPanel
+            detail={detailQuery.data}
+            loading={detailQuery.isLoading}
+            error={detailQuery.isError}
+            onRetry={() => detailQuery.refetch()}
+            busyRemove={removeMut.isPending}
+            onRemove={(tournamentId, tournamentName) => {
+              const name = detailQuery.data?.full_name || 'this player'
+              void confirmDialog({
+                title: 'Remove from tournament?',
+                message: `Withdraw ${name} from "${tournamentName}"?`,
+                confirmLabel: 'Remove',
+                danger: true,
+              }).then((ok) => {
+                if (ok) removeMut.mutate({ tournamentId, userId: selectedId })
+              })
+            }}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function AdminUserRow({
+  user,
+  selected,
+  isSelf,
+  onSelect,
+  onDelete,
+  deleting,
+}: {
+  user: AdminUser
+  selected: boolean
+  isSelf: boolean
+  onSelect: () => void
+  onDelete: () => void
+  deleting: boolean
+}) {
+  return (
+    <li className={`admin-user-row${selected ? ' is-selected' : ''}`}>
+      <button type="button" className="admin-user-main" onClick={onSelect}>
+        <strong>{user.full_name}</strong>
+        <span>{user.email}</span>
+        <span className="admin-user-meta">
+          {user.university_short || 'No uni'}
+          {user.tournament_entries > 0 ? ` · ${user.tournament_entries} active entr${user.tournament_entries === 1 ? 'y' : 'ies'}` : ''}
+          {user.role === 'ADMIN' ? ' · Admin' : ''}
+          {isSelf ? ' · You' : ''}
+        </span>
+      </button>
+      {!isSelf && user.role !== 'ADMIN' && (
+        <button
+          type="button"
+          className="btn btn-danger btn-sm"
+          disabled={deleting}
+          onClick={onDelete}
+        >
+          {deleting ? 'Deleting…' : 'Delete'}
+        </button>
+      )}
+    </li>
+  )
+}
+
+function AdminUserDetailPanel({
+  detail,
+  loading,
+  error,
+  onRetry,
+  busyRemove,
+  onRemove,
+}: {
+  detail: AdminUserDetail | undefined
+  loading: boolean
+  error: boolean
+  onRetry: () => void
+  busyRemove: boolean
+  onRemove: (tournamentId: string, tournamentName: string) => void
+}) {
+  if (loading) {
+    return <div className="admin-user-detail skeleton" style={{ minHeight: 160 }} />
+  }
+  if (error || !detail) {
+    return (
+      <div className="admin-user-detail empty-state">
+        <p>Could not load account details.</p>
+        <button type="button" className="btn btn-ghost" onClick={onRetry}>
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  const activeEntries = detail.entries.filter((e) => !e.withdrawn)
+  const pastEntries = detail.entries.filter((e) => e.withdrawn)
+
+  return (
+    <div className="admin-user-detail">
+      <h2>{detail.full_name}</h2>
+      <p>{detail.email}</p>
+      <p className="admin-user-meta">
+        {[detail.university_short, detail.phone, detail.student_number].filter(Boolean).join(' · ') || 'No extra details'}
+      </p>
+
+      <h3>Tournament entries</h3>
+      {activeEntries.length === 0 && pastEntries.length === 0 && (
+        <p className="muted-note">Not entered in any tournaments.</p>
+      )}
+      {activeEntries.length > 0 && (
+        <ul className="admin-user-entries">
+          {activeEntries.map((e) => (
+            <li key={e.team_id}>
+              <div>
+                <Link to={`/t/${e.tournament_slug}`}>{e.tournament_name}</Link>
+                <span>
+                  {formatDate(e.event_date, { day: 'numeric', month: 'short', year: 'numeric' })} ·{' '}
+                  {statusLabel(e.tournament_status)}
+                  {e.payment_status ? ` · ${e.payment_status}` : ''}
+                </span>
+                <span>{e.players.join(' · ')}</span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={busyRemove}
+                onClick={() => onRemove(e.tournament_id, e.tournament_name)}
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {pastEntries.length > 0 && (
+        <p className="muted-note">
+          {pastEntries.length} withdrawn entr{pastEntries.length === 1 ? 'y' : 'ies'} hidden.
+        </p>
+      )}
+    </div>
+  )
+}

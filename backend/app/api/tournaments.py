@@ -318,9 +318,15 @@ def _notify_email_partner(
 ) -> None:
     """Tell an email-invited partner to claim their spot or open the event."""
     settings = get_settings()
-    next_path = quote(f"/t/{tournament.slug}", safe="")
+    next_path = quote(f"/t/{tournament.slug}/live", safe="")
     if needs_signup or getattr(partner, "must_set_password", False):
-        signup_url = f"{settings.frontend_url}/signup?next={next_path}"
+        # Prefill email (+ name) so they claim the stub account already on the team
+        signup_qs = (
+            f"email={quote(partner.email, safe='')}"
+            f"&name={quote(partner.full_name or '', safe='')}"
+            f"&next={next_path}"
+        )
+        signup_url = f"{settings.frontend_url.rstrip('/')}/signup?{signup_qs}"
         subject = f"Join {captain.full_name} for {tournament.name}"
         text = (
             f"Hi {partner.full_name},\n\n"
@@ -332,15 +338,18 @@ def _notify_email_partner(
             f"See you on court,\nStudent Padel Ireland\n"
         )
     else:
-        event_url = f"{settings.frontend_url}/t/{tournament.slug}"
+        # Send existing accounts to login → live page (Accept / Decline invite)
+        login_url = (
+            f"{settings.frontend_url.rstrip('/')}/login?next={next_path}"
+        )
         subject = f"You're on a team for {tournament.name}"
         text = (
             f"Hi {partner.full_name},\n\n"
             f"{captain.full_name} registered you as their partner for "
             f"{tournament.name} on Student Padel Ireland.\n\n"
-            f"You're already on the team. Open the app to Accept (become friends) "
-            f"or Decline (leave the team so they can pick someone else).\n"
-            f"Open the tournament:\n{event_url}\n\n"
+            f"You're already on the team. Log in to Accept (become friends) "
+            f"or Decline (leave the team so they can pick someone else):\n"
+            f"{login_url}\n\n"
             f"If you can't play, leave the team from that page so your partner can re-enter.\n\n"
             f"Student Padel Ireland\n"
         )
@@ -959,7 +968,13 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
         .filter(
             Match.tournament_id == t.id,
             Match.stage == "GROUP",
-            Match.status.notin_([MatchStatus.COMPLETED.value, MatchStatus.WALKOVER.value]),
+            Match.status.notin_(
+                [
+                    MatchStatus.COMPLETED.value,
+                    MatchStatus.WALKOVER.value,
+                    MatchStatus.CANCELLED.value,
+                ]
+            ),
         )
         .count()
     )
@@ -1524,6 +1539,8 @@ def register_team(
 
     if resume_reg:
         team = db.get(Team, resume_reg.team_id)
+        # Only email when partner is newly attached or swapped (not on every pay retry)
+        partner_newly_attached = False
         if team:
             team.name = body.team_name.strip()
             if body.university_id:
@@ -1543,6 +1560,7 @@ def register_team(
                         slot2.user_id = partner.id
                         slot2.invitation_accepted = True
                         _ensure_pending_friendship(db, user.id, partner.id)
+                        partner_newly_attached = True
                 else:
                     db.add(
                         TeamPlayer(
@@ -1553,6 +1571,7 @@ def register_team(
                         )
                     )
                     _ensure_pending_friendship(db, user.id, partner.id)
+                    partner_newly_attached = True
         if team:
             save_answers_for_registration(
                 db,
@@ -1572,7 +1591,7 @@ def register_team(
             return_origin=body.return_origin,
             native_return=bool(body.native_return),
         )
-        if notify_email_partner and partner:
+        if notify_email_partner and partner and partner_newly_attached:
             _notify_email_partner(
                 captain=user,
                 partner=partner,
@@ -2247,22 +2266,31 @@ def _player_can_leave_entry(db: Session, t: Tournament, team: Team) -> bool:
     return False
 
 
-def _apply_team_withdraw(db: Session, t: Tournament, team: Team, *, as_organiser: bool) -> TeamOut:
+def _apply_team_withdraw(
+    db: Session,
+    t: Tournament,
+    team: Team,
+    *,
+    as_organiser: bool,
+    force: bool = False,
+) -> TeamOut:
+    """Mark a team withdrawn. ``force`` (platform admin) skips live/draw guards."""
     paid = _entry_is_paid(team)
-    if paid and _tournament_blocks_paid_withdraw(t):
-        raise HTTPException(
-            400,
-            "Cannot withdraw a paid entry after the event has started"
-            if not as_organiser
-            else "Cannot withdraw a paid team after the event is live",
-        )
-    if paid and not as_organiser and _tournament_has_fixtures(db, t.id):
-        raise HTTPException(
-            400,
-            "You can’t leave after the draw is published - contact the organiser",
-        )
-    if not as_organiser and not _player_can_leave_entry(db, t, team):
-        raise HTTPException(400, "You can no longer leave this tournament")
+    if not force:
+        if paid and _tournament_blocks_paid_withdraw(t):
+            raise HTTPException(
+                400,
+                "Cannot withdraw a paid entry after the event has started"
+                if not as_organiser
+                else "Cannot withdraw a paid team after the event is live",
+            )
+        if paid and not as_organiser and _tournament_has_fixtures(db, t.id):
+            raise HTTPException(
+                400,
+                "You can’t leave after the draw is published - contact the organiser",
+            )
+        if not as_organiser and not _player_can_leave_entry(db, t, team):
+            raise HTTPException(400, "You can no longer leave this tournament")
 
     team.withdrawn = True
     team.checked_in = False
@@ -2291,7 +2319,10 @@ def withdraw_team(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Organiser withdraw. Unpaid/pending can always be removed; paid only before LIVE."""
+    """Organiser withdraw. Unpaid/pending can always be removed; paid only before LIVE.
+
+    Platform ADMIN can force-withdraw even after the draw / go-live.
+    """
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
@@ -2304,7 +2335,8 @@ def withdraw_team(
     )
     if not team or team.withdrawn:
         raise HTTPException(404, "Team not found")
-    return _apply_team_withdraw(db, t, team, as_organiser=True)
+    force = user.role == Role.ADMIN.value
+    return _apply_team_withdraw(db, t, team, as_organiser=True, force=force)
 
 
 @router.post("/tournaments/{tournament_id}/leave", response_model=TeamOut)
@@ -2421,6 +2453,7 @@ def replace_partner(
         .filter(TeamPlayer.team_id == team.id, TeamPlayer.slot == 2)
         .first()
     )
+    previous_partner_id = slot2.user_id if slot2 else None
     if slot2:
         slot2.user_id = partner.id
         slot2.invitation_accepted = True
@@ -2444,7 +2477,7 @@ def replace_partner(
         singles=False,
     )
     db.commit()
-    if notify_email_partner:
+    if notify_email_partner and partner.id != previous_partner_id:
         _notify_email_partner(
             captain=user,
             partner=partner,

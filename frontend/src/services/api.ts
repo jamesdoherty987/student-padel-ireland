@@ -564,6 +564,67 @@ export const platformApi = {
   organiserDashboard: () => api.get<{ tournaments: OrganiserDashRow[] }>('/api/organiser/dashboard'),
 }
 
+export type AdminUser = {
+  id: string
+  email: string
+  full_name: string
+  phone?: string | null
+  role: string
+  university_id?: string | null
+  university_short?: string | null
+  student_number?: string | null
+  is_active: boolean
+  is_suspended: boolean
+  created_at?: string | null
+  tournament_entries: number
+}
+
+export type AdminUserTournamentEntry = {
+  tournament_id: string
+  tournament_name: string
+  tournament_slug: string
+  tournament_status: string
+  event_date: string
+  team_id: string
+  team_name: string
+  payment_status?: string | null
+  withdrawn: boolean
+  players: string[]
+}
+
+export type AdminUserDetail = AdminUser & {
+  entries: AdminUserTournamentEntry[]
+}
+
+export type AdminTournamentTeam = {
+  team_id: string
+  team_name: string
+  payment_status?: string | null
+  withdrawn: boolean
+  checked_in: boolean
+  players: Array<{ user_id: string; full_name: string; email: string; slot: number }>
+}
+
+export type AdminTournamentEntries = {
+  tournament_id: string
+  tournament_name: string
+  status: string
+  teams: AdminTournamentTeam[]
+}
+
+export const adminApi = {
+  listUsers: (params?: { q?: string; include_inactive?: boolean; limit?: number }) =>
+    api.get<AdminUser[]>('/api/admin/users', { params }),
+  getUser: (userId: string) => api.get<AdminUserDetail>(`/api/admin/users/${userId}`),
+  deleteUser: (userId: string) => api.delete(`/api/admin/users/${userId}`),
+  removePlayerFromTournament: (tournamentId: string, userId: string) =>
+    api.post<TournamentTeam>(`/api/admin/tournaments/${tournamentId}/players/${userId}/remove`),
+  tournamentEntries: (tournamentId: string, includeWithdrawn = false) =>
+    api.get<AdminTournamentEntries>(`/api/admin/tournaments/${tournamentId}/entries`, {
+      params: includeWithdrawn ? { include_withdrawn: true } : undefined,
+    }),
+}
+
 export const reportApi = {
   create: (target_type: 'user' | 'media', target_id: string, reason: string) =>
     api.post<{ ok: boolean }>('/api/reports', { target_type, target_id, reason }),

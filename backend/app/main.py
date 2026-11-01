@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, community, cron, profiles, reports, tournaments
+from app.api import admin, auth, community, cron, profiles, reports, tournaments
 from app.core.config import get_settings
 from app.db.session import init_db
 from app.db.seed import seed_if_empty
@@ -34,6 +34,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 (UPLOAD_DIR / "profiles").mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
+app.include_router(admin.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(community.router, prefix="/api")
 app.include_router(cron.router, prefix="/api")
@@ -59,6 +60,11 @@ def _warn_production_config() -> None:
         )
     if settings.should_seed_demo():
         print("WARNING: SEED_DEMO_DATA is enabled in production - demo passwords will be created.")
+    if not (settings.admin_email or "").strip() or not (settings.admin_password or ""):
+        print(
+            "WARNING: ADMIN_EMAIL / ADMIN_PASSWORD are not set - "
+            "the sole platform admin cannot be created or synced from env."
+        )
     if settings.resend_api_key and not settings.cron_secret:
         print(
             "WARNING: RESEND_API_KEY is set but CRON_SECRET is missing - "

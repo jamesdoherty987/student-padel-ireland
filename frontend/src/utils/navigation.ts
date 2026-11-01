@@ -94,7 +94,7 @@ export function nativeBackFallback(
     return '/tournaments'
   }
   if (pathname.startsWith('/organiser')) {
-    return '/tournaments'
+    return role === 'ADMIN' ? '/admin' : '/tournaments'
   }
   if (pathname.startsWith('/join')) {
     return '/tournaments'
