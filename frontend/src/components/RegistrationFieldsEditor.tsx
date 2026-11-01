@@ -70,11 +70,11 @@ export function validateRegistrationFields(fields: RegistrationFieldDraft[]): st
   for (const f of fields) {
     const label = f.label.trim()
     if (!label) {
-      return 'Each question needs a label — fill it in or remove the question'
+      return 'Each question needs a label - fill it in or remove the question'
     }
     const labelKey = label.toLowerCase()
     if (seenLabels.has(labelKey)) {
-      return `“${label}” is listed twice — remove the duplicate`
+      return `“${label}” is listed twice - remove the duplicate`
     }
     seenLabels.add(labelKey)
     if (f.field_type === 'select' && parseOptionsText(f.optionsText).length < 2) {
@@ -160,14 +160,14 @@ export default function RegistrationFieldsEditor({
         Extra questions players answer when they join.
         {singles
           ? ''
-          : ' “Each teammate” shows the same question twice on the join form — once for the captain, once for their partner.'}
+          : ' “Each teammate” shows the same question twice on the join form - once for the captain, once for their partner.'}
         {mode === 'create'
           ? ' You can add or change these later from Edit.'
           : ' New questions only apply to new signups.'}
       </p>
 
       {fields.length === 0 && (
-        <p className="muted tf-reg-fields-empty">No custom questions yet — add one below.</p>
+        <p className="muted tf-reg-fields-empty">No custom questions yet - add one below.</p>
       )}
 
       <ul className="tf-reg-fields-list">

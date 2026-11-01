@@ -116,7 +116,7 @@ def test_assert_session_matches_bound_session_syncs_amount():
 
 
 def test_assert_session_matches_metadata_before_session_id_commit():
-    """Webhook can arrive before stripe_session_id is committed — trust metadata."""
+    """Webhook can arrive before stripe_session_id is committed - trust metadata."""
     from uuid import uuid4
 
     reg_id = uuid4()

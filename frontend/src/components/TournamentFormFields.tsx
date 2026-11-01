@@ -343,8 +343,8 @@ export default function TournamentFormFields({
           />
           <small id="tf-max-hint" className="form-hint">
             {singles
-              ? 'Number of players who can enter — not matches.'
-              : `Number of doubles teams (pairs) who can enter — ${form.max_teams} teams ≈ ${form.max_teams * 2} players.`}
+              ? 'Number of players who can enter - not matches.'
+              : `Number of doubles teams (pairs) who can enter - ${form.max_teams} teams ≈ ${form.max_teams * 2} players.`}
           </small>
         </div>
 

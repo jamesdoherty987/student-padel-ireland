@@ -82,7 +82,7 @@ function SponsorCard({
   )
 }
 
-/** Clean “Supported by” logo band — hidden when empty. Always shows name + logo. */
+/** Clean “Supported by” logo band - hidden when empty. Always shows name + logo. */
 export default function SponsorStrip({
   sponsors,
   compact = false,

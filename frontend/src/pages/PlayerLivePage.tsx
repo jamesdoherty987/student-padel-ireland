@@ -220,7 +220,7 @@ function NextMatchCard({
       )}
 
       {next.status === 'SCHEDULED' && (
-        <p className="pl-next-hint">Keep this page open — we’ll flash when you’re called.</p>
+        <p className="pl-next-hint">Keep this page open - we’ll flash when you’re called.</p>
       )}
 
       <div className="pl-next-actions">
@@ -641,7 +641,7 @@ export default function PlayerLivePage() {
                     (<strong>{myTeam.name}</strong>)
                   </>
                 ) : null}
-                . They pay for both of you — you just Accept or Decline.
+                . They pay for both of you - you just Accept or Decline.
               </p>
               <div className="pl-next-actions">
                 <button
@@ -668,7 +668,7 @@ export default function PlayerLivePage() {
               <p className="pl-empty" style={{ marginBottom: 12 }}>
                 {t.play_format === 'SINGLES'
                   ? 'Your registration is waiting for payment.'
-                  : 'You registered the team — finish payment for both players. Your partner is invited and isn’t charged.'}
+                  : 'You registered the team - finish payment for both players. Your partner is invited and isn’t charged.'}
               </p>
               <Link to={`/t/${slug}/join`} className="btn btn-primary btn-block">
                 {t.play_format === 'SINGLES' ? 'Complete payment' : 'Pay for both players'}
@@ -679,7 +679,7 @@ export default function PlayerLivePage() {
             <div className="pl-next-card">
               <p className="pl-empty" style={{ marginBottom: 12 }}>
                 You’re on <strong>{myTeam?.name}</strong>. Your teammate registered first and still
-                needs to finish paying for both of you — you don’t pay separately.
+                needs to finish paying for both of you - you don’t pay separately.
               </p>
               <Link to={`/t/${slug}`} className="btn btn-primary btn-block">
                 View tournament

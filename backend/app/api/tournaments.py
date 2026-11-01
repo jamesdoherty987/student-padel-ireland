@@ -1301,7 +1301,7 @@ def update_tournament(
     _assert_organiser(user, t, db)
     data = body.model_dump(exclude_unset=True)
     court_names = data.pop("court_names", None)
-    # Keep as Pydantic models — model_dump() turns nested fields into dicts
+    # Keep as Pydantic models - model_dump() turns nested fields into dicts
     data.pop("registration_fields", None)
     registration_fields = (
         body.registration_fields if "registration_fields" in body.model_fields_set else None
@@ -4013,7 +4013,7 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
                 "teams": teams,
                 "players": teams * per_team,
                 "paid_registrations": paid,
-                # Entry fees only — platform service fee is excluded from organiser revenue
+                # Entry fees only - platform service fee is excluded from organiser revenue
                 "revenue_cents": sum(
                     entry_revenue_cents(r.amount_cents, stripe_session_id=r.stripe_session_id)
                     for r in collected_revenue

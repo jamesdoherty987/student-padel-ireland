@@ -361,8 +361,8 @@ export default function TournamentDetailPage() {
               {hasPendingCaptain
                 ? singles
                   ? 'You’ve started this entry. Finish payment to lock your spot, or cancel below if you’ve changed your mind.'
-                  : 'You registered the team. Finish payment for both players to lock the spot — your partner is invited and isn’t charged.'
-                : 'Your teammate registered first and still needs to finish paying for both of you — or leave below if you want out.'}
+                  : 'You registered the team. Finish payment for both players to lock the spot - your partner is invited and isn’t charged.'
+                : 'Your teammate registered first and still needs to finish paying for both of you - or leave below if you want out.'}
             </p>
             {hasPendingCaptain && (
               <div className="tour-entry-actions">
@@ -420,7 +420,7 @@ export default function TournamentDetailPage() {
         </div>
         {canJoin && !singles && (
           <p className="tour-join-hint">
-            One of you signs up and pays for you + your friend — they get an invite, no separate charge
+            One of you signs up and pays for you + your friend - they get an invite, no separate charge
           </p>
         )}
 

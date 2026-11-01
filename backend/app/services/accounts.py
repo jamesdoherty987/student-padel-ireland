@@ -143,7 +143,7 @@ def purge_user(db: Session, user: User, *, reassign_to: User) -> None:
         {CommunityMatch.player_b2_id: None}, synchronize_session=False
     )
 
-    # Community matches where they are a required player — remove the match
+    # Community matches where they are a required player - remove the match
     db.query(CommunityMatch).filter(
         (CommunityMatch.player_a1_id == uid) | (CommunityMatch.player_b1_id == uid)
     ).delete(synchronize_session=False)

@@ -41,7 +41,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'How do I join a tournament?',
-    a: 'Open Tournaments, pick an official event, and register with your partner — or paste an invite code for a private event.',
+    a: 'Open Tournaments, pick an official event, and register with your partner - or paste an invite code for a private event.',
   },
 
   {

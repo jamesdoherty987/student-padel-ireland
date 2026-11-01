@@ -196,7 +196,7 @@ def test_required_field_rejects_missing():
 
 
 def test_sync_accepts_plain_dicts():
-    """model_dump() turns nested fields into dicts — sync must still work."""
+    """model_dump() turns nested fields into dicts - sync must still work."""
     db = _session()
     t = _tournament(db)
     sync_registration_fields(

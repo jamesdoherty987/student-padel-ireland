@@ -162,7 +162,7 @@ def send_reminder_to_user(db: Session, tournament: Tournament, user: User, *, dr
         db.commit()
     except Exception:
         db.rollback()
-        # Another worker claimed this (tournament, user) — treat as already sent
+        # Another worker claimed this (tournament, user) - treat as already sent
         again = (
             db.query(TournamentReminderLog)
             .filter(

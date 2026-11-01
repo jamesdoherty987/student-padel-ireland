@@ -44,7 +44,7 @@ function paymentLabel(status: string, paymentVia?: string | null) {
   return status.replace(/_/g, ' ')
 }
 
-/** Stripe Checkout URLs embed cs_live_… / cs_test_… — use for native return confirm. */
+/** Stripe Checkout URLs embed cs_live_… / cs_test_… - use for native return confirm. */
 function checkoutSessionIdFromUrl(checkoutUrl: string): string | null {
   const match = checkoutUrl.match(/\bcs_(?:live|test)_[A-Za-z0-9]+/)
   return match?.[0] ?? null
@@ -140,21 +140,21 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
               </li>
               {payOnArrival ? (
                 <li>
-                  Spot reserved — bring {formatMoney(entryFeeCents, data.currency)} to the organiser
+                  Spot reserved - bring {formatMoney(entryFeeCents, data.currency)} to the organiser
                   {!singles ? ' for both players' : ''}
                 </li>
               ) : (
                 <li>
                   {singles
                     ? 'Your spot is locked in'
-                    : 'Team spot locked in — you paid for both players'}
+                    : 'Team spot locked in - you paid for both players'}
                 </li>
               )}
               {!singles ? (
                 <li>
                   {isCaptain
-                    ? 'Your partner was invited — they don’t pay separately'
-                    : 'Your teammate registered the pair — you don’t need to pay'}
+                    ? 'Your partner was invited - they don’t pay separately'
+                    : 'Your teammate registered the pair - you don’t need to pay'}
                 </li>
               ) : null}
               {reminderNote ? <li>{reminderNote}</li> : null}
@@ -303,7 +303,7 @@ function ConfirmPayOnlineButton({
                 navigate(`/t/${slug}/confirmed?registration_id=${regId}`, { replace: true })
                 return
               }
-              setErr('Payment was not completed. If you paid, open the tournament page — we will retry confirming.')
+              setErr('Payment was not completed. If you paid, open the tournament page - we will retry confirming.')
               setBusy(false)
             })()
           })
@@ -338,7 +338,7 @@ function ConfirmPayOnlineButton({
             : `Pay online · ${totalLabel}`}
       </button>
       {coversBothPlayers ? (
-        <p className="pay-online-hint">Pays for you and your friend — they aren’t charged separately</p>
+        <p className="pay-online-hint">Pays for you and your friend - they aren’t charged separately</p>
       ) : feeHint ? (
         <p className="pay-online-hint">{feeHint}</p>
       ) : null}
@@ -366,7 +366,7 @@ function JoinDoublesHowItWorks({
           You’re paying for <strong>you and {friend}</strong>
         </p>
         <p className="join-how-pay-sub">
-          {friend === 'your friend' ? 'They aren’t charged' : `${friend} isn’t charged`} — team fee{' '}
+          {friend === 'your friend' ? 'They aren’t charged' : `${friend} isn’t charged`} - team fee{' '}
           <strong>{teamFee}</strong>
         </p>
       </div>
@@ -389,7 +389,7 @@ function JoinDoublesHowItWorks({
             <strong>You pay for you + {friend}</strong>
             <p>
               {payOnArrival
-                ? `One team fee of ${teamFee} — online or at the venue`
+                ? `One team fee of ${teamFee} - online or at the venue`
                 : `One team fee of ${teamFee} covers both of you`}
             </p>
           </div>
@@ -400,7 +400,7 @@ function JoinDoublesHowItWorks({
           </span>
           <div>
             <strong>{friend === 'your friend' ? 'They get an invite' : `${friend} gets an invite`}</strong>
-            <p>No separate payment — they just join your team</p>
+            <p>No separate payment - they just join your team</p>
           </div>
         </li>
       </ol>
@@ -741,7 +741,7 @@ export default function JoinTournamentPage() {
       status === 403
         ? 'This registration belongs to another account. Log in with the email used at checkout.'
         : status === 404
-          ? 'Payment usually lands within a few seconds. Tap try again — if you were charged, your spot will show as paid.'
+          ? 'Payment usually lands within a few seconds. Tap try again - if you were charged, your spot will show as paid.'
           : "We couldn't verify this payment yet. If you were charged, tap try again or open the tournament page."
 
     return (
@@ -1109,7 +1109,7 @@ export default function JoinTournamentPage() {
             return
           }
           setPaymentNote(
-            'Payment was not completed. If you paid, open the tournament page — confirmation will retry automatically.',
+            'Payment was not completed. If you paid, open the tournament page - confirmation will retry automatically.',
           )
           setLoading(false)
           void qc.invalidateQueries({ queryKey: ['player-view', slug] })
@@ -1312,7 +1312,7 @@ export default function JoinTournamentPage() {
           <p className="tour-youre-in" role="status" style={{ marginTop: 0 }}>
             <span className="tour-youre-in-kicker">Partner needed</span>
             <span className="tour-youre-in-body">
-              Your previous partner left the team. Pick someone new — your entry stays paid.
+              Your previous partner left the team. Pick someone new - your entry stays paid.
             </span>
           </p>
         )}
@@ -1341,7 +1341,7 @@ export default function JoinTournamentPage() {
           )}
           {singles && tournament.pay_on_arrival && (
             <p className="muted-note join-pay-note">
-              Entry is <strong>{teamFee}</strong> — confirm now and pay at the venue, or pay online
+              Entry is <strong>{teamFee}</strong> - confirm now and pay at the venue, or pay online
               below.
             </p>
           )}
@@ -1385,7 +1385,7 @@ export default function JoinTournamentPage() {
                 Your partner
               </label>
               <p className="form-hint join-partner-hint">
-                Add your friend here. You’ll pay for both of you — they get an invite and don’t pay.
+                Add your friend here. You’ll pay for both of you - they get an invite and don’t pay.
               </p>
               <div className="partner-mode-row" role="tablist" aria-label="How to add partner">
                 <button
@@ -1579,7 +1579,7 @@ export default function JoinTournamentPage() {
                           </div>
                         )}
                         <p className="muted-note">
-                          They’re invited onto your team straight away. They can Accept or Decline —
+                          They’re invited onto your team straight away. They can Accept or Decline -
                           you still pay the team fee.
                         </p>
                       </div>
@@ -1622,7 +1622,7 @@ export default function JoinTournamentPage() {
                   />
                   <p className="muted-note">
                     We invite them by email. If they’re new, they create an account with that
-                    address. They won’t be charged — you pay for both.
+                    address. They won’t be charged - you pay for both.
                   </p>
                 </>
               )}
@@ -1734,7 +1734,7 @@ export default function JoinTournamentPage() {
                     </h3>
                     {splitByPerson && (
                       <p className="join-custom-hint">
-                        Same questions twice — once for <strong>you</strong>, once for{' '}
+                        Same questions twice - once for <strong>you</strong>, once for{' '}
                         <strong>{partnerLabel}</strong>.
                       </p>
                     )}

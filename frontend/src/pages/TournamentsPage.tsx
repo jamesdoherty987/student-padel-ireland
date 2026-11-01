@@ -178,7 +178,7 @@ export default function TournamentsPage() {
         ? 'No tournaments yet. Join with a code, or create one.'
         : 'No tournaments listed yet. Log in or check back soon.'
     }
-    if (codeFromSearch) return 'That looks like an invite code — tap below to join.'
+    if (codeFromSearch) return 'That looks like an invite code - tap below to join.'
     if (query.trim()) return 'No tournaments match that search.'
     if (filter === 'official') return 'No official tournaments match.'
     if (filter === 'mine') {
@@ -219,7 +219,7 @@ export default function TournamentsPage() {
             </button>
           </div>
         </div>
-        <p className="page-sub page-sub-tight">Open an event for details — next match shows when you’re entered</p>
+        <p className="page-sub page-sub-tight">Open an event for details - next match shows when you’re entered</p>
 
         <div className="tour-toolbar">
           <div className="tour-toolbar-row tour-toolbar-inline">

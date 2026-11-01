@@ -43,7 +43,7 @@ export default function RankingsPage() {
 
   useEffect(() => {
     if (authLoading) return
-    // Locked scopes need an account — send guests to login (same as chip tap)
+    // Locked scopes need an account - send guests to login (same as chip tap)
     if (!user && isScopeId(scopeParam) && lockedScopes.includes(scopeParam)) {
       navigate(`/login?next=${encodeURIComponent(`/rankings?scope=${scopeParam}`)}`, { replace: true })
       return

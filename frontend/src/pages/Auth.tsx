@@ -344,7 +344,7 @@ export function SignupPage() {
         <h1>Create your account</h1>
         <p className="auth-lead">
           {emailFromInvite
-            ? 'Your teammate already added you — finish signup with this email to see your team.'
+            ? 'Your teammate already added you - finish signup with this email to see your team.'
             : next.includes('/join')
               ? 'Create an account to finish joining with your invite.'
               : next.includes('/confirmed') || next.includes('/live')

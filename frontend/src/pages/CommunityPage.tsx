@@ -249,7 +249,7 @@ export default function CommunityPage() {
 
         {codeFromSearch && (
           <div className="play-empty" style={{ marginBottom: 16 }}>
-            <p>That looks like an invite code — join it below.</p>
+            <p>That looks like an invite code - join it below.</p>
             <HaveCodeButton className="btn btn-primary btn-sm" initialCode={codeFromSearch}>
               Join with this code
             </HaveCodeButton>

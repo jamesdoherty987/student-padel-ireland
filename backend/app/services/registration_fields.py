@@ -101,7 +101,7 @@ def sync_registration_fields(
             raise HTTPException(400, "Signup field label is required")
         label_key = label.lower()
         if label_key in seen_labels:
-            raise HTTPException(400, f"“{label}” is listed twice — remove the duplicate")
+            raise HTTPException(400, f"“{label}” is listed twice - remove the duplicate")
         seen_labels.add(label_key)
         ftype = item.field_type if item.field_type in _VALID_TYPES else "text"
         scope = item.scope if item.scope in _VALID_SCOPES else "player"

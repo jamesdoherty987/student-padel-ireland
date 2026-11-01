@@ -233,7 +233,7 @@ def _assert_session_matches_registration(session: Any, reg: Registration) -> Non
     """Reject mismatched amount/currency so a wrong session can't fulfill an entry.
 
     Trust the session when (a) its id is already bound on the registration, or
-    (b) Checkout metadata/client_reference_id points at this registration — the
+    (b) Checkout metadata/client_reference_id points at this registration - the
     latter covers the race where the webhook arrives before we finish committing
     ``stripe_session_id``. Sync amount/currency from Stripe so a later fee edit
     cannot block fulfillment after the player has paid.
@@ -396,9 +396,9 @@ def create_checkout_session(
         fee = 0
 
     entry_product: dict[str, Any] = {
-        "name": f"{tournament_name} — {team_name}",
+        "name": f"{tournament_name} - {team_name}",
         "description": (
-            "Doubles team entry — one payment covers both players"
+            "Doubles team entry - one payment covers both players"
             if covers_both_players
             else "Singles entry"
         ),
