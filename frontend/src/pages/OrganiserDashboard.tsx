@@ -5,10 +5,12 @@ import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
 import { confirmDialog } from '../components/ConfirmDialog'
 import EditTournamentModal from '../components/EditTournamentModal'
-import NumberInput from '../components/NumberInput'
+import ScoreStep from '../components/ScoreStep'
 import SponsorStrip from '../components/SponsorStrip'
 import TournamentBracket from '../components/TournamentBracket'
+import '../components/ScoreSheet.css'
 import { useAuth } from '../context/AuthContext'
+import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 import { publicPathUrl } from '../native/platform'
 import {
   apiErrorMessage,
@@ -21,6 +23,11 @@ import {
   type TournamentTeam,
 } from '../services/api'
 import {
+  formatGroupSizes,
+  knockoutRoundLabel,
+  previewDraw,
+} from '../utils/drawPreview'
+import {
   bracketFormatHint,
   calendarDaysFromToday,
   courtLabel,
@@ -31,6 +38,8 @@ import {
   statusLabel,
   tournamentFormatSummary,
 } from '../utils/format'
+import { mediaUrl } from '../utils/media'
+import './Organiser.css'
 
 type OrgPanel = 'registration' | 'day-of' | 'settings'
 
@@ -39,13 +48,33 @@ function defaultOrgPanel(status: string, hasFixtures: boolean): OrgPanel {
   if (status === 'COMPLETED' || status === 'CANCELLED') return 'day-of'
   return 'registration'
 }
-import {
-  formatGroupSizes,
-  knockoutRoundLabel,
-  previewDraw,
-} from '../utils/drawPreview'
-import { mediaUrl } from '../utils/media'
-import './Organiser.css'
+
+/** Best-of-3 set tallies for organiser score validation. */
+function tallySets(form: {
+  set1_a: number
+  set1_b: number
+  set2_a: number
+  set2_b: number
+  set3_a: number
+  set3_b: number
+}) {
+  const pairs: [number, number][] = [
+    [form.set1_a, form.set1_b],
+    [form.set2_a, form.set2_b],
+    [form.set3_a, form.set3_b],
+  ]
+  let aSets = 0
+  let bSets = 0
+  let played = 0
+  for (const [a, b] of pairs) {
+    if (!(a || b)) continue
+    if (a === b) return { ok: false as const, reason: 'Set scores can’t be tied' }
+    played += 1
+    if (a > b) aSets += 1
+    else bSets += 1
+  }
+  return { ok: true as const, aSets, bSets, played }
+}
 
 /** Respect organiser selection; only bump when a higher set already has games. */
 function resolveCurrentSet(form: {
@@ -101,6 +130,7 @@ export default function OrganiserDashboard() {
   const [courtFilter, setCourtFilter] = useState<string>('all')
   const [matchFilter, setMatchFilter] = useState<'active' | 'all' | 'done'>('active')
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'owing'>('all')
+  const [checkInFilter, setCheckInFilter] = useState<'all' | 'out' | 'in'>('out')
   const [orgPanel, setOrgPanel] = useState<OrgPanel>('registration')
   const [scoreForm, setScoreForm] = useState({
     set1_a: 0,
@@ -116,6 +146,19 @@ export default function OrganiserDashboard() {
   })
   const [scoreError, setScoreError] = useState('')
 
+  useKeyboardInset(!!scoreMatch)
+  useEffect(() => {
+    if (!scoreMatch) return
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (!t.closest('.score-modal')) return
+      if (t.matches('input, textarea, select')) scrollFieldAboveKeyboard(t)
+    }
+    document.addEventListener('focusin', onFocus)
+    return () => document.removeEventListener('focusin', onFocus)
+  }, [scoreMatch])
+
   useEffect(() => {
     if (params.get('create') === '1') {
       navigate('/tournaments?create=1', { replace: true })
@@ -127,6 +170,7 @@ export default function OrganiserDashboard() {
 
   useEffect(() => {
     setPaymentFilter('all')
+    setCheckInFilter('out')
     setSponsorForm({ name: '', website: '', featured: false, logo: null })
     setSponsorLogoKey((k) => k + 1)
   }, [selectedId])
@@ -508,16 +552,52 @@ export default function OrganiserDashboard() {
 
   const saveScore = () => {
     setScoreError('')
-    if (scoreForm.status === 'COMPLETED' || scoreForm.status === 'WALKOVER') {
-      const hasWinner = !!scoreForm.winner_id
-      const setWon =
-        (scoreForm.set1_a !== scoreForm.set1_b ? 1 : 0) +
-        (scoreForm.set2_a !== scoreForm.set2_b ? 1 : 0) +
-        (scoreForm.set3_a !== scoreForm.set3_b && (scoreForm.set3_a > 0 || scoreForm.set3_b > 0) ? 1 : 0)
-      if (!hasWinner && setWon === 0) {
-        setScoreError('Pick a winner or enter set scores that decide the match before marking completed.')
+    if (scoreForm.status === 'COMPLETED') {
+      const tally = tallySets(scoreForm)
+      if (!tally.ok) {
+        setScoreError(tally.reason)
         return
       }
+      const hasWinner = !!scoreForm.winner_id
+      if (!hasWinner) {
+        if (tally.played < 2) {
+          setScoreError('Enter at least two sets (best of 3), or pick a winner.')
+          return
+        }
+        if (Math.max(tally.aSets, tally.bSets) < 2) {
+          setScoreError('One side needs two sets to win, or pick a winner.')
+          return
+        }
+      }
+      if (
+        tally.ok &&
+        ((tally.aSets === 2 && tally.bSets === 0) || (tally.bSets === 2 && tally.aSets === 0)) &&
+        (scoreForm.set3_a || scoreForm.set3_b)
+      ) {
+        setScoreError('Clear set 3 when the match finished 2–0')
+        return
+      }
+    }
+    if (scoreForm.status === 'WALKOVER' && !scoreForm.winner_id) {
+      setScoreError('Pick a winner for the walkover.')
+      return
+    }
+    const correcting =
+      !!scoreMatch &&
+      (scoreMatch.status === 'COMPLETED' ||
+        scoreMatch.status === 'WALKOVER' ||
+        scoreMatch.ratings_applied)
+    if (correcting) {
+      void confirmDialog({
+        title: 'Correct this result?',
+        message: scoreMatch?.ratings_applied
+          ? 'Standings and the bracket will update. Ireland ratings already applied for this match are not recalculated.'
+          : 'This replaces the saved result and updates standings / the next round.',
+        confirmLabel: 'Save correction',
+      }).then((ok) => {
+        if (ok) scoreMut.mutate()
+      })
+      return
     }
     scoreMut.mutate()
   }
@@ -545,12 +625,19 @@ export default function OrganiserDashboard() {
   })
 
   const checkInMut = useMutation({
-    mutationFn: (teamId: string) =>
-      tournamentApi.checkIn(tid!, teamId, { player1_present: true, player2_present: true }),
-    onSuccess: () => {
+    mutationFn: ({ teamId, present }: { teamId: string; present: boolean }) =>
+      tournamentApi.checkIn(tid!, teamId, {
+        player1_present: present,
+        player2_present: present,
+      }),
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['org-teams'] })
       qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
-      showToast(isSingles ? 'Player checked in' : 'Team checked in')
+      if (vars.present) {
+        showToast(isSingles ? 'Player checked in' : 'Team checked in')
+      } else {
+        showToast(isSingles ? 'Check-in undone' : 'Team check-in undone')
+      }
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Check-in failed')),
   })
@@ -656,6 +743,41 @@ export default function OrganiserDashboard() {
     if (paymentFilter === 'all') return list
     return list.filter((t) => paymentBucket(t) === paymentFilter)
   }, [orgTeams, paymentFilter])
+
+  const checkInPool = useMemo(
+    () => orgTeams.filter((t) => t.payment_status === 'PAID'),
+    [orgTeams],
+  )
+  const checkedInCount = checkInPool.filter((t) => t.checked_in).length
+  const awaitingCheckInCount = checkInPool.length - checkedInCount
+  const checkInRows = useMemo(() => {
+    return [...checkInPool]
+      .sort((a, b) => {
+        if (a.checked_in !== b.checked_in) return a.checked_in ? 1 : -1
+        return a.name.localeCompare(b.name)
+      })
+      .filter((t) => {
+        if (checkInFilter === 'in') return t.checked_in
+        if (checkInFilter === 'out') return !t.checked_in
+        return true
+      })
+  }, [checkInPool, checkInFilter])
+
+  const liveNowMatches = useMemo(
+    () => matches.filter((m) => m.status === 'LIVE'),
+    [matches],
+  )
+  const calledNowMatches = useMemo(
+    () => matches.filter((m) => m.status === 'CALLED'),
+    [matches],
+  )
+  const upNextMatches = useMemo(
+    () =>
+      matches
+        .filter((m) => m.status === 'SCHEDULED' && m.team_a_id && m.team_b_id)
+        .slice(0, 6),
+    [matches],
+  )
 
   const paymentLabel = (team: TournamentTeam) => {
     if (team.payment_via === 'pay_on_arrival') return 'Not paid · venue'
@@ -1312,7 +1434,7 @@ export default function OrganiserDashboard() {
 
               <section className="org-section">
                 <div className="org-section-head">
-                  <h2>Who’s paid</h2>
+                  <h2>Entries & payments</h2>
                   {canAddTeams && (
                     <button type="button" className="btn btn-dark btn-sm" onClick={() => setShowAddTeam(true)}>
                       {isSingles ? 'Add player' : 'Add team'}
@@ -1423,33 +1545,7 @@ export default function OrganiserDashboard() {
                               Mark paid
                             </button>
                           )}
-                          {team.checked_in ? (
-                            <span className="checked">✓ In</span>
-                          ) : team.payment_status === 'PAID' && !canCollect ? (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => checkInMut.mutate(team.id)}
-                            >
-                              Check in
-                            </button>
-                          ) : team.payment_status === 'PAID' && canCollect ? (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => {
-                                void confirmDialog({
-                                  title: 'Check in before collecting?',
-                                  message: `${team.name} still owes at the venue. Check them in anyway?`,
-                                  confirmLabel: 'Check in',
-                                }).then((ok) => {
-                                  if (ok) checkInMut.mutate(team.id)
-                                })
-                              }}
-                            >
-                              Check in
-                            </button>
-                          ) : null}
+                          {team.checked_in ? <span className="checked">✓ Checked in</span> : null}
                           {unpaidEntry && (
                             <button
                               type="button"
@@ -1524,6 +1620,165 @@ export default function OrganiserDashboard() {
 
               {orgPanel === 'day-of' && (
               <>
+              {(liveNowMatches.length > 0 ||
+                calledNowMatches.length > 0 ||
+                upNextMatches.length > 0) && (
+                <section className="org-section org-now-board">
+                  <div className="org-section-head">
+                    <h2>Courtside now</h2>
+                  </div>
+                  <div className="org-now-grid">
+                    {liveNowMatches.map((m) => (
+                      <div key={m.id} className="org-now-card is-live">
+                        <span className="org-now-kicker">Live</span>
+                        <strong>{courtLabel(m.court_name, m.court_number)}</strong>
+                        <p>
+                          {m.team_a_name || 'TBD'} vs {m.team_b_name || 'TBD'}
+                        </p>
+                        {m.score ? (
+                          <span className="org-now-meta">{formatMatchScore(m.score)}</span>
+                        ) : null}
+                        {renderMatchActions(m, true)}
+                      </div>
+                    ))}
+                    {calledNowMatches.map((m) => (
+                      <div key={m.id} className="org-now-card is-called">
+                        <span className="org-now-kicker">Called</span>
+                        <strong>{courtLabel(m.court_name, m.court_number)}</strong>
+                        <p>
+                          {m.team_a_name || 'TBD'} vs {m.team_b_name || 'TBD'}
+                        </p>
+                        {renderMatchActions(m, true)}
+                      </div>
+                    ))}
+                    {liveNowMatches.length === 0 &&
+                      calledNowMatches.length === 0 &&
+                      upNextMatches.map((m) => (
+                        <div key={m.id} className="org-now-card">
+                          <span className="org-now-kicker">Up next</span>
+                          <strong>
+                            {m.court_number != null || m.court_name
+                              ? courtLabel(m.court_name, m.court_number)
+                              : m.scheduled_start
+                                ? formatTime(m.scheduled_start)
+                                : 'Soon'}
+                          </strong>
+                          <p>
+                            {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                            {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                          </p>
+                          {renderMatchActions(m, true)}
+                        </div>
+                      ))}
+                  </div>
+                </section>
+              )}
+
+              {checkInPool.length > 0 && (
+                <section className="org-section org-checkin">
+                  <div className="org-section-head">
+                    <h2>Check-in</h2>
+                    <span className="org-checkin-count">
+                      {checkedInCount}/{checkInPool.length} in
+                    </span>
+                  </div>
+                  <p className="muted org-section-lead">
+                    Check {isSingles ? 'players' : 'teams'} in as they arrive. Undo if you tap by
+                    mistake.
+                  </p>
+                  <div
+                    className="org-view-toggle org-pay-filters"
+                    role="group"
+                    aria-label="Check-in filter"
+                  >
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${checkInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
+                      onClick={() => setCheckInFilter('out')}
+                    >
+                      Not in ({awaitingCheckInCount})
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${checkInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
+                      onClick={() => setCheckInFilter('in')}
+                    >
+                      In ({checkedInCount})
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${checkInFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
+                      onClick={() => setCheckInFilter('all')}
+                    >
+                      All
+                    </button>
+                  </div>
+                  <div className="org-table org-checkin-table">
+                    {checkInRows.map((team) => {
+                      const owesOnArrival = team.payment_via === 'pay_on_arrival'
+                      return (
+                        <div
+                          key={team.id}
+                          className={`org-row org-checkin-row${team.checked_in ? ' is-in' : ''}`}
+                        >
+                          <div>
+                            <strong>{team.name}</strong>
+                            <span>{team.player_names?.join(' / ')}</span>
+                            {owesOnArrival ? (
+                              <span className="badge badge-warn">Collect fee</span>
+                            ) : null}
+                          </div>
+                          <div className="org-row-right org-pay-actions">
+                            {team.checked_in ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                disabled={checkInMut.isPending}
+                                onClick={() =>
+                                  checkInMut.mutate({ teamId: team.id, present: false })
+                                }
+                              >
+                                Undo check-in
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-dark btn-sm"
+                                disabled={checkInMut.isPending}
+                                onClick={() => {
+                                  if (owesOnArrival) {
+                                    void confirmDialog({
+                                      title: 'Check in before collecting?',
+                                      message: `${team.name} still owes at the venue. Check them in anyway?`,
+                                      confirmLabel: 'Check in',
+                                    }).then((ok) => {
+                                      if (ok) checkInMut.mutate({ teamId: team.id, present: true })
+                                    })
+                                    return
+                                  }
+                                  checkInMut.mutate({ teamId: team.id, present: true })
+                                }}
+                              >
+                                Check in
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {checkInRows.length === 0 && (
+                      <p className="muted">
+                        {checkInFilter === 'out'
+                          ? 'Everyone paid is checked in.'
+                          : checkInFilter === 'in'
+                            ? 'Nobody checked in yet.'
+                            : 'No paid entries yet.'}
+                      </p>
+                    )}
+                  </div>
+                </section>
+              )}
+
               <section className="org-section">
                 <div className="org-section-head">
                   <h2>Matches & scoring</h2>
@@ -1599,14 +1854,12 @@ export default function OrganiserDashboard() {
                   <div className="org-bracket">
                     {championshipMatches.length > 0 && (
                       <div className="org-bracket-block">
-                        {plateMatches.length > 0 && <h3 className="org-bracket-title">Championship</h3>}
-                        <TournamentBracket matches={championshipMatches} />
+                        <TournamentBracket matches={championshipMatches} stage="KNOCKOUT" />
                       </div>
                     )}
                     {plateMatches.length > 0 && (
                       <div className="org-bracket-block">
-                        <h3 className="org-bracket-title">Plate</h3>
-                        <TournamentBracket matches={plateMatches} />
+                        <TournamentBracket matches={plateMatches} stage="PLATE" />
                       </div>
                     )}
                   </div>
@@ -1854,7 +2107,7 @@ export default function OrganiserDashboard() {
                     </label>
                     <div className={`org-sponsor-upload${sponsorPreview ? ' has-preview' : ''}`}>
                       {sponsorPreview ? (
-                        <img src={sponsorPreview} alt="" className="org-sponsor-preview" />
+                        <img src={sponsorPreview} alt="" className="org-sponsor-logo-preview" />
                       ) : (
                         <span className="org-sponsor-upload-hint">Tap to choose logo</span>
                       )}
@@ -2203,113 +2456,152 @@ export default function OrganiserDashboard() {
 
       {scoreMatch && (
         <div
-          className="modal-backdrop"
+          className="modal-backdrop score-modal-backdrop org-score-backdrop"
           onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setScoreMatch(null)
+            if (e.target === e.currentTarget) {
+              setScoreMatch(null)
+              setScoreError('')
+            }
           }}
         >
           <div
-            className="modal"
+            className="score-modal pl-score-sheet org-score-sheet"
             role="dialog"
             aria-modal="true"
             aria-labelledby="score-entry-title"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <h2 id="score-entry-title">Enter score</h2>
-            <p>
-              {scoreMatch.team_a_name || 'Team A'} vs {scoreMatch.team_b_name || 'Team B'}
+            <h2 id="score-entry-title">
+              {scoreMatch.ratings_applied ||
+              scoreMatch.status === 'COMPLETED' ||
+              scoreMatch.status === 'WALKOVER'
+                ? 'Correct score'
+                : 'Enter score'}
+            </h2>
+            <p className="muted-note" style={{ marginTop: 0 }}>
+              Best of 3. Tap + / −, then mark Completed.
             </p>
             {scoreMatch.status === 'AWAITING_CONFIRM' && (
               <p className="muted-note" style={{ marginTop: 0 }}>
-                Players haven’t confirmed yet. Saving as Completed finalises this match for them.
+                Players haven’t confirmed yet — saving as Completed finalises it.
               </p>
             )}
-            {(['set1', 'set2', 'set3'] as const).map((set) => (
-              <div key={set} className="score-row">
-                <label>{set.replace('set', 'Set ')}</label>
-                <NumberInput
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  min={0}
-                  emptyValue={0}
-                  aria-label={`${set.replace('set', 'Set ')} team A`}
-                  value={scoreForm[`${set}_a` as 'set1_a']}
-                  onValueChange={(n) => {
-                    const setNum = Number(set.replace('set', '')) || 1
-                    setScoreForm({
-                      ...scoreForm,
-                      [`${set}_a`]: Math.max(0, Math.trunc(n)),
-                      current_set: Math.max(scoreForm.current_set, setNum),
-                    })
-                  }}
-                />
-                <span>-</span>
-                <NumberInput
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  min={0}
-                  emptyValue={0}
-                  aria-label={`${set.replace('set', 'Set ')} team B`}
-                  value={scoreForm[`${set}_b` as 'set1_b']}
-                  onValueChange={(n) => {
-                    const setNum = Number(set.replace('set', '')) || 1
-                    setScoreForm({
-                      ...scoreForm,
-                      [`${set}_b`]: Math.max(0, Math.trunc(n)),
-                      current_set: Math.max(scoreForm.current_set, setNum),
-                    })
-                  }}
-                />
+            <div className="score-sides-label">
+              <div>
+                <span className="muted-note">A</span>
+                <strong>{scoreMatch.team_a_name || 'Team A'}</strong>
               </div>
-            ))}
-            <div className="form-group">
-              <label className="form-label">Current set (shown on TV / live)</label>
-              <select
-                className="form-select"
-                value={scoreForm.current_set}
-                onChange={(e) => setScoreForm({ ...scoreForm, current_set: Number(e.target.value) })}
-              >
-                <option value={1}>Set 1</option>
-                <option value={2}>Set 2</option>
-                <option value={3}>Set 3</option>
-              </select>
+              <div>
+                <span className="muted-note">B</span>
+                <strong>{scoreMatch.team_b_name || 'Team B'}</strong>
+              </div>
             </div>
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <select
-                className="form-select"
-                value={scoreForm.status}
-                onChange={(e) => setScoreForm({ ...scoreForm, status: e.target.value })}
-              >
-                <option value="LIVE">Live</option>
-                <option value="COMPLETED">Completed</option>
-                <option value="WALKOVER">Walkover</option>
-                <option value="CANCELLED">Cancelled</option>
-              </select>
+            <div className="score-grid">
+              {(
+                [
+                  ['set1_a', 'set1_b', 'Set 1', 1] as const,
+                  ['set2_a', 'set2_b', 'Set 2', 2] as const,
+                  ...(scoreForm.set3_a > 0 ||
+                  scoreForm.set3_b > 0 ||
+                  scoreForm.current_set >= 3 ||
+                  (scoreForm.set1_a !== scoreForm.set1_b &&
+                    scoreForm.set2_a !== scoreForm.set2_b &&
+                    (scoreForm.set1_a > scoreForm.set1_b) !== (scoreForm.set2_a > scoreForm.set2_b))
+                    ? ([['set3_a', 'set3_b', 'Set 3', 3]] as const)
+                    : []),
+                ] as const
+              ).map(([ka, kb, label, setNum]) => {
+                const isDecider = label === 'Set 3'
+                const maxGames = isDecider ? 15 : 7
+                return (
+                  <div key={label} className="form-group pl-score-row">
+                    <label>{isDecider ? 'Set 3 / TB' : label}</label>
+                    <div className="score-pair pl-score-pair">
+                      <ScoreStep
+                        label={`${label} side A`}
+                        value={scoreForm[ka]}
+                        max={maxGames}
+                        onChange={(n) =>
+                          setScoreForm({
+                            ...scoreForm,
+                            [ka]: n,
+                            current_set: Math.max(scoreForm.current_set, setNum),
+                          })
+                        }
+                      />
+                      <span className="pl-score-dash">–</span>
+                      <ScoreStep
+                        label={`${label} side B`}
+                        value={scoreForm[kb]}
+                        max={maxGames}
+                        onChange={(n) =>
+                          setScoreForm({
+                            ...scoreForm,
+                            [kb]: n,
+                            current_set: Math.max(scoreForm.current_set, setNum),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-            <div className="form-group">
-              <label className="form-label">Winner (when completed)</label>
-              <select
-                className="form-select"
-                value={scoreForm.winner_id}
-                onChange={(e) => setScoreForm({ ...scoreForm, winner_id: e.target.value })}
-              >
-                <option value="">Auto from scores</option>
-                {scoreMatch.team_a_id && (
-                  <option value={scoreMatch.team_a_id}>{scoreMatch.team_a_name}</option>
-                )}
-                {scoreMatch.team_b_id && (
-                  <option value={scoreMatch.team_b_id}>{scoreMatch.team_b_name}</option>
-                )}
-              </select>
+            <div className="org-score-meta">
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Status</label>
+                <select
+                  className="form-select"
+                  value={scoreForm.status === 'CANCELLED' ? 'LIVE' : scoreForm.status}
+                  onChange={(e) => setScoreForm({ ...scoreForm, status: e.target.value })}
+                >
+                  <option value="LIVE">Live</option>
+                  <option value="COMPLETED">Completed</option>
+                  <option value="WALKOVER">Walkover</option>
+                </select>
+              </div>
+              {(scoreForm.status === 'COMPLETED' || scoreForm.status === 'WALKOVER') && (
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Winner</label>
+                  <select
+                    className="form-select"
+                    value={scoreForm.winner_id}
+                    onChange={(e) => setScoreForm({ ...scoreForm, winner_id: e.target.value })}
+                  >
+                    <option value="">Auto from scores</option>
+                    {scoreMatch.team_a_id && (
+                      <option value={scoreMatch.team_a_id}>{scoreMatch.team_a_name}</option>
+                    )}
+                    {scoreMatch.team_b_id && (
+                      <option value={scoreMatch.team_b_id}>{scoreMatch.team_b_name}</option>
+                    )}
+                  </select>
+                </div>
+              )}
             </div>
             {scoreMatch.ratings_applied && (
-              <p className="muted-note" style={{ marginBottom: '0.75rem' }}>
-                This match already affected Ireland ratings. Saving corrects standings and the bracket only.
+              <p className="muted-note" style={{ margin: '0.75rem 0 0' }}>
+                Ratings already applied - this corrects standings and the bracket only.
               </p>
             )}
             {scoreError && <p className="auth-error">{scoreError}</p>}
-            <div className="modal-actions">
+            <div className="modal-actions pl-score-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={saveScore}
+                disabled={scoreMut.isPending}
+              >
+                {scoreMut.isPending
+                  ? 'Saving…'
+                  : scoreMatch.ratings_applied ||
+                      scoreMatch.status === 'COMPLETED' ||
+                      scoreMatch.status === 'WALKOVER'
+                    ? 'Save correction'
+                    : scoreForm.status === 'COMPLETED'
+                      ? 'Save final score'
+                      : 'Save score'}
+              </button>
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -2319,14 +2611,6 @@ export default function OrganiserDashboard() {
                 }}
               >
                 Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={saveScore}
-                disabled={scoreMut.isPending}
-              >
-                {scoreMut.isPending ? 'Saving...' : scoreMatch.ratings_applied ? 'Correct score' : 'Save score'}
               </button>
             </div>
           </div>

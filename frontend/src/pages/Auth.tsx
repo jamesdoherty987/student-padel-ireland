@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import SearchableSelect from '../components/SearchableSelect'
+import { universitySelectOptions } from '../utils/universities'
 import { useAuth } from '../context/AuthContext'
 import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 import { usePageSeo } from '../hooks/usePageSeo'
@@ -430,17 +431,13 @@ export function SignupPage() {
                   ? 'Loading universities…'
                   : unisError
                     ? 'Couldn’t load universities'
-                    : 'Search your university'
+                    : 'Search or choose your university'
               }
-              searchPlaceholder="Type to search…"
+              searchPlaceholder="Type the university name…"
               emptyLabel="No university matches that name"
               required
               disabled={unisLoading || unisError || universities.length === 0}
-              options={universities.map((u) => ({
-                value: u.id,
-                label: u.name,
-                keywords: u.short_name || '',
-              }))}
+              options={universitySelectOptions(universities)}
             />
             {unisError ? (
               <p className="auth-field-hint" role="alert">

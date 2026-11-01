@@ -496,16 +496,14 @@ export default function TournamentDetailPage() {
         {knockoutActive && knockoutMatches.length > 0 && (
           <section className="block tour-bracket-block" id="tour-draw">
             {championshipMatches.length > 0 && (
-              <>
-                {plateMatches.length > 0 ? <h2>Championship draw</h2> : <h2>Draw</h2>}
-                <TournamentBracket matches={championshipMatches} myTeamId={myTeamId} />
-              </>
+              <TournamentBracket
+                matches={championshipMatches}
+                myTeamId={myTeamId}
+                stage="KNOCKOUT"
+              />
             )}
             {plateMatches.length > 0 && (
-              <>
-                <h2>Plate</h2>
-                <TournamentBracket matches={plateMatches} myTeamId={myTeamId} />
-              </>
+              <TournamentBracket matches={plateMatches} myTeamId={myTeamId} stage="PLATE" />
             )}
           </section>
         )}

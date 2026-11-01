@@ -24,20 +24,33 @@ from app.services.rating import INITIAL_RATING
 
 # Signup / browse order: Limerick campuses first, then the rest A–Z by name in the API.
 IRISH_UNIVERSITIES = [
+    # Limerick first
     ("University of Limerick", "UL", "ul"),
     ("Technological University of the Shannon", "TUS", "tus"),
     ("Mary Immaculate College", "MIC", "mic"),
+    # Rest of island (seed order does not matter; API sorts A–Z after preferred)
+    ("Atlantic Technological University", "ATU", "atu"),
     ("Dublin City University", "DCU", "dcu"),
+    ("Dundalk Institute of Technology", "DkIT", "dkit"),
+    ("Dún Laoghaire Institute of Art, Design and Technology", "IADT", "iadt"),
+    ("Griffith College", "Griffith", "griffith"),
+    ("Marino Institute of Education", "MIE", "mie"),
     ("Maynooth University", "MU", "maynooth"),
+    ("Munster Technological University", "MTU", "mtu"),
+    ("National College of Art and Design", "NCAD", "ncad"),
+    ("National College of Ireland", "NCI", "nci"),
+    ("Queen's University Belfast", "QUB", "qub"),
+    ("RCSI University of Medicine and Health Sciences", "RCSI", "rcsi"),
     ("South East Technological University", "SETU", "setu"),
     ("Technological University Dublin", "TU Dublin", "tud"),
     ("Trinity College Dublin", "Trinity", "trinity"),
+    ("Ulster University", "Ulster", "ulster"),
     ("University College Cork", "UCC", "ucc"),
     ("University College Dublin", "UCD", "ucd"),
     ("University of Galway", "UG", "galway"),
 ]
 
-# Shown first on signup (by slug). Keep in sync with IRISH_UNIVERSITIES order above.
+# Shown first on signup (by slug). Keep in sync with Limerick block above.
 PREFERRED_UNIVERSITY_SLUGS = ("ul", "tus", "mic")
 
 DEMO_MATES = (

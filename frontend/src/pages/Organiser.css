@@ -402,6 +402,11 @@ html.native-app.has-native-tabs .org-toast {
   gap: 0.4rem;
 }
 
+.org-match-actions .btn {
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
 .org-pay-toolbar {
   display: flex;
   flex-direction: column;
@@ -699,7 +704,7 @@ html.native-app.has-native-tabs .org-toast {
   pointer-events: none;
 }
 
-.org-sponsor-preview {
+.org-sponsor-logo-preview {
   max-height: 3.75rem;
   max-width: min(12rem, 72%);
   object-fit: contain;
@@ -805,6 +810,101 @@ html.native-app.has-native-tabs .org-toast {
   color: var(--success);
   font-weight: 600;
   font-size: 0.9rem;
+}
+
+.org-checkin-count {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--court-deep);
+}
+
+.org-checkin .org-pay-filters {
+  margin: 0 0 0.85rem;
+}
+
+.org-checkin-row > div:first-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.org-checkin-row.is-in {
+  background: rgba(22, 163, 74, 0.06);
+  margin: 0 -0.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  border-radius: 8px;
+}
+
+.org-now-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .org-now-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.org-now-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 0.9rem;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-md, 12px);
+  background: var(--white);
+}
+
+.org-now-card.is-live {
+  border-color: rgba(225, 29, 72, 0.35);
+  background: rgba(225, 29, 72, 0.05);
+}
+
+.org-now-card.is-called {
+  border-color: rgba(180, 200, 20, 0.55);
+  background: rgba(200, 230, 0, 0.12);
+}
+
+.org-now-kicker {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.org-now-card.is-live .org-now-kicker {
+  color: #be123c;
+}
+
+.org-now-card.is-called .org-now-kicker {
+  color: #4d7c0f;
+}
+
+.org-now-card strong {
+  color: var(--court-deep);
+  font-size: 1.02rem;
+}
+
+.org-now-card p {
+  margin: 0;
+  color: var(--ink, #122);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.org-now-meta {
+  font-size: 0.92rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--court-deep);
+}
+
+.org-now-card .org-match-actions,
+.org-now-card .org-row-right {
+  margin-top: 0.35rem;
 }
 
 .muted {
@@ -1279,29 +1379,7 @@ html.native-app.has-native-tabs .org-toast {
   margin-top: 1.15rem;
 }
 
-.score-row {
-  display: grid;
-  grid-template-columns: 4rem 1fr auto 1fr;
-  gap: 0.5rem;
-  align-items: center;
-  margin-bottom: 0.65rem;
-}
-
-.score-row input {
-  min-height: 44px;
-  padding: 0.5rem;
-  border: 1.5px solid var(--line);
-  border-radius: 8px;
-  text-align: center;
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-
-.score-row input:focus {
-  outline: none;
-  border-color: var(--court-mid);
-  box-shadow: 0 0 0 3px rgba(20, 102, 68, 0.15);
-}
+/* Organiser score entry uses shared ScoreSheet.css (−/+ bottom sheet) */
 
 @media (max-width: 860px) {
   .org-shell {
@@ -1368,17 +1446,6 @@ html.native-app.has-native-tabs .org-toast {
 
   .org-section {
     padding: 1rem;
-  }
-
-  .score-row {
-    grid-template-columns: 3rem minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 0.35rem;
-  }
-
-  .score-row input {
-    min-width: 0;
-    width: 100%;
-    font-size: 1rem;
   }
 
   .modal-actions {

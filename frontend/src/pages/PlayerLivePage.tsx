@@ -5,9 +5,10 @@ import BackButton from '../components/BackButton'
 import { confirmDialog } from '../components/ConfirmDialog'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
-import NumberInput from '../components/NumberInput'
+import ScoreStep from '../components/ScoreStep'
 import SponsorStrip from '../components/SponsorStrip'
 import TournamentBracket from '../components/TournamentBracket'
+import '../components/ScoreSheet.css'
 import { useAuth } from '../context/AuthContext'
 import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
 import { apiErrorMessage, tournamentApi, type Match } from '../services/api'
@@ -40,52 +41,6 @@ type ScoreSets = {
   set2_b: number
   set3_a: number
   set3_b: number
-}
-
-function ScoreStep({
-  label,
-  value,
-  max,
-  onChange,
-}: {
-  label: string
-  value: number
-  max: number
-  onChange: (n: number) => void
-}) {
-  return (
-    <div className="pl-score-step">
-      <button
-        type="button"
-        className="pl-score-step-btn"
-        aria-label={`Decrease ${label}`}
-        disabled={value <= 0}
-        onClick={() => onChange(Math.max(0, value - 1))}
-      >
-        −
-      </button>
-      <NumberInput
-        className="pl-score-step-input"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        min={0}
-        max={max}
-        emptyValue={0}
-        value={value}
-        onValueChange={(n) => onChange(Math.max(0, Math.min(max, Math.trunc(n))))}
-        aria-label={label}
-      />
-      <button
-        type="button"
-        className="pl-score-step-btn"
-        aria-label={`Increase ${label}`}
-        disabled={value >= max}
-        onClick={() => onChange(Math.min(max, value + 1))}
-      >
-        +
-      </button>
-    </div>
-  )
 }
 
 function opponentName(m: Match, myTeamId?: string) {
@@ -220,7 +175,7 @@ function NextMatchCard({
       )}
 
       {next.status === 'SCHEDULED' && (
-        <p className="pl-next-hint">Keep this page open - we’ll flash when you’re called.</p>
+        <p className="pl-next-hint">Keep this page open - it updates when you’re called.</p>
       )}
 
       <div className="pl-next-actions">
@@ -871,16 +826,14 @@ export default function PlayerLivePage() {
         {knockoutActive && knockoutMatches.length > 0 && (
           <section className="pl-block pl-bracket" id="pl-draw">
             {championshipMatches.length > 0 && (
-              <>
-                {plateMatches.length > 0 && <h2>Championship</h2>}
-                <TournamentBracket matches={championshipMatches} myTeamId={myTeamId} />
-              </>
+              <TournamentBracket
+                matches={championshipMatches}
+                myTeamId={myTeamId}
+                stage="KNOCKOUT"
+              />
             )}
             {plateMatches.length > 0 && (
-              <>
-                <h2>Plate</h2>
-                <TournamentBracket matches={plateMatches} myTeamId={myTeamId} />
-              </>
+              <TournamentBracket matches={plateMatches} myTeamId={myTeamId} stage="PLATE" />
             )}
           </section>
         )}
@@ -949,7 +902,7 @@ export default function PlayerLivePage() {
 
       {scoringMatch && (
         <div
-          className="score-modal-backdrop"
+          className="score-modal-backdrop pl-score-backdrop"
           onClick={() => {
             setScoringMatch(null)
             setScoreError('')

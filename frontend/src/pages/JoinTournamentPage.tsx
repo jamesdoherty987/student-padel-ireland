@@ -6,6 +6,7 @@ import BrandLogo from '../components/BrandLogo'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import SearchableSelect from '../components/SearchableSelect'
+import { universitySelectOptions } from '../utils/universities'
 import SponsorStrip from '../components/SponsorStrip'
 import { useAuth } from '../context/AuthContext'
 import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
@@ -1792,15 +1793,11 @@ export default function JoinTournamentPage() {
               id="join-uni"
               value={form.university_id}
               onChange={(university_id) => setForm({ ...form, university_id })}
-              placeholder="Select university"
-              searchPlaceholder="Search universities…"
+              placeholder="Search or choose your university"
+              searchPlaceholder="Type the university name…"
               emptyLabel="No university matches that name"
               required
-              options={universities.map((u) => ({
-                value: u.id,
-                label: u.name,
-                keywords: u.short_name || '',
-              }))}
+              options={universitySelectOptions(universities)}
             />
           </div>
           {error && (

@@ -233,7 +233,7 @@ const DraftSponsorsField = forwardRef<DraftSponsorsFieldHandle, Props>(
               </label>
               <div className={`org-sponsor-upload${previewUrl ? ' has-preview' : ''}`}>
                 {previewUrl ? (
-                  <img src={previewUrl} alt="" className="org-sponsor-preview" />
+                  <img src={previewUrl} alt="" className="org-sponsor-logo-preview" />
                 ) : (
                   <span className="org-sponsor-upload-hint">Tap to choose logo</span>
                 )}

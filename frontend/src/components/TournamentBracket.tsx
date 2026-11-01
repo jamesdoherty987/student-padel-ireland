@@ -36,10 +36,19 @@ function sideScore(m: Match, side: 'a' | 'b') {
   return won
 }
 
-function buildRounds(matches: Match[]): RoundColumn[] {
-  const ko = matches.filter((m) => m.stage === 'KNOCKOUT' && m.round !== 'BRONZE')
+function inferStage(matches: Match[]): 'KNOCKOUT' | 'PLATE' {
+  if (matches.some((m) => m.stage === 'PLATE') && !matches.some((m) => m.stage === 'KNOCKOUT')) {
+    return 'PLATE'
+  }
+  return 'KNOCKOUT'
+}
+
+function buildRounds(matches: Match[], stage: 'KNOCKOUT' | 'PLATE'): RoundColumn[] {
+  const filtered = matches.filter(
+    (m) => m.stage === stage && !(stage === 'KNOCKOUT' && m.round === 'BRONZE'),
+  )
   const byRound = new Map<string, Match[]>()
-  for (const m of ko) {
+  for (const m of filtered) {
     const list = byRound.get(m.round) || []
     list.push(m)
     byRound.set(m.round, list)
@@ -48,7 +57,7 @@ function buildRounds(matches: Match[]): RoundColumn[] {
     .sort((a, b) => knockoutRoundOrder(a[0]) - knockoutRoundOrder(b[0]))
     .map(([round, list]) => ({
       round,
-      label: knockoutRoundLabel(round, 'KNOCKOUT'),
+      label: knockoutRoundLabel(round, stage),
       matches: [...list].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
     }))
 }
@@ -141,17 +150,26 @@ function MatchCard({ match, myTeamId }: { match: Match; myTeamId?: string }) {
 export default function TournamentBracket({
   matches,
   myTeamId,
+  stage: stageProp,
 }: {
   matches: Match[]
   myTeamId?: string
+  /** When omitted, inferred from the matches (fixes empty Plate brackets). */
+  stage?: 'KNOCKOUT' | 'PLATE'
 }) {
-  const rounds = useMemo(() => buildRounds(matches), [matches])
+  const stage = stageProp || inferStage(matches)
+  const rounds = useMemo(() => buildRounds(matches, stage), [matches, stage])
   const rootRef = useRef<HTMLDivElement>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const [activeRound, setActiveRound] = useState(0)
   const [reduceMotion, setReduceMotion] = useState(false)
 
-  const roundKey = rounds.map((r) => r.round).join('|')
+  const roundKey = `${stage}|${rounds.map((r) => r.round).join('|')}`
+  const isPlate = stage === 'PLATE'
+  const title = isPlate ? 'Plate bracket' : 'Championship bracket'
+  const lead = isPlate ? 'Consolation path to the plate final.' : 'Follow the path to the final.'
+  const tabsLabel = isPlate ? 'Plate rounds' : 'Championship rounds'
+  const championLabel = isPlate ? 'Plate champion' : 'Champion'
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -207,22 +225,22 @@ export default function TournamentBracket({
     : null
 
   return (
-    <div className="tb" ref={rootRef}>
+    <div className={`tb${isPlate ? ' is-plate' : ''}`} ref={rootRef}>
       <div className="tb-head">
         <div>
-          <h2 className="tb-title">Knockout bracket</h2>
-          <p className="tb-lead">Follow the path to the final.</p>
+          <h2 className="tb-title">{title}</h2>
+          <p className="tb-lead">{lead}</p>
         </div>
         {championName ? (
-          <div className="tb-champion" aria-label={`Champion ${championName}`}>
-            <span className="tb-champion-label">Champion</span>
+          <div className="tb-champion" aria-label={`${championLabel} ${championName}`}>
+            <span className="tb-champion-label">{championLabel}</span>
             <strong>{championName}</strong>
           </div>
         ) : null}
       </div>
 
       {rounds.length > 1 ? (
-        <div className="tb-tabs" role="tablist" aria-label="Knockout rounds">
+        <div className="tb-tabs" role="tablist" aria-label={tabsLabel}>
           {rounds.map((r, i) => (
             <button
               key={r.round}
