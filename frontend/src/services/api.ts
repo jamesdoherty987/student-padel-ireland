@@ -79,6 +79,8 @@ export type Tournament = {
   entry_fee_cents: number
   currency: string
   pay_on_arrival: boolean
+  /** When false, leave copy says it's too close for a refund */
+  refunds_on_withdrawal?: boolean
   max_teams: number
   registration_deadline?: string | null
   format: string

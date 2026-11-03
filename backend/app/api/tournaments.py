@@ -629,6 +629,8 @@ def _tournament_out(
         entry_fee_cents=t.entry_fee_cents,
         currency=t.currency or "EUR",
         pay_on_arrival=bool(getattr(t, "pay_on_arrival", False)),
+        # None/missing → True so existing events keep “contact organiser” refund copy
+        refunds_on_withdrawal=getattr(t, "refunds_on_withdrawal", True) is not False,
         max_teams=t.max_teams,
         registration_deadline=t.registration_deadline,
         format=t.format,
@@ -1259,6 +1261,7 @@ def create_tournament(
         number_of_courts=body.number_of_courts,
         entry_fee_cents=body.entry_fee_cents,
         pay_on_arrival=bool(body.pay_on_arrival),
+        refunds_on_withdrawal=bool(body.refunds_on_withdrawal),
         max_teams=body.max_teams,
         registration_deadline=body.registration_deadline,
         format=body.format.value,

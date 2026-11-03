@@ -39,6 +39,7 @@ function defaultForm(variant: CreateTournamentVariant): TournamentFormState {
     max_teams: 48,
     entry_fee_euros: 50,
     pay_on_arrival: true,
+    refunds_on_withdrawal: true,
     description: '',
     rules: official
       ? 'Best of 3 sets. Golden point on deuce. Student ID required on the day.'
@@ -154,6 +155,7 @@ export default function CreateTournamentModal({
         court_names: courtNames.map((n, i) => n.trim() || `Court ${i + 1}`),
         entry_fee_cents: Math.round(form.entry_fee_euros * 100),
         pay_on_arrival: form.pay_on_arrival,
+        refunds_on_withdrawal: form.refunds_on_withdrawal,
         max_teams: form.max_teams,
         format: form.format,
         play_format: form.play_format,

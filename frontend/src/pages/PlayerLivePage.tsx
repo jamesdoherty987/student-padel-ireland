@@ -500,6 +500,7 @@ export default function PlayerLivePage() {
       slug={slug}
       paymentStatus={myPayment}
       paymentVia={myPaymentVia}
+      refundsOnWithdrawal={t.refunds_on_withdrawal !== false}
       teamName={myTeam?.name}
       singles={singles}
       className="btn btn-ghost btn-block"

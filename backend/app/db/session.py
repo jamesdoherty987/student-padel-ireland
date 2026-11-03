@@ -172,6 +172,8 @@ def init_db() -> None:
     _pg_add_column_if_missing("tournaments", "championship_size", "INTEGER DEFAULT 16")
     _sqlite_add_column_if_missing("tournaments", "plate_size", "INTEGER DEFAULT 16")
     _pg_add_column_if_missing("tournaments", "plate_size", "INTEGER DEFAULT 16")
+    _sqlite_add_column_if_missing("tournaments", "refunds_on_withdrawal", "BOOLEAN DEFAULT 1")
+    _pg_add_column_if_missing("tournaments", "refunds_on_withdrawal", "BOOLEAN DEFAULT TRUE")
     _backfill_tournament_is_official()
     _sqlite_ensure_ranking_history_nullable_tournament()
     _pg_ensure_ranking_history_nullable_tournament()

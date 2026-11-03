@@ -432,6 +432,7 @@ export default function TournamentDetailPage() {
                 slug={tournament.slug}
                 paymentStatus={myPayment}
                 paymentVia={myPaymentVia}
+                refundsOnWithdrawal={tournament.refunds_on_withdrawal !== false}
                 teamName={myTeamInfo?.name}
                 singles={singles}
                 className="btn btn-ghost btn-sm"

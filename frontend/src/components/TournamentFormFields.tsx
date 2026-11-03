@@ -22,6 +22,8 @@ export type TournamentFormState = {
   max_teams: number
   entry_fee_euros: number
   pay_on_arrival: boolean
+  /** When false, players are told withdrawals are too close for a refund */
+  refunds_on_withdrawal: boolean
   description: string
   rules: string
   group_size: number
@@ -374,14 +376,29 @@ export default function TournamentFormFields({
         </div>
 
         {form.entry_fee_euros > 0 && (
-          <label className="tf-check">
-            <input
-              type="checkbox"
-              checked={form.pay_on_arrival}
-              onChange={(e) => onChange({ pay_on_arrival: e.target.checked })}
-            />
-            <span>Pay on arrival</span>
-          </label>
+          <>
+            <label className="tf-check">
+              <input
+                type="checkbox"
+                checked={form.pay_on_arrival}
+                onChange={(e) => onChange({ pay_on_arrival: e.target.checked })}
+              />
+              <span>Pay on arrival</span>
+            </label>
+            <label className="tf-check">
+              <input
+                type="checkbox"
+                checked={form.refunds_on_withdrawal}
+                onChange={(e) => onChange({ refunds_on_withdrawal: e.target.checked })}
+              />
+              <span>Refunds on withdrawal</span>
+            </label>
+            <small className="form-hint">
+              {form.refunds_on_withdrawal
+                ? 'Players who leave are told to contact you if they need a refund.'
+                : 'Players who leave are told it’s too close to the tournament for a refund.'}
+            </small>
+          </>
         )}
       </section>
       )}

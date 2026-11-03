@@ -1579,7 +1579,9 @@ export default function OrganiserDashboard() {
                                   const feeNote =
                                     team.payment_via === 'pay_on_arrival'
                                       ? ' They haven’t paid online - this just frees the spot.'
-                                      : ' Entry fees are not refunded automatically.'
+                                      : active.tournament.refunds_on_withdrawal === false
+                                        ? ' Refunds are off for this event - players are told it’s too close for a refund.'
+                                        : ' Entry fees are not refunded automatically.'
                                   void confirmDialog({
                                     title: isSingles ? 'Withdraw player?' : 'Withdraw team?',
                                     message: `${base}${feeNote}`,

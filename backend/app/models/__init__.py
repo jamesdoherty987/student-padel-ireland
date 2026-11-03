@@ -154,6 +154,9 @@ class Tournament(Base, TimestampMixin):
     # When True, players confirm entry without Stripe and pay cash/card at the venue
     # (optional pay-online-now still available on join)
     pay_on_arrival: Mapped[bool] = mapped_column(Boolean, default=True)
+    # When True, leave/withdraw copy tells players to contact the organiser for a refund.
+    # When False, copy says it's too close to the event for a refund.
+    refunds_on_withdrawal: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     max_teams: Mapped[int] = mapped_column(Integer, default=48)
     registration_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     format: Mapped[str] = mapped_column(String(40), default=TournamentFormat.GROUP_KNOCKOUT.value)

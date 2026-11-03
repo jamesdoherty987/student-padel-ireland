@@ -169,6 +169,7 @@ class TournamentCreate(BaseModel):
     court_names: Optional[list[str]] = None
     entry_fee_cents: int = Field(default=5000, ge=0)
     pay_on_arrival: bool = True
+    refunds_on_withdrawal: bool = True
     max_teams: int = Field(default=48, ge=2, le=256)
     registration_deadline: Optional[datetime] = None
     format: TournamentFormat = TournamentFormat.GROUP_KNOCKOUT
@@ -217,6 +218,7 @@ class TournamentUpdate(BaseModel):
     court_names: Optional[list[str]] = None
     entry_fee_cents: Optional[int] = Field(default=None, ge=0)
     pay_on_arrival: Optional[bool] = None
+    refunds_on_withdrawal: Optional[bool] = None
     max_teams: Optional[int] = Field(default=None, ge=2, le=256)
     registration_deadline: Optional[datetime] = None
     format: Optional[TournamentFormat] = None
@@ -275,6 +277,7 @@ class TournamentOut(BaseModel):
     entry_fee_cents: int
     currency: str
     pay_on_arrival: bool = True
+    refunds_on_withdrawal: bool = True
     max_teams: int
     registration_deadline: Optional[datetime] = None
     format: str

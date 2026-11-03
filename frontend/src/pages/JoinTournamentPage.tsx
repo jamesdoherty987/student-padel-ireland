@@ -250,6 +250,7 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
             slug={slug}
             paymentStatus={data.status}
             paymentVia={data.payment_via}
+            refundsOnWithdrawal={data.tournament?.refunds_on_withdrawal !== false}
             teamName={data.team_name}
             singles={singles}
             className="btn btn-ghost btn-block"
@@ -936,13 +937,16 @@ export default function JoinTournamentPage() {
                 Need to pull out before the event starts? You can leave below.
                 {payAtVenue
                   ? ' You haven’t paid online - this just frees your spot.'
-                  : ' Fees aren’t refunded automatically - message the organiser if you need one.'}
+                  : tournament.refunds_on_withdrawal === false
+                    ? ' It’s too close to the tournament - you won’t get a refund if you leave.'
+                    : ' Fees aren’t refunded automatically - message the organiser if you need one.'}
               </p>
               <LeaveTournamentButton
                 tournamentId={tournament.id}
                 slug={tournament.slug}
                 paymentStatus={myPayment}
                 paymentVia={myTeam.payment_via}
+                refundsOnWithdrawal={tournament.refunds_on_withdrawal !== false}
                 teamName={myTeam.name}
                 singles={singles}
                 className="btn btn-ghost"
@@ -977,6 +981,7 @@ export default function JoinTournamentPage() {
                 slug={tournament.slug}
                 paymentStatus={myPayment}
                 paymentVia={myTeam.payment_via}
+                refundsOnWithdrawal={tournament.refunds_on_withdrawal !== false}
                 teamName={myTeam.name}
                 singles={singles}
                 className="btn btn-ghost"
@@ -1064,6 +1069,7 @@ export default function JoinTournamentPage() {
                 slug={tournament.slug}
                 paymentStatus={myPayment}
                 paymentVia={myTeam.payment_via}
+                refundsOnWithdrawal={tournament.refunds_on_withdrawal !== false}
                 teamName={myTeam.name}
                 singles={singles}
                 className="btn btn-ghost"
@@ -1873,6 +1879,7 @@ export default function JoinTournamentPage() {
               slug={tournament.slug}
               paymentStatus={myPayment}
               paymentVia={myTeam.payment_via}
+              refundsOnWithdrawal={tournament.refunds_on_withdrawal !== false}
               teamName={myTeam.name}
               singles={singles}
               className="btn btn-ghost btn-block"
