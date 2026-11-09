@@ -2190,7 +2190,11 @@ def check_in_team(
     _assert_organiser(user, t, db)
     team = (
         db.query(Team)
-        .options(joinedload(Team.members).joinedload(TeamPlayer.user), joinedload(Team.registration))
+        .options(
+            joinedload(Team.members).joinedload(TeamPlayer.user),
+            joinedload(Team.registration),
+            joinedload(Team.university),
+        )
         .filter(Team.id == team_id, Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
         .first()
     )
@@ -2222,7 +2226,11 @@ def mark_fee_collected(
     _assert_organiser(user, t, db)
     team = (
         db.query(Team)
-        .options(joinedload(Team.members).joinedload(TeamPlayer.user), joinedload(Team.registration))
+        .options(
+            joinedload(Team.members).joinedload(TeamPlayer.user),
+            joinedload(Team.registration),
+            joinedload(Team.university),
+        )
         .filter(Team.id == team_id, Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
         .first()
     )

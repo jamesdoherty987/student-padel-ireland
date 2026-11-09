@@ -812,7 +812,8 @@ export default function OrganiserDashboard() {
   const drawPreview = useMemo(() => {
     if (!active) return null
     return previewDraw({
-      teamCount: paidCount,
+      // Use entries that will actually enter the draw (complete paid only).
+      teamCount: drawPaidTeams.length,
       groupSize: tournamentDetail?.group_size ?? 4,
       teamsAdvancePerGroup: tournamentDetail?.teams_advance_per_group ?? 2,
       format: activeFormat,
@@ -822,7 +823,7 @@ export default function OrganiserDashboard() {
     })
   }, [
     active,
-    paidCount,
+    drawPaidTeams.length,
     tournamentDetail?.group_size,
     tournamentDetail?.teams_advance_per_group,
     tournamentDetail?.enable_plate,
@@ -839,7 +840,6 @@ export default function OrganiserDashboard() {
       ).length
     : 0
   const canOpenGenerate = paidCount >= 2
-  const canGenerate = canOpenGenerate && !!drawPreview?.ok && incompleteDoubles === 0
   const generateBlockedReason = (() => {
     if (paidCount < 2) {
       return `Need at least 2 paid ${isSingles ? 'players' : 'teams'} to generate (you have ${paidCount}).`

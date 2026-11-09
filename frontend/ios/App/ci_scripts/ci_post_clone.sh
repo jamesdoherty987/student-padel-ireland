@@ -7,21 +7,26 @@ echo "=== ci_post_clone: Student Padel Ireland (Capacitor) ==="
 
 cd "${CI_PRIMARY_REPOSITORY_PATH}/frontend"
 
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+
 # Capacitor 8 needs Node 22+
-if ! command -v node >/dev/null 2>&1; then
-  echo "Installing Node via Homebrew…"
+ensure_node_22() {
+  if command -v node >/dev/null 2>&1; then
+    MAJOR="$(node -v | sed 's/^v//' | cut -d. -f1)"
+    if [ "${MAJOR}" -ge 22 ]; then
+      return 0
+    fi
+    echo "Node $(node -v) is too old; installing Node 22…"
+  else
+    echo "Installing Node via Homebrew…"
+  fi
   brew install node@22
   brew link --overwrite --force node@22 || true
   export PATH="$(brew --prefix node@22)/bin:${PATH}"
-else
-  MAJOR="$(node -v | sed 's/^v//' | cut -d. -f1)"
-  if [ "${MAJOR}" -lt 22 ]; then
-    echo "Node $(node -v) is too old; installing Node 22…"
-    brew install node@22
-    brew link --overwrite --force node@22 || true
-    export PATH="$(brew --prefix node@22)/bin:${PATH}"
-  fi
-fi
+}
+
+ensure_node_22
 
 echo "node $(node -v) / npm $(npm -v)"
 
