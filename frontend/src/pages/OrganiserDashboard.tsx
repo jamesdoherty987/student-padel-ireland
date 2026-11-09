@@ -8,6 +8,7 @@ import EditTournamentModal from '../components/EditTournamentModal'
 import ScoreStep from '../components/ScoreStep'
 import SponsorStrip from '../components/SponsorStrip'
 import TournamentBracket from '../components/TournamentBracket'
+import GenerateDrawModal from '../components/GenerateDrawModal'
 import '../components/ScoreSheet.css'
 import { useAuth } from '../context/AuthContext'
 import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
@@ -24,11 +25,9 @@ import {
 } from '../services/api'
 import {
   formatGroupSizes,
-  knockoutRoundLabel,
   previewDraw,
 } from '../utils/drawPreview'
 import {
-  bracketFormatHint,
   calendarDaysFromToday,
   courtLabel,
   formatMatchScore,
@@ -182,18 +181,17 @@ export default function OrganiserDashboard() {
   }, [showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch])
 
   useEffect(() => {
-    // Edit/create use ModalShell (dirty-confirm). Don't force-close showEdit here.
-    if (!confirmGenerate && !scoreMatch && !showAddTeam && !moveMatch) return
+    // Generate / edit use ModalShell (own Escape). This covers score / add-team / move.
+    if (!scoreMatch && !showAddTeam && !moveMatch) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
-      setConfirmGenerate(false)
       setScoreMatch(null)
       setShowAddTeam(false)
       setMoveMatch(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [confirmGenerate, scoreMatch, showAddTeam, moveMatch])
+  }, [scoreMatch, showAddTeam, moveMatch])
 
   const tournaments: OrganiserDashRow[] = data?.tournaments || []
 
@@ -306,7 +304,11 @@ export default function OrganiserDashboard() {
   }, [sponsorForm.logo])
 
   const generateMut = useMutation({
-    mutationFn: () => tournamentApi.generate(tid!),
+    mutationFn: (payload?: {
+      seeding_mode?: string
+      manual_groups?: string[][]
+      random_seed?: number
+    }) => tournamentApi.generate(tid!, payload),
     onSuccess: (res) => {
       setConfirmGenerate(false)
       qc.invalidateQueries({ queryKey: ['org-matches'] })
@@ -747,6 +749,16 @@ export default function OrganiserDashboard() {
   const checkInPool = useMemo(
     () => orgTeams.filter((t) => t.payment_status === 'PAID'),
     [orgTeams],
+  )
+  /** Paid entries that will actually enter the draw (complete doubles only). */
+  const drawPaidTeams = useMemo(
+    () =>
+      orgTeams.filter((t) => {
+        if (t.payment_status !== 'PAID' || t.withdrawn) return false
+        if (!isSingles && (t.player_names?.length || 0) < 2) return false
+        return true
+      }),
+    [orgTeams, isSingles],
   )
   const checkedInCount = checkInPool.filter((t) => t.checked_in).length
   const awaitingCheckInCount = checkInPool.length - checkedInCount
@@ -2299,162 +2311,29 @@ export default function OrganiserDashboard() {
         />
       )}
 
-      {confirmGenerate && (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(e) => {
-            if (!generateMut.isPending && e.target === e.currentTarget) setConfirmGenerate(false)
-          }}
-        >
-          <div
-            className="modal modal-wide"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="generate-modal-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="generate-modal-title">
-              {fixturesExist ? 'Re-generate draw?' : 'Generate draw?'}
-            </h2>
-            <p className="org-gen-lead">
-              {activeFormat === 'ROUND_ROBIN' ? (
-                <>
-                  Builds fixtures from <strong>paid</strong> entries only so everyone plays everyone.
-                  Registration will close.
-                </>
-              ) : (
-                <>
-                  Builds groups, fixtures, and the knockout from <strong>paid</strong> entries only.
-                  Empty spots are skipped - the draw fits whoever has paid. Registration will close.
-                </>
-              )}
-            </p>
-            {fixturesExist && (
-              <p className="org-gen-warn" role="alert">
-                Existing matches and groups will be replaced.
-              </p>
-            )}
-            <p className="org-gen-meta">
-              {tournamentFormatSummary(activePlayFormat, activeFormat)}.{' '}
-              {bracketFormatHint(activeFormat, !!tournamentDetail?.enable_plate)}
-            </p>
-
-            <div className="org-gen-stats">
-              <div>
-                <span>Paid entries</span>
-                <strong>
-                  {paidCount}
-                  {maxTeams > 0 ? ` / ${maxTeams}` : ''}
-                </strong>
-              </div>
-              {unpaidCount > 0 && (
-                <div>
-                  <span>Incomplete (excluded)</span>
-                  <strong>{unpaidCount}</strong>
-                </div>
-              )}
-              {paymentCounts.collect > 0 && (
-                <div>
-                  <span>Pay on arrival (in draw)</span>
-                  <strong>{paymentCounts.collect}</strong>
-                </div>
-              )}
-              {drawPreview?.ok && (
-                <>
-                  <div>
-                    <span>Groups</span>
-                    <strong>
-                      {drawPreview.groupCount}{' '}
-                      <span className="org-gen-sub">({formatGroupSizes(drawPreview.groupSizes)})</span>
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Matches</span>
-                    <strong>{drawPreview.totalMatches}</strong>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {paidCount > 0 && maxTeams > 0 && paidCount < maxTeams && (
-              <p className="org-gen-note">
-                Field isn’t full ({maxTeams - paidCount} spot
-                {maxTeams - paidCount === 1 ? '' : 's'} left). That’s fine - groups will be sized evenly
-                from the {paidCount} paid {isSingles ? 'player' : 'team'}
-                {paidCount === 1 ? '' : 's'}.
-              </p>
-            )}
-
-            {drawPreview?.ok && activeFormat !== 'ROUND_ROBIN' && (
-              <ul className="org-gen-list">
-                {drawPreview.enablePlate ? (
-                  <>
-                    <li>
-                      {drawPreview.championshipSize} teams → Championship
-                      {drawPreview.knockoutRounds.length
-                        ? ` (${drawPreview.knockoutRounds.map(knockoutRoundLabel).join(' → ')})`
-                        : ''}
-                    </li>
-                    <li>
-                      {drawPreview.plateSize} teams → Plate
-                      {drawPreview.plateRounds.length
-                        ? ` (${drawPreview.plateRounds.map(knockoutRoundLabel).join(' → ')})`
-                        : ''}
-                    </li>
-                  </>
-                ) : (
-                  <>
-                    <li>
-                      Top {drawPreview.advancePerGroup} per group advance
-                      {drawPreview.advanceAdjusted
-                        ? ` (adjusted from ${drawPreview.requestedAdvance} to fit smaller groups)`
-                        : ''}
-                    </li>
-                    {drawPreview.knockoutRounds.length > 0 ? (
-                      <li>
-                        Knockout starts at {knockoutRoundLabel(drawPreview.knockoutRounds[0])}
-                        {drawPreview.byeSlots > 0
-                          ? ` · ${drawPreview.byeSlots} bye${drawPreview.byeSlots === 1 ? '' : 's'} for the bracket`
-                          : ''}
-                      </li>
-                    ) : (
-                      <li>{drawPreview.note || 'Group stage only'}</li>
-                    )}
-                  </>
-                )}
-              </ul>
-            )}
-
-            {generateBlockedReason && (
-              <p className="org-gen-warn" role="alert">
-                {generateBlockedReason}
-              </p>
-            )}
-
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setConfirmGenerate(false)}
-                disabled={generateMut.isPending}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                disabled={generateMut.isPending || !canGenerate}
-                onClick={() => generateMut.mutate()}
-              >
-                {generateMut.isPending
-                  ? 'Generating…'
-                  : fixturesExist
-                    ? 'Replace draw'
-                    : 'Generate draw'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <GenerateDrawModal
+        open={confirmGenerate}
+        fixturesExist={fixturesExist}
+        isSingles={isSingles}
+        playFormat={activePlayFormat}
+        format={activeFormat}
+        enablePlate={!!tournamentDetail?.enable_plate}
+        groupSize={tournamentDetail?.group_size ?? 4}
+        teamsAdvancePerGroup={tournamentDetail?.teams_advance_per_group ?? 2}
+        championshipSize={tournamentDetail?.championship_size ?? 16}
+        plateSize={tournamentDetail?.plate_size ?? 16}
+        paidTeams={drawPaidTeams}
+        unpaidCount={unpaidCount}
+        collectCount={paymentCounts.collect}
+        maxTeams={maxTeams}
+        drawPreview={drawPreview}
+        generateBlockedReason={generateBlockedReason}
+        isPending={generateMut.isPending}
+        onClose={() => {
+          if (!generateMut.isPending) setConfirmGenerate(false)
+        }}
+        onGenerate={(payload) => generateMut.mutate(payload)}
+      />
 
       {scoreMatch && (
         <div

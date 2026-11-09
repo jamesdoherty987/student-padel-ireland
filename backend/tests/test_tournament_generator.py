@@ -298,3 +298,81 @@ def test_preview_draw_partial_field():
     assert sum(preview["group_sizes"]) == 10
     assert min(preview["group_sizes"]) >= 2
     assert preview["bye_slots"] >= 0
+
+
+def test_alphabetical_seeding_is_stable():
+    cfg = _config(8)
+    cfg.seeding_mode = "alphabetical"
+    a = generate_tournament(cfg)
+    b = generate_tournament(cfg)
+    assert [g.team_ids for g in a.groups] == [g.team_ids for g in b.groups]
+
+
+def test_random_seeding_uses_seed():
+    cfg = _config(12)
+    cfg.seeding_mode = "random"
+    cfg.random_seed = 42
+    a = generate_tournament(cfg)
+    b = generate_tournament(cfg)
+    assert [g.team_ids for g in a.groups] == [g.team_ids for g in b.groups]
+    cfg.random_seed = 99
+    c = generate_tournament(cfg)
+    assert [g.team_ids for g in a.groups] != [g.team_ids for g in c.groups]
+
+
+def test_university_spread_separates_same_uni():
+    teams = [
+        TeamRef(id="t1", name="A1", university="UCD"),
+        TeamRef(id="t2", name="A2", university="UCD"),
+        TeamRef(id="t3", name="B1", university="TCD"),
+        TeamRef(id="t4", name="B2", university="TCD"),
+        TeamRef(id="t5", name="C1", university="UCC"),
+        TeamRef(id="t6", name="C2", university="UCC"),
+        TeamRef(id="t7", name="D1", university="UG"),
+        TeamRef(id="t8", name="D2", university="UG"),
+    ]
+    cfg = GeneratorConfig(
+        teams=teams,
+        courts=4,
+        match_duration_minutes=20,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        group_size=4,
+        teams_advance_per_group=2,
+        format="GROUP_KNOCKOUT",
+        seeding_mode="university_spread",
+    )
+    result = generate_tournament(cfg)
+    assert len(result.groups) == 2
+    for g in result.groups:
+        unis = [next(t.university for t in teams if t.id == tid) for tid in g.team_ids]
+        assert len(unis) == len(set(unis))
+
+
+def test_manual_groups_respected():
+    teams = _teams(6)
+    cfg = _config(6, group_size=3)
+    cfg.seeding_mode = "manual"
+    cfg.manual_groups = [
+        ["t1", "t2", "t3"],
+        ["t6", "t5", "t4"],
+    ]
+    result = generate_tournament(cfg)
+    assert result.groups[0].team_ids == ["t1", "t2", "t3"]
+    assert result.groups[1].team_ids == ["t6", "t5", "t4"]
+    validate_generated(result, {t.id for t in teams})
+
+
+def test_manual_groups_reject_singleton():
+    cfg = _config(5)
+    cfg.seeding_mode = "manual"
+    cfg.manual_groups = [["t1", "t2", "t3", "t4"], ["t5"]]
+    with pytest.raises(ValueError, match="singleton"):
+        generate_tournament(cfg)
+
+
+def test_manual_groups_require_all_teams():
+    cfg = _config(4)
+    cfg.seeding_mode = "manual"
+    cfg.manual_groups = [["t1", "t2"]]
+    with pytest.raises(ValueError, match="Missing"):
+        generate_tournament(cfg)

@@ -163,6 +163,7 @@ export type TournamentTeam = {
   tournament_id: string
   name: string
   university_id?: string | null
+  university_short?: string | null
   seed?: number | null
   checked_in: boolean
   withdrawn: boolean

@@ -245,6 +245,170 @@ export function previewDraw(opts: {
   }
 }
 
+/**
+ * Build knockout/plate stats from the actual group sizes the organiser chose.
+ * Group matches always follow the real layout; advancement clamps to the smallest group.
+ */
+export function liveDrawStats(opts: {
+  groupSizes: number[]
+  teamsAdvancePerGroup?: number
+  format?: string
+  enablePlate?: boolean
+  championshipSize?: number
+  plateSize?: number
+}): Pick<
+  DrawPreview,
+  | 'ok'
+  | 'error'
+  | 'groupCount'
+  | 'groupSizes'
+  | 'groupMatches'
+  | 'advancePerGroup'
+  | 'advanceAdjusted'
+  | 'requestedAdvance'
+  | 'byeSlots'
+  | 'knockoutRounds'
+  | 'plateRounds'
+  | 'enablePlate'
+  | 'championshipSize'
+  | 'plateSize'
+  | 'totalMatches'
+  | 'note'
+> {
+  const format = opts.format || 'GROUP_KNOCKOUT'
+  const requestedAdvance = opts.teamsAdvancePerGroup ?? 2
+  const enablePlate = !!opts.enablePlate
+  const championshipSize = opts.championshipSize ?? 16
+  const plateSize = opts.plateSize ?? 16
+  const groupSizes = opts.groupSizes.filter((n) => n > 0)
+  const teamCount = groupSizes.reduce((sum, n) => sum + n, 0)
+  const groupMatches = groupSizes.reduce((sum, s) => sum + (s * (s - 1)) / 2, 0)
+
+  if (teamCount < 2) {
+    return {
+      ok: false,
+      error: 'Need at least 2 paid entries to generate',
+      groupCount: 0,
+      groupSizes: [],
+      groupMatches: 0,
+      advancePerGroup: 0,
+      advanceAdjusted: false,
+      requestedAdvance,
+      byeSlots: 0,
+      knockoutRounds: [],
+      plateRounds: [],
+      enablePlate,
+      championshipSize: 0,
+      plateSize: 0,
+      totalMatches: 0,
+    }
+  }
+
+  if (format === 'ROUND_ROBIN') {
+    return {
+      ok: true,
+      groupCount: 1,
+      groupSizes: [teamCount],
+      groupMatches: (teamCount * (teamCount - 1)) / 2,
+      advancePerGroup: 0,
+      advanceAdjusted: false,
+      requestedAdvance: 0,
+      byeSlots: 0,
+      knockoutRounds: [],
+      plateRounds: [],
+      enablePlate: false,
+      championshipSize: 0,
+      plateSize: 0,
+      totalMatches: (teamCount * (teamCount - 1)) / 2,
+    }
+  }
+
+  if (enablePlate) {
+    const champ = nextPowerOfTwo(Math.max(2, championshipSize))
+    const plate = nextPowerOfTwo(Math.max(2, plateSize))
+    const needed = champ + plate
+    if (needed > teamCount) {
+      return {
+        ok: false,
+        error: `Championship (${champ}) + Plate (${plate}) need ${needed} teams, but only ${teamCount} are entered`,
+        groupCount: groupSizes.length,
+        groupSizes,
+        groupMatches,
+        advancePerGroup: 0,
+        advanceAdjusted: false,
+        requestedAdvance: 0,
+        byeSlots: 0,
+        knockoutRounds: [],
+        plateRounds: [],
+        enablePlate: true,
+        championshipSize: champ,
+        plateSize: plate,
+        totalMatches: groupMatches,
+      }
+    }
+    return {
+      ok: true,
+      groupCount: groupSizes.length,
+      groupSizes,
+      groupMatches,
+      advancePerGroup: 0,
+      advanceAdjusted: false,
+      requestedAdvance: 0,
+      byeSlots: 0,
+      knockoutRounds: knockoutRoundNames(champ),
+      plateRounds: knockoutRoundNames(plate),
+      enablePlate: true,
+      championshipSize: champ,
+      plateSize: plate,
+      totalMatches: groupMatches + (champ - 1) + (plate - 1),
+      note: `${champ} → Championship · ${plate} → Plate`,
+    }
+  }
+
+  const minSize = groupSizes.length ? Math.min(...groupSizes) : 0
+  const advancePerGroup = Math.min(Math.max(1, requestedAdvance), minSize || 1)
+  const advanceAdjusted = advancePerGroup !== requestedAdvance
+  const advancing = groupSizes.length * advancePerGroup
+
+  if (advancing < 2) {
+    return {
+      ok: true,
+      groupCount: groupSizes.length,
+      groupSizes,
+      groupMatches,
+      advancePerGroup,
+      advanceAdjusted,
+      requestedAdvance,
+      byeSlots: 0,
+      knockoutRounds: [],
+      plateRounds: [],
+      enablePlate: false,
+      championshipSize: 0,
+      plateSize: 0,
+      totalMatches: groupMatches,
+      note: 'Group stage only - not enough advancers for a knockout.',
+    }
+  }
+
+  const bracketSize = nextPowerOfTwo(advancing)
+  return {
+    ok: true,
+    groupCount: groupSizes.length,
+    groupSizes,
+    groupMatches,
+    advancePerGroup,
+    advanceAdjusted,
+    requestedAdvance,
+    byeSlots: bracketSize - advancing,
+    knockoutRounds: knockoutRoundNames(bracketSize),
+    plateRounds: [],
+    enablePlate: false,
+    championshipSize: 0,
+    plateSize: 0,
+    totalMatches: groupMatches + (bracketSize - 1),
+  }
+}
+
 export function formatGroupSizes(sizes: number[]): string {
   if (sizes.length === 0) return '-'
   const counts = new Map<number, number>()

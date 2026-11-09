@@ -8,9 +8,13 @@ STRAIGHT_KNOCKOUT, SWISS, etc. can be added without rewriting callers.
 from __future__ import annotations
 
 import math
+import random
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol, Sequence
+
+SEEDING_MODES = ("alphabetical", "random", "university_spread", "manual")
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,11 @@ class GeneratorConfig:
     plate_size: int = 16
     # Optional: rest minutes between matches on same court
     court_buffer_minutes: int = 0
+    # alphabetical | random | university_spread | manual
+    seeding_mode: str = "alphabetical"
+    # Explicit group assignment (list of team-id lists). When set, overrides auto seeding.
+    manual_groups: list[list[str]] | None = None
+    random_seed: int | None = None
 
 
 @dataclass
@@ -382,23 +391,41 @@ def _knockout_round_names(bracket_size: int) -> list[str]:
     return rounds
 
 
-def _seed_into_groups(teams: Sequence[TeamRef], group_count: int, group_size: int) -> list[list[TeamRef]]:
-    """
-    Snake seeding across evenly sized groups (partial fields OK).
-
-    Group capacities come from ``_balanced_group_sizes`` so unsold spots don't
-    leave a singleton group or dump leftovers into the last group.
-    """
-    ordered = sorted(
-        teams,
-        key=lambda t: (t.seed is None, t.seed if t.seed is not None else 10_000, t.name),
+def _order_teams_for_seeding(
+    teams: Sequence[TeamRef],
+    mode: str,
+    *,
+    random_seed: int | None = None,
+) -> list[TeamRef]:
+    """Order teams before snake-seeding into groups."""
+    items = list(teams)
+    mode_norm = (mode or "alphabetical").strip().lower()
+    if mode_norm == "random":
+        rng = random.Random(random_seed)
+        rng.shuffle(items)
+        return items
+    if mode_norm == "university_spread":
+        # Harder-to-place cohorts first (largest university blocks), then name.
+        by_uni: Counter[str] = Counter((t.university or "").strip().lower() or f"__{t.id}" for t in items)
+        return sorted(
+            items,
+            key=lambda t: (
+                -by_uni[(t.university or "").strip().lower() or f"__{t.id}"],
+                (t.university or "").lower(),
+                t.name.lower(),
+            ),
+        )
+    # alphabetical (default) — honour explicit seeds when present
+    return sorted(
+        items,
+        key=lambda t: (t.seed is None, t.seed if t.seed is not None else 10_000, t.name.lower()),
     )
-    sizes = _balanced_group_sizes(len(ordered), group_size)
+
+
+def _snake_fill(ordered: Sequence[TeamRef], sizes: list[int]) -> list[list[TeamRef]]:
+    """Snake-place an ordered team list into capacity-constrained groups."""
     if not sizes:
         return []
-    # Prefer caller group_count only when it matches balanced plan length
-    if group_count != len(sizes):
-        sizes = _balanced_group_sizes(len(ordered), group_size)
     group_count = len(sizes)
     groups: list[list[TeamRef]] = [[] for _ in range(group_count)]
     direction = 1
@@ -418,7 +445,6 @@ def _seed_into_groups(teams: Sequence[TeamRef], group_count: int, group_size: in
                 g += direction
                 g = max(0, min(group_count - 1, g))
         if not placed:
-            # Fallback: fill the group with the most remaining capacity
             idx = max(range(group_count), key=lambda i: sizes[i] - len(groups[i]))
             groups[idx].append(team)
             g = idx
@@ -432,6 +458,107 @@ def _seed_into_groups(teams: Sequence[TeamRef], group_count: int, group_size: in
             g = max(0, min(group_count - 1, g))
 
     return [grp for grp in groups if grp]
+
+
+def _university_spread_groups(teams: Sequence[TeamRef], group_size: int) -> list[list[TeamRef]]:
+    """
+    Greedy placement that keeps same-university teams apart when capacity allows.
+    Falls back to balancing group sizes when uni keys are missing.
+    """
+    ordered = _order_teams_for_seeding(teams, "university_spread")
+    sizes = _balanced_group_sizes(len(ordered), group_size)
+    if not sizes:
+        return []
+    groups: list[list[TeamRef]] = [[] for _ in range(len(sizes))]
+    uni_counts: list[dict[str, int]] = [defaultdict(int) for _ in sizes]
+
+    for team in ordered:
+        uni = (team.university or "").strip().lower() or f"__{team.id}"
+        candidates = [i for i, size in enumerate(sizes) if len(groups[i]) < size]
+        if not candidates:
+            idx = max(range(len(sizes)), key=lambda i: sizes[i] - len(groups[i]))
+        else:
+            # Prefer fewest teammates from same uni, then fill smaller groups first.
+            idx = min(
+                candidates,
+                key=lambda i: (uni_counts[i][uni], len(groups[i]), i),
+            )
+        groups[idx].append(team)
+        uni_counts[idx][uni] += 1
+
+    return [grp for grp in groups if grp]
+
+
+def _resolve_manual_groups(
+    teams: Sequence[TeamRef],
+    manual_groups: Sequence[Sequence[str]],
+) -> list[list[TeamRef]]:
+    """Validate and materialise explicit group assignments."""
+    by_id = {t.id: t for t in teams}
+    expected = set(by_id)
+    seen: set[str] = set()
+    groups: list[list[TeamRef]] = []
+    for gi, raw in enumerate(manual_groups):
+        ids = [str(tid) for tid in raw if tid]
+        if not ids:
+            raise ValueError(f"Group {_group_letter(gi)} is empty - remove it or add teams")
+        group_teams: list[TeamRef] = []
+        for tid in ids:
+            if tid not in by_id:
+                raise ValueError(f"Unknown team in group assignment: {tid}")
+            if tid in seen:
+                raise ValueError(f"Team appears in more than one group: {by_id[tid].name}")
+            seen.add(tid)
+            group_teams.append(by_id[tid])
+        groups.append(group_teams)
+
+    missing = expected - seen
+    if missing:
+        names = ", ".join(by_id[tid].name for tid in sorted(missing, key=lambda x: by_id[x].name)[:5])
+        extra = f" (+{len(missing) - 5} more)" if len(missing) > 5 else ""
+        raise ValueError(f"Every paid entry must be in a group. Missing: {names}{extra}")
+    extra_ids = seen - expected
+    if extra_ids:
+        raise ValueError("Group assignment includes teams that are not paid entries")
+    if len(groups) >= 2 and any(len(g) < 2 for g in groups):
+        raise ValueError("Manual groups cannot include a singleton group - merge it into another group")
+    return groups
+
+
+def _seed_into_groups(
+    teams: Sequence[TeamRef],
+    group_count: int,
+    group_size: int,
+    *,
+    seeding_mode: str = "alphabetical",
+    manual_groups: Sequence[Sequence[str]] | None = None,
+    random_seed: int | None = None,
+) -> list[list[TeamRef]]:
+    """
+    Place teams into groups.
+
+    Prefer ``manual_groups`` when provided. Otherwise apply the seeding mode
+    (alphabetical / random snake, or university spread).
+    """
+    if manual_groups is not None:
+        return _resolve_manual_groups(teams, manual_groups)
+
+    mode = (seeding_mode or "alphabetical").strip().lower()
+    if mode == "manual":
+        raise ValueError("Manual seeding requires group assignments")
+    if mode not in SEEDING_MODES:
+        raise ValueError(f"Unknown seeding mode: {seeding_mode}")
+
+    if mode == "university_spread":
+        return _university_spread_groups(teams, group_size)
+
+    ordered = _order_teams_for_seeding(teams, mode, random_seed=random_seed)
+    sizes = _balanced_group_sizes(len(ordered), group_size)
+    if not sizes:
+        return []
+    if group_count != len(sizes):
+        sizes = _balanced_group_sizes(len(ordered), group_size)
+    return _snake_fill(ordered, sizes)
 
 
 def _round_robin_pairs(team_ids: list[str]) -> list[tuple[str, str]]:
@@ -637,7 +764,14 @@ class GroupKnockoutGenerator:
 
         planned_sizes = _balanced_group_sizes(n, config.group_size)
         group_count = len(planned_sizes)
-        seeded_groups = _seed_into_groups(teams, group_count, config.group_size)
+        seeded_groups = _seed_into_groups(
+            teams,
+            group_count,
+            config.group_size,
+            seeding_mode=config.seeding_mode,
+            manual_groups=config.manual_groups,
+            random_seed=config.random_seed,
+        )
         seeded_groups = [g for g in seeded_groups if g]
         group_count = len(seeded_groups)
         if group_count < 1:

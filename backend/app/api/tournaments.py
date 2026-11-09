@@ -85,7 +85,12 @@ from app.schemas import (
     UserProfilePublic,
 )
 from app.services.standings import MatchResult, accumulate_standings, rank_standings
-from app.services.tournament_generator import GeneratorConfig, TeamRef, generate_tournament
+from app.services.tournament_generator import (
+    GeneratorConfig,
+    TeamRef,
+    _order_teams_for_seeding,
+    generate_tournament,
+)
 
 router = APIRouter(tags=["tournaments"])
 
@@ -187,11 +192,13 @@ def _unique_player_names(members) -> list[str]:
 def _team_out(team: Team, db: Session | None = None) -> TeamOut:
     names = _unique_player_names(team.members)
     custom = answers_for_team(db, team) if db is not None else []
+    uni = getattr(team, "university", None)
     return TeamOut(
         id=team.id,
         tournament_id=team.tournament_id,
         name=team.name,
         university_id=team.university_id,
+        university_short=uni.short_name if uni is not None else None,
         seed=team.seed,
         checked_in=team.checked_in,
         withdrawn=team.withdrawn,
@@ -2157,7 +2164,11 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 def list_teams(tournament_id: UUID, db: Session = Depends(get_db)):
     teams = (
         db.query(Team)
-        .options(joinedload(Team.members).joinedload(TeamPlayer.user), joinedload(Team.registration))
+        .options(
+            joinedload(Team.members).joinedload(TeamPlayer.user),
+            joinedload(Team.registration),
+            joinedload(Team.university),
+        )
         .filter(Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
         .order_by(Team.name)
         .all()
@@ -2605,7 +2616,7 @@ def generate(
 
     paid_teams = (
         db.query(Team)
-        .options(joinedload(Team.members))
+        .options(joinedload(Team.members), joinedload(Team.university))
         .join(Registration)
         .filter(
             Team.tournament_id == tournament_id,
@@ -2651,6 +2662,12 @@ def generate(
     enable_plate = bool(getattr(t, "enable_plate", False))
     championship_size = int(getattr(t, "championship_size", 16) or 16)
     plate_size = int(getattr(t, "plate_size", 16) or 16)
+    seeding_mode = (body.seeding_mode or "alphabetical").strip().lower()
+    manual_groups_raw = body.manual_groups
+    if seeding_mode not in ("alphabetical", "random", "university_spread", "manual"):
+        raise HTTPException(400, f"Unknown seeding mode: {seeding_mode}")
+    if seeding_mode == "manual" and not manual_groups_raw:
+        raise HTTPException(400, "Manual seeding requires group assignments")
 
     if not enable_plate and advance > group_size:
         raise HTTPException(
@@ -2665,13 +2682,46 @@ def generate(
     t.teams_advance_per_group = advance
     _sync_courts(db, t.id, courts)
 
-    # Seed teams
-    for i, team in enumerate(sorted(paid_teams, key=lambda x: x.name), start=1):
-        team.seed = i
+    # Assign display seeds from the placement order (not forced A–Z)
+    team_refs = [
+        TeamRef(
+            id=str(tm.id),
+            name=tm.name,
+            university=tm.university.short_name if tm.university else None,
+        )
+        for tm in paid_teams
+    ]
+    manual_groups = (
+        [[str(tid) for tid in group] for group in manual_groups_raw]
+        if manual_groups_raw
+        else None
+    )
+    if manual_groups is not None:
+        ordered_ids = [tid for group in manual_groups for tid in group]
+    else:
+        # Mirror generator ordering so stored seeds match the draw
+        ordered_ids = [
+            t.id
+            for t in _order_teams_for_seeding(
+                team_refs,
+                seeding_mode,
+                random_seed=body.random_seed,
+            )
+        ]
+    seed_by_id = {tid: i for i, tid in enumerate(ordered_ids, start=1)}
+    for tm in paid_teams:
+        tm.seed = seed_by_id.get(str(tm.id))
+    for ref_i, ref in enumerate(team_refs):
+        team_refs[ref_i] = TeamRef(
+            id=ref.id,
+            name=ref.name,
+            seed=seed_by_id.get(ref.id),
+            university=ref.university,
+        )
 
     start_dt = datetime.combine(t.event_date, t.start_time, tzinfo=DUBLIN_TZ).astimezone(timezone.utc)
     config = GeneratorConfig(
-        teams=[TeamRef(id=str(tm.id), name=tm.name, seed=tm.seed) for tm in paid_teams],
+        teams=team_refs,
         courts=courts,
         match_duration_minutes=duration,
         start_time=start_dt,
@@ -2681,6 +2731,9 @@ def generate(
         enable_plate=enable_plate,
         championship_size=championship_size,
         plate_size=plate_size,
+        seeding_mode=seeding_mode,
+        manual_groups=manual_groups,
+        random_seed=body.random_seed,
     )
     try:
         generated = generate_tournament(config)
@@ -2760,6 +2813,7 @@ def generate(
         "plate_size": generated.plate_size,
         "paid_teams": len(paid_teams),
         "max_teams": t.max_teams,
+        "seeding_mode": seeding_mode,
     }
 
 

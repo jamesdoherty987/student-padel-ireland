@@ -309,6 +309,7 @@ class TeamOut(BaseModel):
     tournament_id: UUID
     name: str
     university_id: Optional[UUID] = None
+    university_short: Optional[str] = None
     seed: Optional[int] = None
     checked_in: bool
     withdrawn: bool
@@ -371,6 +372,11 @@ class GenerateRequest(BaseModel):
     courts: Optional[int] = Field(default=None, ge=1, le=32)
     group_size: Optional[int] = Field(default=None, ge=2, le=8)
     teams_advance_per_group: Optional[int] = Field(default=None, ge=1, le=4)
+    # alphabetical | random | university_spread | manual
+    seeding_mode: Optional[str] = Field(default="alphabetical", max_length=40)
+    # Explicit group lists (team UUIDs). When set, becomes the draw groups.
+    manual_groups: Optional[list[list[UUID]]] = None
+    random_seed: Optional[int] = None
 
 
 class ScoreUpdate(BaseModel):
