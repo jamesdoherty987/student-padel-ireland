@@ -205,6 +205,7 @@ def _team_out(team: Team, db: Session | None = None) -> TeamOut:
         player_names=names,
         payment_status=team.registration.status if team.registration else None,
         payment_via=_payment_via(team.registration),
+        created_at=getattr(team, "created_at", None),
         custom_answers=custom,
     )
 

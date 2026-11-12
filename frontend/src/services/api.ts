@@ -170,6 +170,7 @@ export type TournamentTeam = {
   player_names: string[]
   payment_status?: string | null
   payment_via?: string | null
+  created_at?: string | null
   custom_answers?: CustomAnswer[]
 }
 

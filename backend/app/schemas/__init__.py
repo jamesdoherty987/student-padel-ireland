@@ -317,6 +317,7 @@ class TeamOut(BaseModel):
     payment_status: Optional[str] = None
     # free_entry | pay_on_arrival | demo_payment | online | None
     payment_via: Optional[str] = None
+    created_at: Optional[datetime] = None
     custom_answers: list[CustomAnswerOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

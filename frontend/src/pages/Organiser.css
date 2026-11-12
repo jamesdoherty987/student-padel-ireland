@@ -414,6 +414,67 @@ html.native-app.has-native-tabs .org-toast {
   margin: 0 0 0.85rem;
 }
 
+.org-entries-search {
+  width: 100%;
+  max-width: 28rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--court-deep);
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.org-entries-search:focus {
+  outline: 2px solid color-mix(in srgb, var(--court-deep) 25%, transparent);
+  outline-offset: 1px;
+}
+
+.org-entries-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.org-entries-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.org-entries-sort select {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--court-deep);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.25rem 0.4rem;
+}
+
+.org-entry-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.55rem;
+}
+
+.org-entry-title-row strong {
+  margin: 0;
+}
+
+.org-entry-signed-up {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
 .org-pay-filters {
   flex-wrap: wrap;
 }

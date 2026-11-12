@@ -30,6 +30,7 @@ import {
 import {
   calendarDaysFromToday,
   courtLabel,
+  formatDateTime,
   formatMatchScore,
   formatMoney,
   formatTime,
@@ -129,6 +130,9 @@ export default function OrganiserDashboard() {
   const [courtFilter, setCourtFilter] = useState<string>('all')
   const [matchFilter, setMatchFilter] = useState<'active' | 'all' | 'done'>('active')
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'owing'>('all')
+  const [entriesCheckInFilter, setEntriesCheckInFilter] = useState<'all' | 'in' | 'out'>('all')
+  const [entriesQuery, setEntriesQuery] = useState('')
+  const [entriesSort, setEntriesSort] = useState<'newest' | 'oldest' | 'name'>('newest')
   const [checkInFilter, setCheckInFilter] = useState<'all' | 'out' | 'in'>('out')
   const [orgPanel, setOrgPanel] = useState<OrgPanel>('registration')
   const [scoreForm, setScoreForm] = useState({
@@ -169,6 +173,9 @@ export default function OrganiserDashboard() {
 
   useEffect(() => {
     setPaymentFilter('all')
+    setEntriesCheckInFilter('all')
+    setEntriesQuery('')
+    setEntriesSort('newest')
     setCheckInFilter('out')
     setSponsorForm({ name: '', website: '', featured: false, logo: null })
     setSponsorLogoKey((k) => k + 1)
@@ -730,21 +737,40 @@ export default function OrganiserDashboard() {
   const unpaidCount = paymentCounts.incomplete
 
   const filteredTeams = useMemo(() => {
-    const list = [...orgTeams]
+    const needle = entriesQuery.trim().toLowerCase()
+    const list = orgTeams.filter((t) => {
+      if (paymentFilter !== 'all' && paymentBucket(t) !== paymentFilter) return false
+      if (entriesCheckInFilter === 'in' && !t.checked_in) return false
+      if (entriesCheckInFilter === 'out' && t.checked_in) return false
+      if (!needle) return true
+      const hay = [t.name, ...(t.player_names || []), t.university_short || '', t.payment_status || '']
+        .join(' ')
+        .toLowerCase()
+      return hay.includes(needle)
+    })
+
     list.sort((a, b) => {
+      if (entriesSort === 'name') {
+        const byName = a.name.localeCompare(b.name)
+        if (byName !== 0) return byName
+      } else {
+        const aTs = a.created_at ? new Date(a.created_at).getTime() : 0
+        const bTs = b.created_at ? new Date(b.created_at).getTime() : 0
+        const byTime = entriesSort === 'oldest' ? aTs - bTs : bTs - aTs
+        if (byTime !== 0) return byTime
+        const byName = a.name.localeCompare(b.name)
+        if (byName !== 0) return byName
+      }
       const rank = (t: TournamentTeam) => {
         if (t.payment_status === 'PENDING' || t.payment_status === 'FAILED') return 0
         if (t.payment_status === 'PAID' && t.payment_via === 'pay_on_arrival') return 1
         if (t.payment_status === 'PAID') return 2
         return 3
       }
-      const d = rank(a) - rank(b)
-      if (d !== 0) return d
-      return a.name.localeCompare(b.name)
+      return rank(a) - rank(b)
     })
-    if (paymentFilter === 'all') return list
-    return list.filter((t) => paymentBucket(t) === paymentFilter)
-  }, [orgTeams, paymentFilter])
+    return list
+  }, [orgTeams, paymentFilter, entriesCheckInFilter, entriesQuery, entriesSort])
 
   const checkInPool = useMemo(
     () => orgTeams.filter((t) => t.payment_status === 'PAID'),
@@ -1455,6 +1481,14 @@ export default function OrganiserDashboard() {
                 </div>
                 {orgTeams.length > 0 && (
                   <div className="org-pay-toolbar">
+                    <input
+                      type="search"
+                      className="org-entries-search"
+                      placeholder={isSingles ? 'Search player…' : 'Search team or player…'}
+                      value={entriesQuery}
+                      onChange={(e) => setEntriesQuery(e.target.value)}
+                      aria-label="Search entries"
+                    />
                     <div className="org-view-toggle org-pay-filters" role="group" aria-label="Payment filter">
                       <button
                         type="button"
@@ -1477,6 +1511,44 @@ export default function OrganiserDashboard() {
                       >
                         Not paid ({paymentCounts.owing})
                       </button>
+                    </div>
+                    <div className="org-view-toggle org-pay-filters" role="group" aria-label="Check-in filter">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${entriesCheckInFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setEntriesCheckInFilter('all')}
+                      >
+                        Any check-in
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${entriesCheckInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setEntriesCheckInFilter('in')}
+                      >
+                        Checked in ({orgTeams.filter((t) => t.checked_in).length})
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${entriesCheckInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setEntriesCheckInFilter('out')}
+                      >
+                        Not checked in ({orgTeams.filter((t) => !t.checked_in).length})
+                      </button>
+                    </div>
+                    <div className="org-entries-meta-row">
+                      <label className="org-entries-sort">
+                        Sort
+                        <select
+                          value={entriesSort}
+                          onChange={(e) =>
+                            setEntriesSort(e.target.value as 'newest' | 'oldest' | 'name')
+                          }
+                        >
+                          <option value="newest">Newest signup</option>
+                          <option value="oldest">Oldest signup</option>
+                          <option value="name">Name</option>
+                        </select>
+                      </label>
                     </div>
                     {paymentCounts.owing > 0 ? (
                       <p className="org-pay-hint">
@@ -1504,6 +1576,7 @@ export default function OrganiserDashboard() {
                   {filteredTeams.map((team) => {
                     const owing = paymentBucket(team) === 'owing'
                     const canCollect = team.payment_via === 'pay_on_arrival'
+                    const signedUp = formatDateTime(team.created_at)
                     const unpaidEntry =
                       team.payment_status === 'PENDING' ||
                       team.payment_status === 'CANCELLED' ||
@@ -1512,7 +1585,10 @@ export default function OrganiserDashboard() {
                     return (
                       <div key={team.id} className={`org-row org-pay-row${owing ? ' is-owing' : ''}`}>
                         <div>
-                          <strong>{team.name}</strong>
+                          <div className="org-entry-title-row">
+                            <strong>{team.name}</strong>
+                            {signedUp && <span className="org-entry-signed-up">{signedUp}</span>}
+                          </div>
                           <span>{team.player_names?.join(' / ')}</span>
                           <span className={paymentBadgeClass(team)}>{paymentLabel(team)}</span>
                           {!!team.custom_answers?.length && (
@@ -1620,11 +1696,13 @@ export default function OrganiserDashboard() {
                   )}
                   {orgTeams.length > 0 && filteredTeams.length === 0 && (
                     <p className="muted">
-                      {paymentFilter === 'paid'
-                        ? 'Nobody marked paid yet.'
-                        : paymentFilter === 'owing'
-                          ? 'Everyone here is paid.'
-                          : 'No entries to show.'}
+                      {entriesQuery.trim() || entriesCheckInFilter !== 'all'
+                        ? 'No entries match these filters.'
+                        : paymentFilter === 'paid'
+                          ? 'Nobody marked paid yet.'
+                          : paymentFilter === 'owing'
+                            ? 'Everyone here is paid.'
+                            : 'No entries to show.'}
                     </p>
                   )}
                 </div>
