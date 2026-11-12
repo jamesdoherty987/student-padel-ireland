@@ -2,9 +2,13 @@ import sharp from 'sharp'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const dir = join(process.cwd(), 'public', 'icons')
+const publicDir = join(process.cwd(), 'public')
+const dir = join(publicDir, 'icons')
+/** Full brand square (green bg + yellow mark) - best for favicons / Google. */
+const branded = join(process.cwd(), 'assets', 'icon.png')
+/** Logo mark only - composited onto green for PWA / maskable. */
 const source = join(process.cwd(), 'assets', 'icon-only.png')
-const background = '#0d623e'
+const background = '#0b3d2e'
 mkdirSync(dir, { recursive: true })
 
 async function render(size, scale = 1) {
@@ -27,6 +31,13 @@ async function render(size, scale = 1) {
     .toBuffer()
 }
 
+async function faviconPng(size) {
+  return sharp(branded)
+    .resize(size, size, { fit: 'cover' })
+    .png()
+    .toBuffer()
+}
+
 for (const [name, size, scale] of [
   ['icon-192.png', 192, 1],
   ['icon-512.png', 512, 1],
@@ -36,6 +47,14 @@ for (const [name, size, scale] of [
   writeFileSync(join(dir, name), await render(size, scale))
 }
 
-writeFileSync(join(process.cwd(), 'public', 'apple-touch-icon.png'), await render(180))
+writeFileSync(join(publicDir, 'apple-touch-icon.png'), await render(180))
 
-console.log('PWA icons written to public/icons and apple-touch-icon.png')
+// Browser tab + Google Search (Google wants a multiple of 48px, square, crawlable)
+for (const size of [32, 48, 96, 192]) {
+  writeFileSync(join(publicDir, `favicon-${size}.png`), await faviconPng(size))
+}
+
+// favicon.ico as 48px PNG bytes - Chrome/Safari/Edge accept this; Google uses the PNG links
+writeFileSync(join(publicDir, 'favicon.ico'), await faviconPng(48))
+
+console.log('PWA icons + favicons written to public/ and public/icons/')

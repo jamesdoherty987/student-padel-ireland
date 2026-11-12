@@ -3,6 +3,7 @@
 | Path | Used for |
 |------|----------|
 | `spi-logo.png` | **In-app UI** - landing header, BrandLogo, auth, nav |
+| `../favicon-48.png` (etc.) | **Browser tab + Google Search favicon** - generated from `assets/icon.png` via `npm run icons` |
 | `student-padel-ireland-logo.png` | **Google / schema.org** official logo (SEO filename) |
 | `student-padel-ireland-logo.jpg` | JPEG copy of the official logo |
 | `student-padel-ireland-og.jpg` | Open Graph / Twitter - official logo only on green (1200×630) |
