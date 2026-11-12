@@ -246,6 +246,16 @@ export function formatDate(iso: string, opts?: Intl.DateTimeFormatOptions) {
   return parseCalendarDate(iso).toLocaleDateString('en-IE', opts ?? { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+/** Compact local date + time, e.g. "12 Nov · 14:32". */
+export function formatDateTime(iso: string | null | undefined) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const date = d.toLocaleDateString('en-IE', { day: 'numeric', month: 'short' })
+  const time = d.toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' })
+  return `${date} · ${time}`
+}
+
 export function formatTime(iso: string | null | undefined) {
   if (!iso) return 'TBC'
   // Backend may send "10:00:00" or full ISO

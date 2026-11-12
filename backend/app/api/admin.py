@@ -9,7 +9,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import require_role
-from app.api.tournaments import _apply_team_withdraw, _membership_for_user
+from app.api.tournaments import _apply_team_withdraw, _membership_for_user, _payment_via
 from app.core.roles import Role
 from app.db.session import get_db
 from app.models import Team, TeamPlayer, Tournament, University, User, UserRole
@@ -273,8 +273,10 @@ def list_tournament_entries(
                 team_id=team.id,
                 team_name=team.name,
                 payment_status=team.registration.status if team.registration else None,
+                payment_via=_payment_via(team.registration),
                 withdrawn=bool(team.withdrawn),
                 checked_in=bool(team.checked_in),
+                created_at=getattr(team, "created_at", None),
                 players=players,
             )
         )

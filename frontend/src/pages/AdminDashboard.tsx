@@ -19,7 +19,14 @@ import {
   type OrganiserDashRow,
   type Tournament,
 } from '../services/api'
-import { formatDate, formatEntrySummary, formatMoney, statusBadgeClass, statusLabel } from '../utils/format'
+import {
+  formatDate,
+  formatDateTime,
+  formatEntrySummary,
+  formatMoney,
+  statusBadgeClass,
+  statusLabel,
+} from '../utils/format'
 import './Organiser.css'
 import './Admin.css'
 
@@ -433,6 +440,20 @@ function AdminTournamentCard({
   )
 }
 
+type EntriesPaymentFilter = 'all' | 'paid' | 'owing' | 'other'
+type EntriesCheckInFilter = 'all' | 'in' | 'out'
+type EntriesSort = 'newest' | 'oldest' | 'name'
+
+function adminPaymentBucket(team: {
+  payment_status?: string | null
+  payment_via?: string | null
+}): EntriesPaymentFilter {
+  if (team.payment_status === 'PENDING' || team.payment_status === 'FAILED') return 'owing'
+  if (team.payment_status === 'PAID' && team.payment_via === 'pay_on_arrival') return 'owing'
+  if (team.payment_status === 'PAID') return 'paid'
+  return 'other'
+}
+
 function AdminEntriesModal({
   tournament,
   onClose,
@@ -443,9 +464,10 @@ function AdminEntriesModal({
   onToast: (msg: string) => void
 }) {
   const qc = useQueryClient()
+  const [includeWithdrawn, setIncludeWithdrawn] = useState(false)
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['admin-tournament-entries', tournament.id],
-    queryFn: async () => (await adminApi.tournamentEntries(tournament.id)).data,
+    queryKey: ['admin-tournament-entries', tournament.id, includeWithdrawn],
+    queryFn: async () => (await adminApi.tournamentEntries(tournament.id, includeWithdrawn)).data,
   })
 
   const removeMut = useMutation({
@@ -480,6 +502,8 @@ function AdminEntriesModal({
       {data && (
         <AdminEntriesList
           data={data}
+          includeWithdrawn={includeWithdrawn}
+          onIncludeWithdrawnChange={setIncludeWithdrawn}
           busyUserId={removeMut.isPending ? removeMut.variables : null}
           onRemove={(userId, name) => {
             void confirmDialog({
@@ -499,49 +523,203 @@ function AdminEntriesModal({
 
 function AdminEntriesList({
   data,
+  includeWithdrawn,
+  onIncludeWithdrawnChange,
   busyUserId,
   onRemove,
 }: {
   data: AdminTournamentEntries
+  includeWithdrawn: boolean
+  onIncludeWithdrawnChange: (v: boolean) => void
   busyUserId: string | null
   onRemove: (userId: string, name: string) => void
 }) {
+  const [q, setQ] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState<EntriesPaymentFilter>('all')
+  const [checkInFilter, setCheckInFilter] = useState<EntriesCheckInFilter>('all')
+  const [sort, setSort] = useState<EntriesSort>('newest')
+
+  const counts = useMemo(() => {
+    let paid = 0
+    let owing = 0
+    let other = 0
+    let checkedIn = 0
+    let notCheckedIn = 0
+    for (const team of data.teams) {
+      const bucket = adminPaymentBucket(team)
+      if (bucket === 'paid') paid += 1
+      else if (bucket === 'owing') owing += 1
+      else other += 1
+      if (team.checked_in) checkedIn += 1
+      else notCheckedIn += 1
+    }
+    return { paid, owing, other, checkedIn, notCheckedIn, total: data.teams.length }
+  }, [data.teams])
+
+  const filteredTeams = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    const list = data.teams.filter((team) => {
+      if (paymentFilter !== 'all' && adminPaymentBucket(team) !== paymentFilter) return false
+      if (checkInFilter === 'in' && !team.checked_in) return false
+      if (checkInFilter === 'out' && team.checked_in) return false
+      if (!needle) return true
+      const hay = [
+        team.team_name,
+        team.payment_status || '',
+        ...team.players.map((p) => p.full_name),
+        ...team.players.map((p) => p.email),
+      ]
+        .join(' ')
+        .toLowerCase()
+      return hay.includes(needle)
+    })
+
+    list.sort((a, b) => {
+      if (sort === 'name') return a.team_name.localeCompare(b.team_name)
+      const aTs = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bTs = b.created_at ? new Date(b.created_at).getTime() : 0
+      if (sort === 'oldest') return aTs - bTs || a.team_name.localeCompare(b.team_name)
+      return bTs - aTs || a.team_name.localeCompare(b.team_name)
+    })
+    return list
+  }, [data.teams, q, paymentFilter, checkInFilter, sort])
+
   if (data.teams.length === 0) {
     return (
       <div className="empty-state">
-        <p>No active entries.</p>
+        <p>{includeWithdrawn ? 'No entries found.' : 'No active entries.'}</p>
       </div>
     )
   }
 
   return (
-    <ul className="admin-entries-list">
-      {data.teams.map((team) => (
-        <li key={team.team_id} className="admin-entry-row">
-          <div>
-            <strong>{team.team_name}</strong>
-            <p>
-              {team.players.map((p) => p.full_name).join(' · ')}
-              {team.payment_status ? ` · ${team.payment_status}` : ''}
-            </p>
-            <p className="admin-entry-emails">
-              {team.players.map((p) => p.email).join(' · ')}
-            </p>
-          </div>
+    <div className="admin-entries">
+      <div className="admin-entries-filters">
+        <input
+          type="search"
+          className="admin-entries-search"
+          placeholder="Search team, player, or email"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          aria-label="Search entries"
+        />
+        <div className="admin-entries-filter-row" role="group" aria-label="Payment filter">
           <button
             type="button"
-            className="btn btn-danger btn-sm"
-            disabled={removeBusy(busyUserId, team.players)}
-            onClick={() => {
-              const first = team.players[0]
-              if (first) onRemove(first.user_id, first.full_name)
-            }}
+            className={`btn btn-sm ${paymentFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
+            onClick={() => setPaymentFilter('all')}
           >
-            Remove
+            All ({counts.total})
           </button>
-        </li>
-      ))}
-    </ul>
+          <button
+            type="button"
+            className={`btn btn-sm ${paymentFilter === 'paid' ? 'btn-dark' : 'btn-ghost'}`}
+            onClick={() => setPaymentFilter('paid')}
+          >
+            Paid ({counts.paid})
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${paymentFilter === 'owing' ? 'btn-dark' : 'btn-ghost'}`}
+            onClick={() => setPaymentFilter('owing')}
+          >
+            Not paid ({counts.owing})
+          </button>
+          {counts.other > 0 && (
+            <button
+              type="button"
+              className={`btn btn-sm ${paymentFilter === 'other' ? 'btn-dark' : 'btn-ghost'}`}
+              onClick={() => setPaymentFilter('other')}
+            >
+              Other ({counts.other})
+            </button>
+          )}
+        </div>
+        <div className="admin-entries-filter-row" role="group" aria-label="Check-in filter">
+          <button
+            type="button"
+            className={`btn btn-sm ${checkInFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
+            onClick={() => setCheckInFilter('all')}
+          >
+            Any check-in
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${checkInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
+            onClick={() => setCheckInFilter('in')}
+          >
+            Checked in ({counts.checkedIn})
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${checkInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
+            onClick={() => setCheckInFilter('out')}
+          >
+            Not checked in ({counts.notCheckedIn})
+          </button>
+        </div>
+        <div className="admin-entries-meta-row">
+          <label className="admin-check">
+            <input
+              type="checkbox"
+              checked={includeWithdrawn}
+              onChange={(e) => onIncludeWithdrawnChange(e.target.checked)}
+            />
+            Show withdrawn
+          </label>
+          <label className="admin-entries-sort">
+            Sort
+            <select value={sort} onChange={(e) => setSort(e.target.value as EntriesSort)}>
+              <option value="newest">Newest signup</option>
+              <option value="oldest">Oldest signup</option>
+              <option value="name">Team name</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      {filteredTeams.length === 0 ? (
+        <div className="empty-state">
+          <p>No teams match these filters.</p>
+        </div>
+      ) : (
+        <ul className="admin-entries-list">
+          {filteredTeams.map((team) => {
+            const signedUp = formatDateTime(team.created_at)
+            return (
+              <li key={team.team_id} className="admin-entry-row">
+                <div>
+                  <div className="admin-entry-title-row">
+                    <strong>{team.team_name}</strong>
+                    {signedUp && <span className="admin-entry-signed-up">{signedUp}</span>}
+                  </div>
+                  <p>
+                    {team.players.map((p) => p.full_name).join(' · ')}
+                    {team.payment_status ? ` · ${team.payment_status}` : ''}
+                    {team.checked_in ? ' · checked in' : ''}
+                    {team.withdrawn ? ' · withdrawn' : ''}
+                  </p>
+                  <p className="admin-entry-emails">
+                    {team.players.map((p) => p.email).join(' · ')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  disabled={team.withdrawn || removeBusy(busyUserId, team.players)}
+                  onClick={() => {
+                    const first = team.players[0]
+                    if (first) onRemove(first.user_id, first.full_name)
+                  }}
+                >
+                  Remove
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
   )
 }
 

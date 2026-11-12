@@ -737,8 +737,10 @@ class AdminTournamentTeamOut(BaseModel):
     team_id: UUID
     team_name: str
     payment_status: Optional[str] = None
+    payment_via: Optional[str] = None
     withdrawn: bool = False
     checked_in: bool = False
+    created_at: Optional[datetime] = None
     players: list[AdminTournamentEntryPlayer] = Field(default_factory=list)
 
 

@@ -603,8 +603,10 @@ export type AdminTournamentTeam = {
   team_id: string
   team_name: string
   payment_status?: string | null
+  payment_via?: string | null
   withdrawn: boolean
   checked_in: boolean
+  created_at?: string | null
   players: Array<{ user_id: string; full_name: string; email: string; slot: number }>
 }
 
