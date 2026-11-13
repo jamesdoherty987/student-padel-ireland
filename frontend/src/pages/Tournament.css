@@ -202,9 +202,14 @@
   }
 
   .header-actions--tour .btn {
-    min-height: 38px;
-    padding: 0.4rem 0.75rem;
-    font-size: 0.86rem;
+    min-height: 44px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.88rem;
+  }
+
+  .btn-new-tour {
+    padding-left: 0.95rem;
+    padding-right: 0.95rem;
   }
 }
 

@@ -135,8 +135,12 @@ export default function EditTournamentModal({
         start_time: form.start_time.length === 5 ? `${form.start_time}:00` : form.start_time,
         number_of_courts: form.number_of_courts,
         court_names: courtNames.map((n, i) => n.trim() || `Court ${i + 1}`),
-        entry_fee_cents: Math.round(form.entry_fee_euros * 100),
-        pay_on_arrival: form.pay_on_arrival,
+        entry_fee_cents:
+          !isAdmin && tournament.is_official === false
+            ? 0
+            : Math.round(form.entry_fee_euros * 100),
+        pay_on_arrival:
+          !isAdmin && tournament.is_official === false ? true : form.pay_on_arrival,
         refunds_on_withdrawal: form.refunds_on_withdrawal,
         max_teams: form.max_teams,
         match_duration_minutes: form.match_duration_minutes,
@@ -176,8 +180,13 @@ export default function EditTournamentModal({
 
   return (
     <ModalShell
-      title="Edit tournament"
+      title={!isAdmin && tournament.is_official === false ? 'Event settings' : 'Edit tournament'}
       titleId="edit-tournament-title"
+      subtitle={
+        !isAdmin && tournament.is_official === false
+          ? 'Private · free · change format before the draw'
+          : undefined
+      }
       onClose={() => void requestClose()}
       preventClose={saving}
       closeOnBackdrop={false}
@@ -211,7 +220,18 @@ export default function EditTournamentModal({
             setDirty(true)
             setRegistrationFields(next)
           }}
+          // Player private hosts: no Stripe / fee editing (settle court costs offline)
+          sections={
+            !isAdmin && tournament.is_official === false
+              ? ['event', 'format', 'courts', 'info', 'signup_fields']
+              : undefined
+          }
         />
+        {!isAdmin && tournament.is_official === false && (
+          <p className="form-hint" style={{ marginTop: '0.5rem' }}>
+            Private events stay free in the app — no card payments or Stripe account needed.
+          </p>
+        )}
 
         {isAdmin && (
           <label className="tf-check" style={{ marginTop: '0.75rem' }}>

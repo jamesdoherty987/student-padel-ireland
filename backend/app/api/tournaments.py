@@ -769,8 +769,13 @@ def _tournament_out(
     entered = bool(viewer_entered) if viewer_entered is not None else False
     if viewer and viewer_entered is None:
         entered = _viewer_entered_tournament(db, t, viewer)
-    # Invite codes are host-only (and invite-code lookup). Never leak on public GETs.
-    show_invite = bool(reveal_invite or can_manage)
+    # Official events: invite code is shareable (public listing).
+    # Private events: host/co-admin only (or explicit invite-code lookup).
+    show_invite = bool(
+        reveal_invite
+        or can_manage
+        or bool(getattr(t, "is_official", False))
+    )
     # Always build plain data - never pass ORM Court objects into the response model
     return TournamentOut(
         id=t.id,
@@ -1409,8 +1414,12 @@ def create_tournament(
 ):
     # Any logged-in player can host a private event. Only platform admins can
     # create official (public catalogue) tournaments.
+    # Player hosts never get Stripe payouts (no Connect) — keep their events free
+    # so friends join without charging the platform Stripe account.
     is_admin = user.role == Role.ADMIN.value
     is_official = bool(body.is_official) if is_admin else False
+    entry_fee_cents = int(body.entry_fee_cents or 0) if is_admin else 0
+    pay_on_arrival = bool(body.pay_on_arrival) if is_admin else True
     t = Tournament(
         name=body.name.strip(),
         slug=_unique_slug(db, body.name),
@@ -1419,8 +1428,8 @@ def create_tournament(
         event_date=body.event_date,
         start_time=body.start_time,
         number_of_courts=body.number_of_courts,
-        entry_fee_cents=body.entry_fee_cents,
-        pay_on_arrival=bool(body.pay_on_arrival),
+        entry_fee_cents=entry_fee_cents,
+        pay_on_arrival=pay_on_arrival,
         refunds_on_withdrawal=bool(body.refunds_on_withdrawal),
         max_teams=body.max_teams,
         registration_deadline=body.registration_deadline,
@@ -1481,6 +1490,12 @@ def update_tournament(
             data.pop("is_official", None)
         else:
             data["is_official"] = bool(data["is_official"])
+
+    # Player-hosted private events stay free (no Stripe Connect payouts to hosts)
+    if user.role != Role.ADMIN.value and not bool(getattr(t, "is_official", False)):
+        if "entry_fee_cents" in data:
+            data["entry_fee_cents"] = 0
+        data["pay_on_arrival"] = True
 
     format_fields = {"format", "play_format"}
     changing_format = any(f in data and getattr(t, f) != (

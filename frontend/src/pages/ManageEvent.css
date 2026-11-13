@@ -54,6 +54,12 @@ html.native-app.has-native-tabs .org-toast {
   width: 100%;
 }
 
+@media (min-width: 861px) {
+  .org-event-picker {
+    display: none !important;
+  }
+}
+
 .org-nav {
   background: var(--white);
   border-right: 1px solid var(--line);
@@ -306,16 +312,35 @@ html.native-app.has-native-tabs .org-toast {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.org-invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  width: 100%;
+}
+
+.org-invite-actions .btn {
+  flex: 1 1 auto;
+  min-width: min(100%, 8.5rem);
+  min-height: 44px;
 }
 
 .org-invite-self {
-  margin-top: 0.85rem;
-  padding-top: 0.75rem;
+  margin-top: 0.15rem;
+  padding-top: 0.85rem;
   border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.35rem;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.org-invite-self .btn {
+  width: 100%;
+  min-height: 48px;
 }
 
 .org-invite-self-note {
@@ -326,6 +351,21 @@ html.native-app.has-native-tabs .org-toast {
 
 .org-invite .qr-wrap {
   margin-top: 0;
+}
+
+.org-host-tip {
+  margin: 0 0 0.85rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: rgba(11, 61, 46, 0.04);
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.org-host-tip strong {
+  color: var(--court-deep);
 }
 
 .org-search-results {
@@ -1707,40 +1747,73 @@ html.native-app.has-native-tabs .org-toast {
 
 /* Admin score entry uses shared ScoreSheet.css (−/+ bottom sheet) */
 
+/* Mobile/tablet: clear event switcher (select), not a cryptic chip strip */
+.org-event-picker {
+  display: none;
+  margin: 0 0 0.85rem;
+  padding: 0.85rem 0.95rem;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.org-event-picker-label {
+  display: block;
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.org-event-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.org-event-select {
+  width: 100%;
+  min-height: 48px;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--court-deep);
+  padding-right: 2.25rem;
+}
+
+.org-event-picker-new {
+  min-height: 48px;
+  min-width: 48px;
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.org-event-picker-hint {
+  margin: 0.45rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
 @media (max-width: 860px) {
   .org-shell {
     grid-template-columns: 1fr;
   }
 
+  /* Desktop sidebar list is a poor mobile control — use the picker instead */
   .org-nav {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    gap: 0.45rem;
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-    padding: 0.75rem max(1rem, env(safe-area-inset-right)) 0.75rem max(1rem, env(safe-area-inset-left));
-    scrollbar-width: none;
-  }
-
-  .org-nav::-webkit-scrollbar {
     display: none;
   }
 
-  .org-nav-label,
-  .org-aside-note {
-    display: none;
-  }
-
-  .org-nav-item {
-    flex: 0 0 auto;
-    min-height: 44px;
-    max-width: 11rem;
-  }
-
-  .org-nav-item-meta {
-    white-space: nowrap;
+  .org-event-picker {
+    display: block;
   }
 
   .org-main {
@@ -1763,12 +1836,40 @@ html.native-app.has-native-tabs .org-toast {
 
   .org-header-actions {
     width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.45rem;
   }
 
   .org-header-actions .btn {
-    flex: 1 1 auto;
-    min-width: min(100%, 5.5rem);
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .org-header-actions .btn-primary {
+    grid-column: 1 / -1;
+  }
+
+  .org-invite-code {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .org-invite .share-code {
+    text-align: center;
+    font-size: 1.25rem;
+  }
+
+  .section-tabs {
+    gap: 0.35rem;
+  }
+
+  .section-tab {
+    min-height: 44px;
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
   }
 
   .org-header-danger {

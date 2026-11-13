@@ -1396,11 +1396,12 @@ export default function ManageEventPage() {
       <NavBar />
       {toast && <div className="org-toast">{toast}</div>}
       <div className="org-shell">
-        <aside className="org-nav">
+        <aside className="org-nav" aria-label={isAdmin ? 'All events' : 'My events'}>
           <p className="org-nav-label">{isAdmin ? 'All events' : 'My events'}</p>
           {tournaments.map((t) => (
             <button
               key={t.tournament.id}
+              type="button"
               className={`org-nav-item ${active?.tournament.id === t.tournament.id ? 'active' : ''}`}
               onClick={() => {
                 setSelectedId(t.tournament.id)
@@ -1432,6 +1433,47 @@ export default function ManageEventPage() {
         </aside>
 
         <main className="org-main">
+          {tournaments.length > 0 && (
+            <div className="org-event-picker">
+              <label className="org-event-picker-label" htmlFor="org-event-select">
+                {tournaments.length === 1 ? 'Your event' : 'Switch event'}
+              </label>
+              <div className="org-event-picker-row">
+                <select
+                  id="org-event-select"
+                  className="form-select org-event-select"
+                  value={active?.tournament.id || ''}
+                  onChange={(e) => {
+                    const id = e.target.value
+                    if (!id) return
+                    setSelectedId(id)
+                    setSearchParams({ t: id }, { replace: true })
+                  }}
+                  aria-label="Choose which event to manage"
+                >
+                  {tournaments.map((t) => (
+                    <option key={t.tournament.id} value={t.tournament.id}>
+                      {t.tournament.name}
+                      {t.tournament.is_official ? '' : ' · Private'}
+                      {` · ${statusLabel(t.tournament.status)}`}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-primary org-event-picker-new"
+                  onClick={() => setShowCreate(true)}
+                  aria-label={isAdmin ? 'New tournament' : 'Host private event'}
+                >
+                  <i className="fas fa-plus" aria-hidden />
+                  <span>New</span>
+                </button>
+              </div>
+              {tournaments.length > 1 ? (
+                <p className="org-event-picker-hint">Tap the menu to manage a different event</p>
+              ) : null}
+            </div>
+          )}
           {isLoading && (
             <div aria-busy="true">
               <div className="skeleton" style={{ height: 28, width: '55%', marginBottom: 16 }} />
@@ -1738,20 +1780,40 @@ export default function ManageEventPage() {
               {orgPanel === 'registration' && (
               <>
               <section className="org-section">
-                <h2>Invite</h2>
+                <div className="org-section-head">
+                  <h2>Invite</h2>
+                  {tournamentDetail && (
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowEdit(true)}>
+                      Settings
+                    </button>
+                  )}
+                </div>
+                {!isAdmin && !active.tournament.is_official ? (
+                  <p className="org-host-tip">
+                    <strong>Private · free.</strong> Share the code or QR. Change format, courts, and
+                    rules anytime with Settings before you generate the draw.
+                  </p>
+                ) : null}
                 {inviteCode ? (
                   <div className="org-invite">
                     <div className="org-invite-code">
                       <span className="org-invite-label">Code</span>
                       <code className="share-code">{inviteCode}</code>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copyInviteCode()}>
-                        {codeCopied ? 'Copied' : 'Copy'}
-                      </button>
+                      <div className="org-invite-actions">
+                        <button type="button" className="btn btn-ghost" onClick={() => void copyInviteCode()}>
+                          {codeCopied ? 'Copied' : 'Copy code'}
+                        </button>
+                        {active.tournament.slug ? (
+                          <Link to={`/t/${active.tournament.slug}`} className="btn btn-ghost">
+                            Event page
+                          </Link>
+                        ) : null}
+                      </div>
                     </div>
                     {active.tournament.status === 'REGISTRATION_OPEN' && joinUrl ? (
                       <ShareQr url={joinUrl} openLabel="Join link" />
                     ) : active.tournament.status === 'DRAFT' ? (
-                      <p className="muted">Open registration so friends can join with this code.</p>
+                      <p className="muted">Tap Open above so friends can join with this code.</p>
                     ) : fixturesExist ? (
                       <p className="muted">
                         Registration closed for the draw.{' '}
@@ -1764,14 +1826,11 @@ export default function ManageEventPage() {
                     active.tournament.slug &&
                     !(tournamentDetail?.viewer_entered || active.tournament.viewer_entered) ? (
                       <div className="org-invite-self">
-                        <Link
-                          to={`/t/${active.tournament.slug}/join`}
-                          className="btn btn-primary btn-sm"
-                        >
+                        <Link to={`/t/${active.tournament.slug}/join`} className="btn btn-primary">
                           Enter myself as a player
                         </Link>
                         <p className="muted org-invite-self-note">
-                          You’re the host — you can also play. Same join flow as everyone else.
+                          You’re the host — you can play too. Same join flow as everyone else.
                         </p>
                       </div>
                     ) : null}
