@@ -45,7 +45,7 @@ export default function NativeTabBar() {
   const onFriends = pathname.startsWith('/community')
   const onRankings = pathname.startsWith('/rankings') || onOtherProfile
   const onAccount =
-    onOwnProfile || pathname.startsWith('/organiser') || pathname.startsWith('/admin')
+    onOwnProfile || pathname.startsWith('/manage') || pathname.startsWith('/admin')
 
   return (
     <nav className="native-tab-bar" aria-label="Main">

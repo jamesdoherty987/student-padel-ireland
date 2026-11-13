@@ -83,7 +83,8 @@ export default function PlayerProfilePage() {
   )
 
   const reportMut = useMutation({
-    mutationFn: () => reportApi.create(reportTarget!.type, reportTarget!.id, reportReason.trim()),
+    mutationFn: (vars: { type: 'user' | 'media'; id: string; reason: string }) =>
+      reportApi.create(vars.type, vars.id, vars.reason),
     onSuccess: () => {
       setReportMsg('Thanks - your report has been sent. We will review it promptly.')
       setReportReason('')
@@ -776,8 +777,8 @@ export default function PlayerProfilePage() {
                     <Link to="/community" className="btn btn-primary btn-block">
                       Friends
                     </Link>
-                    <Link to="/tournaments?filter=mine" className="btn btn-ghost btn-block">
-                      Owned by me
+                    <Link to="/tournaments" className="btn btn-ghost btn-block">
+                      Tournaments
                     </Link>
                     {user?.role === 'ADMIN' && (
                       <Link to="/admin" className="btn btn-ghost btn-block">
@@ -1097,7 +1098,14 @@ export default function PlayerProfilePage() {
                     type="button"
                     className="btn btn-primary btn-sm"
                     disabled={reportReason.trim().length < 3 || reportMut.isPending}
-                    onClick={() => reportMut.mutate()}
+                    onClick={() => {
+                      if (!reportTarget) return
+                      reportMut.mutate({
+                        type: reportTarget.type,
+                        id: reportTarget.id,
+                        reason: reportReason.trim(),
+                      })
+                    }}
                   >
                     {reportMut.isPending ? 'Sending…' : 'Send report'}
                   </button>

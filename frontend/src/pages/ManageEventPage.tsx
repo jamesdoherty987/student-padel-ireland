@@ -20,7 +20,7 @@ import {
   platformApi,
   tournamentApi,
   type Match,
-  type OrganiserDashRow,
+  type ManageDashRow,
   type PlayerSearch,
   type TournamentTeam,
 } from '../services/api'
@@ -35,13 +35,14 @@ import {
   formatMatchScore,
   formatMoney,
   formatTime,
+  isKnockoutActive,
   knockoutRoundLabel,
   matchPathLabel,
   statusBadgeClass,
   statusLabel,
 } from '../utils/format'
 import { mediaUrl } from '../utils/media'
-import './Organiser.css'
+import './ManageEvent.css'
 
 type OrgPanel = 'registration' | 'day-of' | 'settings'
 
@@ -94,15 +95,15 @@ function resolveCurrentSet(form: {
   return selected
 }
 
-export default function OrganiserDashboard() {
+export default function ManageEventPage() {
   const { user, loading: authLoading } = useAuth()
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [params, setSearchParams] = useSearchParams()
   const canOrganise = !!user
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ['organiser-dashboard'],
-    queryFn: async () => (await platformApi.organiserDashboard()).data,
+    queryKey: ['manage-dashboard'],
+    queryFn: async () => (await platformApi.manageDashboard()).data,
     enabled: canOrganise,
   })
 
@@ -131,8 +132,9 @@ export default function OrganiserDashboard() {
   const [matchView, setMatchView] = useState<'list' | 'courts' | 'bracket'>('list')
   const [courtFilter, setCourtFilter] = useState<string>('all')
   const [matchFilter, setMatchFilter] = useState<'now' | 'upcoming' | 'active' | 'all' | 'done'>(
-    'now',
+    'all',
   )
+  const bracketPreferred = useRef(false)
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'owing'>('all')
   const [entriesCheckInFilter, setEntriesCheckInFilter] = useState<'all' | 'in' | 'out'>('all')
   const [entriesQuery, setEntriesQuery] = useState('')
@@ -183,7 +185,9 @@ export default function OrganiserDashboard() {
     setEntriesSort('newest')
     setCheckInFilter('out')
     setCheckInQuery('')
-    setMatchFilter('now')
+    setMatchFilter('all')
+    setMatchView('list')
+    bracketPreferred.current = false
     setSponsorForm({ name: '', website: '', featured: false, logo: null })
     setSponsorLogoKey((k) => k + 1)
   }, [selectedId])
@@ -207,7 +211,7 @@ export default function OrganiserDashboard() {
     return () => window.removeEventListener('keydown', onKey)
   }, [scoreMatch, showAddTeam, moveMatch])
 
-  const tournaments: OrganiserDashRow[] = data?.tournaments || []
+  const tournaments: ManageDashRow[] = data?.tournaments || []
 
   const active = selectedId
     ? tournaments.find((t) => t.tournament.id === selectedId) || null
@@ -240,7 +244,7 @@ export default function OrganiserDashboard() {
     queryKey: ['org-matches', slug],
     queryFn: async () => (await tournamentApi.matches(slug!)).data,
     enabled: !!slug && canOrganise,
-    refetchInterval: 6000,
+    refetchInterval: 4000,
   })
 
   const { data: tournamentDetail } = useQuery({
@@ -299,12 +303,12 @@ export default function OrganiserDashboard() {
   }
 
   const invalidateTournamentPublic = () => {
-    qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+    qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
     qc.invalidateQueries({ queryKey: ['tournaments'] })
+    qc.invalidateQueries({ queryKey: ['display'] })
     if (slug) {
       qc.invalidateQueries({ queryKey: ['tournament', slug] })
       qc.invalidateQueries({ queryKey: ['matches', slug] })
-      qc.invalidateQueries({ queryKey: ['display', slug] })
       qc.invalidateQueries({ queryKey: ['player-view', slug] })
       qc.invalidateQueries({ queryKey: ['announcements', slug] })
       qc.invalidateQueries({ queryKey: ['sponsors', slug] })
@@ -330,7 +334,7 @@ export default function OrganiserDashboard() {
     onSuccess: (res) => {
       setConfirmGenerate(false)
       qc.invalidateQueries({ queryKey: ['org-matches'] })
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       invalidateTournamentPublic()
       const d = res.data as {
         matches?: number
@@ -353,17 +357,6 @@ export default function OrganiserDashboard() {
     onError: (e: unknown) => {
       showToast(apiErrorMessage(e, 'Generate failed. You need at least 2 paid entries.'))
     },
-  })
-
-  const seedKoMut = useMutation({
-    mutationFn: () => tournamentApi.seedKnockout(tid!),
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['org-matches'] })
-      invalidateTournamentPublic()
-      const d = res.data as { filled?: number }
-      showToast(`Knockout seeded · ${d.filled ?? 0} slots filled`)
-    },
-    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not seed knockout')),
   })
 
   const openMut = useMutation({
@@ -424,7 +417,7 @@ export default function OrganiserDashboard() {
     mutationFn: () => tournamentApi.delete(tid!),
     onSuccess: (res) => {
       const deletedId = tid
-      qc.setQueryData(['organiser-dashboard'], (old: unknown) => {
+      qc.setQueryData(['manage-dashboard'], (old: unknown) => {
         const data = old as { tournaments?: Array<{ tournament: { id: string } }> } | undefined
         if (!data?.tournaments || !deletedId) return old
         return {
@@ -443,7 +436,7 @@ export default function OrganiserDashboard() {
   const transferOwnerMut = useMutation({
     mutationFn: (userId: string) => tournamentApi.update(tid!, { organiser_id: userId }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       qc.invalidateQueries({ queryKey: ['tournament-admins', tid] })
       qc.invalidateQueries({ queryKey: ['tournament', slug] })
       showToast('Ownership transferred')
@@ -452,7 +445,8 @@ export default function OrganiserDashboard() {
   })
 
   const announceMut = useMutation({
-    mutationFn: () => tournamentApi.createAnnouncement(tid!, announce),
+    mutationFn: (payload: { title: string; body: string }) =>
+      tournamentApi.createAnnouncement(tid!, payload),
     onSuccess: () => {
       setAnnounce({ title: '', body: '' })
       qc.invalidateQueries({ queryKey: ['player-view', slug] })
@@ -473,13 +467,12 @@ export default function OrganiserDashboard() {
   })
 
   const sponsorMut = useMutation({
-    mutationFn: () =>
-      tournamentApi.createSponsor(tid!, {
-        name: sponsorForm.name.trim(),
-        website: sponsorForm.website.trim() || undefined,
-        featured: sponsorForm.featured,
-        logo: sponsorForm.logo,
-      }),
+    mutationFn: (payload: {
+      name: string
+      website?: string
+      featured: boolean
+      logo: File | null
+    }) => tournamentApi.createSponsor(tid!, payload),
     onSuccess: () => {
       setSponsorForm({ name: '', website: '', featured: false, logo: null })
       setSponsorLogoKey((k) => k + 1)
@@ -540,42 +533,47 @@ export default function OrganiserDashboard() {
     }
   }
 
+  type ScorePayload = {
+    match: Match
+    form: typeof scoreForm
+    toastOk?: string
+  }
+
   const scoreMut = useMutation({
-    mutationFn: () => {
+    mutationFn: ({ match, form }: ScorePayload) => {
       const simple = scoringMode === 'SIMPLE'
-      const current_set = simple ? 1 : resolveCurrentSet(scoreForm)
-      return tournamentApi.updateScore(scoreMatch!.id, {
-        set1_a: scoreForm.set1_a,
-        set1_b: scoreForm.set1_b,
-        set2_a: simple ? 0 : scoreForm.set2_a,
-        set2_b: simple ? 0 : scoreForm.set2_b,
-        set3_a: simple ? 0 : scoreForm.set3_a,
-        set3_b: simple ? 0 : scoreForm.set3_b,
+      const current_set = simple ? 1 : resolveCurrentSet(form)
+      return tournamentApi.updateScore(match.id, {
+        set1_a: form.set1_a,
+        set1_b: form.set1_b,
+        set2_a: simple ? 0 : form.set2_a,
+        set2_b: simple ? 0 : form.set2_b,
+        set3_a: simple ? 0 : form.set3_a,
+        set3_b: simple ? 0 : form.set3_b,
         current_set,
-        status: scoreForm.status,
-        winner_id: scoreForm.winner_id || null,
-        force: scoreForm.force || !!scoreMatch?.ratings_applied,
+        status: form.status,
+        winner_id: form.winner_id || null,
+        force: form.force || !!match.ratings_applied,
       })
     },
-    onMutate: () => {
+    onMutate: ({ match }) => {
       void hapticSuccess()
-      // Close sheet immediately so the desk never waits on the network
-      const closed = scoreMatch
+      // Close sheet immediately — match + form are in the mutation vars
       setScoreMatch(null)
       setScoreError('')
       showToast('Saving…')
-      return { closed }
+      return { closed: match }
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       qc.invalidateQueries({ queryKey: ['rankings'] })
       qc.invalidateQueries({ queryKey: ['player-view'] })
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['display'] })
       if (slug) {
         qc.invalidateQueries({ queryKey: ['matches', slug] })
-        qc.invalidateQueries({ queryKey: ['display', slug] })
       }
-      showToast('Score saved')
+      showToast(vars.toastOk || 'Score saved')
     },
     onError: (e: unknown, _vars, ctx) => {
       const msg = apiErrorMessage(e, 'Could not save score')
@@ -587,7 +585,44 @@ export default function OrganiserDashboard() {
     },
   })
 
+  const clearScore = () => {
+    if (!scoreMatch?.id) {
+      setScoreError('Match missing — close and try again.')
+      return
+    }
+    const matchToClear = scoreMatch
+    void confirmDialog({
+      title: 'Clear this result?',
+      message: matchToClear.ratings_applied
+        ? 'Match goes back to the queue. Standings/bracket update; Ireland ratings already applied stay as first recorded.'
+        : 'Match goes back to the queue and the next round slot is cleared if still open.',
+      confirmLabel: 'Clear result',
+    }).then((ok) => {
+      if (!ok) return
+      scoreMut.mutate({
+        match: matchToClear,
+        form: {
+          set1_a: 0,
+          set1_b: 0,
+          set2_a: 0,
+          set2_b: 0,
+          set3_a: 0,
+          set3_b: 0,
+          current_set: 1,
+          status: 'SCHEDULED',
+          winner_id: '',
+          force: true,
+        },
+        toastOk: 'Result cleared',
+      })
+    })
+  }
+
   const saveScore = () => {
+    if (!scoreMatch?.id) {
+      setScoreError('Match missing — close and try again.')
+      return
+    }
     setScoreError('')
     if (scoreForm.status === 'COMPLETED' || scoreForm.status === 'WALKOVER') {
       if (scoringMode === 'SIMPLE') {
@@ -632,24 +667,25 @@ export default function OrganiserDashboard() {
         return
       }
     }
+    const matchToSave = scoreMatch
+    const formToSave = { ...scoreForm }
     const correcting =
-      !!scoreMatch &&
-      (scoreMatch.status === 'COMPLETED' ||
-        scoreMatch.status === 'WALKOVER' ||
-        scoreMatch.ratings_applied)
+      matchToSave.status === 'COMPLETED' ||
+      matchToSave.status === 'WALKOVER' ||
+      !!matchToSave.ratings_applied
     if (correcting) {
       void confirmDialog({
         title: 'Correct this result?',
-        message: scoreMatch?.ratings_applied
+        message: matchToSave.ratings_applied
           ? 'Standings and the bracket will update. Ireland ratings already applied for this match are not recalculated.'
           : 'This replaces the saved result and updates standings / the next round.',
         confirmLabel: 'Save correction',
       }).then((ok) => {
-        if (ok) scoreMut.mutate()
+        if (ok) scoreMut.mutate({ match: matchToSave, form: formToSave })
       })
       return
     }
-    scoreMut.mutate()
+    scoreMut.mutate({ match: matchToSave, form: formToSave })
   }
 
   const moveMut = useMutation({
@@ -679,13 +715,19 @@ export default function OrganiserDashboard() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       qc.invalidateQueries({ queryKey: ['player-view'] })
+      qc.invalidateQueries({ queryKey: ['display'] })
       if (slug) {
         qc.invalidateQueries({ queryKey: ['matches', slug] })
-        qc.invalidateQueries({ queryKey: ['display', slug] })
       }
       if (!vars.silent) {
         const st = vars.data?.status
-        showToast(st === 'CALLED' ? 'Called — players notified' : 'Updated')
+        showToast(
+          st === 'CALLED'
+            ? 'Called — players notified'
+            : st === 'SCHEDULED'
+              ? 'Call undone'
+              : 'Updated',
+        )
       }
     },
     onError: (e: unknown, _vars, ctx) => {
@@ -711,7 +753,7 @@ export default function OrganiserDashboard() {
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['org-teams'] })
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       showToast(vars.present ? 'Checked in' : 'Undone')
     },
     onError: (e: unknown, _vars, ctx) => {
@@ -739,7 +781,7 @@ export default function OrganiserDashboard() {
     mutationFn: (teamId: string) => tournamentApi.markFeeCollected(tid!, teamId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['org-teams'] })
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       showToast('Marked as paid')
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not mark as paid')),
@@ -749,7 +791,7 @@ export default function OrganiserDashboard() {
     mutationFn: (teamId: string) => tournamentApi.withdrawTeam(tid!, teamId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['org-teams'] })
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       qc.invalidateQueries({ queryKey: ['tournament', slug] })
       showToast(isSingles ? 'Player withdrawn' : 'Team withdrawn')
     },
@@ -878,8 +920,6 @@ export default function OrganiserDashboard() {
     const done = matches.filter(
       (m) => m.status === 'COMPLETED' || m.status === 'WALKOVER',
     ).length
-    const live = matches.filter((m) => m.status === 'LIVE').length
-    const called = matches.filter((m) => m.status === 'CALLED').length
     const pendingConfirm = matches.filter((m) => m.status === 'AWAITING_CONFIRM')
     const needsCourt = matches.filter(
       (m) =>
@@ -888,7 +928,7 @@ export default function OrganiserDashboard() {
         m.team_a_id &&
         m.team_b_id,
     )
-    // Only group fixtures missing teams need organiser action — KO/Plate slots
+    // Only group fixtures missing teams need admin action — KO/Plate slots
     // fill automatically when the previous round is scored.
     const waitingTeams = matches.filter(
       (m) =>
@@ -962,11 +1002,9 @@ export default function OrganiserDashboard() {
 
     return {
       done,
-      live,
-      called,
       open,
       total: matches.length,
-      attention: attention.slice(0, 8),
+      attention: attention.slice(0, 6),
       allClear: attention.length === 0 && matches.length > 0,
     }
   }, [
@@ -1191,6 +1229,15 @@ export default function OrganiserDashboard() {
     }
   }, [matchView, hasKnockoutMatches])
 
+  // Once knockout is live, prefer the Draw view for scoring (once per tournament)
+  useEffect(() => {
+    if (!hasKnockoutMatches || bracketPreferred.current) return
+    if (!isKnockoutActive(matches)) return
+    bracketPreferred.current = true
+    setMatchView('bracket')
+    setMatchFilter('all')
+  }, [hasKnockoutMatches, matches])
+
   const openScore = (m: Match) => {
     if (!m.team_a_id || !m.team_b_id) return
     setScoreError('')
@@ -1225,27 +1272,31 @@ export default function OrganiserDashboard() {
     })
   }
 
+  /** Open score sheet for any match that has both teams. */
+  const scoreMatchQuick = (m: Match) => {
+    openScore(m)
+  }
+
   const renderMatchActions = (m: Match, compact = false) => {
     const canScore = !!(m.team_a_id && m.team_b_id)
-    if (!canScore) return null
+    if (!canScore) {
+      return (
+        <div className="org-match-actions">
+          <span className="badge badge-draft">After previous round</span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            title="Change court or time"
+            onClick={() => openMove(m)}
+          >
+            Move
+          </button>
+        </div>
+      )
+    }
     const locked = !!m.ratings_applied
     const done = m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED'
     const pending = m.status === 'AWAITING_CONFIRM'
-    const onScore = () => {
-      if (m.status === 'SCHEDULED') {
-        // Mark called for board state, but don't email — Call to court does that.
-        moveMut.mutate(
-          {
-            matchId: m.id,
-            data: { status: 'CALLED', notify_players: false },
-            silent: true,
-          },
-          { onSuccess: () => openScore({ ...m, status: 'CALLED' }) },
-        )
-        return
-      }
-      openScore(m)
-    }
     return (
       <div className="org-match-actions">
         {!compact && (
@@ -1253,28 +1304,44 @@ export default function OrganiserDashboard() {
             {m.status === 'CALLED'
               ? 'Called'
               : m.status === 'AWAITING_CONFIRM'
-                ? 'Needs confirm'
+                ? 'Confirm'
                 : m.status.replace(/_/g, ' ')}
           </span>
         )}
         {m.status === 'SCHEDULED' && (
           <button
             type="button"
-            className="btn btn-primary btn-sm"
+            className="btn btn-ghost btn-sm"
             disabled={moveMut.isPending}
-            title="Call players to this court"
+            title="Notify players to this court"
             onClick={() => moveMut.mutate({ matchId: m.id, data: { status: 'CALLED' } })}
           >
             Call
           </button>
         )}
-        {(m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'SCHEDULED' || pending) && (
+        {m.status === 'CALLED' && (
           <button
             type="button"
-            className="btn btn-dark btn-sm"
+            className="btn btn-ghost btn-sm"
             disabled={moveMut.isPending}
-            onClick={onScore}
-            title={pending ? 'Confirm or correct the result' : 'Log who won'}
+            title="Undo call — put back in queue"
+            onClick={() =>
+              moveMut.mutate({
+                matchId: m.id,
+                data: { status: 'SCHEDULED', notify_players: false },
+              })
+            }
+          >
+            Uncall
+          </button>
+        )}
+        {!done && (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={moveMut.isPending}
+            onClick={() => scoreMatchQuick(m)}
+            title={pending ? 'Confirm or correct' : 'Log who won'}
           >
             {pending ? 'Fix' : 'Score'}
           </button>
@@ -1286,19 +1353,17 @@ export default function OrganiserDashboard() {
             title={locked ? 'Correct result' : 'Edit score'}
             onClick={() => openScore(m)}
           >
-            {locked ? 'Fix' : 'Score'}
+            {locked ? 'Fix' : 'Edit'}
           </button>
         )}
-        {!done && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            title="Change court or time"
-            onClick={() => openMove(m)}
-          >
-            Move
-          </button>
-        )}
+        <button
+          type="button"
+          className={`btn btn-ghost btn-sm${compact ? ' org-action-more' : ''}`}
+          title="Change court or time"
+          onClick={() => openMove(m)}
+        >
+          {compact ? '···' : 'Move'}
+        </button>
       </div>
     )
   }
@@ -1322,7 +1387,7 @@ export default function OrganiserDashboard() {
           <h1 className="page-title">Admin access required</h1>
           <p className="page-sub">Log in with the platform admin account to manage events.</p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
-            <Link to="/login?next=%2Forganiser" className="btn btn-primary">
+            <Link to="/login?next=%2Fmanage" className="btn btn-primary">
               Log in
             </Link>
             <Link to="/tournaments" className="btn btn-ghost">
@@ -1976,18 +2041,12 @@ export default function OrganiserDashboard() {
                       <strong>{dayOps.done}</strong> done
                     </span>
                     <span>
-                      <strong>{dayOps.live}</strong> live
-                    </span>
-                    <span>
-                      <strong>{dayOps.called}</strong> called
-                    </span>
-                    <span>
-                      <strong>{dayOps.open}</strong> open
+                      <strong>{dayOps.open}</strong> to play
                     </span>
                     {dayOps.allClear ? (
                       <span className="org-pulse-ok">All clear</span>
                     ) : dayOps.attention.length > 0 ? (
-                      <span className="org-pulse-warn">{dayOps.attention.length} to fix</span>
+                      <span className="org-pulse-warn">{dayOps.attention.length} need you</span>
                     ) : null}
                   </div>
                   {dayOps.attention.length > 0 && (
@@ -2001,7 +2060,7 @@ export default function OrganiserDashboard() {
                           {item.kind === 'fix' && item.match ? (
                             <button
                               type="button"
-                              className="btn btn-dark btn-sm"
+                              className="btn btn-primary btn-sm"
                               onClick={() => openScore(item.match!)}
                             >
                               Fix
@@ -2053,12 +2112,13 @@ export default function OrganiserDashboard() {
               {courtsideNow.length > 0 && (
                 <section className="org-section org-now-board">
                   <div className="org-section-head">
-                    <h2>Now</h2>
+                    <h2>Courts now</h2>
                     <span className="muted">{courtsideNow.length}</span>
                   </div>
                   <div className="org-now-grid">
                     {courtsideNow.map((slot) => {
                       const m = slot.match
+                      const canTapScore = !!(m.team_a_id && m.team_b_id)
                       return (
                         <div
                           key={slot.courtKey}
@@ -2070,21 +2130,42 @@ export default function OrganiserDashboard() {
                                 : slot.kind === 'called'
                                   ? 'is-called'
                                   : ''
-                          }`}
+                          }${canTapScore ? ' is-tap' : ''}`}
+                          role={canTapScore ? 'button' : undefined}
+                          tabIndex={canTapScore ? 0 : undefined}
+                          onClick={
+                            canTapScore
+                              ? (e) => {
+                                  if ((e.target as HTMLElement).closest('button')) return
+                                  scoreMatchQuick(m)
+                                }
+                              : undefined
+                          }
+                          onKeyDown={
+                            canTapScore
+                              ? (e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault()
+                                    scoreMatchQuick(m)
+                                  }
+                                }
+                              : undefined
+                          }
                         >
-                          <span className="org-now-kicker">
-                            {m.status === 'AWAITING_CONFIRM'
-                              ? 'Needs fix'
-                              : slot.kind === 'live'
-                                ? 'Live'
-                                : slot.kind === 'called'
-                                  ? 'Called'
-                                  : 'Next'}
-                            {matchPathLabel(m.stage) ? ` · ${matchPathLabel(m.stage)}` : ''}
-                          </span>
-                          <strong>{slot.label}</strong>
+                          <div className="org-now-top">
+                            <strong>{slot.label}</strong>
+                            <span className="org-now-kicker">
+                              {m.status === 'AWAITING_CONFIRM'
+                                ? 'Fix score'
+                                : slot.kind === 'live'
+                                  ? 'Live'
+                                  : slot.kind === 'called'
+                                    ? 'Called'
+                                    : 'Next'}
+                            </span>
+                          </div>
                           <p className="org-now-round">{knockoutRoundLabel(m.round, m.stage)}</p>
-                          <p>
+                          <p className="org-now-vs">
                             {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
                             {m.team_b_name || m.team_b_placeholder || 'TBD'}
                           </p>
@@ -2104,18 +2185,7 @@ export default function OrganiserDashboard() {
 
               <section className="org-section">
                 <div className="org-section-head">
-                  <h2>Matches</h2>
-                  {matches.some((m) => m.stage === 'KNOCKOUT' && (!m.team_a_id || !m.team_b_id)) &&
-                    matches.some((m) => m.stage === 'GROUP') && (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        disabled={seedKoMut.isPending}
-                        onClick={() => seedKoMut.mutate()}
-                      >
-                        {seedKoMut.isPending ? '…' : 'Seed KO'}
-                      </button>
-                    )}
+                  <h2>{hasKnockoutMatches && isKnockoutActive(matches) ? 'Knockout' : 'Matches'}</h2>
                 </div>
                 {matches.length > 0 && (
                   <div className="org-match-filters">
@@ -2155,11 +2225,11 @@ export default function OrganiserDashboard() {
                         }
                         aria-label="Filter matches"
                       >
+                        <option value="all">All</option>
                         <option value="now">Now</option>
                         <option value="upcoming">Next</option>
                         <option value="active">Open</option>
                         <option value="done">Done</option>
-                        <option value="all">All</option>
                       </select>
                     )}
                     {matchView === 'list' && (
@@ -2182,27 +2252,14 @@ export default function OrganiserDashboard() {
                 {matchView === 'bracket' && hasKnockoutMatches && (
                   <div className="org-bracket">
                     <p className="muted org-section-lead" style={{ marginTop: 0 }}>
-                      Tap a match to score it. Empty slots fill when the previous round is done.
+                      Tap a match to score. Next round fills in automatically.
                     </p>
                     {championshipMatches.length > 0 && (
                       <div className="org-bracket-block">
                         <TournamentBracket
                           matches={championshipMatches}
                           stage="KNOCKOUT"
-                          onScoreMatch={(m) => {
-                            if (m.status === 'SCHEDULED') {
-                              moveMut.mutate(
-                                {
-                                  matchId: m.id,
-                                  data: { status: 'CALLED', notify_players: false },
-                                  silent: true,
-                                },
-                                { onSuccess: () => openScore({ ...m, status: 'CALLED' }) },
-                              )
-                              return
-                            }
-                            openScore(m)
-                          }}
+                          onScoreMatch={scoreMatchQuick}
                         />
                       </div>
                     )}
@@ -2211,20 +2268,7 @@ export default function OrganiserDashboard() {
                         <TournamentBracket
                           matches={plateMatches}
                           stage="PLATE"
-                          onScoreMatch={(m) => {
-                            if (m.status === 'SCHEDULED') {
-                              moveMut.mutate(
-                                {
-                                  matchId: m.id,
-                                  data: { status: 'CALLED', notify_players: false },
-                                  silent: true,
-                                },
-                                { onSuccess: () => openScore({ ...m, status: 'CALLED' }) },
-                              )
-                              return
-                            }
-                            openScore(m)
-                          }}
+                          onScoreMatch={scoreMatchQuick}
                         />
                       </div>
                     )}
@@ -2242,8 +2286,33 @@ export default function OrganiserDashboard() {
                             <div key={col.number} className="org-court-col">
                               <h3>{col.name || `Court ${col.number}`}</h3>
                               {courtMatches.length === 0 && <p className="muted">Free</p>}
-                              {courtMatches.map((m) => (
-                                <div key={m.id} className={`org-court-card is-${m.status.toLowerCase()}`}>
+                              {courtMatches.map((m) => {
+                                const canTap = !!(m.team_a_id && m.team_b_id)
+                                return (
+                                <div
+                                  key={m.id}
+                                  className={`org-court-card is-${m.status.toLowerCase()}${canTap ? ' is-tap' : ''}`}
+                                  role={canTap ? 'button' : undefined}
+                                  tabIndex={canTap ? 0 : undefined}
+                                  onClick={
+                                    canTap
+                                      ? (e) => {
+                                          if ((e.target as HTMLElement).closest('button')) return
+                                          scoreMatchQuick(m)
+                                        }
+                                      : undefined
+                                  }
+                                  onKeyDown={
+                                    canTap
+                                      ? (e) => {
+                                          if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault()
+                                            scoreMatchQuick(m)
+                                          }
+                                        }
+                                      : undefined
+                                  }
+                                >
                                   <strong>
                                     {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
                                     {m.team_b_name || m.team_b_placeholder || 'TBD'}
@@ -2255,7 +2324,8 @@ export default function OrganiserDashboard() {
                                   </span>
                                   {renderMatchActions(m, true)}
                                 </div>
-                              ))}
+                                )
+                              })}
                             </div>
                           )
                         })}
@@ -2296,7 +2366,27 @@ export default function OrganiserDashboard() {
                             </p>
                           ) : null}
                           <div
-                            className={`org-row ${m.status === 'CALLED' ? 'is-called' : ''} ${m.status === 'LIVE' ? 'is-live' : ''} ${m.stage === 'PLATE' ? 'is-plate' : ''} ${m.stage === 'KNOCKOUT' ? 'is-champ' : ''}`}
+                            className={`org-row ${m.status === 'CALLED' ? 'is-called' : ''} ${m.status === 'LIVE' ? 'is-live' : ''} ${m.stage === 'PLATE' ? 'is-plate' : ''} ${m.stage === 'KNOCKOUT' ? 'is-champ' : ''}${canScore ? ' is-tap' : ''}`}
+                            role={canScore ? 'button' : undefined}
+                            tabIndex={canScore ? 0 : undefined}
+                            onClick={
+                              canScore
+                                ? (e) => {
+                                    if ((e.target as HTMLElement).closest('button')) return
+                                    scoreMatchQuick(m)
+                                  }
+                                : undefined
+                            }
+                            onKeyDown={
+                              canScore
+                                ? (e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault()
+                                      scoreMatchQuick(m)
+                                    }
+                                  }
+                                : undefined
+                            }
                           >
                             <div>
                               <strong>
@@ -2511,7 +2601,9 @@ export default function OrganiserDashboard() {
                 <button
                   className="btn btn-primary"
                   disabled={!announce.title || !announce.body || announceMut.isPending}
-                  onClick={() => announceMut.mutate()}
+                  onClick={() =>
+                    announceMut.mutate({ title: announce.title, body: announce.body })
+                  }
                 >
                   Post
                 </button>
@@ -2676,7 +2768,14 @@ export default function OrganiserDashboard() {
                     type="button"
                     className="btn btn-primary btn-block"
                     disabled={sponsorForm.name.trim().length < 2 || sponsorMut.isPending || sponsors.length >= 12}
-                    onClick={() => sponsorMut.mutate()}
+                    onClick={() =>
+                      sponsorMut.mutate({
+                        name: sponsorForm.name.trim(),
+                        website: sponsorForm.website.trim() || undefined,
+                        featured: sponsorForm.featured,
+                        logo: sponsorForm.logo,
+                      })
+                    }
                   >
                     {sponsorMut.isPending ? 'Adding…' : 'Add sponsor'}
                   </button>
@@ -2799,7 +2898,7 @@ export default function OrganiserDashboard() {
           onAdded={(msg) => {
             showToast(msg)
             qc.invalidateQueries({ queryKey: ['org-teams'] })
-            qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+            qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
             qc.invalidateQueries({ queryKey: ['tournament', slug] })
           }}
         />
@@ -3060,6 +3159,19 @@ export default function OrganiserDashboard() {
                     ? 'Save correction'
                     : 'Save result'}
               </button>
+              {(scoreMatch.status === 'COMPLETED' ||
+                scoreMatch.status === 'WALKOVER' ||
+                scoreMatch.status === 'AWAITING_CONFIRM') && (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={clearScore}
+                  disabled={scoreMut.isPending}
+                  title="Undo result and put match back in the queue"
+                >
+                  Clear result
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -3220,7 +3332,7 @@ function AddTeamModal({
     }
     setSaving(true)
     try {
-      await tournamentApi.organiserAddTeam(tournamentId, {
+      await tournamentApi.adminAddTeam(tournamentId, {
         team_name: teamName.trim(),
         player1_id: player1Id,
         ...(singles ? {} : { player2_id: player2Id }),

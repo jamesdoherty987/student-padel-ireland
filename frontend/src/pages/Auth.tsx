@@ -130,10 +130,10 @@ export function LoginPage() {
     ? 'Log in with the account used at checkout to confirm your registration.'
     : next.includes('/join')
       ? 'Log in to finish joining.'
-      : next.includes('create=1') || next.startsWith('/admin') || next.startsWith('/organiser')
+      : next.includes('create=1') || next.startsWith('/admin') || next.startsWith('/manage')
         ? 'Log in with an admin account to manage events.'
         : next.includes('filter=mine')
-          ? 'Log in to see tournaments you own.'
+          ? 'Log in with an admin account to see events you manage.'
           : next.includes('/rankings')
             ? 'Log in to filter rankings by your events, friends, or university.'
             : next.includes('/community')
@@ -347,7 +347,7 @@ export function SignupPage() {
               ? 'Create an account to finish joining with your invite.'
               : next.includes('/confirmed') || next.includes('/live')
                 ? 'Create an account to continue to your match.'
-                : next.includes('create=1') || next.startsWith('/admin') || next.startsWith('/organiser')
+                : next.includes('create=1') || next.startsWith('/admin') || next.startsWith('/manage')
                   ? 'Admin accounts are provisioned separately — create a player account to join events.'
                   : next.includes('/community')
                     ? 'Create an account to add friends and join events.'

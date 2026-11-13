@@ -1,5 +1,5 @@
 /* Shared create / edit tournament form (ModalShell). Loaded with the form so
-   styles work on Tournaments, Admin, and Manage - not only Organiser.css. */
+   styles work on Tournaments, Admin, and Manage - not only ManageEvent.css. */
 
 .tf-steps {
   display: grid;

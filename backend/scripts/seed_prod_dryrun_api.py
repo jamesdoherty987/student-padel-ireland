@@ -337,7 +337,7 @@ def main() -> None:
     print(" Admin (manage draw / score)")
     print(f"  Email:    {admin_email}")
     print(f"  Password: (ADMIN_PASSWORD)")
-    print(f"  Hub:      https://www.studentpadel.ie/organiser")
+    print(f"  Hub:      https://www.studentpadel.ie/manage")
     print(f"  Event:    https://www.studentpadel.ie/t/{slug}")
     print(f"  Live:     https://www.studentpadel.ie/t/{slug}/live")
     print(f"  Join:     https://www.studentpadel.ie/t/join/{invite}")

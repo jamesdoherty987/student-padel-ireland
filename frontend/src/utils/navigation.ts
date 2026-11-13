@@ -93,7 +93,7 @@ export function nativeBackFallback(
     if (nested) return `/t/${nested[1]}`
     return '/tournaments'
   }
-  if (pathname.startsWith('/organiser')) {
+  if (pathname.startsWith('/manage') || pathname.startsWith('/organiser')) {
     return role === 'ADMIN' ? '/admin' : '/tournaments'
   }
   if (pathname.startsWith('/join')) {

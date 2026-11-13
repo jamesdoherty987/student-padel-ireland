@@ -161,7 +161,7 @@ export default function EditTournamentModal({
         payload.is_official = isOfficial
       }
       await tournamentApi.update(tournament.id, payload)
-      await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      await qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       await qc.invalidateQueries({ queryKey: ['tournament', tournament.slug] })
       await qc.invalidateQueries({ queryKey: ['tournaments'] })
       onSaved('Tournament updated')

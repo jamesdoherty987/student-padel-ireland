@@ -4,6 +4,7 @@ Allow: /
 
 # Private / app surfaces - no value in search results
 Disallow: /admin
+Disallow: /manage
 Disallow: /organiser
 Disallow: /welcome
 Disallow: /login

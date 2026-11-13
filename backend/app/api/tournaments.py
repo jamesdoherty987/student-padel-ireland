@@ -596,6 +596,29 @@ def _notify_call_to_court(db: Session, t: Tournament, m: Match) -> None:
         )
 
 
+def _unseat_winner_from_next(db: Session, m: Match) -> None:
+    """Remove this match's winner from the next round (only if that match is still queued)."""
+    if not m.next_match_id or not m.next_match_slot or not m.winner_id:
+        return
+    nxt = db.get(Match, m.next_match_id)
+    if not nxt:
+        return
+    if nxt.status not in (MatchStatus.SCHEDULED.value, MatchStatus.CALLED.value):
+        raise HTTPException(
+            400,
+            "Cannot clear this result — the next knockout match has already started or finished",
+        )
+    if m.next_match_slot == "A" and nxt.team_a_id == m.winner_id:
+        nxt.team_a_id = None
+        nxt.team_a_placeholder = "TBD"
+    elif m.next_match_slot == "B" and nxt.team_b_id == m.winner_id:
+        nxt.team_b_id = None
+        nxt.team_b_placeholder = "TBD"
+    # If next was called with incomplete teams, put it back in the queue
+    if nxt.status == MatchStatus.CALLED.value and (not nxt.team_a_id or not nxt.team_b_id):
+        nxt.status = MatchStatus.SCHEDULED.value
+
+
 def _advance_winner_to_next(db: Session, m: Match, winner_id: UUID) -> None:
     if not m.next_match_id or not m.next_match_slot:
         return
@@ -2971,6 +2994,10 @@ def update_score(
     if not m.score:
         m.score = MatchScore(match_id=m.id)
         db.add(m.score)
+
+    prev_status = m.status
+    prev_winner_id = m.winner_id
+
     m.score.set1_a = body.set1_a
     m.score.set1_b = body.set1_b
     m.score.set2_a = body.set2_a
@@ -2998,6 +3025,8 @@ def update_score(
             raise HTTPException(400, "Completed matches need a winner (or set scores that determine one)")
         if winner_id not in (m.team_a_id, m.team_b_id):
             raise HTTPException(400, "Winner must be one of the match teams")
+        # Restore previous winner so advance can clear a wrong seat first
+        m.winner_id = prev_winner_id
         _advance_winner_to_next(db, m, winner_id)
         m.winner_id = winner_id
         m.score.confirmed_by_id = user.id
@@ -3015,8 +3044,22 @@ def update_score(
             raise HTTPException(400, "Enter set scores with a clear winner")
         m.winner_id = winner_id
         m.score.confirmed_by_id = None
+    elif body.status in (MatchStatus.SCHEDULED, MatchStatus.CALLED, MatchStatus.CANCELLED):
+        # Admin clear / undo result — put match back in the queue
+        was_final = prev_status in (
+            MatchStatus.COMPLETED.value,
+            MatchStatus.WALKOVER.value,
+            MatchStatus.AWAITING_CONFIRM.value,
+        ) or bool(prev_winner_id)
+        if was_final:
+            m.winner_id = prev_winner_id
+            _unseat_winner_from_next(db, m)
+        m.winner_id = None
+        m.score.confirmed_by_id = None
+        if body.status == MatchStatus.CANCELLED:
+            m.score.entered_by_id = None
     else:
-        # Live / other - clear pending confirm markers
+        # Live — clear pending confirm markers
         if body.status == MatchStatus.LIVE:
             m.score.confirmed_by_id = None
             m.winner_id = None

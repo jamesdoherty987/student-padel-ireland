@@ -182,7 +182,7 @@ export default function CreateTournamentModal({ onClose, onCreated, onToast }: P
         try {
           await tournamentApi.update(data.id, { status: 'REGISTRATION_OPEN' })
         } catch {
-          await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+          await qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
           await qc.invalidateQueries({ queryKey: ['tournaments'] })
           await qc.invalidateQueries({ queryKey: ['sponsors', data.slug] })
           let msg =
@@ -198,7 +198,7 @@ export default function CreateTournamentModal({ onClose, onCreated, onToast }: P
         }
       }
 
-      await qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      await qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       await qc.invalidateQueries({ queryKey: ['tournaments'] })
       await qc.invalidateQueries({ queryKey: ['sponsors', data.slug] })
 

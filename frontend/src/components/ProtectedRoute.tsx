@@ -46,8 +46,8 @@ export function ProtectedRoute({
             <Link to="/tournaments" className="btn btn-primary">
               Browse tournaments
             </Link>
-            <Link to="/tournaments?filter=mine" className="btn btn-ghost">
-              Owned by me
+            <Link to="/community" className="btn btn-ghost">
+              Community
             </Link>
           </div>
         </main>

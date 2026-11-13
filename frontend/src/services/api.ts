@@ -42,7 +42,7 @@ api.interceptors.response.use(
           path.startsWith('/community/') && !path.startsWith('/community/join/')
         // Live boards are public - don't kick viewers to login on a stale token
         const needsAuth =
-          path.startsWith('/organiser') ||
+          path.startsWith('/manage') || path.startsWith('/organiser') ||
           path.startsWith('/admin') ||
           isCommunityPrivate ||
           isTournamentJoin
@@ -176,8 +176,8 @@ export type TournamentTeam = {
   custom_answers?: CustomAnswer[]
 }
 
-/** Row from GET /api/organiser/dashboard (admin manage hub) */
-export type OrganiserDashRow = {
+/** Admin manage hub tournament row (API: /api/organiser/dashboard) */
+export type ManageDashRow = {
   tournament: Tournament
   teams: number
   players: number
@@ -422,7 +422,7 @@ export const tournamentApi = {
       demo_mode?: boolean
       message?: string
     }>(`/api/tournaments/${tournamentId}/pay-online-now`, data || {}),
-  organiserAddTeam: (tournamentId: string, data: Record<string, unknown>) =>
+  adminAddTeam: (tournamentId: string, data: Record<string, unknown>) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/organiser-add-team`, data),
   teams: (tournamentId: string) => api.get<TournamentTeam[]>(`/api/tournaments/${tournamentId}/teams`),
   generate: (tournamentId: string, data?: Record<string, unknown>) =>
@@ -568,7 +568,7 @@ export const platformApi = {
   deleteMedia: (id: string) => api.delete(`/api/me/profile/media/${id}`),
   setAvatar: (id: string) => api.post<RankingRow>(`/api/me/profile/media/${id}/avatar`),
   clearAvatar: () => api.delete<RankingRow>('/api/me/profile/avatar'),
-  organiserDashboard: () => api.get<{ tournaments: OrganiserDashRow[] }>('/api/organiser/dashboard'),
+  manageDashboard: () => api.get<{ tournaments: ManageDashRow[] }>('/api/organiser/dashboard'),
 }
 
 export type AdminUser = {

@@ -301,13 +301,12 @@ function FateCard({ fate }: { fate: PlayerFate }) {
 
 function NextMatchCard({
   next,
-  slug,
   myTeamId,
   partnerLabel,
   actions,
 }: {
   next: Match
-  slug: string
+  slug?: string
   myTeamId?: string
   partnerLabel?: string | null
   actions: NextActions
@@ -421,9 +420,6 @@ function NextMatchCard({
         ) : null}
       </div>
 
-      <Link to={`/t/${slug}`} className="pl-details-link">
-        Full tournament page
-      </Link>
     </div>
   )
 }
@@ -467,7 +463,7 @@ export default function PlayerLivePage() {
     enabled: !!slug,
     retry: 4,
     retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 10000),
-    refetchInterval: (query) => (query.state.status === 'error' ? 4000 : 5000),
+    refetchInterval: (query) => (query.state.status === 'error' ? 2500 : 3000),
   })
 
   const { data: allMatches = [] } = useQuery({
@@ -517,30 +513,34 @@ export default function PlayerLivePage() {
   }, [scoringMatch])
 
   const scoreMut = useMutation({
-    mutationFn: async () => {
-      if (!scoringMatch) throw new Error('No match')
-      const mode = tournamentScoringMode(data?.tournament?.scoring_mode)
+    mutationFn: async (vars: {
+      match: Match
+      mode: 'SIMPLE' | 'BEST_OF_3'
+      sets: ScoreSets
+      winnerId: string
+    }) => {
       const payload = playerScorePayload(
-        mode,
-        sets,
-        winnerId,
-        scoringMatch.team_a_id,
-        scoringMatch.team_b_id,
+        vars.mode,
+        vars.sets,
+        vars.winnerId,
+        vars.match.team_a_id,
+        vars.match.team_b_id,
       )
-      return (await tournamentApi.playerSubmitScore(scoringMatch.id, payload)).data
+      return (await tournamentApi.playerSubmitScore(vars.match.id, payload)).data
     },
-    onMutate: () => {
+    onMutate: (vars) => {
       void hapticSuccess()
-      const closed = scoringMatch
-      const closedMode = scoreSheetMode
-      const closedSets = { ...sets }
-      const closedWinner = winnerId
-      // Close sheet immediately — don't wait on Render/API latency
+      // Close sheet immediately — all data is in mutate vars (avoids null-id race)
       setScoringMatch(null)
       setScoreSheetMode('log')
       setScoreError('')
       setActionError('')
-      return { closed, closedMode, closedSets, closedWinner }
+      return {
+        closed: vars.match,
+        closedMode: scoreSheetMode,
+        closedSets: { ...vars.sets },
+        closedWinner: vars.winnerId,
+      }
     },
     onSuccess: () => {
       invalidate()
@@ -753,11 +753,8 @@ export default function PlayerLivePage() {
     t.status !== 'CANCELLED'
   const reminderNote = waitingOnDraw ? reminderPromiseCopy(t.event_date) : ''
   const matchDayLive = hasPaidEntry && (t.status === 'LIVE' || drawReady)
-  // Only hide venue board when you're actually on court - still show it while waiting to confirm
   const myOnCourt =
     hasPaidEntry && next && (next.status === 'LIVE' || next.status === 'CALLED')
-  // Pre-start: don't drown “you're in” with empty venue chrome
-  const showVenueBoard = !waitingOnDraw && !hasPendingCaptain && !isListedPartner
   const championshipMatches = allMatches.filter((m) => m.stage === 'KNOCKOUT')
   const plateMatches = allMatches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]
@@ -778,6 +775,14 @@ export default function PlayerLivePage() {
           tournamentDone: t.status === 'COMPLETED',
         })
       : null
+  // Hide other-courts board when you have your own match focus (or you're out)
+  const showVenueBoard =
+    !waitingOnDraw &&
+    !hasPendingCaptain &&
+    !isListedPartner &&
+    !myOnCourt &&
+    !playerFate &&
+    !(hasPaidEntry && next)
 
   const nextActions: NextActions = {
     onLogScore: () => next && openScoreSheet(next, { mode: 'log' }),
@@ -838,9 +843,6 @@ export default function PlayerLivePage() {
                 : 'Your next court shows here when play starts.'}
             </p>
           )}
-          {!myOnCourt && matchDayLive && (
-            <p className="pl-lead">Your next match updates live.</p>
-          )}
           {sponsors.length > 0 ? (
             <SponsorStrip sponsors={sponsors} placement="hero" compact />
           ) : null}
@@ -855,22 +857,19 @@ export default function PlayerLivePage() {
               {t.entry_fee_cents > 0
                 ? ` (${formatMoney(t.entry_fee_cents, t.currency)})`
                 : ''}{' '}
-              - pay at the desk at the venue
+              — pay at the desk
               {(mySlot === 1 || mySlot == null) ? (
                 <>
                   {' '}
-                  or <Link to={`/t/${slug}/join`}>pay online now</Link>
+                  or <Link to={`/t/${slug}/join`}>pay online</Link>
                 </>
               ) : null}
               .
             </p>
           )}
-          {dataUpdatedAt > 0 && (
-            <p className="pl-updated">
-              Updated {new Date(dataUpdatedAt).toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit' })}
-              {isFetching ? ' · refreshing…' : ''}
-            </p>
-          )}
+          {isFetching && dataUpdatedAt > 0 ? (
+            <p className="pl-updated">Refreshing…</p>
+          ) : null}
         </header>
 
         <section className="pl-next">
@@ -1035,8 +1034,8 @@ export default function PlayerLivePage() {
         {matchDayLive &&
           (myUpcoming.filter((m) => m.id !== next?.id).length > 0 ||
             myResults.length > 0 ||
-            standings.length > 0 ||
-            knockoutActive) && (
+            (knockoutActive && knockoutMatches.length > 0) ||
+            (!knockoutActive && standings.length > 0)) && (
             <nav className="pl-jump" aria-label="Jump to section">
               {myUpcoming.filter((m) => m.id !== next?.id).length > 0 && (
                 <button
@@ -1066,21 +1065,7 @@ export default function PlayerLivePage() {
                   Results
                 </button>
               )}
-              {standings.length > 0 && (
-                <button
-                  type="button"
-                  className="pl-jump-link"
-                  onClick={() =>
-                    document.getElementById('pl-groups')?.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'start',
-                    })
-                  }
-                >
-                  Groups
-                </button>
-              )}
-              {knockoutActive && knockoutMatches.length > 0 && (
+              {knockoutActive && knockoutMatches.length > 0 ? (
                 <button
                   type="button"
                   className="pl-jump-link"
@@ -1093,21 +1078,20 @@ export default function PlayerLivePage() {
                 >
                   Draw
                 </button>
-              )}
-              {showVenueBoard && (liveMatches.length > 0 || calledMatches.length > 0) && (
+              ) : standings.length > 0 ? (
                 <button
                   type="button"
                   className="pl-jump-link"
                   onClick={() =>
-                    document.getElementById('pl-venue')?.scrollIntoView({
+                    document.getElementById('pl-groups')?.scrollIntoView({
                       behavior: 'smooth',
                       block: 'start',
                     })
                   }
                 >
-                  Courts
+                  Groups
                 </button>
-              )}
+              ) : null}
             </nav>
           )}
 
@@ -1279,7 +1263,18 @@ export default function PlayerLivePage() {
             onSubmit={(e) => {
               e.preventDefault()
               setScoreError('')
+              if (!scoringMatch?.id) {
+                setScoreError('Match missing — close and try again')
+                return
+              }
               const mode = tournamentScoringMode(data?.tournament?.scoring_mode)
+              const submit = () =>
+                scoreMut.mutate({
+                  match: scoringMatch,
+                  mode,
+                  sets: { ...sets },
+                  winnerId,
+                })
               if (mode !== 'BEST_OF_3') {
                 if (!winnerId) {
                   setScoreError('Tap who won')
@@ -1289,7 +1284,7 @@ export default function PlayerLivePage() {
                   setScoreError('Score can’t be tied — change it or leave both at 0')
                   return
                 }
-                scoreMut.mutate()
+                submit()
                 return
               }
               const pairs: [number, number][] = [
@@ -1324,7 +1319,7 @@ export default function PlayerLivePage() {
                   return
                 }
               }
-              scoreMut.mutate()
+              submit()
             }}
           >
             <h2 id="pl-score-title">

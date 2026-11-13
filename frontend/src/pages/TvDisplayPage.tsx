@@ -196,14 +196,14 @@ export default function TvDisplayPage() {
       navigate(-1)
       return
     }
-    navigate(id ? `/organiser?t=${id}` : '/organiser')
+    navigate(id ? `/manage?t=${id}` : '/manage')
   }
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['display', id],
     queryFn: async () => (await tournamentApi.display(id)).data,
     enabled: !!id,
-    refetchInterval: (query) => (query.state.status === 'error' ? 4000 : 5000),
+    refetchInterval: (query) => (query.state.status === 'error' ? 2500 : 2500),
     retry: 4,
     retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 8000),
   })

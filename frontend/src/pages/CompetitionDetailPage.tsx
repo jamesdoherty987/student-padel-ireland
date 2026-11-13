@@ -131,10 +131,10 @@ export default function CompetitionDetailPage() {
   })
 
   const scoreMut = useMutation({
-    mutationFn: () =>
-      communityApi.scoreMatch(scoringMatch!.id, {
+    mutationFn: (vars: { matchId: string; winnerSide: 'A' | 'B' }) =>
+      communityApi.scoreMatch(vars.matchId, {
         ...emptySets,
-        winner_side: winnerSide,
+        winner_side: vars.winnerSide,
         status: 'AWAITING_CONFIRM',
       }),
     onSuccess: () => {
@@ -810,11 +810,15 @@ export default function CompetitionDetailPage() {
               onSubmit={(e) => {
                 e.preventDefault()
                 setScoreError('')
+                if (!scoringMatch?.id) {
+                  setScoreError('Match missing — close and try again')
+                  return
+                }
                 if (winnerSide !== 'A' && winnerSide !== 'B') {
                   setScoreError('Pick who won the match')
                   return
                 }
-                scoreMut.mutate()
+                scoreMut.mutate({ matchId: scoringMatch.id, winnerSide })
               }}
             >
               <h2 id="score-modal-title">Who won?</h2>

@@ -16,7 +16,7 @@ import {
   type AdminTournamentEntries,
   type AdminUser,
   type AdminUserDetail,
-  type OrganiserDashRow,
+  type ManageDashRow,
   type Tournament,
 } from '../services/api'
 import {
@@ -27,7 +27,7 @@ import {
   statusBadgeClass,
   statusLabel,
 } from '../utils/format'
-import './Organiser.css'
+import './ManageEvent.css'
 import './Admin.css'
 
 type AdminTab = 'tournaments' | 'accounts'
@@ -63,12 +63,12 @@ export default function AdminDashboard() {
   const toastTimer = useRef<number | null>(null)
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['organiser-dashboard'],
-    queryFn: async () => (await platformApi.organiserDashboard()).data,
+    queryKey: ['manage-dashboard'],
+    queryFn: async () => (await platformApi.manageDashboard()).data,
     enabled: isAdmin,
   })
 
-  const allRows: OrganiserDashRow[] = data?.tournaments || []
+  const allRows: ManageDashRow[] = data?.tournaments || []
   const privateCount = allRows.filter((r) => !r.tournament.is_official).length
   const rows = useMemo(
     () => (showPrivate ? allRows : allRows.filter((r) => r.tournament.is_official !== false)),
@@ -100,7 +100,7 @@ export default function AdminDashboard() {
   const statusMut = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => tournamentApi.update(id, { status }),
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       qc.invalidateQueries({ queryKey: ['tournaments'] })
       showToast(`Status → ${statusLabel(vars.status)}`)
     },
@@ -110,7 +110,7 @@ export default function AdminDashboard() {
   const deleteMut = useMutation({
     mutationFn: (id: string) => tournamentApi.delete(id),
     onSuccess: (res, id) => {
-      qc.setQueryData(['organiser-dashboard'], (old: unknown) => {
+      qc.setQueryData(['manage-dashboard'], (old: unknown) => {
         const data = old as { tournaments?: Array<{ tournament: { id: string } }> } | undefined
         if (!data?.tournaments) return old
         return {
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
           tournaments: data.tournaments.filter((row) => row.tournament.id !== id),
         }
       })
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       qc.invalidateQueries({ queryKey: ['tournaments'] })
       showToast(`Deleted "${res.data.deleted}"`)
     },
@@ -297,7 +297,7 @@ export default function AdminDashboard() {
           onToast={showToast}
           onCreated={(msg, id) => {
             showToast(msg)
-            if (id) navigate(`/organiser?t=${id}`)
+            if (id) navigate(`/manage?t=${id}`)
           }}
         />
       )}
@@ -334,7 +334,7 @@ function AdminTournamentCard({
   onDelete,
   onCopied,
 }: {
-  row: OrganiserDashRow
+  row: ManageDashRow
   busy: boolean
   onOpenRegistration: () => void
   onEdit: () => void
@@ -379,7 +379,7 @@ function AdminTournamentCard({
       </div>
 
       <div className="admin-actions">
-        <Link to={`/organiser?t=${t.id}`} className="btn btn-primary btn-sm">
+        <Link to={`/manage?t=${t.id}`} className="btn btn-primary btn-sm">
           Manage event
         </Link>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onEntries}>
@@ -473,7 +473,7 @@ function AdminEntriesModal({
     mutationFn: (userId: string) => adminApi.removePlayerFromTournament(tournament.id, userId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-tournament-entries', tournament.id] })
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       qc.invalidateQueries({ queryKey: ['admin-users'] })
       onToast('Player removed from tournament')
     },
@@ -771,7 +771,7 @@ function AdminAccountsPanel({ onToast }: { onToast: (msg: string) => void }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-user', selectedId] })
       qc.invalidateQueries({ queryKey: ['admin-users'] })
-      qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       onToast('Removed from tournament')
     },
     onError: (e: unknown) => onToast(apiErrorMessage(e, 'Could not remove from tournament')),

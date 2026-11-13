@@ -414,7 +414,7 @@ export default function TournamentDetailPage() {
             </Link>
           )}
           {isOps && (
-            <Link to={`/organiser?t=${tournament.id}`} className="btn btn-dark">
+            <Link to={`/manage?t=${tournament.id}`} className="btn btn-dark">
               Manage event
             </Link>
           )}

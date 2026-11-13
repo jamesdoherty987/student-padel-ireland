@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, type ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmDialogProvider } from './components/ConfirmDialog'
@@ -19,6 +19,13 @@ function WebOnly({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/** Old /organiser bookmarks → /manage (admin day-of hub). */
+function LegacyOrganiserRedirect() {
+  const [params] = useSearchParams()
+  const t = params.get('t')
+  return <Navigate to={t ? `/manage?t=${encodeURIComponent(t)}` : '/manage'} replace />
+}
+
 // Landing stays eager - first paint for web home. Everything else is code-split.
 import Landing from './pages/Landing'
 import NativeWelcomePage from './pages/NativeWelcomePage'
@@ -33,7 +40,7 @@ const JoinByCodePage = lazy(() => import('./pages/JoinByCodePage'))
 const PlayerLivePage = lazy(() => import('./pages/PlayerLivePage'))
 const TvDisplayPage = lazy(() => import('./pages/TvDisplayPage'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
-const OrganiserDashboard = lazy(() => import('./pages/OrganiserDashboard'))
+const ManageEventPage = lazy(() => import('./pages/ManageEventPage'))
 const RankingsPage = lazy(() => import('./pages/RankingsPage'))
 const PlayerProfilePage = lazy(() => import('./pages/PlayerProfilePage'))
 const CommunityPage = lazy(() => import('./pages/CommunityPage'))
@@ -231,13 +238,14 @@ export default function App() {
                   }
                 />
                 <Route
-                  path="/organiser"
+                  path="/manage"
                   element={
                     <ProtectedRoute roles={['ADMIN']}>
-                      <OrganiserDashboard />
+                      <ManageEventPage />
                     </ProtectedRoute>
                   }
                 />
+                <Route path="/organiser" element={<LegacyOrganiserRedirect />} />
                 <Route path="/rankings" element={<RankingsPage />} />
                 <Route path="/community" element={<CommunityPage />} />
                 <Route path="/community/join/:code" element={<JoinCompetitionPage />} />

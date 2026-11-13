@@ -14,7 +14,7 @@ import './Tournament.css'
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'official', label: 'Official' },
-  { id: 'mine', label: 'Owned by me' },
+  { id: 'mine', label: 'My events' },
   { id: 'open', label: 'Open to join' },
   { id: 'live', label: 'Live' },
   { id: 'upcoming', label: 'Upcoming' },
@@ -135,7 +135,7 @@ export default function TournamentsPage() {
     const list = tournaments
       .filter((t) => {
         if (t.status !== 'DRAFT') return true
-        // Owners still see their drafts under Owned by me / All
+        // Admins still see their drafts under My events / All
         return !!user && (t.organiser_id === user.id || !!t.can_manage)
       })
       .map((t) => ({
@@ -356,7 +356,7 @@ export default function TournamentsPage() {
           onCreated={(msg, id) => {
             showToast(msg)
             closeCreate()
-            if (id) navigate(`/organiser?t=${id}`)
+            if (id) navigate(`/manage?t=${id}`)
           }}
         />
       )}

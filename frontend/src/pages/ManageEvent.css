@@ -942,6 +942,57 @@ html.native-app.has-native-tabs .org-toast {
   }
 }
 
+.org-now-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.org-now-top strong {
+  font-size: 1.05rem;
+}
+
+.org-now-vs {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--court-deep);
+  overflow-wrap: anywhere;
+}
+
+.org-checkin-summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+
+.org-checkin-summary::-webkit-details-marker {
+  display: none;
+}
+
+.org-checkin > *:not(summary) {
+  margin-top: 0.85rem;
+}
+
+.org-action-more {
+  min-width: 2.25rem;
+  letter-spacing: 0.08em;
+}
+
+.org-now-card.is-tap,
+.org-row.is-tap,
+.org-court-card.is-tap {
+  cursor: pointer;
+}
+
+.org-now-card.is-tap:focus-visible,
+.org-row.is-tap:focus-visible,
+.org-court-card.is-tap:focus-visible {
+  outline: 2px solid var(--court-deep);
+  outline-offset: 2px;
+}
+
 .org-now-card {
   display: grid;
   gap: 0.35rem;

@@ -102,7 +102,7 @@ export default function LeaveTournamentButton({
         qc.invalidateQueries({ queryKey: ['tournaments'] }),
         qc.invalidateQueries({ queryKey: ['matches', slug] }),
         qc.invalidateQueries({ queryKey: ['org-teams'] }),
-        qc.invalidateQueries({ queryKey: ['organiser-dashboard'] }),
+        qc.invalidateQueries({ queryKey: ['manage-dashboard'] }),
       ])
       onLeft?.()
     } catch (err: unknown) {
