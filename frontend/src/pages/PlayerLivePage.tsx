@@ -519,6 +519,8 @@ export default function PlayerLivePage() {
   const [winnerId, setWinnerId] = useState('')
   const [scoreError, setScoreError] = useState('')
   const [actionError, setActionError] = useState('')
+  /** Holds the post-submit match until the server view agrees — stops poll/refetch flicker. */
+  const [scoreHold, setScoreHold] = useState<Match | null>(null)
   useKeyboardInset(!!scoringMatch)
 
   useEffect(() => {
@@ -567,6 +569,13 @@ export default function PlayerLivePage() {
     void qc.invalidateQueries({ queryKey: ['matches', slug] })
   }
 
+  const softInvalidateSoon = () => {
+    window.setTimeout(() => {
+      void qc.invalidateQueries({ queryKey: ['player-view', slug] })
+      void qc.invalidateQueries({ queryKey: ['matches', slug] })
+    }, 900)
+  }
+
   useEffect(() => {
     if (searchParams.get('pay_cancelled') !== '1') return
     setPayNote('Online payment was cancelled. You can still pay at the venue, or try again below.')
@@ -574,6 +583,20 @@ export default function PlayerLivePage() {
     next.delete('pay_cancelled')
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
+
+  // Drop the hold once the live view has the pending score for real
+  useEffect(() => {
+    if (!scoreHold) return
+    const n = data?.next_match as Match | null | undefined
+    if (
+      n &&
+      n.id === scoreHold.id &&
+      n.status === 'AWAITING_CONFIRM' &&
+      n.score_submitted_by_me
+    ) {
+      setScoreHold(null)
+    }
+  }, [data?.next_match, scoreHold])
 
   useEffect(() => {
     if (!scoringMatch) return
@@ -611,8 +634,12 @@ export default function PlayerLivePage() {
       )
       return (await tournamentApi.playerSubmitScore(vars.match.id, payload)).data
     },
-    onMutate: (vars) => {
+    onMutate: async (vars) => {
       void hapticSuccess()
+      // Kill in-flight polls so they can't overwrite the waiting card with stale data
+      await qc.cancelQueries({ queryKey: ['player-view', slug] })
+      await qc.cancelQueries({ queryKey: ['matches', slug] })
+
       // Close sheet immediately — all data is in mutate vars (avoids null-id race)
       setScoringMatch(null)
       setScoreSheetMode('log')
@@ -641,6 +668,7 @@ export default function PlayerLivePage() {
       }
       const prevView = qc.getQueryData(['player-view', slug])
       const prevMatches = qc.getQueryData(['matches', slug])
+      setScoreHold(pending)
       qc.setQueryData(['player-view', slug], (old) => patchMatchInPlayerView(old, pending))
       qc.setQueryData(['matches', slug], (old) => patchMatchInList(old, pending))
 
@@ -654,12 +682,21 @@ export default function PlayerLivePage() {
       }
     },
     onSuccess: (m) => {
-      // Server match (with viewer flags) replaces optimistic patch; no wait on refetch
-      qc.setQueryData(['player-view', slug], (old) => patchMatchInPlayerView(old, m))
-      qc.setQueryData(['matches', slug], (old) => patchMatchInList(old, m))
-      invalidate()
+      const held: Match = {
+        ...m,
+        can_i_score: false,
+        needs_my_confirm: false,
+        score_submitted_by_me: true,
+        status: m.status || 'AWAITING_CONFIRM',
+      }
+      setScoreHold(held)
+      qc.setQueryData(['player-view', slug], (old) => patchMatchInPlayerView(old, held))
+      qc.setQueryData(['matches', slug], (old) => patchMatchInList(old, held))
+      // Delayed refresh — immediate invalidate races with Render lag and snaps back to Score
+      softInvalidateSoon()
     },
     onError: (err, _vars, ctx) => {
+      setScoreHold(null)
       if (ctx?.prevView !== undefined) qc.setQueryData(['player-view', slug], ctx.prevView)
       if (ctx?.prevMatches !== undefined) qc.setQueryData(['matches', slug], ctx.prevMatches)
       if (ctx?.closed) {
@@ -793,8 +830,8 @@ export default function PlayerLivePage() {
     })
   }, [allMatches, data?.my_upcoming, data?.my_results, data?.next_match])
 
-  // Wait for view + matches together so groups/bracket don’t flash the wrong stage
-  if (isLoading || !viewFetched || !matchesFetched) {
+  // Show next-match as soon as player-view is ready (don’t wait on full fixture list)
+  if (isLoading || !viewFetched) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -833,7 +870,29 @@ export default function PlayerLivePage() {
   }
 
   const t = data.tournament
-  const next = data.next_match as Match | null
+  const rawNext = data.next_match as Match | null
+  // Keep waiting card stable while polls/refetch catch up after submit
+  const next: Match | null = (() => {
+    if (!scoreHold) return rawNext
+    if (rawNext && rawNext.id !== scoreHold.id) return rawNext
+    if (
+      rawNext &&
+      rawNext.status === 'AWAITING_CONFIRM' &&
+      (rawNext.score_submitted_by_me || rawNext.needs_my_confirm)
+    ) {
+      return rawNext
+    }
+    return { ...(rawNext || scoreHold), ...scoreHold }
+  })()
+  const scoreSyncing =
+    scoreMut.isPending ||
+    (!!scoreHold &&
+      !(
+        rawNext &&
+        rawNext.id === scoreHold.id &&
+        rawNext.status === 'AWAITING_CONFIRM' &&
+        !!rawNext.score_submitted_by_me
+      ))
   const myTeam = data.my_team as {
     id: string
     name: string
@@ -1148,13 +1207,21 @@ export default function PlayerLivePage() {
             </div>
           ) : next && hasPaidEntry ? (
             <>
-              <NextMatchCard
-                next={next}
-                slug={slug}
-                myTeamId={myTeamId}
-                partnerLabel={partnerLabel}
-                actions={nextActions}
-              />
+              <div className={`pl-next-wrap${scoreSyncing ? ' is-syncing' : ''}`}>
+                {scoreSyncing ? (
+                  <div className="pl-sync" role="status" aria-live="polite">
+                    <span className="pl-sync-spinner" aria-hidden />
+                    <span>Updating score…</span>
+                  </div>
+                ) : null}
+                <NextMatchCard
+                  next={next}
+                  slug={slug}
+                  myTeamId={myTeamId}
+                  partnerLabel={partnerLabel}
+                  actions={nextActions}
+                />
+              </div>
               {actionError && <p className="form-error pl-action-error">{actionError}</p>}
               {leaveBtn && <div style={{ marginTop: 12 }}>{leaveBtn}</div>}
             </>
@@ -1250,7 +1317,7 @@ export default function PlayerLivePage() {
         )}
 
         {/* Group tables while still in groups — hide once knockout seats fill */}
-        {!knockoutActive && standings.length > 0 && (
+        {matchesFetched && !knockoutActive && standings.length > 0 && (
           <div id="pl-groups">
             {standings.map((g) => (
               <section key={g.group} className="pl-block">
@@ -1270,7 +1337,7 @@ export default function PlayerLivePage() {
         )}
 
         {/* Bracket is KNOCKOUT / PLATE only — never group fixtures */}
-        {knockoutActive && knockoutMatches.length > 0 && (
+        {matchesFetched && knockoutActive && knockoutMatches.length > 0 && (
           <section className="pl-block pl-bracket" id="pl-draw">
             {championshipMatches.length > 0 && (
               <TournamentBracket

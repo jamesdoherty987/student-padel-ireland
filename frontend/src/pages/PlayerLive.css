@@ -751,6 +751,52 @@ html.native-app .pl-page {
   box-shadow: 0 0 0 3px rgba(200, 230, 0, 0.4);
 }
 
+.pl-next-wrap {
+  position: relative;
+}
+
+.pl-next-wrap.is-syncing .pl-next-card {
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.pl-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0 0 0.55rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(11, 61, 46, 0.08);
+  color: var(--court-deep);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.pl-sync-spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  border: 2px solid rgba(11, 61, 46, 0.2);
+  border-top-color: var(--court-deep);
+  animation: pl-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pl-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pl-sync-spinner {
+    animation: none;
+    border-top-color: rgba(11, 61, 46, 0.2);
+    border-right-color: var(--court-deep);
+  }
+}
+
 .pl-fate {
   text-align: left;
 }
