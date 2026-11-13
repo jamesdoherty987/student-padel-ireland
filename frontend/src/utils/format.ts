@@ -303,7 +303,7 @@ export function statusLabel(status: string) {
     CANCELLED: 'Cancelled',
     OPEN: 'Open',
     SCHEDULED: 'Scheduled',
-    CALLED: 'Called',
+    CALLED: 'Queued',
     AWAITING_CONFIRM: 'Awaiting confirm',
     WALKOVER: 'Walkover',
   }

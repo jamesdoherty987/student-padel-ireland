@@ -461,6 +461,8 @@ class MatchMove(BaseModel):
     status: Optional[MatchStatus] = None
     # When calling a match, email players (default on). Score-entry path can set false.
     notify_players: Optional[bool] = None
+    # Email players only — do not change match status (preferred day-of “Notify”).
+    notify_only: Optional[bool] = None
 
 
 class AnnouncementCreate(BaseModel):

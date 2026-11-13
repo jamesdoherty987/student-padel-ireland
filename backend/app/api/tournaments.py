@@ -3300,6 +3300,30 @@ def move_match(
     prev_status = m.status
     data = body.model_dump(exclude_unset=True)
     notify_players = data.pop("notify_players", None)
+    notify_only = bool(data.pop("notify_only", None))
+
+    # Notify-only: email players; do not put the match in a special “Called” state
+    if notify_only:
+        if not m.team_a_id or not m.team_b_id:
+            raise HTTPException(400, "Both teams must be set before notifying players")
+        if m.status in (
+            MatchStatus.COMPLETED.value,
+            MatchStatus.WALKOVER.value,
+            MatchStatus.CANCELLED.value,
+        ):
+            raise HTTPException(400, "This match is already finished")
+        # Clear legacy Called state so the board stays simple (queued → scored)
+        if m.status == MatchStatus.CALLED.value:
+            m.status = MatchStatus.SCHEDULED.value
+            db.commit()
+            db.refresh(m)
+        try:
+            _notify_call_to_court(db, t, m)
+        except Exception:
+            logging.getLogger(__name__).exception("Call-to-court email failed for match %s", m.id)
+            raise HTTPException(502, "Could not send player emails — check email is configured")
+        return _match_out(db, m)
+
     if "status" in data and data["status"] is not None:
         data["status"] = data["status"].value
     for k, v in data.items():

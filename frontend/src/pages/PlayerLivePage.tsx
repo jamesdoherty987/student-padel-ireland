@@ -515,7 +515,7 @@ export default function PlayerLivePage() {
   const scoreMut = useMutation({
     mutationFn: async (vars: {
       match: Match
-      mode: 'SIMPLE' | 'BEST_OF_3'
+      mode: 'SIMPLE' | 'BEST_OF_3' | 'LEGACY'
       sets: ScoreSets
       winnerId: string
     }) => {

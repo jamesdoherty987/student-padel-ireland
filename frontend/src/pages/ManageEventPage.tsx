@@ -697,19 +697,9 @@ export default function ManageEventPage() {
       data: Record<string, unknown>
       silent?: boolean
     }) => tournamentApi.moveMatch(matchId, data),
-    onMutate: async (vars) => {
+    onMutate: async () => {
       void hapticLight()
       setMoveMatch(null)
-      if (vars.data?.status === 'CALLED' && slug) {
-        await qc.cancelQueries({ queryKey: ['org-matches', slug] })
-        const prev = qc.getQueryData<Match[]>(['org-matches', slug])
-        qc.setQueryData<Match[]>(['org-matches', slug], (old) =>
-          (old || []).map((m) =>
-            m.id === vars.matchId ? { ...m, status: 'CALLED' as Match['status'] } : m,
-          ),
-        )
-        return { prev }
-      }
       return {}
     },
     onSuccess: (_data, vars) => {
@@ -720,18 +710,14 @@ export default function ManageEventPage() {
         qc.invalidateQueries({ queryKey: ['matches', slug] })
       }
       if (!vars.silent) {
-        const st = vars.data?.status
-        showToast(
-          st === 'CALLED'
-            ? 'Called — players notified'
-            : st === 'SCHEDULED'
-              ? 'Call undone'
-              : 'Updated',
-        )
+        if (vars.data?.notify_only) {
+          showToast('Players emailed')
+        } else {
+          showToast('Updated')
+        }
       }
     },
-    onError: (e: unknown, _vars, ctx) => {
-      if (ctx?.prev && slug) qc.setQueryData(['org-matches', slug], ctx.prev)
+    onError: (e: unknown) => {
       showToast(apiErrorMessage(e, 'Could not update match'))
     },
   })
@@ -1297,42 +1283,29 @@ export default function ManageEventPage() {
     const locked = !!m.ratings_applied
     const done = m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED'
     const pending = m.status === 'AWAITING_CONFIRM'
+    const canNotify = !done && !!(m.team_a_id && m.team_b_id)
     return (
       <div className="org-match-actions">
         {!compact && (
           <span className={`badge ${statusBadgeClass(m.status)}`}>
-            {m.status === 'CALLED'
-              ? 'Called'
-              : m.status === 'AWAITING_CONFIRM'
-                ? 'Confirm'
+            {m.status === 'AWAITING_CONFIRM'
+              ? 'Confirm'
+              : m.status === 'CALLED'
+                ? 'Queued'
                 : m.status.replace(/_/g, ' ')}
           </span>
         )}
-        {m.status === 'SCHEDULED' && (
+        {canNotify && (
           <button
             type="button"
             className="btn btn-ghost btn-sm"
             disabled={moveMut.isPending}
-            title="Notify players to this court"
-            onClick={() => moveMut.mutate({ matchId: m.id, data: { status: 'CALLED' } })}
-          >
-            Call
-          </button>
-        )}
-        {m.status === 'CALLED' && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            disabled={moveMut.isPending}
-            title="Undo call — put back in queue"
+            title="Email players that their match is ready — does not change the match"
             onClick={() =>
-              moveMut.mutate({
-                matchId: m.id,
-                data: { status: 'SCHEDULED', notify_players: false },
-              })
+              moveMut.mutate({ matchId: m.id, data: { notify_only: true } })
             }
           >
-            Uncall
+            Notify
           </button>
         )}
         {!done && (
@@ -2159,9 +2132,7 @@ export default function ManageEventPage() {
                                 ? 'Fix score'
                                 : slot.kind === 'live'
                                   ? 'Live'
-                                  : slot.kind === 'called'
-                                    ? 'Called'
-                                    : 'Next'}
+                                  : 'Next'}
                             </span>
                           </div>
                           <p className="org-now-round">{knockoutRoundLabel(m.round, m.stage)}</p>
