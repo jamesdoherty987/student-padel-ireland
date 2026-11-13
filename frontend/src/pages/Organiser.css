@@ -925,6 +925,82 @@ html.native-app.has-native-tabs .org-toast {
   background: rgba(200, 230, 0, 0.12);
 }
 
+.org-now-card.is-attention {
+  border-color: rgba(234, 88, 12, 0.55);
+  background: rgba(234, 88, 12, 0.08);
+}
+
+.org-now-card.is-attention .org-now-kicker {
+  color: #c2410c;
+}
+
+.org-pulse {
+  padding: 0.75rem 0.9rem;
+}
+
+.org-pulse-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.9rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.org-pulse-row strong {
+  color: var(--court-deep);
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.2rem;
+}
+
+.org-pulse-ok {
+  margin-left: auto;
+  font-weight: 700;
+  color: #166534;
+}
+
+.org-pulse-warn {
+  margin-left: auto;
+  font-weight: 800;
+  color: #c2410c;
+}
+
+.org-attention {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.org-attention li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(234, 88, 12, 0.28);
+  border-radius: 10px;
+  background: rgba(234, 88, 12, 0.06);
+}
+
+.org-attention li strong {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--court-deep);
+}
+
+.org-attention li span {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 16rem;
+}
+
 .org-now-kicker {
   font-size: 0.72rem;
   font-weight: 800;

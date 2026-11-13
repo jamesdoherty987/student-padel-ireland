@@ -12,6 +12,7 @@ import GenerateDrawModal from '../components/GenerateDrawModal'
 import '../components/ScoreSheet.css'
 import { useAuth } from '../context/AuthContext'
 import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
+import { hapticLight, hapticSuccess } from '../native/haptics'
 import { publicPathUrl } from '../native/platform'
 import {
   apiErrorMessage,
@@ -36,7 +37,6 @@ import {
   formatTime,
   statusBadgeClass,
   statusLabel,
-  tournamentFormatSummary,
 } from '../utils/format'
 import { mediaUrl } from '../utils/media'
 import './Organiser.css'
@@ -238,7 +238,7 @@ export default function OrganiserDashboard() {
     queryKey: ['org-matches', slug],
     queryFn: async () => (await tournamentApi.matches(slug!)).data,
     enabled: !!slug && canOrganise,
-    refetchInterval: 10000,
+    refetchInterval: 6000,
   })
 
   const { data: tournamentDetail } = useQuery({
@@ -555,9 +555,16 @@ export default function OrganiserDashboard() {
         force: scoreForm.force || !!scoreMatch?.ratings_applied,
       })
     },
-    onSuccess: () => {
+    onMutate: () => {
+      void hapticSuccess()
+      // Close sheet immediately so the desk never waits on the network
+      const closed = scoreMatch
       setScoreMatch(null)
       setScoreError('')
+      showToast('Saving…')
+      return { closed }
+    },
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       qc.invalidateQueries({ queryKey: ['rankings'] })
       qc.invalidateQueries({ queryKey: ['player-view'] })
@@ -568,9 +575,12 @@ export default function OrganiserDashboard() {
       }
       showToast('Score saved')
     },
-    onError: (e: unknown) => {
+    onError: (e: unknown, _vars, ctx) => {
       const msg = apiErrorMessage(e, 'Could not save score')
-      setScoreError(msg)
+      if (ctx?.closed) {
+        setScoreMatch(ctx.closed)
+        setScoreError(msg)
+      }
       showToast(msg)
     },
   })
@@ -649,8 +659,22 @@ export default function OrganiserDashboard() {
       data: Record<string, unknown>
       silent?: boolean
     }) => tournamentApi.moveMatch(matchId, data),
-    onSuccess: (_data, vars) => {
+    onMutate: async (vars) => {
+      void hapticLight()
       setMoveMatch(null)
+      if (vars.data?.status === 'CALLED' && slug) {
+        await qc.cancelQueries({ queryKey: ['org-matches', slug] })
+        const prev = qc.getQueryData<Match[]>(['org-matches', slug])
+        qc.setQueryData<Match[]>(['org-matches', slug], (old) =>
+          (old || []).map((m) =>
+            m.id === vars.matchId ? { ...m, status: 'CALLED' as Match['status'] } : m,
+          ),
+        )
+        return { prev }
+      }
+      return {}
+    },
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       qc.invalidateQueries({ queryKey: ['player-view'] })
       if (slug) {
@@ -659,10 +683,13 @@ export default function OrganiserDashboard() {
       }
       if (!vars.silent) {
         const st = vars.data?.status
-        showToast(st === 'CALLED' ? 'Called to court — players notified' : 'Match updated')
+        showToast(st === 'CALLED' ? 'Called — players notified' : 'Updated')
       }
     },
-    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not update match')),
+    onError: (e: unknown, _vars, ctx) => {
+      if (ctx?.prev && slug) qc.setQueryData(['org-matches', slug], ctx.prev)
+      showToast(apiErrorMessage(e, 'Could not update match'))
+    },
   })
 
   const checkInMut = useMutation({
@@ -671,16 +698,24 @@ export default function OrganiserDashboard() {
         player1_present: present,
         player2_present: present,
       }),
+    onMutate: async (vars) => {
+      void hapticLight()
+      await qc.cancelQueries({ queryKey: ['org-teams', tid] })
+      const prev = qc.getQueryData<TournamentTeam[]>(['org-teams', tid])
+      qc.setQueryData<TournamentTeam[]>(['org-teams', tid], (old) =>
+        (old || []).map((t) => (t.id === vars.teamId ? { ...t, checked_in: vars.present } : t)),
+      )
+      return { prev }
+    },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['org-teams'] })
       qc.invalidateQueries({ queryKey: ['organiser-dashboard'] })
-      if (vars.present) {
-        showToast(isSingles ? 'Player checked in' : 'Team checked in')
-      } else {
-        showToast(isSingles ? 'Check-in undone' : 'Team check-in undone')
-      }
+      showToast(vars.present ? 'Checked in' : 'Undone')
     },
-    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Check-in failed')),
+    onError: (e: unknown, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['org-teams', tid], ctx.prev)
+      showToast(apiErrorMessage(e, 'Check-in failed'))
+    },
   })
 
   const remindMut = useMutation({
@@ -835,6 +870,106 @@ export default function OrganiserDashboard() {
         return hay.includes(q)
       })
   }, [checkInPool, checkInFilter, checkInQuery])
+
+  /** Desk pulse: progress + anything that needs a fix. */
+  const dayOps = useMemo(() => {
+    const done = matches.filter(
+      (m) => m.status === 'COMPLETED' || m.status === 'WALKOVER',
+    ).length
+    const live = matches.filter((m) => m.status === 'LIVE').length
+    const called = matches.filter((m) => m.status === 'CALLED').length
+    const pendingConfirm = matches.filter((m) => m.status === 'AWAITING_CONFIRM')
+    const needsCourt = matches.filter(
+      (m) =>
+        (m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'AWAITING_CONFIRM') &&
+        m.court_number == null &&
+        m.team_a_id &&
+        m.team_b_id,
+    )
+    const waitingTeams = matches.filter(
+      (m) =>
+        (m.status === 'SCHEDULED' || m.status === 'CALLED' || m.status === 'LIVE') &&
+        (!m.team_a_id || !m.team_b_id),
+    )
+    const open =
+      matches.filter(
+        (m) =>
+          m.status === 'SCHEDULED' ||
+          m.status === 'CALLED' ||
+          m.status === 'LIVE' ||
+          m.status === 'AWAITING_CONFIRM',
+      ).length
+    const collectFees = orgTeams.filter(
+      (t) => t.payment_status === 'PAID' && t.payment_via === 'pay_on_arrival' && !t.withdrawn,
+    )
+    const attention: Array<{
+      id: string
+      label: string
+      detail: string
+      kind: 'fix' | 'move' | 'checkin' | 'entries'
+      match?: Match
+    }> = []
+
+    for (const m of pendingConfirm) {
+      attention.push({
+        id: `confirm-${m.id}`,
+        label: 'Confirm score',
+        detail: `${m.team_a_name || 'TBD'} vs ${m.team_b_name || 'TBD'}`,
+        kind: 'fix',
+        match: m,
+      })
+    }
+    for (const m of needsCourt) {
+      attention.push({
+        id: `court-${m.id}`,
+        label: 'Needs court',
+        detail: `${m.team_a_name || 'TBD'} vs ${m.team_b_name || 'TBD'}`,
+        kind: 'move',
+        match: m,
+      })
+    }
+    for (const m of waitingTeams.slice(0, 4)) {
+      attention.push({
+        id: `teams-${m.id}`,
+        label: 'Waiting on teams',
+        detail: `${m.round.replace(/_/g, ' ')} · ${courtLabel(m.court_name, m.court_number)}`,
+        kind: 'move',
+        match: m,
+      })
+    }
+    if (awaitingCheckInCount > 0 && (active?.tournament.status === 'LIVE' || fixturesExist)) {
+      attention.push({
+        id: 'checkin',
+        label: 'Check-in',
+        detail: `${awaitingCheckInCount} still out`,
+        kind: 'checkin',
+      })
+    }
+    if (collectFees.length > 0) {
+      attention.push({
+        id: 'fees',
+        label: 'Collect fees',
+        detail: `${collectFees.length} at venue`,
+        kind: 'entries',
+      })
+    }
+
+    return {
+      done,
+      live,
+      called,
+      open,
+      total: matches.length,
+      attention: attention.slice(0, 8),
+      allClear: attention.length === 0 && matches.length > 0,
+    }
+  }, [
+    matches,
+    orgTeams,
+    awaitingCheckInCount,
+    active?.tournament.status,
+    fixturesExist,
+  ])
 
   /** One card per court: LIVE beats CALLED beats next SCHEDULED. */
   const courtsideNow = useMemo(() => {
@@ -1836,6 +1971,87 @@ export default function OrganiserDashboard() {
 
               {orgPanel === 'day-of' && (
               <>
+              {matches.length > 0 && (
+                <section className="org-section org-pulse" aria-label="Day progress">
+                  <div className="org-pulse-row">
+                    <span>
+                      <strong>{dayOps.done}</strong> done
+                    </span>
+                    <span>
+                      <strong>{dayOps.live}</strong> live
+                    </span>
+                    <span>
+                      <strong>{dayOps.called}</strong> called
+                    </span>
+                    <span>
+                      <strong>{dayOps.open}</strong> open
+                    </span>
+                    {dayOps.allClear ? (
+                      <span className="org-pulse-ok">All clear</span>
+                    ) : dayOps.attention.length > 0 ? (
+                      <span className="org-pulse-warn">{dayOps.attention.length} to fix</span>
+                    ) : null}
+                  </div>
+                  {dayOps.attention.length > 0 && (
+                    <ul className="org-attention">
+                      {dayOps.attention.map((item) => (
+                        <li key={item.id}>
+                          <div>
+                            <strong>{item.label}</strong>
+                            <span>{item.detail}</span>
+                          </div>
+                          {item.kind === 'fix' && item.match ? (
+                            <button
+                              type="button"
+                              className="btn btn-dark btn-sm"
+                              onClick={() => openScore(item.match!)}
+                            >
+                              Fix
+                            </button>
+                          ) : null}
+                          {item.kind === 'move' && item.match ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => openMove(item.match!)}
+                            >
+                              Move
+                            </button>
+                          ) : null}
+                          {item.kind === 'checkin' ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                setCheckInFilter('out')
+                                document.getElementById('org-checkin')?.scrollIntoView({
+                                  behavior: 'smooth',
+                                  block: 'start',
+                                })
+                              }}
+                            >
+                              Open
+                            </button>
+                          ) : null}
+                          {item.kind === 'entries' ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                setPaymentFilter('owing')
+                                setOrgPanel('registration')
+                              }}
+                            >
+                              Entries
+                            </button>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </section>
+              )}
+
               {courtsideNow.length > 0 && (
                 <section className="org-section org-now-board">
                   <div className="org-section-head">
@@ -1849,17 +2065,23 @@ export default function OrganiserDashboard() {
                         <div
                           key={slot.courtKey}
                           className={`org-now-card ${
-                            slot.kind === 'live' ? 'is-live' : slot.kind === 'called' ? 'is-called' : ''
+                            m.status === 'AWAITING_CONFIRM'
+                              ? 'is-attention'
+                              : slot.kind === 'live'
+                                ? 'is-live'
+                                : slot.kind === 'called'
+                                  ? 'is-called'
+                                  : ''
                           }`}
                         >
                           <span className="org-now-kicker">
-                            {slot.kind === 'live'
-                              ? 'Live'
-                              : slot.kind === 'called'
-                                ? m.status === 'AWAITING_CONFIRM'
-                                  ? 'Confirm'
-                                  : 'Called'
-                                : 'Next'}
+                            {m.status === 'AWAITING_CONFIRM'
+                              ? 'Needs fix'
+                              : slot.kind === 'live'
+                                ? 'Live'
+                                : slot.kind === 'called'
+                                  ? 'Called'
+                                  : 'Next'}
                           </span>
                           <strong>{slot.label}</strong>
                           <p>
@@ -2061,7 +2283,11 @@ export default function OrganiserDashboard() {
               </section>
 
               {checkInPool.length > 0 && (
-                <details className="org-section org-checkin" open={awaitingCheckInCount > 0}>
+                <details
+                  id="org-checkin"
+                  className="org-section org-checkin"
+                  open={awaitingCheckInCount > 0}
+                >
                   <summary className="org-section-head org-checkin-summary">
                     <h2>Check-in</h2>
                     <span className="org-checkin-count">

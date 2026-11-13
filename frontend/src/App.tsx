@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmDialogProvider } from './components/ConfirmDialog'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import NativeTabBar from './components/NativeTabBar'
+import OfflineBanner from './components/OfflineBanner'
 import RouteSeoFallback from './components/RouteSeoFallback'
 import { NativeDeepLinkRouter } from './native/NativeDeepLinkRouter'
 import { apiBaseUrl, isNativeApp } from './native/platform'
@@ -179,6 +180,7 @@ export default function App() {
             <ScrollToTop />
             <NativeDeepLinkRouter />
             <RouteSeoFallback />
+            <OfflineBanner />
             <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/" element={<RootRoute />} />

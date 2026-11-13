@@ -731,6 +731,59 @@ html.native-app .pl-page {
   box-shadow: 0 0 0 3px rgba(200, 230, 0, 0.4);
 }
 
+.pl-fate {
+  text-align: left;
+}
+
+.pl-fate--champion {
+  background: linear-gradient(160deg, #0b3d2e 0%, #146644 45%, #8a6a00 120%);
+  box-shadow: 0 0 0 3px rgba(200, 230, 0, 0.45);
+}
+
+.pl-fate--runner {
+  background: linear-gradient(160deg, #0b3d2e 0%, #1a4d3a 100%);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+
+.pl-fate--out {
+  background: linear-gradient(160deg, #1a2430 0%, #0f1720 100%);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+}
+
+.pl-fate--wait {
+  background: linear-gradient(160deg, #0b3d2e 0%, #0a2a20 100%);
+}
+
+.pl-fate-kicker {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.pl-fate-title {
+  margin: 0 0 0.45rem;
+  font-family: var(--font-display);
+  font-size: clamp(1.55rem, 5vw, 1.9rem);
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  color: #fff;
+  line-height: 1.15;
+}
+
+.pl-fate--champion .pl-fate-title {
+  color: var(--ball, #c8e600);
+}
+
+.pl-fate-body {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.82);
+}
+
 .pl-propose {
   display: flex;
   flex-direction: column;

@@ -10,6 +10,7 @@ import TournamentBracket from '../components/TournamentBracket'
 import '../components/ScoreSheet.css'
 import { useAuth } from '../context/AuthContext'
 import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboardInset'
+import { hapticLight, hapticSuccess } from '../native/haptics'
 import { apiErrorMessage, tournamentApi, type Match } from '../services/api'
 import {
   formatDate,
@@ -172,6 +173,130 @@ function proposedWinnerLabel(m: Match, myTeamId?: string) {
   if (m.winner_id === m.team_a_id) return m.team_a_name || 'Team A'
   if (m.winner_id === m.team_b_id) return m.team_b_name || 'Team B'
   return null
+}
+
+type PlayerFate = {
+  tone: 'champion' | 'runner' | 'out' | 'wait'
+  title: string
+  body: string
+}
+
+function resolvePlayerFate(opts: {
+  myTeamId?: string
+  myResults: Match[]
+  allMatches: Match[]
+  groupsDone: boolean
+  tournamentDone: boolean
+}): PlayerFate | null {
+  const { myTeamId, myResults, allMatches, groupsDone, tournamentDone } = opts
+  if (!myTeamId) return null
+
+  const mine = (m: Match) => m.team_a_id === myTeamId || m.team_b_id === myTeamId
+  const won = (m: Match) => m.winner_id === myTeamId
+  const lost = (m: Match) => !!m.winner_id && m.winner_id !== myTeamId && mine(m)
+
+  const champFinal = allMatches.find((m) => m.stage === 'KNOCKOUT' && m.round === 'FINAL')
+  const plateFinal = allMatches.find((m) => m.stage === 'PLATE' && m.round === 'FINAL')
+
+  if (champFinal && mine(champFinal) && (champFinal.status === 'COMPLETED' || champFinal.status === 'WALKOVER')) {
+    if (won(champFinal)) {
+      return {
+        tone: 'champion',
+        title: 'Champions',
+        body: 'You won the tournament. Celebrate — then check the bracket below.',
+      }
+    }
+    return {
+      tone: 'runner',
+      title: 'Runners-up',
+      body: 'You reached the final. Huge run — see the full bracket below.',
+    }
+  }
+
+  if (plateFinal && mine(plateFinal) && (plateFinal.status === 'COMPLETED' || plateFinal.status === 'WALKOVER')) {
+    if (won(plateFinal)) {
+      return {
+        tone: 'champion',
+        title: 'Plate champions',
+        body: 'You won the plate. Great recovery — see results below.',
+      }
+    }
+    return {
+      tone: 'runner',
+      title: 'Plate runners-up',
+      body: 'You reached the plate final. See your results below.',
+    }
+  }
+
+  const myKo = allMatches.filter(
+    (m) =>
+      mine(m) &&
+      (m.stage === 'KNOCKOUT' || m.stage === 'PLATE') &&
+      (m.status === 'COMPLETED' || m.status === 'WALKOVER'),
+  )
+  const lastLoss = [...myKo].reverse().find(lost)
+  if (lastLoss) {
+    const path = lastLoss.stage === 'PLATE' ? 'plate' : 'championship'
+    return {
+      tone: 'out',
+      title: 'You’re out',
+      body: `Knocked out in the ${path} ${knockoutRoundLabel(lastLoss.round, lastLoss.stage).toLowerCase()}. Your results stay below.`,
+    }
+  }
+
+  const inKoDraw = allMatches.some(
+    (m) =>
+      mine(m) &&
+      (m.stage === 'KNOCKOUT' || m.stage === 'PLATE') &&
+      (m.team_a_id === myTeamId || m.team_b_id === myTeamId),
+  )
+  if (groupsDone && !inKoDraw && myResults.length > 0) {
+    return {
+      tone: 'out',
+      title: 'You’re out',
+      body: 'Group stage is done and you didn’t advance. Thanks for playing — results are below.',
+    }
+  }
+
+  if (tournamentDone) {
+    return {
+      tone: 'out',
+      title: 'Tournament finished',
+      body: 'This event is complete. See your results and the bracket below.',
+    }
+  }
+
+  if (groupsDone && inKoDraw) {
+    return {
+      tone: 'wait',
+      title: 'Waiting on the draw',
+      body: 'You’re through. Your next knockout match will show here when it’s set.',
+    }
+  }
+
+  return {
+    tone: 'wait',
+    title: 'No match right now',
+    body: 'You’re between matches. We’ll show your next court here when it’s ready.',
+  }
+}
+
+function FateCard({ fate }: { fate: PlayerFate }) {
+  return (
+    <div className={`pl-next-card pl-fate pl-fate--${fate.tone}`} role="status">
+      <p className="pl-fate-kicker">
+        {fate.tone === 'champion'
+          ? 'Result'
+          : fate.tone === 'runner'
+            ? 'Result'
+            : fate.tone === 'out'
+              ? 'End of run'
+              : 'Status'}
+      </p>
+      <h3 className="pl-fate-title">{fate.title}</h3>
+      <p className="pl-fate-body">{fate.body}</p>
+    </div>
+  )
 }
 
 function NextMatchCard({
@@ -342,14 +467,14 @@ export default function PlayerLivePage() {
     enabled: !!slug,
     retry: 4,
     retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 10000),
-    refetchInterval: (query) => (query.state.status === 'error' ? 5000 : 8000),
+    refetchInterval: (query) => (query.state.status === 'error' ? 4000 : 5000),
   })
 
   const { data: allMatches = [] } = useQuery({
     queryKey: ['matches', slug],
     queryFn: async () => (await tournamentApi.matches(slug)).data,
     enabled: !!slug,
-    refetchInterval: 12000,
+    refetchInterval: 8000,
   })
   const { data: sponsors = [] } = useQuery({
     queryKey: ['sponsors', slug],
@@ -404,20 +529,56 @@ export default function PlayerLivePage() {
       )
       return (await tournamentApi.playerSubmitScore(scoringMatch.id, payload)).data
     },
-    onSuccess: () => {
+    onMutate: () => {
+      void hapticSuccess()
+      const closed = scoringMatch
+      const closedMode = scoreSheetMode
+      const closedSets = { ...sets }
+      const closedWinner = winnerId
+      // Close sheet immediately — don't wait on Render/API latency
       setScoringMatch(null)
       setScoreSheetMode('log')
       setScoreError('')
       setActionError('')
+      return { closed, closedMode, closedSets, closedWinner }
+    },
+    onSuccess: () => {
       invalidate()
     },
-    onError: (err) => setScoreError(apiErrorMessage(err)),
+    onError: (err, _vars, ctx) => {
+      if (ctx?.closed) {
+        setScoringMatch(ctx.closed)
+        setScoreSheetMode(ctx.closedMode)
+        setSets(ctx.closedSets)
+        setWinnerId(ctx.closedWinner)
+      }
+      setScoreError(apiErrorMessage(err))
+    },
   })
 
   const confirmMut = useMutation({
     mutationFn: async (matchId: string) => (await tournamentApi.confirmScore(matchId)).data,
-    onSuccess: () => {
+    onMutate: () => {
+      void hapticSuccess()
       setActionError('')
+    },
+    onSuccess: (m) => {
+      // Patch live board immediately with the confirmed match
+      qc.setQueryData(['player-view', slug], (old: unknown) => {
+        if (!old || typeof old !== 'object') return old
+        const view = old as {
+          next_match?: Match | null
+          my_upcoming?: Match[]
+          my_results?: Match[]
+        }
+        const upcoming = (view.my_upcoming || []).filter((x) => x.id !== m.id)
+        return {
+          ...view,
+          next_match: upcoming[0] || null,
+          my_upcoming: upcoming,
+          my_results: [m, ...(view.my_results || [])],
+        }
+      })
       invalidate()
     },
     onError: (err) => setActionError(apiErrorMessage(err)),
@@ -437,6 +598,9 @@ export default function PlayerLivePage() {
     }) => {
       const m = (await tournamentApi.cancelPendingScore(matchId)).data
       return { m, reopen, mode, draft }
+    },
+    onMutate: () => {
+      void hapticLight()
     },
     onSuccess: ({ m, reopen, mode, draft }) => {
       setActionError('')
@@ -598,6 +762,22 @@ export default function PlayerLivePage() {
   const plateMatches = allMatches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]
   const knockoutActive = isKnockoutActive(allMatches)
+  const groupsDone =
+    drawReady &&
+    allMatches.some((m) => m.stage === 'GROUP') &&
+    allMatches
+      .filter((m) => m.stage === 'GROUP')
+      .every((m) => m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED')
+  const playerFate =
+    hasPaidEntry && !next && matchDayLive
+      ? resolvePlayerFate({
+          myTeamId,
+          myResults,
+          allMatches,
+          groupsDone,
+          tournamentDone: t.status === 'COMPLETED',
+        })
+      : null
 
   const nextActions: NextActions = {
     onLogScore: () => next && openScoreSheet(next, { mode: 'log' }),
@@ -697,11 +877,17 @@ export default function PlayerLivePage() {
           <h2>
             {waitingOnDraw
               ? 'Waiting for fixtures'
-              : hasPaidEntry || hasPendingCaptain || isListedPartner
-                ? 'Your next match'
-                : !user
-                  ? 'Live board'
-                  : 'Get on the board'}
+              : playerFate
+                ? playerFate.tone === 'champion' || playerFate.tone === 'runner'
+                  ? 'Your result'
+                  : playerFate.tone === 'out'
+                    ? 'Your run'
+                    : 'Your status'
+                : hasPaidEntry || hasPendingCaptain || isListedPartner
+                  ? 'Your next match'
+                  : !user
+                    ? 'Live board'
+                    : 'Get on the board'}
           </h2>
           {needsPartner ? (
             <div className="pl-next-card">
@@ -809,18 +995,22 @@ export default function PlayerLivePage() {
               {actionError && <p className="form-error pl-action-error">{actionError}</p>}
               {leaveBtn && <div style={{ marginTop: 12 }}>{leaveBtn}</div>}
             </>
+          ) : playerFate ? (
+            <>
+              <FateCard fate={playerFate} />
+              {leaveBtn && <div style={{ marginTop: 12 }}>{leaveBtn}</div>}
+              <Link to={`/t/${slug}`} className="pl-details-link">
+                Full tournament page
+              </Link>
+            </>
           ) : (
             <div className="pl-next-card pl-next-card--quiet">
               <p className="pl-empty">
-                {hasPaidEntry
-                  ? t.status === 'COMPLETED'
-                    ? 'This tournament is finished. See your results below.'
-                    : 'No upcoming matches for you right now.'
-                  : !user
-                    ? liveMatches.length > 0 || calledMatches.length > 0
-                      ? 'Courts and calls update below - no login needed.'
-                      : 'Courts and scores will show here when play starts.'
-                    : 'Register for this tournament to see your next match here.'}
+                {!user
+                  ? liveMatches.length > 0 || calledMatches.length > 0
+                    ? 'Courts and calls update below - no login needed.'
+                    : 'Courts and scores will show here when play starts.'
+                  : 'Register for this tournament to see your next match here.'}
               </p>
               {!user ? (
                 <p className="muted-note" style={{ marginTop: 8, marginBottom: 0 }}>
