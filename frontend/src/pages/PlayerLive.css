@@ -126,12 +126,6 @@ html.native-app .pl-page {
   line-height: 1.4;
 }
 
-.pl-updated {
-  margin-top: 0.45rem;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
 .pl-live-list {
   list-style: none;
   display: flex;

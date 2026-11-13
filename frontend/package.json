@@ -8,8 +8,8 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:native": "node scripts/check-native-env.mjs && tsc -b && vite build && npx cap sync",
+    "build": "tsc -p tsconfig.app.json --noEmit && vite build",
+    "build:native": "node scripts/check-native-env.mjs && tsc -p tsconfig.app.json --noEmit && vite build && npx cap sync",
     "lint": "oxlint",
     "preview": "vite preview",
     "test:deeplinks": "node scripts/check-deeplinks.mjs",

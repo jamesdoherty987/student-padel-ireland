@@ -37,6 +37,8 @@ export VITE_WEB_ORIGIN="${VITE_WEB_ORIGIN:-https://studentpadel.ie}"
 echo "VITE_API_URL=${VITE_API_URL}"
 echo "VITE_WEB_ORIGIN=${VITE_WEB_ORIGIN}"
 
+# Xcode Cloud npm can flake under high concurrency
+npm config set maxsockets 3
 npm ci
 npm run build:native
 

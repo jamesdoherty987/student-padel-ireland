@@ -188,7 +188,7 @@ function MatchCard({
     </>
   )
 
-  if (canScore) {
+  if (canScore && onScore) {
     return (
       <button
         type="button"
