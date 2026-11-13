@@ -2,7 +2,7 @@
   width: min(860px, 100%);
 }
 
-/* Local copies so the modal stays readable even if Organiser.css isn't mounted. */
+/* Local copies so the modal stays readable even if manage CSS isn't mounted. */
 .modal-draw .org-gen-meta {
   color: var(--muted);
   margin: 0 0 1rem;

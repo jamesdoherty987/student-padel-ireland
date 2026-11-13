@@ -63,7 +63,7 @@ def send_tournament_reminders(
     user: User = Depends(get_current_user),
     dry_run: bool = Query(False),
 ):
-    """Organiser: manual send for day-before / day-of only (avoids burning the real reminder early)."""
+    """Admin: manual send for day-before / day-of only (avoids burning the real reminder early)."""
     from app.services.reminders import ireland_today
 
     t = db.get(Tournament, tournament_id)

@@ -264,7 +264,7 @@
     width: min(22rem, calc(100vw - var(--app-sidebar-w) - 1.25rem));
   }
 
-  /* Avoid double left chrome on organiser (app sidebar + event list) */
+  /* Avoid double left chrome on manage hub (app sidebar + event list) */
   html.has-app-sidebar:not(.native-app) .org-shell {
     grid-template-columns: 1fr;
   }

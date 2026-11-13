@@ -161,7 +161,7 @@ class Tournament(Base, TimestampMixin):
     # When True, players confirm entry without Stripe and pay cash/card at the venue
     # (optional pay-online-now still available on join)
     pay_on_arrival: Mapped[bool] = mapped_column(Boolean, default=True)
-    # When True, leave/withdraw copy tells players to contact the organiser for a refund.
+    # When True, leave/withdraw copy tells players to contact the admin for a refund.
     # When False, copy says it's too close to the event for a refund.
     refunds_on_withdrawal: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     max_teams: Mapped[int] = mapped_column(Integer, default=48)
@@ -208,7 +208,7 @@ class Tournament(Base, TimestampMixin):
 
 
 class TournamentRegistrationField(Base, TimestampMixin):
-    """Custom signup question defined by the organiser (e.g. jersey size)."""
+    """Custom signup question defined by the event admin (e.g. jersey size)."""
 
     __tablename__ = "tournament_registration_fields"
     __table_args__ = (
@@ -260,7 +260,7 @@ class TournamentRegistrationAnswer(Base, TimestampMixin):
 
 
 class TournamentAdmin(Base, TimestampMixin):
-    """Co-organiser who can manage a tournament (score, edit, announce)."""
+    """Co-admin who can manage a tournament (score, edit, announce)."""
 
     __tablename__ = "tournament_admins"
     __table_args__ = (UniqueConstraint("tournament_id", "user_id", name="uq_tournament_admin"),)

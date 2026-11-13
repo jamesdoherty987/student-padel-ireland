@@ -14,17 +14,13 @@ import {
 } from './RegistrationFieldsEditor'
 import { apiErrorMessage, tournamentApi } from '../services/api'
 
-export type CreateTournamentVariant = 'admin' | 'organiser'
-
 type Props = {
-  variant?: CreateTournamentVariant
   onClose: () => void
   onCreated: (msg: string, id?: string) => void
   onToast?: (msg: string) => void
 }
 
-function defaultForm(variant: CreateTournamentVariant): TournamentFormState {
-  const official = variant === 'admin'
+function defaultForm(): TournamentFormState {
   return {
     name: '',
     location: '',
@@ -34,19 +30,17 @@ function defaultForm(variant: CreateTournamentVariant): TournamentFormState {
     registration_deadline: '',
     play_format: 'DOUBLES',
     format: 'GROUP_KNOCKOUT',
-    number_of_courts: official ? 7 : 6,
+    number_of_courts: 7,
     match_duration_minutes: 20,
     max_teams: 48,
     entry_fee_euros: 50,
     pay_on_arrival: true,
     refunds_on_withdrawal: true,
     description: '',
-    rules: official
-      ? 'Best of 3 sets. Golden point on deuce. Student ID required on the day.'
-      : 'Best of 3 sets. Golden point on deuce.',
+    rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day.',
     group_size: 4,
     teams_advance_per_group: 2,
-    enable_plate: official,
+    enable_plate: true,
     scoring_mode: 'SIMPLE',
     championship_size: 16,
     plate_size: 16,
@@ -72,18 +66,12 @@ function validateForm(form: TournamentFormState): string | null {
   return null
 }
 
-export default function CreateTournamentModal({
-  variant = 'organiser',
-  onClose,
-  onCreated,
-  onToast,
-}: Props) {
+export default function CreateTournamentModal({ onClose, onCreated, onToast }: Props) {
   const qc = useQueryClient()
-  const isAdmin = variant === 'admin'
   const [openRegistration, setOpenRegistration] = useState(true)
-  const [form, setForm] = useState<TournamentFormState>(() => defaultForm(variant))
+  const [form, setForm] = useState<TournamentFormState>(() => defaultForm())
   const [courtNames, setCourtNames] = useState(() =>
-    courtNamesFor(defaultForm(variant).number_of_courts),
+    courtNamesFor(defaultForm().number_of_courts),
   )
   const [sponsors, setSponsors] = useState<DraftSponsor[]>([])
   const [registrationFields, setRegistrationFields] = useState<RegistrationFieldDraft[]>([])
@@ -126,7 +114,6 @@ export default function CreateTournamentModal({
       })
       if (ok) onClose()
     } catch {
-      // If confirm UI fails, still allow cancel so the modal never freezes
       onClose()
     }
   }
@@ -143,7 +130,6 @@ export default function CreateTournamentModal({
     savingRef.current = true
     setSaving(true)
     try {
-      // Include a filled-in sponsor row even if "Add to list" wasn't clicked
       const sponsorsToUpload = sponsorsFieldRef.current?.flush() ?? sponsors
 
       const { data } = await tournamentApi.create({
@@ -167,6 +153,7 @@ export default function CreateTournamentModal({
         championship_size: form.championship_size,
         plate_size: form.plate_size,
         scoring_mode: form.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
+        is_official: true,
         registration_deadline: form.registration_deadline
           ? new Date(form.registration_deadline).toISOString()
           : null,
@@ -216,12 +203,8 @@ export default function CreateTournamentModal({
       await qc.invalidateQueries({ queryKey: ['sponsors', data.slug] })
 
       let msg = openRegistration
-        ? isAdmin
-          ? 'Official tournament created - registration is open'
-          : 'Tournament created - registration is open'
-        : isAdmin
-          ? 'Official tournament created as draft'
-          : 'Tournament created as draft'
+        ? 'Official tournament created - registration is open'
+        : 'Official tournament created as draft'
       if (sponsorsToUpload.length && sponsorFails === 0) {
         msg += ` · ${sponsorsToUpload.length} sponsor${sponsorsToUpload.length === 1 ? '' : 's'} saved`
       } else if (sponsorFails > 0) {
@@ -239,7 +222,7 @@ export default function CreateTournamentModal({
 
   return (
     <ModalShell
-      title={isAdmin ? 'New official tournament' : 'Create tournament'}
+      title="New official tournament"
       titleId="create-tournament-title"
       onClose={() => void requestClose()}
       preventClose={saving}

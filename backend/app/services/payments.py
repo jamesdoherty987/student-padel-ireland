@@ -31,7 +31,7 @@ def stripe_checkout_total_cents(entry_fee_cents: int) -> int:
 
 
 def entry_revenue_cents(amount_cents: int, *, stripe_session_id: str | None = None) -> int:
-    """Organiser revenue excludes the platform service fee on Stripe charges."""
+    """Event revenue excludes the platform service fee on Stripe charges."""
     amount = max(0, int(amount_cents or 0))
     session = (stripe_session_id or "").strip()
     if session.startswith("cs_"):
@@ -86,7 +86,7 @@ def mark_registration_paid(
         raise HTTPException(
             400,
             "This registration was cancelled or is no longer awaiting payment. "
-            "Contact the organiser if you were charged.",
+            "Contact the admin if you were charged.",
         )
 
     # Lock tournament row to reduce last-spot double-pay races (Postgres)
@@ -100,7 +100,7 @@ def mark_registration_paid(
     if not team or team.withdrawn:
         raise HTTPException(
             400,
-            "This entry was withdrawn. Contact the organiser if you were charged.",
+            "This entry was withdrawn. Contact the admin if you were charged.",
         )
 
     if t and t.max_teams:
@@ -117,7 +117,7 @@ def mark_registration_paid(
         if paid_count >= t.max_teams:
             raise HTTPException(
                 400,
-                "This event is full - payment cannot be completed. Contact the organiser for a refund if you were charged.",
+                "This event is full - payment cannot be completed. Contact the admin for a refund if you were charged.",
             )
 
     player_ids = [
@@ -299,7 +299,7 @@ def fulfill_checkout_session(db: Session, session_id: str) -> Registration | Non
     if team and team.withdrawn:
         raise HTTPException(
             400,
-            "This entry was withdrawn. Contact the organiser for a refund if you were charged.",
+            "This entry was withdrawn. Contact the admin for a refund if you were charged.",
         )
 
     _assert_session_matches_registration(session, reg)

@@ -76,7 +76,15 @@ function currentRoundIndex(rounds: RoundColumn[]) {
   return Math.max(0, rounds.length - 1)
 }
 
-function MatchCard({ match, myTeamId }: { match: Match; myTeamId?: string }) {
+function MatchCard({
+  match,
+  myTeamId,
+  onScore,
+}: {
+  match: Match
+  myTeamId?: string
+  onScore?: (m: Match) => void
+}) {
   const aMine = !!myTeamId && match.team_a_id === myTeamId
   const bMine = !!myTeamId && match.team_b_id === myTeamId
   const aWon = !!match.winner_id && match.winner_id === match.team_a_id
@@ -86,6 +94,15 @@ function MatchCard({ match, myTeamId }: { match: Match; myTeamId?: string }) {
   const aSets = sideScore(match, 'a')
   const bSets = sideScore(match, 'b')
   const showSets = aSets != null && bSets != null && (aSets > 0 || bSets > 0)
+  const canScore = !!onScore && !!match.team_a_id && !!match.team_b_id
+  const scoreLabel =
+    match.status === 'AWAITING_CONFIRM'
+      ? 'Fix'
+      : done
+        ? match.ratings_applied
+          ? 'Fix'
+          : 'Edit'
+        : 'Score'
 
   let statusNote = ''
   if (match.status === 'LIVE') statusNote = 'Live'
@@ -93,22 +110,24 @@ function MatchCard({ match, myTeamId }: { match: Match; myTeamId?: string }) {
   else if (match.status === 'AWAITING_CONFIRM') statusNote = 'Confirming'
   else if (!done && match.scheduled_start) statusNote = formatTime(match.scheduled_start)
 
-  return (
-    <article
-      className={[
-        'tb-match',
-        match.status === 'LIVE' ? 'is-live' : '',
-        match.status === 'CALLED' ? 'is-called' : '',
-        aMine || bMine ? 'is-mine' : '',
-        done ? 'is-done' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-    >
-      {statusNote ? (
+  const className = [
+    'tb-match',
+    match.status === 'LIVE' ? 'is-live' : '',
+    match.status === 'CALLED' ? 'is-called' : '',
+    aMine || bMine ? 'is-mine' : '',
+    done ? 'is-done' : '',
+    canScore ? 'is-scorable' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const body = (
+    <>
+      {statusNote || canScore ? (
         <div className="tb-match-meta">
           {match.status === 'LIVE' && <span className="tb-live-dot" aria-hidden />}
-          <span>{statusNote}</span>
+          {statusNote ? <span>{statusNote}</span> : <span />}
+          {canScore ? <span className="tb-score-chip">{scoreLabel}</span> : null}
         </div>
       ) : null}
       <div
@@ -143,19 +162,40 @@ function MatchCard({ match, myTeamId }: { match: Match; myTeamId?: string }) {
       {done && match.score && !showSets ? (
         <p className="tb-scoreline">{formatMatchScore(match.score)}</p>
       ) : null}
-    </article>
+      {!canScore && !match.team_a_id && !match.team_b_id ? (
+        <p className="tb-scoreline">Waiting for previous round</p>
+      ) : null}
+    </>
   )
+
+  if (canScore) {
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={() => onScore(match)}
+        aria-label={`${scoreLabel}: ${teamLabel(match.team_a_name, match.team_a_placeholder)} vs ${teamLabel(match.team_b_name, match.team_b_placeholder)}`}
+      >
+        {body}
+      </button>
+    )
+  }
+
+  return <article className={className}>{body}</article>
 }
 
 export default function TournamentBracket({
   matches,
   myTeamId,
   stage: stageProp,
+  onScoreMatch,
 }: {
   matches: Match[]
   myTeamId?: string
   /** When omitted, inferred from the matches (fixes empty Plate brackets). */
   stage?: 'KNOCKOUT' | 'PLATE'
+  /** Admin: tap a match with both teams to open score entry. */
+  onScoreMatch?: (m: Match) => void
 }) {
   const stage = stageProp || inferStage(matches)
   const rounds = useMemo(() => buildRounds(matches, stage), [matches, stage])
@@ -261,7 +301,7 @@ export default function TournamentBracket({
         <h3 className="tb-round-label">{active.label}</h3>
         <div className="tb-mobile-list">
           {active.matches.map((m) => (
-            <MatchCard key={m.id} match={m} myTeamId={myTeamId} />
+            <MatchCard key={m.id} match={m} myTeamId={myTeamId} onScore={onScoreMatch} />
           ))}
         </div>
       </div>
@@ -280,7 +320,7 @@ export default function TournamentBracket({
               <div className="tb-round-matches">
                 {r.matches.map((m) => (
                   <div key={m.id} className="tb-slot">
-                    <MatchCard match={m} myTeamId={myTeamId} />
+                    <MatchCard match={m} myTeamId={myTeamId} onScore={onScoreMatch} />
                   </div>
                 ))}
               </div>

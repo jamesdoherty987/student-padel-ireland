@@ -1,4 +1,4 @@
-"""Permission helpers for tournament organisers / co-admins."""
+"""Permission helpers for tournament owners / co-admins."""
 
 from __future__ import annotations
 

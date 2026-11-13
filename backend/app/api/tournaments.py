@@ -13,7 +13,13 @@ from fastapi.responses import Response
 from sqlalchemy import case, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user, get_optional_user, user_can_manage_tournament, user_owns_tournament
+from app.api.deps import (
+    get_current_user,
+    get_optional_user,
+    require_role,
+    user_can_manage_tournament,
+    user_owns_tournament,
+)
 from app.core.config import get_settings
 from app.core.roles import Role
 from app.core.security import hash_password
@@ -713,7 +719,7 @@ def _tournament_out(
         entry_fee_cents=t.entry_fee_cents,
         currency=t.currency or "EUR",
         pay_on_arrival=bool(getattr(t, "pay_on_arrival", False)),
-        # None/missing → True so existing events keep “contact organiser” refund copy
+        # None/missing → True so existing events keep “contact the admin” refund copy
         refunds_on_withdrawal=getattr(t, "refunds_on_withdrawal", True) is not False,
         max_teams=t.max_teams,
         registration_deadline=t.registration_deadline,
@@ -1140,10 +1146,10 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
 
 
 def _assert_organiser(user: User, tournament: Tournament, db: Session) -> None:
-    """Allow platform ADMIN, primary organiser, or tournament co-admin."""
+    """Allow platform ADMIN, event owner, or tournament co-admin."""
     if user_can_manage_tournament(user, tournament, db):
         return
-    raise HTTPException(403, "Not a tournament organiser")
+    raise HTTPException(403, "Not allowed to manage this tournament")
 
 
 def _assert_owner(user: User, tournament: Tournament) -> None:
@@ -1331,11 +1337,11 @@ def _resolve_tournament(db: Session, slug_or_id: str) -> Tournament:
 @router.post("/tournaments", response_model=TournamentOut)
 def create_tournament(
     body: TournamentCreate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_role(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    # Only platform admins create publicly listed events (landing + /tournaments).
-    is_official = user.role == Role.ADMIN.value
+    # Platform admins only — there is no separate organiser account type.
+    is_official = bool(body.is_official)
     t = Tournament(
         name=body.name.strip(),
         slug=_unique_slug(db, body.name),
@@ -1428,7 +1434,7 @@ def update_tournament(
         _assert_owner(user, t)
         new_owner = db.get(User, new_organiser_id)
         if not new_owner or not new_owner.is_active:
-            raise HTTPException(400, "New organiser user not found")
+            raise HTTPException(400, "New owner user not found")
         old_owner_id = t.organiser_id
         t.organiser_id = new_organiser_id
         # Keep previous owner as a co-admin so they aren't locked out abruptly
@@ -1762,7 +1768,7 @@ def organiser_add_team(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Organiser adds a team from known players (marks entry as paid)."""
+    """Admin adds a team from known players (marks entry as paid)."""
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
@@ -1902,7 +1908,7 @@ def _issue_checkout(
             message="Registration confirmed - free entry.",
         )
 
-    # Organiser collects cash/card at the venue - confirm the spot without Stripe
+    # Admin collects cash/card at the venue - confirm the spot without Stripe
     # (unless the captain chose optional pay-online-now for the full team fee)
     if getattr(t, "pay_on_arrival", False) and not pay_online_now:
         from app.services.payments import mark_registration_paid
@@ -2215,7 +2221,7 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 reg = fulfill_checkout_session(db, session_id)
             except HTTPException as exc:
                 # Business rejection (withdrawn/full/mismatch) - ack so Stripe stops retrying.
-                # Player may have been charged; organiser handles refund manually.
+                # Player may have been charged; admin handles refund manually.
                 logger.warning(
                     "Stripe webhook fulfill rejected for %s: %s",
                     session_id,
@@ -2302,7 +2308,7 @@ def mark_fee_collected(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Organiser marks a pay-on-arrival entry as fee collected at the venue."""
+    """Admin marks a pay-on-arrival entry as fee collected at the venue."""
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
@@ -2396,7 +2402,7 @@ def _apply_team_withdraw(
         if paid and not as_organiser and _tournament_has_fixtures(db, t.id):
             raise HTTPException(
                 400,
-                "You can’t leave after the draw is published - contact the organiser",
+                "You can’t leave after the draw is published - contact the admin",
             )
         if not as_organiser and not _player_can_leave_entry(db, t, team):
             raise HTTPException(400, "You can no longer leave this tournament")
@@ -2428,7 +2434,7 @@ def withdraw_team(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Organiser withdraw. Unpaid/pending can always be removed; paid only before LIVE.
+    """Admin withdraw. Unpaid/pending can always be removed; paid only before LIVE.
 
     Platform ADMIN can force-withdraw even after the draw / go-live.
     """
@@ -2473,7 +2479,7 @@ def leave_tournament(
         ):
             raise HTTPException(
                 400,
-                "You can’t leave after the draw is published or the event has started - contact the organiser",
+                "You can’t leave after the draw is published or the event has started - contact the admin",
             )
         raise HTTPException(400, "You can no longer leave this tournament")
 
@@ -2660,7 +2666,7 @@ def respond_partner_invite(
     ) or _tournament_has_fixtures(db, t.id):
         raise HTTPException(
             400,
-            "You can’t leave after the draw is published - contact the organiser",
+            "You can’t leave after the draw is published - contact the admin",
         )
 
     db.delete(tp)
@@ -2938,7 +2944,7 @@ def update_score(
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t, db)
 
-    # Organisers finalise results - never leave a player-confirm limbo
+    # Admins finalise results - never leave a player-confirm limbo
     if body.status == MatchStatus.AWAITING_CONFIRM:
         body = body.model_copy(update={"status": MatchStatus.COMPLETED})
 
@@ -3122,7 +3128,7 @@ def player_submit_score(
     m.score.confirmed_by_id = None
     m.winner_id = winner_id
     m.status = MatchStatus.AWAITING_CONFIRM.value
-    # Do not flip tournament → LIVE here. Confirm (or organiser call/start) does that,
+    # Do not flip tournament → LIVE here. Confirm (or admin call/start) does that,
     # so proposing a score on a scheduled match can't block paid withdrawals early.
 
     db.commit()
@@ -3193,7 +3199,7 @@ def player_cancel_pending_score(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Withdraw or reject a score waiting for confirm (either side, or organiser)."""
+    """Withdraw or reject a score waiting for confirm (either side, or admin)."""
     m = db.get(Match, match_id)
     if not m:
         raise HTTPException(404, "Match not found")
@@ -3210,9 +3216,9 @@ def player_cancel_pending_score(
     entered_by = m.score.entered_by_id if m.score else None
     same_side_as_scorer = bool(entered_by and on_team and _same_match_side(db, m, user.id, entered_by))
     if not is_organiser and not on_team:
-        raise HTTPException(403, "Only players in this match (or an organiser) can cancel a pending score")
+        raise HTTPException(403, "Only players in this match (or an admin) can cancel a pending score")
 
-    # Scoring side editing keeps the numbers; opponent reject / organiser wipe clears them
+    # Scoring side editing keeps the numbers; opponent reject / admin wipe clears them
     keep_sets = bool(same_side_as_scorer and not is_organiser)
 
     m.status = MatchStatus.LIVE.value
@@ -4116,25 +4122,9 @@ def player_profile(
 
 
 @router.get("/organiser/dashboard")
-def organiser_dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if user.role == Role.ADMIN.value:
-        tournaments = db.query(Tournament).order_by(Tournament.event_date.desc()).all()
-    else:
-        admin_ids = [
-            row[0]
-            for row in db.query(TournamentAdmin.tournament_id)
-            .filter(TournamentAdmin.user_id == user.id)
-            .all()
-        ]
-        filters = [Tournament.organiser_id == user.id]
-        if admin_ids:
-            filters.append(Tournament.id.in_(admin_ids))
-        tournaments = (
-            db.query(Tournament)
-            .filter(or_(*filters))
-            .order_by(Tournament.event_date.desc())
-            .all()
-        )
+def organiser_dashboard(user: User = Depends(require_role(Role.ADMIN)), db: Session = Depends(get_db)):
+    # Admin-only manage hub — no separate organiser accounts.
+    tournaments = db.query(Tournament).order_by(Tournament.event_date.desc()).all()
     stats = []
     for t in tournaments:
         teams = _team_count(db, t.id)
@@ -4198,7 +4188,7 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
                 "teams": teams,
                 "players": teams * per_team,
                 "paid_registrations": paid,
-                # Entry fees only - platform service fee is excluded from organiser revenue
+                # Entry fees only - platform service fee is excluded from event revenue
                 "revenue_cents": sum(
                     entry_revenue_cents(r.amount_cents, stripe_session_id=r.stripe_session_id)
                     for r in collected_revenue

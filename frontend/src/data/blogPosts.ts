@@ -37,8 +37,7 @@ export const BLOG_POSTS: BlogPost[] = [
         type: 'ul',
         items: [
           'Students looking for padel tournaments near their campus',
-          'Friends who want to run a private tournament with a code',
-          'Organisers running doubles or singles events',
+          'Friends joining private events with an invite code',
           'Players who want a clear Ireland ranking from real results',
         ],
       },
@@ -48,11 +47,11 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Browse upcoming events in Dublin, Cork, Galway, Limerick, Belfast, Waterford and beyond. Join with a partner, pay online or on arrival when the organiser allows it, follow live scores on the day, and see rankings update after matches.',
+        text: 'Browse upcoming events in Dublin, Cork, Galway, Limerick, Belfast, Waterford and beyond. Join with a partner, pay online or on arrival when the event allows it, follow live scores on the day, and see rankings update after matches.',
       },
       {
         type: 'p',
-        text: 'Anyone can create a private tournament, share the invite code with friends, and run a draw with live scoring - useful when there is no official event that weekend.',
+        text: 'Official and invite-only events are set up by platform admins. Share a code with friends to join a private day, then follow the draw and live scoring on your phone.',
       },
       {
         type: 'cta',
@@ -97,7 +96,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Most student padel events are doubles. One player starts registration as captain; the partner confirms. Fees can be paid online, or at the venue if the organiser collects on arrival.',
+        text: 'Most student padel events are doubles. One player starts registration as captain; the partner confirms. Fees can be paid online, or at the venue if pay-on-arrival is enabled.',
       },
       {
         type: 'h2',
@@ -105,7 +104,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'If a friend or organiser shared a code or QR, tap Code (or open the link), enter the code, and you will land on the right tournament join flow.',
+        text: 'If a friend shared a code or QR, tap Code (or open the link), enter the code, and you will land on the right tournament join flow.',
       },
       {
         type: 'ul',
@@ -193,17 +192,17 @@ export const BLOG_POSTS: BlogPost[] = [
       {
         type: 'ul',
         items: [
-          'Create a private tournament and invite your society with a code',
+          'Join a private invite-only day with your society when one is running',
           'Add friends so you can find teammates for the next event',
-          'Promote your first open tournament on the SPI events list',
+          'Share open tournaments from the SPI events list',
           'Link your club Instagram bio to studentpadel.ie so new members find you',
         ],
       },
       {
         type: 'cta',
-        text: 'Create a tournament or find an event near you.',
-        to: '/tournaments?create=1',
-        label: 'Create a tournament',
+        text: 'Find an event near you.',
+        to: '/tournaments',
+        label: 'Browse tournaments',
       },
     ],
   },
@@ -258,16 +257,16 @@ export const BLOG_POSTS: BlogPost[] = [
   },
   {
     slug: 'organise-a-student-padel-tournament',
-    title: 'How to organise a student padel tournament',
+    title: 'How student padel tournament days work',
     description:
-      'Practical checklist for society organisers running a student padel tournament in Ireland with Student Padel Ireland.',
+      'What to expect on a Student Padel Ireland event day - registration, draws, live scores, and rankings.',
     publishedAt: '2026-10-06',
-    tags: ['organisers', 'how-to'],
+    tags: ['tournaments', 'how-to'],
     readingMinutes: 6,
     body: [
       {
         type: 'p',
-        text: 'Running a student padel day is easier when registration, payments, draws, and live scores live in one tool. Here is a practical organiser checklist for Ireland campuses.',
+        text: 'Running a student padel day is easier when registration, payments, draws, and live scores live in one tool. Platform admins set up each event; players join, play, and follow the board.',
       },
       {
         type: 'h2',
@@ -276,10 +275,10 @@ export const BLOG_POSTS: BlogPost[] = [
       {
         type: 'ul',
         items: [
-          'Book courts and confirm hours with the venue',
-          'Create the tournament on Student Padel Ireland (format, fee, max teams, deadline)',
+          'Courts and hours are confirmed with the venue',
+          'Admins publish the tournament (format, fee, max teams, deadline)',
           'Share the public link and invite code in your society channels',
-          'Decide online payment vs pay-on-arrival (or both)',
+          'Pay online ahead of time, or on arrival when the event allows it',
         ],
       },
       {
@@ -288,7 +287,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Use the organiser tools to generate the draw, call matches to courts, and enter scores. Players can follow a live phone view; a TV display route works for the venue screen.',
+        text: 'Admins generate the draw, call matches to courts, and enter scores. Players can follow a live phone view; a TV display route works for the venue screen.',
       },
       {
         type: 'h2',
@@ -300,9 +299,9 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'cta',
-        text: 'Create your next event.',
-        to: '/tournaments?create=1',
-        label: 'Create a tournament',
+        text: 'Find your next event.',
+        to: '/tournaments',
+        label: 'Browse tournaments',
       },
     ],
   },
@@ -346,7 +345,7 @@ export const BLOG_POSTS: BlogPost[] = [
       },
       {
         type: 'p',
-        text: 'Create a small private tournament with friends from your course or society. Playing structured matches keeps you sharp and starts building a ranking before the next open.',
+        text: 'Join a private invite-only day with friends from your course or society when one is running. Structured matches keep you sharp and start building a ranking before the next open.',
       },
       {
         type: 'cta',
@@ -446,7 +445,7 @@ export const BLOG_POSTS: BlogPost[] = [
     body: [
       {
         type: 'p',
-        text: 'Match day is chaotic when scores live in a notebook. Student Padel Ireland gives organisers a scoring flow and players a live phone view so the next court call is obvious.',
+        text: 'Match day is chaotic when scores live in a notebook. Student Padel Ireland gives admins a scoring flow and players a live phone view so the next court call is obvious.',
       },
       {
         type: 'h2',
@@ -457,16 +456,16 @@ export const BLOG_POSTS: BlogPost[] = [
         items: [
           'Open your tournament’s live page on your phone',
           'See scheduled, called, and live matches',
-          'Follow set scores as the organiser updates them',
+          'Follow set scores as they are updated',
         ],
       },
       {
         type: 'h2',
-        text: 'For organisers and venues',
+        text: 'For admins and venues',
       },
       {
         type: 'p',
-        text: 'Organisers enter results as matches finish. A dedicated display route can drive a TV at the venue so spectators and waiting pairs see the board without crowding the desk.',
+        text: 'Admins enter results as matches finish. A dedicated display route can drive a TV at the venue so spectators and waiting pairs see the board without crowding the desk.',
       },
       {
         type: 'cta',

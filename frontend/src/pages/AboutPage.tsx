@@ -38,7 +38,7 @@ export default function AboutPage() {
           <ul>
             <li>Public tournament listings with registration and payments</li>
             <li>Friends, invite codes, and private tournaments</li>
-            <li>Live scoring for players, organisers, and venue displays</li>
+            <li>Live scoring for players, admins, and venue displays</li>
             <li>Ireland rankings fed by confirmed tournament results</li>
           </ul>
 
@@ -62,8 +62,8 @@ export default function AboutPage() {
             <Link to="/tournaments" className="btn btn-ghost">
               Official tournaments
             </Link>
-            <Link to="/tournaments?create=1" className="btn btn-ghost">
-              Create a tournament
+            <Link to="/tournaments" className="btn btn-ghost">
+              Browse tournaments
             </Link>
           </div>
         </div>

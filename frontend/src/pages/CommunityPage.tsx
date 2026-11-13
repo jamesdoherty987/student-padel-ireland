@@ -202,8 +202,8 @@ export default function CommunityPage() {
               <span>Tap Code to paste a tournament invite.</span>
             </li>
             <li>
-              <strong>Create a tournament</strong>
-              <span>Run your own event from the Tournaments tab.</span>
+              <strong>Play and climb</strong>
+              <span>Confirmed results update Ireland rankings.</span>
             </li>
           </ol>
           <div className="community-guest-actions">
@@ -213,8 +213,8 @@ export default function CommunityPage() {
             <Link to={`/login?next=${next}`} className="btn btn-ghost">
               Log in
             </Link>
-            <Link to="/tournaments?create=1" className="btn btn-ghost">
-              New tournament
+            <Link to="/tournaments" className="btn btn-ghost">
+              Browse tournaments
             </Link>
           </div>
         </main>

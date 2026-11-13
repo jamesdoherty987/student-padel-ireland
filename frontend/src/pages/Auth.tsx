@@ -130,17 +130,15 @@ export function LoginPage() {
     ? 'Log in with the account used at checkout to confirm your registration.'
     : next.includes('/join')
       ? 'Log in to finish joining.'
-      : next.includes('create=1')
-        ? 'Log in to create your tournament.'
+      : next.includes('create=1') || next.startsWith('/admin') || next.startsWith('/organiser')
+        ? 'Log in with an admin account to manage events.'
         : next.includes('filter=mine')
           ? 'Log in to see tournaments you own.'
-          : next.startsWith('/organiser')
-            ? 'Log in to manage your event.'
-            : next.includes('/rankings')
-              ? 'Log in to filter rankings by your events, friends, or university.'
-              : next.includes('/community')
-                ? 'Log in to add friends and join with a code.'
-                : 'Log in to join tournaments and manage your entries.'
+          : next.includes('/rankings')
+            ? 'Log in to filter rankings by your events, friends, or university.'
+            : next.includes('/community')
+              ? 'Log in to add friends and join with a code.'
+              : 'Log in to join tournaments and manage your entries.'
 
   if (authLoading) {
     return (
@@ -237,8 +235,7 @@ export function LoginPage() {
         )}
         {import.meta.env.DEV && (
           <p className="auth-demo">
-            Dev: james@ul.ie / player12345 · organiser@studentpadelireland.ie / organiser123 ·
-            admin from ADMIN_EMAIL / ADMIN_PASSWORD
+            Dev: james@ul.ie / player12345 · admin from ADMIN_EMAIL / ADMIN_PASSWORD
           </p>
         )}
       </div>
@@ -350,13 +347,11 @@ export function SignupPage() {
               ? 'Create an account to finish joining with your invite.'
               : next.includes('/confirmed') || next.includes('/live')
                 ? 'Create an account to continue to your match.'
-                : next.includes('create=1')
-                  ? 'Create an account to set up your tournament.'
-                  : next.startsWith('/organiser')
-                    ? 'Create an account to manage your event.'
-                    : next.includes('/community')
-                      ? 'Create an account to add friends and join events.'
-                      : 'A few details and you’re ready to play and join events.'}
+                : next.includes('create=1') || next.startsWith('/admin') || next.startsWith('/organiser')
+                  ? 'Admin accounts are provisioned separately — create a player account to join events.'
+                  : next.includes('/community')
+                    ? 'Create an account to add friends and join events.'
+                    : 'A few details and you’re ready to play and join events.'}
         </p>
         <form onSubmit={onSubmit}>
           <div className="form-group">

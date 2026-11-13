@@ -27,7 +27,7 @@ export default function TournamentsPage() {
   usePageSeo({
     title: 'Student Padel Tournaments in Ireland',
     description:
-      'Browse official and personal student padel tournaments across Ireland. Open an event to see your entry, next match, court, and time.',
+      'Browse official student padel tournaments across Ireland. Open an event to see your entry, next match, court, and time.',
     path: '/tournaments',
   })
   const { user } = useAuth()
@@ -70,23 +70,6 @@ export default function TournamentsPage() {
     setFilter(next)
   }, [filterParam])
 
-  useEffect(() => {
-    if (searchParams.get('create') !== '1') return
-    if (!user) {
-      navigate('/login?next=%2Ftournaments%3Fcreate%3D1', { replace: true })
-      return
-    }
-    setShowCreate(true)
-  }, [searchParams, user, navigate])
-
-  useEffect(() => {
-    if (user || searchParams.get('filter') !== 'mine') return
-    const next = new URLSearchParams(searchParams)
-    next.delete('filter')
-    setSearchParams(next, { replace: true })
-    setFilter('all')
-  }, [user, searchParams, setSearchParams])
-
   const clearCreateParam = useCallback(() => {
     if (searchParams.get('create') !== '1') return
     const next = new URLSearchParams(searchParams)
@@ -94,9 +77,38 @@ export default function TournamentsPage() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
 
+  const isAdmin = user?.role === 'ADMIN'
+
+  useEffect(() => {
+    if (searchParams.get('create') !== '1') return
+    if (!user) {
+      navigate('/login?next=%2Fadmin', { replace: true })
+      return
+    }
+    if (user.role !== 'ADMIN') {
+      clearCreateParam()
+      navigate('/tournaments', { replace: true })
+      return
+    }
+    setShowCreate(true)
+  }, [searchParams, user, navigate, clearCreateParam])
+
+  useEffect(() => {
+    if (searchParams.get('filter') !== 'mine') return
+    if (user?.role === 'ADMIN') return
+    const next = new URLSearchParams(searchParams)
+    next.delete('filter')
+    setSearchParams(next, { replace: true })
+    setFilter('all')
+  }, [user, searchParams, setSearchParams])
+
   const openCreate = () => {
     if (!user) {
-      navigate('/login?next=%2Ftournaments%3Fcreate%3D1')
+      navigate('/login?next=%2Fadmin')
+      return
+    }
+    if (!isAdmin) {
+      navigate('/admin')
       return
     }
     setShowCreate(true)
@@ -175,14 +187,20 @@ export default function TournamentsPage() {
   const emptyMessage = (() => {
     if (events.length === 0) {
       return user
-        ? 'No tournaments yet. Join with a code, or create one.'
+        ? isAdmin
+          ? 'No tournaments yet. Create one, or join with a code.'
+          : 'No tournaments yet. Join with a code, or check back soon.'
         : 'No tournaments listed yet. Log in or check back soon.'
     }
     if (codeFromSearch) return 'That looks like an invite code - tap below to join.'
     if (query.trim()) return 'No tournaments match that search.'
     if (filter === 'official') return 'No official tournaments match.'
     if (filter === 'mine') {
-      return user ? 'You don’t own any tournaments yet.' : 'Log in to see tournaments you own.'
+      return user
+        ? isAdmin
+          ? 'You don’t own any tournaments yet.'
+          : 'Only admins manage tournaments.'
+        : 'Log in to see tournaments you own.'
     }
     if (filter === 'open') return 'No tournaments open to join right now.'
     if (filter === 'live') return 'No live tournaments right now.'
@@ -191,7 +209,7 @@ export default function TournamentsPage() {
     return 'No tournaments to show.'
   })()
 
-  const visibleFilters = FILTERS.filter((f) => f.id !== 'mine' || !!user)
+  const visibleFilters = FILTERS.filter((f) => f.id !== 'mine' || isAdmin)
 
   return (
     <div className="app-shell">
@@ -271,7 +289,7 @@ export default function TournamentsPage() {
                     {e.entered ? (
                       <span className="tour-card-in">You’re in</span>
                     ) : e.owned ? (
-                      <span className="tour-card-in">Organiser</span>
+                      <span className="tour-card-in">Managing</span>
                     ) : null}
                     {e.entered || e.owned ? <span aria-hidden> · </span> : null}
                     <span>{e.official ? 'Official' : 'Personal'}</span>
@@ -310,14 +328,16 @@ export default function TournamentsPage() {
             )}
             {events.length === 0 && !codeFromSearch && (
               <div className="header-actions header-actions--tour" style={{ marginTop: 12, justifyContent: 'center' }}>
-                <button type="button" className="btn btn-primary btn-sm btn-new-tour" onClick={openCreate}>
-                  <i className="fas fa-plus" aria-hidden />
-                  New
-                </button>
+                {isAdmin ? (
+                  <button type="button" className="btn btn-primary btn-sm btn-new-tour" onClick={openCreate}>
+                    <i className="fas fa-plus" aria-hidden />
+                    New
+                  </button>
+                ) : null}
                 <HaveCodeButton className="btn btn-ghost btn-sm">Code</HaveCodeButton>
               </div>
             )}
-            {filter === 'mine' && events.length > 0 && !codeFromSearch && (
+            {isAdmin && filter === 'mine' && events.length > 0 && !codeFromSearch && (
               <div style={{ marginTop: 12 }}>
                 <button type="button" className="btn btn-primary btn-sm btn-new-tour" onClick={openCreate}>
                   <i className="fas fa-plus" aria-hidden />
@@ -329,9 +349,8 @@ export default function TournamentsPage() {
         )}
       </main>
 
-      {showCreate && user && (
+      {showCreate && user && isAdmin && (
         <CreateTournamentModal
-          variant="organiser"
           onClose={closeCreate}
           onToast={showToast}
           onCreated={(msg, id) => {

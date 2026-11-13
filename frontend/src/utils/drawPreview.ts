@@ -1,4 +1,4 @@
-/** Client-side draw preview for the organiser generate confirm modal. */
+/** Client-side draw preview for the admin generate confirm modal. */
 
 function nextPowerOfTwo(n: number) {
   if (n <= 1) return 1
@@ -246,7 +246,7 @@ export function previewDraw(opts: {
 }
 
 /**
- * Build knockout/plate stats from the actual group sizes the organiser chose.
+ * Build knockout/plate stats from the actual group sizes chosen for the draw.
  * Group matches always follow the real layout; advancement clamps to the smallest group.
  */
 export function liveDrawStats(opts: {

@@ -195,7 +195,7 @@ def init_db() -> None:
 
 
 def _migrate_organiser_roles_to_player() -> None:
-    """ORGANISER was a signup role; hosting is now per-tournament ownership/co-admin."""
+    """Legacy ORGANISER accounts are demoted to PLAYER; only ADMIN hosts events."""
     with engine.begin() as conn:
         try:
             conn.execute(text("UPDATE users SET role = 'PLAYER' WHERE role = 'ORGANISER'"))

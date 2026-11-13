@@ -346,8 +346,8 @@ export default function RankingsPage() {
               <Link to="/tournaments" className="btn btn-primary">
                 Browse tournaments
               </Link>
-              <Link to="/tournaments?create=1" className="btn btn-ghost">
-                Create a tournament
+              <Link to="/join" className="btn btn-ghost">
+                Join with a code
               </Link>
             </div>
           </div>

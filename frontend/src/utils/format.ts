@@ -144,7 +144,17 @@ export function knockoutRoundLabel(round: string, stage?: string) {
     BRONZE: '3rd place',
   }
   const base = map[round] || round.replace(/_/g, ' ')
-  return stage === 'PLATE' ? `Plate ${base}` : base
+  if (stage === 'PLATE') return `Plate · ${base}`
+  if (stage === 'KNOCKOUT') return `Championship · ${base}`
+  return base
+}
+
+/** Short path label for list/TV chips. */
+export function matchPathLabel(stage?: string | null) {
+  if (stage === 'PLATE') return 'Plate'
+  if (stage === 'KNOCKOUT') return 'Championship'
+  if (stage === 'GROUP') return 'Groups'
+  return ''
 }
 
 /** Sort key for knockout rounds (earlier rounds first). */

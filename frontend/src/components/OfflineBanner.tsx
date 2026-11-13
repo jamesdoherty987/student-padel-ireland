@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useOnlineStatus } from '../native/network'
 
-/** Only show after a short sustained offline stretch — avoids false positives. */
-const OFFLINE_DELAY_MS = 2000
+/** Only show after a sustained offline stretch — avoids Capacitor/browser false alarms. */
+const OFFLINE_DELAY_MS = 4000
 
 /** Thin offline strip - native + web. */
 export default function OfflineBanner() {

@@ -35,6 +35,8 @@ import {
   formatMatchScore,
   formatMoney,
   formatTime,
+  knockoutRoundLabel,
+  matchPathLabel,
   statusBadgeClass,
   statusLabel,
 } from '../utils/format'
@@ -49,7 +51,7 @@ function defaultOrgPanel(status: string, hasFixtures: boolean): OrgPanel {
   return 'registration'
 }
 
-/** Best-of-3 set tallies for organiser score validation. */
+/** Best-of-3 set tallies for admin score validation. */
 function tallySets(form: {
   set1_a: number
   set1_b: number
@@ -76,7 +78,7 @@ function tallySets(form: {
   return { ok: true as const, aSets, bSets, played }
 }
 
-/** Respect organiser selection; only bump when a higher set already has games. */
+/** Respect selected set; only bump when a higher set already has games. */
 function resolveCurrentSet(form: {
   set1_a: number
   set1_b: number
@@ -167,7 +169,7 @@ export default function OrganiserDashboard() {
 
   useEffect(() => {
     if (params.get('create') === '1') {
-      navigate('/tournaments?create=1', { replace: true })
+      navigate('/admin', { replace: true })
       return
     }
     const t = params.get('t')
@@ -886,19 +888,23 @@ export default function OrganiserDashboard() {
         m.team_a_id &&
         m.team_b_id,
     )
+    // Only group fixtures missing teams need organiser action — KO/Plate slots
+    // fill automatically when the previous round is scored.
     const waitingTeams = matches.filter(
       (m) =>
+        m.stage === 'GROUP' &&
         (m.status === 'SCHEDULED' || m.status === 'CALLED' || m.status === 'LIVE') &&
         (!m.team_a_id || !m.team_b_id),
     )
-    const open =
-      matches.filter(
-        (m) =>
-          m.status === 'SCHEDULED' ||
+    const playable = (m: Match) => !!(m.team_a_id && m.team_b_id)
+    const open = matches.filter(
+      (m) =>
+        playable(m) &&
+        (m.status === 'SCHEDULED' ||
           m.status === 'CALLED' ||
           m.status === 'LIVE' ||
-          m.status === 'AWAITING_CONFIRM',
-      ).length
+          m.status === 'AWAITING_CONFIRM'),
+    ).length
     const collectFees = orgTeams.filter(
       (t) => t.payment_status === 'PAID' && t.payment_via === 'pay_on_arrival' && !t.withdrawn,
     )
@@ -932,7 +938,7 @@ export default function OrganiserDashboard() {
       attention.push({
         id: `teams-${m.id}`,
         label: 'Waiting on teams',
-        detail: `${m.round.replace(/_/g, ' ')} · ${courtLabel(m.court_name, m.court_number)}`,
+        detail: `${knockoutRoundLabel(m.round, m.stage)} · ${courtLabel(m.court_name, m.court_number)}`,
         kind: 'move',
         match: m,
       })
@@ -1131,15 +1137,21 @@ export default function OrganiserDashboard() {
   const filteredMatches = useMemo(() => {
     const now = Date.now()
     const windowMs = 45 * 60 * 1000
+    const stageRank = (stage: string) =>
+      stage === 'KNOCKOUT' ? 0 : stage === 'PLATE' ? 1 : stage === 'GROUP' ? 2 : 3
     const sorted = [...matches].sort((a, b) => {
+      const sr = stageRank(a.stage) - stageRank(b.stage)
+      if (sr !== 0) return sr
       const ta = a.scheduled_start ? new Date(a.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
       const tb = b.scheduled_start ? new Date(b.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
       if (ta !== tb) return ta - tb
       return (a.sort_order || 0) - (b.sort_order || 0)
     })
+    const bothTeams = (m: Match) => !!(m.team_a_id && m.team_b_id)
     return sorted.filter((m) => {
       if (courtFilter !== 'all' && String(m.court_number) !== courtFilter) return false
       if (matchFilter === 'now') {
+        if (!bothTeams(m)) return false
         return (
           m.status === 'LIVE' ||
           m.status === 'CALLED' ||
@@ -1150,14 +1162,16 @@ export default function OrganiserDashboard() {
         )
       }
       if (matchFilter === 'upcoming') {
-        return m.status === 'SCHEDULED' && !!m.team_a_id && !!m.team_b_id
+        return m.status === 'SCHEDULED' && bothTeams(m)
       }
       if (matchFilter === 'active') {
+        // Playable open matches only — hide empty SF/Final slots until seeded
         return (
-          m.status === 'SCHEDULED' ||
-          m.status === 'CALLED' ||
-          m.status === 'LIVE' ||
-          m.status === 'AWAITING_CONFIRM'
+          bothTeams(m) &&
+          (m.status === 'SCHEDULED' ||
+            m.status === 'CALLED' ||
+            m.status === 'LIVE' ||
+            m.status === 'AWAITING_CONFIRM')
         )
       }
       if (matchFilter === 'done') {
@@ -1305,14 +1319,14 @@ export default function OrganiserDashboard() {
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Host a tournament</h1>
-          <p className="page-sub">Create an account or log in to run your own events.</p>
+          <h1 className="page-title">Admin access required</h1>
+          <p className="page-sub">Log in with the platform admin account to manage events.</p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
-            <Link to="/signup?next=%2Ftournaments%3Fcreate%3D1" className="btn btn-primary">
-              Sign up
-            </Link>
-            <Link to="/login?next=%2Ftournaments%3Fcreate%3D1" className="btn btn-ghost">
+            <Link to="/login?next=%2Forganiser" className="btn btn-primary">
               Log in
+            </Link>
+            <Link to="/tournaments" className="btn btn-ghost">
+              Browse tournaments
             </Link>
           </div>
         </main>
@@ -1350,19 +1364,13 @@ export default function OrganiserDashboard() {
           <button
             className="btn btn-ghost btn-block"
             type="button"
-            onClick={() =>
-              navigate(user?.role === 'ADMIN' ? '/admin' : '/tournaments?create=1')
-            }
+            onClick={() => navigate('/admin')}
           >
             + New tournament
           </button>
           <div className="org-aside-note">
-            <strong>{user?.role === 'ADMIN' ? 'Platform admin' : 'Running an event?'}</strong>
-            <p>
-              {user?.role === 'ADMIN'
-                ? 'Open registration, generate the draw, go live, and score from here.'
-                : 'Registration, payments, and live scoring in one place.'}
-            </p>
+            <strong>Admin</strong>
+            <p>Open registration, generate the draw, go live, and score from here.</p>
           </div>
         </aside>
 
@@ -1386,20 +1394,10 @@ export default function OrganiserDashboard() {
           )}
           {!active && !isLoading && !isError && (
             <div className="org-empty">
-              <h1>{user?.role === 'ADMIN' ? 'No tournaments yet' : 'Running an event?'}</h1>
-              <p>
-                {user?.role === 'ADMIN'
-                  ? 'Create an official tournament from the admin portal, then manage the draw and live scoring here.'
-                  : 'Set up registration, payments, and live scoring. Tournaments you create here are private - players join with your invite code (they won’t appear on the landing page).'}
-              </p>
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={() =>
-                  navigate(user?.role === 'ADMIN' ? '/admin' : '/tournaments?create=1')
-                }
-              >
-                {user?.role === 'ADMIN' ? 'Go to admin' : 'Create a tournament'}
+              <h1>No tournaments yet</h1>
+              <p>Create an event from the admin portal, then manage the draw and scoring here.</p>
+              <button className="btn btn-primary" type="button" onClick={() => navigate('/admin')}>
+                Go to admin
               </button>
             </div>
           )}
@@ -1649,7 +1647,7 @@ export default function OrganiserDashboard() {
                 </div>
               </div>
 
-              <div className="section-tabs" role="tablist" aria-label="Organiser sections">
+              <div className="section-tabs" role="tablist" aria-label="Event sections">
                 {(
                   [
                     { id: 'registration' as const, label: 'Entries' },
@@ -2082,8 +2080,10 @@ export default function OrganiserDashboard() {
                                 : slot.kind === 'called'
                                   ? 'Called'
                                   : 'Next'}
+                            {matchPathLabel(m.stage) ? ` · ${matchPathLabel(m.stage)}` : ''}
                           </span>
                           <strong>{slot.label}</strong>
+                          <p className="org-now-round">{knockoutRoundLabel(m.round, m.stage)}</p>
                           <p>
                             {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
                             {m.team_b_name || m.team_b_placeholder || 'TBD'}
@@ -2181,14 +2181,51 @@ export default function OrganiserDashboard() {
                 )}
                 {matchView === 'bracket' && hasKnockoutMatches && (
                   <div className="org-bracket">
+                    <p className="muted org-section-lead" style={{ marginTop: 0 }}>
+                      Tap a match to score it. Empty slots fill when the previous round is done.
+                    </p>
                     {championshipMatches.length > 0 && (
                       <div className="org-bracket-block">
-                        <TournamentBracket matches={championshipMatches} stage="KNOCKOUT" />
+                        <TournamentBracket
+                          matches={championshipMatches}
+                          stage="KNOCKOUT"
+                          onScoreMatch={(m) => {
+                            if (m.status === 'SCHEDULED') {
+                              moveMut.mutate(
+                                {
+                                  matchId: m.id,
+                                  data: { status: 'CALLED', notify_players: false },
+                                  silent: true,
+                                },
+                                { onSuccess: () => openScore({ ...m, status: 'CALLED' }) },
+                              )
+                              return
+                            }
+                            openScore(m)
+                          }}
+                        />
                       </div>
                     )}
                     {plateMatches.length > 0 && (
                       <div className="org-bracket-block">
-                        <TournamentBracket matches={plateMatches} stage="PLATE" />
+                        <TournamentBracket
+                          matches={plateMatches}
+                          stage="PLATE"
+                          onScoreMatch={(m) => {
+                            if (m.status === 'SCHEDULED') {
+                              moveMut.mutate(
+                                {
+                                  matchId: m.id,
+                                  data: { status: 'CALLED', notify_players: false },
+                                  silent: true,
+                                },
+                                { onSuccess: () => openScore({ ...m, status: 'CALLED' }) },
+                              )
+                              return
+                            }
+                            openScore(m)
+                          }}
+                        />
                       </div>
                     )}
                   </div>
@@ -2212,7 +2249,7 @@ export default function OrganiserDashboard() {
                                     {m.team_b_name || m.team_b_placeholder || 'TBD'}
                                   </strong>
                                   <span>
-                                    {m.status.replace(/_/g, ' ')}
+                                    {knockoutRoundLabel(m.round, m.stage)}
                                     {m.score ? ` · ${formatMatchScore(m.score)}` : ''}
                                     {m.scheduled_start ? ` · ${formatTime(m.scheduled_start)}` : ''}
                                   </span>
@@ -2244,30 +2281,44 @@ export default function OrganiserDashboard() {
                 )}
                 {matchView === 'list' && (
                   <div className="org-table">
-                    {filteredMatches.map((m) => {
+                    {filteredMatches.map((m, idx) => {
                       const canScore = !!(m.team_a_id && m.team_b_id)
+                      const prev = filteredMatches[idx - 1]
+                      const showPath =
+                        !!matchPathLabel(m.stage) &&
+                        (!prev || prev.stage !== m.stage)
+                      const laterRound = !canScore && (m.stage === 'KNOCKOUT' || m.stage === 'PLATE')
                       return (
-                        <div
-                          key={m.id}
-                          className={`org-row ${m.status === 'CALLED' ? 'is-called' : ''} ${m.status === 'LIVE' ? 'is-live' : ''}`}
-                        >
-                          <div>
-                            <strong>
-                              {m.round.replace(/_/g, ' ')} · {courtLabel(m.court_name, m.court_number)}
-                              {m.scheduled_start ? ` · ${formatTime(m.scheduled_start)}` : ''}
-                            </strong>
-                            <span>
-                              {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
-                              {m.team_b_name || m.team_b_placeholder || 'TBD'}
-                              {m.score ? ` · ${formatMatchScore(m.score)}` : ''}
-                            </span>
-                          </div>
-                          <div className="org-row-right">
-                            {canScore ? (
-                              renderMatchActions(m)
-                            ) : (
-                              <span className="badge badge-draft">Waiting for teams</span>
-                            )}
+                        <div key={m.id}>
+                          {showPath ? (
+                            <p className={`org-path-head org-path-head--${m.stage.toLowerCase()}`}>
+                              {matchPathLabel(m.stage)}
+                            </p>
+                          ) : null}
+                          <div
+                            className={`org-row ${m.status === 'CALLED' ? 'is-called' : ''} ${m.status === 'LIVE' ? 'is-live' : ''} ${m.stage === 'PLATE' ? 'is-plate' : ''} ${m.stage === 'KNOCKOUT' ? 'is-champ' : ''}`}
+                          >
+                            <div>
+                              <strong>
+                                {knockoutRoundLabel(m.round, m.stage)} ·{' '}
+                                {courtLabel(m.court_name, m.court_number)}
+                                {m.scheduled_start ? ` · ${formatTime(m.scheduled_start)}` : ''}
+                              </strong>
+                              <span>
+                                {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                                {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                                {m.score ? ` · ${formatMatchScore(m.score)}` : ''}
+                              </span>
+                            </div>
+                            <div className="org-row-right">
+                              {canScore ? (
+                                renderMatchActions(m)
+                              ) : laterRound ? (
+                                <span className="badge badge-draft">After previous round</span>
+                              ) : (
+                                <span className="badge badge-draft">Waiting for teams</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )

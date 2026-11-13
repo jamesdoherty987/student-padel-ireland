@@ -25,7 +25,7 @@ const CITY_CARDS = [
 ]
 
 const STEPS = [
-  { n: '1', title: 'Browse or create', body: 'Join official SPI tournaments, or create your own private event and share the code.' },
+  { n: '1', title: 'Browse events', body: 'Join official SPI tournaments, or use an invite code for a private day.' },
   { n: '2', title: 'Register with a code', body: 'Paste an invite code, or register as a doubles team for open events.' },
   { n: '3', title: 'Play and climb rankings', body: 'Confirmed results update Ireland rankings after your matches.' },
 ]
@@ -33,11 +33,11 @@ const STEPS = [
 const FAQS: { q: string; a: string }[] = [
   {
     q: 'What is Student Padel Ireland?',
-    a: 'Student Padel Ireland is the platform for student padel in Ireland - browse official tournaments, create private events, join with an invite code, and follow live scores and national rankings.',
+    a: 'Student Padel Ireland is the platform for student padel in Ireland - browse official tournaments, join with an invite code, and follow live scores and national rankings.',
   },
   {
     q: 'Where can I play student padel in Ireland?',
-    a: 'Official tournaments run across Ireland including Dublin, Cork, Galway, Limerick, Belfast, and Waterford. Check Upcoming events, or create a private tournament and invite friends with a code.',
+    a: 'Official tournaments run across Ireland including Dublin, Cork, Galway, Limerick, Belfast, and Waterford. Check Upcoming events, or join a private day with an invite code.',
   },
   {
     q: 'How do I join a tournament?',
@@ -306,8 +306,8 @@ export default function Landing() {
               <a href="#upcoming" className="lp-btn lp-btn-primary">
                 Official tournaments
               </a>
-              <Link to="/tournaments?create=1" className="lp-btn lp-btn-ghost">
-                Create a tournament
+              <Link to="/tournaments" className="lp-btn lp-btn-ghost">
+                All events
               </Link>
             </div>
           </div>

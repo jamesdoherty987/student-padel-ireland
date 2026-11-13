@@ -293,7 +293,6 @@ export default function AdminDashboard() {
 
       {showCreate && (
         <CreateTournamentModal
-          variant="admin"
           onClose={() => setShowCreate(false)}
           onToast={showToast}
           onCreated={(msg, id) => {

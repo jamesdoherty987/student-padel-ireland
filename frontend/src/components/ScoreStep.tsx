@@ -1,6 +1,6 @@
 import NumberInput from './NumberInput'
 
-/** Touch-friendly − / value / + control for set scores (player + organiser). */
+/** Touch-friendly − / value / + control for set scores (player + admin). */
 export default function ScoreStep({
   label,
   value,

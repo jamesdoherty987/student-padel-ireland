@@ -17,7 +17,7 @@ from app.models import (
 
 
 class RegistrationFieldIn(BaseModel):
-    """Organiser-defined signup question (create/update tournament)."""
+    """Admin-defined signup question (create/update tournament)."""
 
     id: Optional[UUID] = None
     label: str = Field(min_length=1, max_length=200)
@@ -191,6 +191,8 @@ class TournamentCreate(BaseModel):
     plate_size: int = Field(default=16, ge=2, le=64)
     scoring_mode: ScoringMode = ScoringMode.SIMPLE
     tie_break_order: Optional[str] = None
+    # Admin create form defaults to public listing; dry-run scripts can pass False
+    is_official: bool = True
     registration_fields: list[RegistrationFieldIn] = Field(default_factory=list)
 
     @field_validator("court_names")
@@ -357,7 +359,7 @@ class PayOnlineNowRequest(BaseModel):
 
 
 class OrganiserAddTeamRequest(BaseModel):
-    """Organiser adds a team (waives payment / marks paid). player2 optional for singles."""
+    """Admin adds a team (waives payment / marks paid). player2 optional for singles."""
 
     team_name: str = Field(min_length=2, max_length=120)
     player1_id: UUID
@@ -405,7 +407,7 @@ class ScoreUpdate(BaseModel):
 
 
 class PlayerScoreSubmit(BaseModel):
-    """Final result proposed by a player - opponent (or organiser) must confirm.
+    """Final result proposed by a player - opponent (or admin) must confirm.
 
     SIMPLE scoring: winner_id required; set1_* optional points.
     BEST_OF_3: set scores must determine a winner (winner_id optional override).

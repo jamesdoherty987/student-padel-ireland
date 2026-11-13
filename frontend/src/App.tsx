@@ -230,7 +230,14 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route path="/organiser" element={<OrganiserDashboard />} />
+                <Route
+                  path="/organiser"
+                  element={
+                    <ProtectedRoute roles={['ADMIN']}>
+                      <OrganiserDashboard />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/rankings" element={<RankingsPage />} />
                 <Route path="/community" element={<CommunityPage />} />
                 <Route path="/community/join/:code" element={<JoinCompetitionPage />} />

@@ -24,7 +24,7 @@ function feeNote(paymentVia: string | null | undefined, refundsOnWithdrawal: boo
     return `You haven’t paid online - this just frees your spot.`
   }
   if (refundsOnWithdrawal) {
-    return `Entry fees are not refunded automatically - contact the organiser if you need a refund.`
+    return `Entry fees are not refunded automatically - contact the admin if you need a refund.`
   }
   return `It’s too close to the tournament - withdrawals aren’t refunded.`
 }

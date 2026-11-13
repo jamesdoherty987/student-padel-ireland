@@ -29,7 +29,7 @@ export default function TermsPage() {
           <h2>The service</h2>
           <p>
             We provide tools for discovering and joining student padel tournaments in Ireland, logging community
-            matches, rankings, and related features. Event organisers remain responsible for their own venue rules,
+            matches, rankings, and related features. Event hosts remain responsible for their own venue rules,
             safety, and on-court conduct.
           </p>
 
@@ -44,14 +44,14 @@ export default function TermsPage() {
           <ul>
             <li>Do not harass others, upload illegal or abusive content, or attempt to disrupt the service</li>
             <li>Do not scrape, reverse engineer, or misuse APIs beyond normal app use</li>
-            <li>Organisers must only enter scores and team data they are authorised to manage</li>
+            <li>Admins must only enter scores and team data they are authorised to manage</li>
           </ul>
 
           <h2>Payments</h2>
           <p>
-            Tournament entry fees are charged by organisers via Stripe Checkout when enabled. Online card payments may
+            Tournament entry fees are charged via Stripe Checkout when enabled. Online card payments may
             include a small platform service fee shown at checkout (e.g. entry fee + service fee). Fees, refunds, and
-            cancellations for a specific event are set by that event&apos;s organiser unless we state otherwise.
+            cancellations for a specific event are set by that event&apos;s admin unless we state otherwise.
             Stripe&apos;s terms also apply to card payments.
           </p>
 

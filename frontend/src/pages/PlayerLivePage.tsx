@@ -855,7 +855,7 @@ export default function PlayerLivePage() {
               {t.entry_fee_cents > 0
                 ? ` (${formatMoney(t.entry_fee_cents, t.currency)})`
                 : ''}{' '}
-              - pay the organiser at the venue
+              - pay at the desk at the venue
               {(mySlot === 1 || mySlot == null) ? (
                 <>
                   {' '}

@@ -86,7 +86,8 @@ export default function TournamentDetailPage() {
         },
   )
 
-  const isOps = !!user && !!tournament?.can_manage
+  // Day-of manage hub is platform-admin only (no organiser accounts).
+  const isOps = !!user && user.role === 'ADMIN' && !!tournament?.can_manage
 
   if (isLoading) {
     return (
@@ -321,7 +322,7 @@ export default function TournamentDetailPage() {
                       : preStart
                         ? reminderNote
                           ? `Draw not published yet · ${reminderNote}`
-                          : 'Waiting for the organiser to publish the draw'
+                          : 'Waiting for the admin to publish the draw'
                         : reminderNote || 'Your spot is confirmed'}
                   </li>
                 </ul>

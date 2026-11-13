@@ -22,8 +22,9 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.security import hash_password
-from app.db.seed import _ensure_universities
+from app.db.seed import _DEMO_ADMIN_EMAIL, _DEMO_ADMIN_PASSWORD, _ensure_universities
 from app.db.session import SessionLocal, init_db
 from app.models import (
     Court,
@@ -52,10 +53,15 @@ from app.services.rating import INITIAL_RATING
 SLUG = "dry-run-demo"
 INVITE_CODE = "DRYRUN01"
 PASSWORD = "demo12345"
-ORGANISER_EMAIL = "organiser@studentpadelireland.ie"
-ORGANISER_PASSWORD = "organiser123"
 # example.com is accepted by EmailStr (required for /api/auth/login).
 EMAIL_DOMAIN = "example.com"
+
+
+def _admin_login() -> tuple[str, str]:
+    settings = get_settings()
+    email = (settings.admin_email or "").strip().lower() or _DEMO_ADMIN_EMAIL
+    password = settings.admin_password or _DEMO_ADMIN_PASSWORD
+    return email, password
 
 # Stable Irish-ish pair names so the draw is readable on court boards.
 TEAM_NAMES = (
@@ -110,11 +116,13 @@ def _invite_or_fixed(db: Session, preferred: str) -> str:
     return preferred + secrets.token_hex(1)[:2].upper()
 
 
-def _ensure_organiser(db: Session, uni: University | None) -> User:
-    user = db.query(User).filter(User.email == ORGANISER_EMAIL).first()
+def _ensure_admin_owner(db: Session) -> User:
+    """Dry-run events are owned by the platform admin (no organiser accounts)."""
+    email, password = _admin_login()
+    user = db.query(User).filter(User.email == email).first()
     if user:
-        user.password_hash = hash_password(ORGANISER_PASSWORD)
-        user.role = UserRole.PLAYER.value
+        user.password_hash = hash_password(password)
+        user.role = UserRole.ADMIN.value
         user.is_active = True
         user.is_suspended = False
         if getattr(user, "must_set_password", False):
@@ -122,11 +130,10 @@ def _ensure_organiser(db: Session, uni: University | None) -> User:
         return user
 
     user = User(
-        email=ORGANISER_EMAIL,
-        password_hash=hash_password(ORGANISER_PASSWORD),
-        full_name="Aoife Host",
-        role=UserRole.PLAYER.value,
-        university_id=uni.id if uni else None,
+        email=email,
+        password_hash=hash_password(password),
+        full_name="Platform Admin",
+        role=UserRole.ADMIN.value,
     )
     db.add(user)
     db.flush()
@@ -225,7 +232,7 @@ def _wipe_tournament(db: Session, t: Tournament) -> None:
 
 def _ensure_tournament(
     db: Session,
-    organiser: User,
+    owner: User,
     *,
     courts: int,
     enable_plate: bool,
@@ -251,7 +258,7 @@ def _ensure_tournament(
         t.format = TournamentFormat.GROUP_KNOCKOUT.value
         t.play_format = PlayFormat.DOUBLES.value
         t.status = TournamentStatus.REGISTRATION_OPEN.value
-        t.organiser_id = organiser.id
+        t.organiser_id = owner.id
         t.match_duration_minutes = 20
         t.group_size = 4
         t.teams_advance_per_group = 2
@@ -293,7 +300,7 @@ def _ensure_tournament(
             "TV display, and player live view before the first real tournament."
         ),
         status=TournamentStatus.REGISTRATION_OPEN.value,
-        organiser_id=organiser.id,
+        organiser_id=owner.id,
         match_duration_minutes=20,
         group_size=4,
         teams_advance_per_group=2,
@@ -423,17 +430,18 @@ def seed(
                 .all()
             )
             if legacy:
-                anchor = _ensure_organiser(db, ul)
+                anchor = _ensure_admin_owner(db)
+                admin_email, _ = _admin_login()
                 for user in legacy:
-                    if user.email == ORGANISER_EMAIL:
+                    if user.email == admin_email:
                         continue
                     purge_user(db, user, reassign_to=anchor)
                 db.commit()
                 print(f"Reset: purged {len(legacy)} previous dry-run player accounts.")
 
-        organiser = _ensure_organiser(db, ul)
+        owner = _ensure_admin_owner(db)
         t = _ensure_tournament(
-            db, organiser, courts=courts, enable_plate=enable_plate, teams=teams
+            db, owner, courts=courts, enable_plate=enable_plate, teams=teams
         )
 
         created_players = 0
@@ -479,9 +487,10 @@ def seed(
         print(f"  Plate:        {t.enable_plate}")
         print(f"  Date:         {t.event_date} @ {t.start_time}")
         print()
-        print(" Organiser login (manage draw / score / courts)")
-        print(f"  Email:    {ORGANISER_EMAIL}")
-        print(f"  Password: {ORGANISER_PASSWORD}")
+        admin_email, admin_password = _admin_login()
+        print(" Admin login (manage draw / score / courts)")
+        print(f"  Email:    {admin_email}")
+        print(f"  Password: {admin_password}")
         print(f"  Hub:      http://localhost:5173/organiser")
         print(f"  Event:    http://localhost:5173/t/{t.slug}")
         print(f"  Live:     http://localhost:5173/t/{t.slug}/live")
@@ -502,9 +511,9 @@ def seed(
             )
         print()
         print(" Suggested dry-run order")
-        print("  1. Log in as organiser → open the event in /organiser")
+        print("  1. Log in as admin → open the event in /organiser")
         print("  2. Generate draw (4 groups of 4 → 8 advance to QF)")
-        print("  3. Score group matches (organiser score OR player propose + confirm)")
+        print("  3. Score group matches (admin score OR player propose + confirm)")
         print("  4. Watch knockout auto-seed; continue scoring to the final")
         print("  5. Check next-court calls, player live view, and TV display")
         print("  6. Mark tournament COMPLETED when done")

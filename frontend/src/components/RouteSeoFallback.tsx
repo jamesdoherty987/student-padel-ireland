@@ -28,7 +28,7 @@ function hasOwnSeo(pathname: string): boolean {
 
 /**
  * Clears stale meta when navigating to app routes that don't set their own SEO
- * (organiser, admin, profiles, live/TV, community detail, etc.).
+ * (manage hub, admin, profiles, live/TV, community detail, etc.).
  */
 export default function RouteSeoFallback() {
   const { pathname } = useLocation()

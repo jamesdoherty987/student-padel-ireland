@@ -15,7 +15,7 @@ bearer = HTTPBearer(auto_error=False)
 
 
 def user_can_manage_tournament(user: User, tournament: Tournament, db: Session) -> bool:
-    """Platform ADMIN, primary organiser, or listed tournament admin."""
+    """Platform ADMIN, event owner, or listed tournament co-admin (scorer/manager)."""
     if user.role == Role.ADMIN.value:
         return True
     if tournament.organiser_id == user.id:
@@ -32,7 +32,7 @@ def user_can_manage_tournament(user: User, tournament: Tournament, db: Session) 
 
 
 def user_owns_tournament(user: User, tournament: Tournament) -> bool:
-    """Primary organiser or platform ADMIN (delete / transfer / manage admins)."""
+    """Event owner or platform ADMIN (delete / transfer / manage admins)."""
     if user.role == Role.ADMIN.value:
         return True
     return tournament.organiser_id == user.id
@@ -83,5 +83,5 @@ def require_tournament_organiser(
     if not tournament:
         raise HTTPException(status_code=404, detail="Tournament not found")
     if not user_can_manage_tournament(user, tournament, db):
-        raise HTTPException(status_code=403, detail="Not a tournament organiser")
+        raise HTTPException(status_code=403, detail="Not allowed to manage this tournament")
     return tournament

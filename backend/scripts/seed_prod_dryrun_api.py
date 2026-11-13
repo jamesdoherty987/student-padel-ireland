@@ -1,7 +1,9 @@
 """Seed a PRIVATE dry-run tournament on production via the public API.
 
-Creates a player host (so is_official=false), 16 paid doubles teams, opens
+Creates the event as the platform admin, 16 paid doubles teams, opens
 registration. Does NOT touch Limerick Open or make anything public.
+
+Requires ADMIN_EMAIL / ADMIN_PASSWORD (or defaults from app settings env).
 
 Usage:
 
@@ -13,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import ssl
 import sys
 import time
@@ -47,9 +50,19 @@ TEAM_NAMES = (
     "TUD Titans",
 )
 
-HOST_EMAIL = "dryrun.host@example.com"
 PASSWORD = "demo12345"
 DEFAULT_BASE = "https://student-padel-ireland.onrender.com"
+
+
+def _admin_creds() -> tuple[str, str]:
+    email = (os.environ.get("ADMIN_EMAIL") or "").strip().lower()
+    password = os.environ.get("ADMIN_PASSWORD") or ""
+    if not email or not password:
+        raise SystemExit(
+            "Set ADMIN_EMAIL and ADMIN_PASSWORD to the platform admin account "
+            "(tournament create is admin-only)."
+        )
+    return email, password
 
 
 def _req(
@@ -85,8 +98,21 @@ def _req(
         return e.code, parsed
 
 
-def ensure_user(base: str, email: str, full_name: str) -> tuple[str, str]:
-    """Return (access_token, user_id). Register or login."""
+def login_admin(base: str) -> tuple[str, str]:
+    email, password = _admin_creds()
+    code, data = _req(
+        base,
+        "POST",
+        "/api/auth/login",
+        body={"email": email, "password": password},
+    )
+    if code == 200 and isinstance(data, dict) and data.get("access_token"):
+        return data["access_token"], email
+    raise SystemExit(f"Admin login failed for {email}: {code} {data}")
+
+
+def ensure_player(base: str, email: str, full_name: str) -> str:
+    """Return user_id. Register or login as a player."""
     code, data = _req(
         base,
         "POST",
@@ -98,9 +124,8 @@ def ensure_user(base: str, email: str, full_name: str) -> tuple[str, str]:
         },
     )
     if code == 200 and isinstance(data, dict) and data.get("access_token"):
-        return data["access_token"], data["user"]["id"]
+        return data["user"]["id"]
 
-    # Already registered
     if code == 400:
         code, data = _req(
             base,
@@ -109,17 +134,19 @@ def ensure_user(base: str, email: str, full_name: str) -> tuple[str, str]:
             body={"email": email, "password": PASSWORD},
         )
         if code == 200 and isinstance(data, dict) and data.get("access_token"):
-            return data["access_token"], data["user"]["id"]
+            return data["user"]["id"]
 
     raise SystemExit(f"Could not ensure user {email}: {code} {data}")
 
 
 def find_existing_dryrun(base: str, token: str) -> dict | None:
     code, data = _req(base, "GET", "/api/organiser/dashboard", token=token)
-    if code != 200 or not isinstance(data, list):
+    if code != 200 or not isinstance(data, dict):
         return None
-    for row in data:
-        t = row.get("tournament") or {}
+    for row in data.get("tournaments") or []:
+        t = row.get("tournament") or row
+        if not isinstance(t, dict):
+            continue
         if t.get("slug") == "dry-run-demo" or (t.get("name") or "").startswith("Dry Run Demo"):
             return t
     return None
@@ -140,10 +167,10 @@ def main() -> None:
         raise SystemExit(f"API health failed: {code} {health}")
     print(f"Health: {health}")
 
-    host_token, host_id = ensure_user(base, HOST_EMAIL, "Dry Run Host")
-    print(f"Host ready: {HOST_EMAIL} ({host_id})")
+    admin_token, admin_email = login_admin(base)
+    print(f"Admin ready: {admin_email}")
 
-    existing = find_existing_dryrun(base, host_token)
+    existing = find_existing_dryrun(base, admin_token)
     if existing:
         tid = existing["id"]
         slug = existing["slug"]
@@ -151,15 +178,24 @@ def main() -> None:
         official = existing.get("is_official")
         print(f"Reusing existing dry-run: {slug} official={official} invite={invite}")
         if official:
-            # Host is a player so this shouldn't happen; abort rather than leave public.
-            raise SystemExit("Existing dry-run is marked official — aborting to protect landing page.")
+            code, patched = _req(
+                base,
+                "PATCH",
+                f"/api/tournaments/{tid}",
+                token=admin_token,
+                body={"is_official": False},
+            )
+            if code != 200:
+                raise SystemExit(f"Could not unpublish dry-run: {code} {patched}")
+            print("Unpublished dry-run (is_official=false).")
+            official = False
     else:
         event_date = (date.today() + timedelta(days=3)).isoformat()
         code, created = _req(
             base,
             "POST",
             "/api/tournaments",
-            token=host_token,
+            token=admin_token,
             body={
                 "name": "Dry Run Demo Tournament",
                 "location": "Limerick",
@@ -177,6 +213,7 @@ def main() -> None:
                 "group_size": 4,
                 "teams_advance_per_group": 2,
                 "enable_plate": False,
+                "is_official": False,
                 "description": (
                     "PRIVATE dry-run for testing scoring, brackets, next-court, "
                     "and live views. Not a public event — delete after testing."
@@ -193,13 +230,22 @@ def main() -> None:
         official = created.get("is_official")
         print(f"Created: {slug} id={tid} official={official} invite={invite}")
         if official:
-            raise SystemExit("Tournament was created as official — aborting (landing page risk).")
+            code, patched = _req(
+                base,
+                "PATCH",
+                f"/api/tournaments/{tid}",
+                token=admin_token,
+                body={"is_official": False},
+            )
+            if code != 200:
+                raise SystemExit(f"Created official — could not unpublish: {code} {patched}")
+            print("Forced is_official=false.")
 
         code, opened = _req(
             base,
             "PATCH",
             f"/api/tournaments/{tid}",
-            token=host_token,
+            token=admin_token,
             body={"status": "REGISTRATION_OPEN"},
         )
         if code != 200:
@@ -208,7 +254,7 @@ def main() -> None:
         print("Registration opened.")
 
     # Ensure still private + simple (overall) scoring for the dry-run
-    code, detail = _req(base, "GET", f"/api/tournaments/{slug}", token=host_token)
+    code, detail = _req(base, "GET", f"/api/tournaments/{slug}", token=admin_token)
     if code == 200 and isinstance(detail, dict):
         if detail.get("is_official"):
             raise SystemExit("Tournament is official — aborting.")
@@ -219,7 +265,7 @@ def main() -> None:
                 base,
                 "PATCH",
                 f"/api/tournaments/{tid}",
-                token=host_token,
+                token=admin_token,
                 body={
                     "scoring_mode": "SIMPLE",
                     "rules": "Demo scores only. Winner + optional score.",
@@ -231,7 +277,7 @@ def main() -> None:
                 print(f"Warning: could not set scoring_mode SIMPLE: {code} {patched}")
 
     # Existing teams by name
-    code, teams_payload = _req(base, "GET", f"/api/tournaments/{tid}/teams", token=host_token)
+    code, teams_payload = _req(base, "GET", f"/api/tournaments/{tid}/teams", token=admin_token)
     existing_names: set[str] = set()
     if code == 200 and isinstance(teams_payload, list):
         existing_names = {t.get("name") for t in teams_payload if t.get("name")}
@@ -248,15 +294,15 @@ def main() -> None:
             continue
         email_a = f"dryrun{i:02d}a@example.com"
         email_b = f"dryrun{i:02d}b@example.com"
-        _, id_a = ensure_user(base, email_a, f"{name} A")
+        id_a = ensure_player(base, email_a, f"{name} A")
         time.sleep(0.05)
-        _, id_b = ensure_user(base, email_b, f"{name} B")
+        id_b = ensure_player(base, email_b, f"{name} B")
         time.sleep(0.05)
         code, team = _req(
             base,
             "POST",
             f"/api/tournaments/{tid}/organiser-add-team",
-            token=host_token,
+            token=admin_token,
             body={
                 "team_name": name,
                 "player1_id": id_a,
@@ -288,9 +334,9 @@ def main() -> None:
     print(f"  On upcoming:  {public_hit}  ← must be False")
     print(f"  Teams added:  {added} (this run)")
     print()
-    print(" Host (manage draw / score)")
-    print(f"  Email:    {HOST_EMAIL}")
-    print(f"  Password: {PASSWORD}")
+    print(" Admin (manage draw / score)")
+    print(f"  Email:    {admin_email}")
+    print(f"  Password: (ADMIN_PASSWORD)")
     print(f"  Hub:      https://www.studentpadel.ie/organiser")
     print(f"  Event:    https://www.studentpadel.ie/t/{slug}")
     print(f"  Live:     https://www.studentpadel.ie/t/{slug}/live")

@@ -538,6 +538,42 @@ html.native-app.has-native-tabs .org-toast {
   border-radius: 8px;
 }
 
+.org-path-head {
+  margin: 1rem 0 0.35rem;
+  padding: 0.2rem 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--court-deep);
+}
+
+.org-path-head:first-child {
+  margin-top: 0.15rem;
+}
+
+.org-path-head--knockout {
+  color: var(--court-deep);
+}
+
+.org-path-head--plate {
+  color: #6b5a1e;
+}
+
+.org-path-head--group {
+  color: var(--ink-soft, #5a6b63);
+}
+
+.org-row.is-champ {
+  border-left: 3px solid var(--court-deep);
+  padding-left: 0.55rem;
+}
+
+.org-row.is-plate {
+  border-left: 3px solid #c4a000;
+  padding-left: 0.55rem;
+}
+
 .org-view-toggle {
   display: flex;
   gap: 0.35rem;
@@ -1027,6 +1063,14 @@ html.native-app.has-native-tabs .org-toast {
   color: var(--ink, #122);
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.org-now-round {
+  margin: 0.15rem 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(11, 61, 46, 0.7);
 }
 
 .org-now-meta {
@@ -1572,7 +1616,7 @@ html.native-app.has-native-tabs .org-toast {
   margin-top: 1.15rem;
 }
 
-/* Organiser score entry uses shared ScoreSheet.css (−/+ bottom sheet) */
+/* Admin score entry uses shared ScoreSheet.css (−/+ bottom sheet) */
 
 @media (max-width: 860px) {
   .org-shell {

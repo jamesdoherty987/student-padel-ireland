@@ -141,7 +141,7 @@ function ConfirmView({ data }: { data: RegistrationConfirm }) {
               </li>
               {payOnArrival ? (
                 <li>
-                  Spot reserved - bring {formatMoney(entryFeeCents, data.currency)} to the organiser
+                  Spot reserved - bring {formatMoney(entryFeeCents, data.currency)} to the admin
                   {!singles ? ' for both players' : ''}
                 </li>
               ) : (
@@ -939,7 +939,7 @@ export default function JoinTournamentPage() {
                   ? ' You haven’t paid online - this just frees your spot.'
                   : tournament.refunds_on_withdrawal === false
                     ? ' It’s too close to the tournament - you won’t get a refund if you leave.'
-                    : ' Fees aren’t refunded automatically - message the organiser if you need one.'}
+                    : ' Fees aren’t refunded automatically - message the admin if you need one.'}
               </p>
               <LeaveTournamentButton
                 tournamentId={tournament.id}

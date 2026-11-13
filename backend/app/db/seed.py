@@ -246,13 +246,20 @@ def _seed_demo_accounts(db: Session) -> None:
         .first()
     ):
         # Migrate old demo emails if present
-        for old, new in (
-            ("admin@irishstudentpadel.ie", "admin@studentpadelireland.ie"),
-            ("organiser@irishstudentpadel.ie", "organiser@studentpadelireland.ie"),
-        ):
+        for old, new in (("admin@irishstudentpadel.ie", "admin@studentpadelireland.ie"),):
             u = db.query(User).filter(User.email == old).first()
             if u and not db.query(User).filter(User.email == new).first():
                 u.email = new
+        # Legacy demo host account — deactivate (admins own events now)
+        for legacy_email in (
+            "organiser@studentpadelireland.ie",
+            "organiser@irishstudentpadel.ie",
+        ):
+            legacy = db.query(User).filter(User.email == legacy_email).first()
+            if legacy:
+                legacy.is_active = False
+                if legacy.role != UserRole.ADMIN.value:
+                    legacy.role = UserRole.PLAYER.value
         db.commit()
         _ensure_demo_friends(db)
         ensure_single_admin(db)
@@ -266,13 +273,6 @@ def _seed_demo_accounts(db: Session) -> None:
         full_name=(settings.admin_name or "Platform Admin").strip() or "Platform Admin",
         role=UserRole.ADMIN.value,
     )
-    organiser = User(
-        email="organiser@studentpadelireland.ie",
-        password_hash=hash_password("organiser123"),
-        full_name="Aoife Host",
-        role=UserRole.PLAYER.value,
-        university_id=ul.id if ul else None,
-    )
     player = User(
         email="james@ul.ie",
         password_hash=hash_password("player12345"),
@@ -282,9 +282,9 @@ def _seed_demo_accounts(db: Session) -> None:
         phone="+353870000001",
         student_number="20123456",
     )
-    db.add_all([admin, organiser, player])
+    db.add_all([admin, player])
     db.flush()
-    for u in (admin, organiser, player):
+    for u in (admin, player):
         pts = 1620 if u.email.startswith("james") else INITIAL_RATING
         db.add(
             Ranking(
@@ -300,7 +300,7 @@ def _seed_demo_accounts(db: Session) -> None:
     db.commit()
     _ensure_demo_friends(db)
     ensure_single_admin(db)
-    print("Seeded universities, demo users, and friends.")
+    print("Seeded universities, demo admin + player, and friends.")
 
 
 def seed_if_empty() -> None:

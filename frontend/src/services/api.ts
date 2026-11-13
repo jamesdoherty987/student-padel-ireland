@@ -159,7 +159,7 @@ export type TournamentSponsor = {
   has_logo?: boolean
 }
 
-/** Team row returned by organiser team list / check-in / withdraw */
+/** Team row returned by admin team list / check-in / withdraw */
 export type TournamentTeam = {
   id: string
   tournament_id: string
@@ -176,7 +176,7 @@ export type TournamentTeam = {
   custom_answers?: CustomAnswer[]
 }
 
-/** Row from GET /api/organiser/dashboard */
+/** Row from GET /api/organiser/dashboard (admin manage hub) */
 export type OrganiserDashRow = {
   tournament: Tournament
   teams: number
