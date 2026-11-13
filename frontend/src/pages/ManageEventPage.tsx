@@ -712,6 +712,11 @@ export default function ManageEventPage() {
       if (!vars.silent) {
         if (vars.data?.notify_only) {
           showToast('Players emailed')
+        } else if (
+          vars.data?.court_number != null ||
+          vars.data?.scheduled_start !== undefined
+        ) {
+          showToast('Court / time updated')
         } else {
           showToast('Updated')
         }
@@ -1331,11 +1336,11 @@ export default function ManageEventPage() {
         )}
         <button
           type="button"
-          className={`btn btn-ghost btn-sm${compact ? ' org-action-more' : ''}`}
+          className="btn btn-ghost btn-sm"
           title="Change court or time"
           onClick={() => openMove(m)}
         >
-          {compact ? '···' : 'Move'}
+          Move
         </button>
       </div>
     )
@@ -3172,9 +3177,12 @@ export default function ManageEventPage() {
             aria-labelledby="move-match-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="move-match-title">Move match</h2>
+            <h2 id="move-match-title">Court &amp; time</h2>
             <p className="muted" style={{ marginBottom: '1rem' }}>
               {moveMatch.team_a_name || 'TBD'} vs {moveMatch.team_b_name || 'TBD'}
+            </p>
+            <p className="muted-note" style={{ marginTop: 0 }}>
+              Only changes court or kickoff time. Score and who advances stay the same.
             </p>
             <div className="form-group">
               <label className="form-label">Court</label>
@@ -3208,9 +3216,13 @@ export default function ManageEventPage() {
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={moveMut.isPending}
+                disabled={moveMut.isPending || !moveMatch?.id}
                 onClick={() => {
-                  const data: Record<string, unknown> = { court_number: moveForm.court_number }
+                  if (!moveMatch?.id) return
+                  const matchId = moveMatch.id
+                  const data: Record<string, unknown> = {
+                    court_number: moveForm.court_number,
+                  }
                   if (moveForm.scheduled_time) {
                     const datePart =
                       tournamentDetail?.event_date?.slice(0, 10) ||
@@ -3222,7 +3234,7 @@ export default function ManageEventPage() {
                       `${datePart}T${moveForm.scheduled_time}:00`,
                     ).toISOString()
                   }
-                  moveMut.mutate({ matchId: moveMatch.id, data })
+                  moveMut.mutate({ matchId, data })
                 }}
               >
                 {moveMut.isPending ? 'Saving…' : 'Save'}

@@ -237,6 +237,15 @@ html.native-app .pl-page {
   background: linear-gradient(155deg, #0b3d2e 0%, #146644 100%);
 }
 
+.pl-next-card--glance.is-tap-score {
+  cursor: pointer;
+}
+
+.pl-next-card--glance.is-tap-score:focus-visible {
+  outline: 2px solid #c8e600;
+  outline-offset: 3px;
+}
+
 .pl-next-top {
   display: flex;
   flex-wrap: wrap;

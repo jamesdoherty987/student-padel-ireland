@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
@@ -325,9 +325,31 @@ function NextMatchCard({
     next.score && formatMatchScore(next.score) !== '-' ? formatMatchScore(next.score) : null
   const winnerText = proposedWinnerLabel(next, myTeamId)
 
+  const canTapScore = !!next.can_i_score && !next.needs_my_confirm && !pending
+
   return (
     <div
-      className={`pl-next-card pl-next-card--glance ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''} ${pending ? 'is-pending' : ''}`}
+      className={`pl-next-card pl-next-card--glance ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''} ${pending ? 'is-pending' : ''}${canTapScore ? ' is-tap-score' : ''}`}
+      role={canTapScore ? 'button' : undefined}
+      tabIndex={canTapScore ? 0 : undefined}
+      onClick={
+        canTapScore
+          ? (e) => {
+              if ((e.target as HTMLElement).closest('button')) return
+              actions.onLogScore()
+            }
+          : undefined
+      }
+      onKeyDown={
+        canTapScore
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                actions.onLogScore()
+              }
+            }
+          : undefined
+      }
     >
       <div className="pl-next-top">
         <p className={`pl-go-now${chip.soft ? ' pl-go-now--soft' : ''}`}>{chip.label}</p>
@@ -379,7 +401,6 @@ function NextMatchCard({
         </div>
       )}
 
-
       <div className="pl-next-actions">
         {next.needs_my_confirm ? (
           <>
@@ -415,11 +436,10 @@ function NextMatchCard({
           </>
         ) : next.can_i_score ? (
           <button type="button" className="btn btn-primary btn-block" onClick={actions.onLogScore}>
-            Score
+            Score this match
           </button>
         ) : null}
       </div>
-
     </div>
   )
 }
@@ -457,7 +477,7 @@ export default function PlayerLivePage() {
     return () => document.removeEventListener('focusin', onFocus)
   }, [scoringMatch])
 
-  const { data, isLoading, isError, dataUpdatedAt, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['player-view', slug],
     queryFn: async () => (await tournamentApi.playerView(slug)).data,
     enabled: !!slug,
@@ -661,6 +681,48 @@ export default function PlayerLivePage() {
     },
   })
 
+  // Deep link: /live?score=1 opens your next match score sheet (one place to play)
+  useEffect(() => {
+    if (searchParams.get('score') !== '1') return
+    const m = data?.next_match as Match | null | undefined
+    if (!m?.id) return
+    const clear = () => {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('score')
+      setSearchParams(nextParams, { replace: true })
+    }
+    if (m.needs_my_confirm) {
+      confirmMut.mutate(m.id)
+      clear()
+      return
+    }
+    if (m.score_submitted_by_me && m.status === 'AWAITING_CONFIRM') {
+      cancelMut.mutate({
+        matchId: m.id,
+        reopen: true,
+        mode: 'edit',
+        draft: pendingDraft(m),
+      })
+      clear()
+      return
+    }
+    if (m.status === 'AWAITING_CONFIRM' && !m.can_i_score) {
+      cancelMut.mutate({
+        matchId: m.id,
+        reopen: true,
+        mode: 'fix',
+        draft: pendingDraft(m),
+      })
+      clear()
+      return
+    }
+    if (m.can_i_score) {
+      openScoreSheet(m, { mode: 'log' })
+    }
+    clear()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, data?.next_match])
+
   if (isLoading) {
     return (
       <div className="app-shell">
@@ -755,8 +817,25 @@ export default function PlayerLivePage() {
   const matchDayLive = hasPaidEntry && (t.status === 'LIVE' || drawReady)
   const myOnCourt =
     hasPaidEntry && next && (next.status === 'LIVE' || next.status === 'CALLED')
-  const championshipMatches = allMatches.filter((m) => m.stage === 'KNOCKOUT')
-  const plateMatches = allMatches.filter((m) => m.stage === 'PLATE')
+  const bracketMatches = useMemo(() => {
+    const flags = new Map<string, Match>()
+    for (const m of [...(data?.my_upcoming || []), ...(data?.my_results || [])] as Match[]) {
+      flags.set(m.id, m)
+    }
+    if (data?.next_match) flags.set((data.next_match as Match).id, data.next_match as Match)
+    return allMatches.map((m) => {
+      const f = flags.get(m.id)
+      if (!f) return m
+      return {
+        ...m,
+        can_i_score: f.can_i_score ?? m.can_i_score,
+        needs_my_confirm: f.needs_my_confirm ?? m.needs_my_confirm,
+        score_submitted_by_me: f.score_submitted_by_me ?? m.score_submitted_by_me,
+      }
+    })
+  }, [allMatches, data?.my_upcoming, data?.my_results, data?.next_match])
+  const championshipMatches = bracketMatches.filter((m) => m.stage === 'KNOCKOUT')
+  const plateMatches = bracketMatches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]
   const knockoutActive = isKnockoutActive(allMatches)
   const groupsDone =
@@ -805,6 +884,40 @@ export default function PlayerLivePage() {
       }),
     confirming: confirmMut.isPending && confirmMut.variables === next?.id,
     cancelling: cancelMut.isPending && cancelMut.variables?.matchId === next?.id,
+  }
+
+  /** Tap own bracket card → score / confirm / edit pending. */
+  const onBracketScore = (m: Match) => {
+    if (!myTeamId) return
+    if (m.needs_my_confirm) {
+      confirmMut.mutate(m.id)
+      return
+    }
+    if (m.score_submitted_by_me && m.status === 'AWAITING_CONFIRM') {
+      cancelMut.mutate({
+        matchId: m.id,
+        reopen: true,
+        mode: 'edit',
+        draft: pendingDraft(m),
+      })
+      return
+    }
+    if (
+      m.status === 'AWAITING_CONFIRM' &&
+      !m.can_i_score &&
+      !m.needs_my_confirm &&
+      !m.score_submitted_by_me
+    ) {
+      // Opponent proposed; open fix flow
+      cancelMut.mutate({
+        matchId: m.id,
+        reopen: true,
+        mode: 'fix',
+        draft: pendingDraft(m),
+      })
+      return
+    }
+    openScoreSheet(m, { mode: 'log' })
   }
 
   const leaveBtn = canLeave ? (
@@ -867,9 +980,6 @@ export default function PlayerLivePage() {
               .
             </p>
           )}
-          {isFetching && dataUpdatedAt > 0 ? (
-            <p className="pl-updated">Refreshing…</p>
-          ) : null}
         </header>
 
         <section className="pl-next">
@@ -1175,10 +1285,18 @@ export default function PlayerLivePage() {
                 matches={championshipMatches}
                 myTeamId={myTeamId}
                 stage="KNOCKOUT"
+                onScoreMatch={hasPaidEntry ? onBracketScore : undefined}
+                scoreOwnMatchesOnly
               />
             )}
             {plateMatches.length > 0 && (
-              <TournamentBracket matches={plateMatches} myTeamId={myTeamId} stage="PLATE" />
+              <TournamentBracket
+                matches={plateMatches}
+                myTeamId={myTeamId}
+                stage="PLATE"
+                onScoreMatch={hasPaidEntry ? onBracketScore : undefined}
+                scoreOwnMatchesOnly
+              />
             )}
           </section>
         )}

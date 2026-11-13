@@ -2940,7 +2940,11 @@ def generate(
 # ── Matches / Scores ──────────────────────────────────────────
 
 @router.get("/tournaments/{slug_or_id}/matches", response_model=list[MatchOut])
-def list_matches(slug_or_id: str, db: Session = Depends(get_db)):
+def list_matches(
+    slug_or_id: str,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
     t = _resolve_tournament(db, slug_or_id)
     matches = (
         db.query(Match)
@@ -2949,7 +2953,7 @@ def list_matches(slug_or_id: str, db: Session = Depends(get_db)):
         .order_by(Match.sort_order)
         .all()
     )
-    return [_match_out(db, m) for m in matches]
+    return [_match_out(db, m, viewer=user) for m in matches]
 
 
 @router.patch("/matches/{match_id}/score", response_model=MatchOut)
@@ -3326,18 +3330,25 @@ def move_match(
 
     if "status" in data and data["status"] is not None:
         data["status"] = data["status"].value
+    # Court / time only — never invent a status change
     for k, v in data.items():
         setattr(m, k, v)
+
+    status_changed = m.status != prev_status
     # Calling/starting a match is day-of activity - mark the tournament live
-    if (
+    if status_changed and (
         t.status not in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value)
-        and getattr(m, "status", None) in (MatchStatus.LIVE.value, MatchStatus.CALLED.value)
+        and m.status in (MatchStatus.LIVE.value, MatchStatus.CALLED.value)
     ):
         if t.status != TournamentStatus.LIVE.value:
             t.status = TournamentStatus.LIVE.value
-    _apply_tournament_match_ratings(db, m, t)
+    # Ratings only when a result status is set via this endpoint (not on court/time moves)
+    if status_changed:
+        _apply_tournament_match_ratings(db, m, t)
     newly_called = (
-        m.status == MatchStatus.CALLED.value and prev_status != MatchStatus.CALLED.value
+        status_changed
+        and m.status == MatchStatus.CALLED.value
+        and prev_status != MatchStatus.CALLED.value
     )
     should_email = newly_called and notify_players is not False
     db.commit()

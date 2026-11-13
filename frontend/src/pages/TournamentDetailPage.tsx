@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
@@ -31,6 +31,7 @@ import './Tournament.css'
 
 export default function TournamentDetailPage() {
   const { slug = '' } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const [shareTab, setShareTab] = useState<'invite' | 'live'>('invite')
   const { data: tournament, isLoading, isError, refetch, isFetching } = useQuery({
@@ -88,6 +89,45 @@ export default function TournamentDetailPage() {
 
   // Day-of manage hub is platform-admin only (no organiser accounts).
   const isOps = !!user && user.role === 'ADMIN' && !!tournament?.can_manage
+
+  // Match day: send entered players straight to Live (next match + score in one place)
+  useEffect(() => {
+    if (!slug || !tournament || playerViewPending || playerViewError) return
+    if (isOps) return
+    const team = playerView?.my_team as
+      | {
+          payment_status?: string
+          slot?: number | null
+          needs_partner?: boolean
+          partner_invite_pending?: boolean
+        }
+      | null
+      | undefined
+    if (!team || team.payment_status !== 'PAID') return
+    if (team.needs_partner && team.slot === 1) return
+    if (team.partner_invite_pending && team.slot === 2) return
+    const onMatchDay =
+      tournament.status === 'LIVE' ||
+      (matches.length > 0 && tournament.status !== 'CANCELLED' && tournament.status !== 'COMPLETED')
+    const next = playerView?.next_match as Match | null | undefined
+    if (!onMatchDay && !next) return
+    const openScore =
+      !!next &&
+      (next.can_i_score ||
+        next.needs_my_confirm ||
+        next.score_submitted_by_me ||
+        next.status === 'AWAITING_CONFIRM')
+    navigate(`/t/${slug}/live${openScore ? '?score=1' : ''}`, { replace: true })
+  }, [
+    slug,
+    tournament,
+    playerView,
+    playerViewPending,
+    playerViewError,
+    matches.length,
+    isOps,
+    navigate,
+  ])
 
   if (isLoading) {
     return (
@@ -329,14 +369,27 @@ export default function TournamentDetailPage() {
               </>
             )}
             <div className="tour-entry-actions">
-              <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
-                {nextMatch
-                  ? nextMatch.status === 'CALLED' || nextMatch.status === 'LIVE'
-                    ? 'Open live match'
-                    : 'Open my matches'
-                  : matchDay
-                    ? 'My matches'
-                    : 'View my entry'}
+              <Link
+                to={
+                  nextMatch &&
+                  (nextMatch.can_i_score ||
+                    nextMatch.needs_my_confirm ||
+                    nextMatch.score_submitted_by_me ||
+                    nextMatch.status === 'AWAITING_CONFIRM')
+                    ? `/t/${tournament.slug}/live?score=1`
+                    : `/t/${tournament.slug}/live`
+                }
+                className="btn btn-primary"
+              >
+                {nextMatch?.needs_my_confirm
+                  ? 'Confirm score'
+                  : nextMatch?.can_i_score
+                    ? 'Score this match'
+                    : nextMatch
+                      ? 'My match'
+                      : matchDay
+                        ? 'My match'
+                        : 'View my entry'}
               </Link>
               {owesAtVenue && (mySlot === 1 || mySlot == null) && (
                 <Link to={`/t/${tournament.slug}/join`} className="btn btn-ghost tour-entry-btn-ghost">
@@ -474,7 +527,7 @@ export default function TournamentDetailPage() {
           <nav className="tour-jump" aria-label="Jump to section">
             {matchDay && (
               <Link to={`/t/${tournament.slug}/live`} className="tour-jump-link tour-jump-link--primary">
-                My matches
+                My match
               </Link>
             )}
             {upcoming.length > 0 && (
@@ -525,8 +578,8 @@ export default function TournamentDetailPage() {
               ))}
             </ul>
             {hasPaidEntry && (
-              <Link to={`/t/${tournament.slug}/live`} className="form-inline-link">
-                Open My matches to confirm
+              <Link to={`/t/${tournament.slug}/live?score=1`} className="form-inline-link">
+                Confirm on My match
               </Link>
             )}
           </section>

@@ -592,6 +592,12 @@ html.native-app.has-native-tabs .org-toast {
   background: linear-gradient(165deg, rgba(11, 61, 46, 0.03), rgba(200, 230, 0, 0.06));
   border: 1px solid rgba(11, 61, 46, 0.1);
   border-radius: var(--radius-md, 12px);
+  overflow: visible;
+}
+
+.org-bracket-block {
+  min-width: 0;
+  overflow: visible;
 }
 
 .org-court-col {
@@ -973,11 +979,6 @@ html.native-app.has-native-tabs .org-toast {
 
 .org-checkin > *:not(summary) {
   margin-top: 0.85rem;
-}
-
-.org-action-more {
-  min-width: 2.25rem;
-  letter-spacing: 0.08em;
 }
 
 .org-now-card.is-tap,
