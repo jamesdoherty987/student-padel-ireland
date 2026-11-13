@@ -681,48 +681,6 @@ export default function PlayerLivePage() {
     },
   })
 
-  // Deep link: /live?score=1 opens your next match score sheet (one place to play)
-  useEffect(() => {
-    if (searchParams.get('score') !== '1') return
-    const m = data?.next_match as Match | null | undefined
-    if (!m?.id) return
-    const clear = () => {
-      const nextParams = new URLSearchParams(searchParams)
-      nextParams.delete('score')
-      setSearchParams(nextParams, { replace: true })
-    }
-    if (m.needs_my_confirm) {
-      confirmMut.mutate(m.id)
-      clear()
-      return
-    }
-    if (m.score_submitted_by_me && m.status === 'AWAITING_CONFIRM') {
-      cancelMut.mutate({
-        matchId: m.id,
-        reopen: true,
-        mode: 'edit',
-        draft: pendingDraft(m),
-      })
-      clear()
-      return
-    }
-    if (m.status === 'AWAITING_CONFIRM' && !m.can_i_score) {
-      cancelMut.mutate({
-        matchId: m.id,
-        reopen: true,
-        mode: 'fix',
-        draft: pendingDraft(m),
-      })
-      clear()
-      return
-    }
-    if (m.can_i_score) {
-      openScoreSheet(m, { mode: 'log' })
-    }
-    clear()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, data?.next_match])
-
   if (isLoading) {
     return (
       <div className="app-shell">

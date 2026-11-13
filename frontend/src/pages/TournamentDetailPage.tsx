@@ -111,13 +111,7 @@ export default function TournamentDetailPage() {
       (matches.length > 0 && tournament.status !== 'CANCELLED' && tournament.status !== 'COMPLETED')
     const next = playerView?.next_match as Match | null | undefined
     if (!onMatchDay && !next) return
-    const openScore =
-      !!next &&
-      (next.can_i_score ||
-        next.needs_my_confirm ||
-        next.score_submitted_by_me ||
-        next.status === 'AWAITING_CONFIRM')
-    navigate(`/t/${slug}/live${openScore ? '?score=1' : ''}`, { replace: true })
+    navigate(`/t/${slug}/live`, { replace: true })
   }, [
     slug,
     tournament,
@@ -369,18 +363,7 @@ export default function TournamentDetailPage() {
               </>
             )}
             <div className="tour-entry-actions">
-              <Link
-                to={
-                  nextMatch &&
-                  (nextMatch.can_i_score ||
-                    nextMatch.needs_my_confirm ||
-                    nextMatch.score_submitted_by_me ||
-                    nextMatch.status === 'AWAITING_CONFIRM')
-                    ? `/t/${tournament.slug}/live?score=1`
-                    : `/t/${tournament.slug}/live`
-                }
-                className="btn btn-primary"
-              >
+              <Link to={`/t/${tournament.slug}/live`} className="btn btn-primary">
                 {nextMatch?.needs_my_confirm
                   ? 'Confirm score'
                   : nextMatch?.can_i_score
@@ -578,7 +561,7 @@ export default function TournamentDetailPage() {
               ))}
             </ul>
             {hasPaidEntry && (
-              <Link to={`/t/${tournament.slug}/live?score=1`} className="form-inline-link">
+              <Link to={`/t/${tournament.slug}/live`} className="form-inline-link">
                 Confirm on My match
               </Link>
             )}

@@ -3,14 +3,16 @@ import type { Match } from '../services/api'
 import {
   formatMatchScore,
   formatTime,
-  knockoutRoundLabel,
+  knockoutRoundBare,
   knockoutRoundOrder,
+  knockoutRoundShort,
 } from '../utils/format'
 import './TournamentBracket.css'
 
 type RoundColumn = {
   round: string
   label: string
+  shortLabel: string
   matches: Match[]
 }
 
@@ -57,7 +59,9 @@ function buildRounds(matches: Match[], stage: 'KNOCKOUT' | 'PLATE'): RoundColumn
     .sort((a, b) => knockoutRoundOrder(a[0]) - knockoutRoundOrder(b[0]))
     .map(([round, list]) => ({
       round,
-      label: knockoutRoundLabel(round, stage),
+      // Bare labels — bracket title already says Championship / Plate
+      label: knockoutRoundBare(round),
+      shortLabel: knockoutRoundShort(round),
       matches: [...list].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
     }))
 }
@@ -229,8 +233,8 @@ export default function TournamentBracket({
 
   const roundKey = `${stage}|${rounds.map((r) => r.round).join('|')}`
   const isPlate = stage === 'PLATE'
-  const title = isPlate ? 'Plate bracket' : 'Championship bracket'
-  const lead = isPlate ? 'Consolation path to the plate final.' : 'Follow the path to the final.'
+  const title = isPlate ? 'Plate' : 'Championship'
+  const lead = isPlate ? 'Consolation path to the plate final.' : 'Path to the final.'
   const tabsLabel = isPlate ? 'Plate rounds' : 'Championship rounds'
   const championLabel = isPlate ? 'Plate champion' : 'Champion'
 
@@ -315,10 +319,12 @@ export default function TournamentBracket({
               type="button"
               role="tab"
               aria-selected={safeIndex === i}
+              aria-label={r.label}
               className={`tb-tab ${safeIndex === i ? 'is-active' : ''}`}
               onClick={() => setActiveRound(i)}
             >
-              {r.label}
+              <span className="tb-tab-full">{r.label}</span>
+              <span className="tb-tab-short">{r.shortLabel}</span>
             </button>
           ))}
         </div>
@@ -326,7 +332,12 @@ export default function TournamentBracket({
 
       {/* Mobile: one round at a time */}
       <div className="tb-mobile">
-        <h3 className="tb-round-label">{active.label}</h3>
+        <div className="tb-mobile-head">
+          <h3 className="tb-round-label">{active.label}</h3>
+          <span className="tb-mobile-count">
+            {active.matches.length} match{active.matches.length === 1 ? '' : 'es'}
+          </span>
+        </div>
         <div className="tb-mobile-list">
           {active.matches.map((m) => (
             <MatchCard

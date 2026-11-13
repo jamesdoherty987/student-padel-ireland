@@ -123,13 +123,9 @@ export function bracketFormatHint(format?: string | null, enablePlate?: boolean)
   return 'Split into groups first. Top finishers from each group advance to a knockout bracket.'
 }
 
-/** Display label for knockout / group round codes from the API. */
-export function knockoutRoundLabel(round: string, stage?: string) {
-  if (!round) {
-    if (stage === 'PLATE') return 'Plate'
-    if (stage === 'KNOCKOUT') return 'Championship'
-    return 'Match'
-  }
+/** Bare round name without Championship/Plate prefix (for in-bracket tabs). */
+export function knockoutRoundBare(round: string) {
+  if (!round) return 'Match'
   if (round.startsWith('GROUP_')) return `Group ${round.replace('GROUP_', '')}`
   const map: Record<string, string> = {
     ROUND_OF_64: 'Round of 64',
@@ -143,7 +139,36 @@ export function knockoutRoundLabel(round: string, stage?: string) {
     FINAL: 'Final',
     BRONZE: '3rd place',
   }
-  const base = map[round] || round.replace(/_/g, ' ')
+  return map[round] || round.replace(/_/g, ' ')
+}
+
+/** Compact tab label for mobile bracket pills. */
+export function knockoutRoundShort(round: string) {
+  if (!round) return 'Match'
+  if (round.startsWith('GROUP_')) return round.replace('GROUP_', 'G')
+  const map: Record<string, string> = {
+    ROUND_OF_64: 'R64',
+    ROUND_OF_32: 'R32',
+    ROUND_OF_16: 'R16',
+    R16: 'R16',
+    QUARTER_FINAL: 'QF',
+    QF: 'QF',
+    SEMI_FINAL: 'SF',
+    SF: 'SF',
+    FINAL: 'Final',
+    BRONZE: '3rd',
+  }
+  return map[round] || knockoutRoundBare(round)
+}
+
+/** Display label for knockout / group round codes from the API. */
+export function knockoutRoundLabel(round: string, stage?: string) {
+  if (!round) {
+    if (stage === 'PLATE') return 'Plate'
+    if (stage === 'KNOCKOUT') return 'Championship'
+    return 'Match'
+  }
+  const base = knockoutRoundBare(round)
   if (stage === 'PLATE') return `Plate · ${base}`
   if (stage === 'KNOCKOUT') return `Championship · ${base}`
   return base
