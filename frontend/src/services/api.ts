@@ -399,10 +399,18 @@ export const authApi = {
   deleteAccount: (password: string) => api.delete('/api/auth/me', { data: { password } }),
 }
 
+function privateCodeParams(code?: string | null) {
+  const cleaned = (code || '').trim()
+  return cleaned ? { code: cleaned } : undefined
+}
+
 export const tournamentApi = {
   list: (params?: { status?: string; upcoming?: boolean }) =>
     api.get<Tournament[]>('/api/tournaments', { params }),
-  get: (slugOrId: string) => api.get<Tournament>(`/api/tournaments/${slugOrId}`),
+  get: (slugOrId: string, opts?: { code?: string | null }) =>
+    api.get<Tournament>(`/api/tournaments/${slugOrId}`, {
+      params: privateCodeParams(opts?.code),
+    }),
   getByCode: (code: string) => api.get<Tournament>(`/api/tournaments/code/${code}`),
   create: (data: Record<string, unknown>) => api.post<Tournament>('/api/tournaments', data),
   update: (id: string, data: Record<string, unknown>) =>
@@ -429,12 +437,26 @@ export const tournamentApi = {
     api.post(`/api/tournaments/${tournamentId}/generate`, data || {}),
   seedKnockout: (tournamentId: string) =>
     api.post(`/api/tournaments/${tournamentId}/seed-knockout`),
-  matches: (slugOrId: string) => api.get<Match[]>(`/api/tournaments/${slugOrId}/matches`),
-  standings: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/standings`),
-  playerView: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/player-view`),
-  display: (slugOrId: string) => api.get(`/api/tournaments/${slugOrId}/display`),
-  announcements: (slugOrId: string) =>
-    api.get<TournamentAnnouncement[]>(`/api/tournaments/${slugOrId}/announcements`),
+  matches: (slugOrId: string, opts?: { code?: string | null }) =>
+    api.get<Match[]>(`/api/tournaments/${slugOrId}/matches`, {
+      params: privateCodeParams(opts?.code),
+    }),
+  standings: (slugOrId: string, opts?: { code?: string | null }) =>
+    api.get(`/api/tournaments/${slugOrId}/standings`, {
+      params: privateCodeParams(opts?.code),
+    }),
+  playerView: (slugOrId: string, opts?: { code?: string | null }) =>
+    api.get(`/api/tournaments/${slugOrId}/player-view`, {
+      params: privateCodeParams(opts?.code),
+    }),
+  display: (slugOrId: string, opts?: { code?: string | null }) =>
+    api.get(`/api/tournaments/${slugOrId}/display`, {
+      params: privateCodeParams(opts?.code),
+    }),
+  announcements: (slugOrId: string, opts?: { code?: string | null }) =>
+    api.get<TournamentAnnouncement[]>(`/api/tournaments/${slugOrId}/announcements`, {
+      params: privateCodeParams(opts?.code),
+    }),
   createAnnouncement: (id: string, data: Record<string, unknown>) =>
     api.post<TournamentAnnouncement>(`/api/tournaments/${id}/announcements`, data),
   updateAnnouncement: (tournamentId: string, announcementId: string, data: Record<string, unknown>) =>
@@ -444,8 +466,10 @@ export const tournamentApi = {
     ),
   deleteAnnouncement: (tournamentId: string, announcementId: string) =>
     api.delete(`/api/tournaments/${tournamentId}/announcements/${announcementId}`),
-  sponsors: (slugOrId: string) =>
-    api.get<TournamentSponsor[]>(`/api/tournaments/${slugOrId}/sponsors`),
+  sponsors: (slugOrId: string, opts?: { code?: string | null }) =>
+    api.get<TournamentSponsor[]>(`/api/tournaments/${slugOrId}/sponsors`, {
+      params: privateCodeParams(opts?.code),
+    }),
   createSponsor: (
     tournamentId: string,
     data: { name: string; website?: string; featured?: boolean; logo?: File | null },

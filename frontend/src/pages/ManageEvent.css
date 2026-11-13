@@ -308,6 +308,22 @@ html.native-app.has-native-tabs .org-toast {
   border-radius: var(--radius-sm);
 }
 
+.org-invite-self {
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.org-invite-self-note {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
 .org-invite .qr-wrap {
   margin-top: 0;
 }

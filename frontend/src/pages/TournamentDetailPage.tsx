@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
+import { HaveCodeButton } from '../components/JoinCodeModal'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
@@ -11,6 +12,8 @@ import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { tournamentApi, type Match } from '../services/api'
 import { publicPathUrl } from '../native/platform'
+import { cleanInviteCode } from '../utils/inviteCode'
+import { getRememberedPrivateInvite, rememberPrivateInvite } from '../utils/privateEventAccess'
 import {
   bracketFormatHint,
   courtLabel,
@@ -31,30 +34,51 @@ import './Tournament.css'
 
 export default function TournamentDetailPage() {
   const { slug = '' } = useParams()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { user } = useAuth()
   const [shareTab, setShareTab] = useState<'invite' | 'live'>('invite')
+  const inviteCode = useMemo(() => {
+    const fromUrl = cleanInviteCode(searchParams.get('code') || '')
+    if (fromUrl.length >= 6) return fromUrl
+    return getRememberedPrivateInvite(slug) || ''
+  }, [searchParams, slug])
+
+  useEffect(() => {
+    if (inviteCode) rememberPrivateInvite(slug, inviteCode)
+  }, [slug, inviteCode])
+
   const { data: tournament, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ['tournament', slug, user?.id],
-    queryFn: async () => (await tournamentApi.get(slug)).data,
+    queryKey: ['tournament', slug, user?.id, inviteCode || ''],
+    queryFn: async () => {
+      const { data } = await tournamentApi.get(slug, { code: inviteCode || undefined })
+      if (inviteCode) {
+        rememberPrivateInvite(slug, inviteCode)
+        rememberPrivateInvite(data.id, inviteCode)
+      }
+      return data
+    },
     enabled: !!slug,
-    retry: 4,
+    retry: 2,
   })
   const { data: announcements = [] } = useQuery({
-    queryKey: ['announcements', slug],
-    queryFn: async () => (await tournamentApi.announcements(slug)).data,
-    enabled: !!slug,
+    queryKey: ['announcements', slug, inviteCode || ''],
+    queryFn: async () =>
+      (await tournamentApi.announcements(slug, { code: inviteCode || undefined })).data,
+    enabled: !!slug && !!tournament,
   })
   const { data: sponsors = [] } = useQuery({
-    queryKey: ['sponsors', slug],
-    queryFn: async () => (await tournamentApi.sponsors(slug)).data,
-    enabled: !!slug,
+    queryKey: ['sponsors', slug, inviteCode || ''],
+    queryFn: async () =>
+      (await tournamentApi.sponsors(slug, { code: inviteCode || undefined })).data,
+    enabled: !!slug && !!tournament,
     staleTime: 60_000,
   })
   const { data: matches = [] } = useQuery({
-    queryKey: ['matches', slug],
-    queryFn: async () => (await tournamentApi.matches(slug)).data,
-    enabled: !!slug,
+    queryKey: ['matches', slug, inviteCode || ''],
+    queryFn: async () =>
+      (await tournamentApi.matches(slug, { code: inviteCode || undefined })).data,
+    enabled: !!slug && !!tournament,
     refetchInterval: 12000,
   })
 
@@ -64,9 +88,10 @@ export default function TournamentDetailPage() {
     isPending: playerViewPending,
     refetch: refetchPlayerView,
   } = useQuery({
-    queryKey: ['player-view', slug],
-    queryFn: async () => (await tournamentApi.playerView(slug)).data,
-    enabled: !!slug && !!user,
+    queryKey: ['player-view', slug, inviteCode || ''],
+    queryFn: async () =>
+      (await tournamentApi.playerView(slug, { code: inviteCode || undefined })).data,
+    enabled: !!slug && !!user && !!tournament,
     staleTime: 0,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
@@ -87,8 +112,7 @@ export default function TournamentDetailPage() {
         },
   )
 
-  // Day-of manage hub is platform-admin only (no organiser accounts).
-  const isOps = !!user && user.role === 'ADMIN' && !!tournament?.can_manage
+  const isOps = !!user && !!tournament?.can_manage
 
   const teamForRedirect = playerView?.my_team as
     | {
@@ -139,11 +163,16 @@ export default function TournamentDetailPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Could not load this tournament</h1>
-          <p className="page-sub">The server may be waking up. Try again in a few seconds.</p>
+          <h1 className="page-title">Private or missing event</h1>
+          <p className="page-sub">
+            Private events aren’t on the public list. Use the host’s invite code or QR to open it.
+          </p>
           <div className="header-actions" style={{ justifyContent: 'center' }}>
-            <button type="button" className="btn btn-primary" onClick={() => refetch()} disabled={isFetching}>
-              {isFetching ? 'Retrying...' : 'Retry'}
+            <HaveCodeButton className="btn btn-primary" initialCode={inviteCode}>
+              Enter invite code
+            </HaveCodeButton>
+            <button type="button" className="btn btn-ghost" onClick={() => refetch()} disabled={isFetching}>
+              {isFetching ? 'Retrying…' : 'Retry'}
             </button>
             <Link to="/tournaments" className="btn btn-ghost">
               Browse tournaments
@@ -160,10 +189,16 @@ export default function TournamentDetailPage() {
   const plateMatches = matches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]
   const knockoutActive = isKnockoutActive(matches)
-  const liveUrl = publicPathUrl(`/t/${tournament.slug}/live`)
+  const livePath = inviteCode
+    ? `/t/${tournament.slug}/live?code=${encodeURIComponent(inviteCode)}`
+    : `/t/${tournament.slug}/live`
+  const joinPath = inviteCode
+    ? `/t/${tournament.slug}/join?code=${encodeURIComponent(inviteCode)}`
+    : `/t/${tournament.slug}/join`
+  const liveUrl = publicPathUrl(livePath)
   const joinUrl = tournament.invite_code
     ? publicPathUrl(`/join/${tournament.invite_code}`)
-    : publicPathUrl(`/t/${tournament.slug}/join`)
+    : publicPathUrl(joinPath)
   const myTeamInfo = playerView?.my_team as
     | {
         id?: string
@@ -238,7 +273,10 @@ export default function TournamentDetailPage() {
     !isListedPartner &&
     !hasPendingCaptain &&
     hasSpot
-  const showInvite = !!tournament.invite_code && (canJoin || isOps || hasPendingCaptain)
+  // Invite QR/code is host-only for private events (players arrive via code/QR already)
+  const showInvite =
+    !!tournament.invite_code &&
+    (isOps || (!!tournament.is_official && (canJoin || hasPendingCaptain)))
   const activeShareTab = showInvite ? shareTab : 'live'
 
   return (
@@ -247,13 +285,20 @@ export default function TournamentDetailPage() {
       <main className="page tourney-detail">
         <BackButton fallbackTo="/tournaments" />
         <p className="tour-card-kind tour-detail-kind">
-          {tournament.is_official ? 'Official' : 'Personal'}
+          <span className={tournament.is_official ? undefined : 'tour-card-private-label'}>
+            {tournament.is_official ? 'Official' : 'Private'}
+          </span>
           <span aria-hidden> · </span>
           {statusLabel(tournament.status)}
           <span aria-hidden> · </span>
           {tournament.location}
         </p>
         <h1 className="page-title">{tournament.name}</h1>
+        {!tournament.is_official && (
+          <p className="page-sub page-sub-tight tour-private-note">
+            Invite-only · not an official Student Padel Ireland tournament
+          </p>
+        )}
         <p className="page-sub page-sub-tight">
           {tournament.venue} · {formatDate(tournament.event_date, { day: 'numeric', month: 'short' })} ·{' '}
           {formatTime(tournament.start_time)}
@@ -272,7 +317,7 @@ export default function TournamentDetailPage() {
               paid.
             </p>
             <div className="tour-entry-actions">
-              <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
+              <Link to={joinPath} className="btn btn-primary">
                 Add partner
               </Link>
             </div>
@@ -370,7 +415,7 @@ export default function TournamentDetailPage() {
                         : 'View my entry'}
               </Link>
               {owesAtVenue && (mySlot === 1 || mySlot == null) && (
-                <Link to={`/t/${tournament.slug}/join`} className="btn btn-ghost tour-entry-btn-ghost">
+                <Link to={joinPath} className="btn btn-ghost tour-entry-btn-ghost">
                   Pay online now
                 </Link>
               )}
@@ -398,7 +443,7 @@ export default function TournamentDetailPage() {
             </p>
             {hasPendingCaptain && (
               <div className="tour-entry-actions">
-                <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
+                <Link to={joinPath} className="btn btn-primary">
                   {singles ? 'Complete payment' : 'Pay for both players'}
                 </Link>
               </div>
@@ -435,12 +480,18 @@ export default function TournamentDetailPage() {
 
         <div className="tour-actions">
           {canJoin && (
-            <Link to={`/t/${tournament.slug}/join`} className="btn btn-primary">
-              {singles ? 'Join tournament' : 'Register your team'}
+            <Link to={joinPath} className="btn btn-primary">
+              {tournament.is_official
+                ? singles
+                  ? 'Join tournament'
+                  : 'Register your team'
+                : singles
+                  ? 'Join private event'
+                  : 'Register for private event'}
             </Link>
           )}
           {!hasPaidEntry && !canJoin && !canResumePayment && !isListedPartner && tournament.status === 'LIVE' && (
-            <Link to={`/t/${tournament.slug}/live`} className="btn btn-ghost">
+            <Link to={livePath} className="btn btn-ghost">
               Live scores
             </Link>
           )}

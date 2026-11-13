@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
 import { confirmDialog } from '../components/ConfirmDialog'
+import CreatePrivateEventModal from '../components/CreatePrivateEventModal'
+import CreateTournamentModal from '../components/CreateTournamentModal'
 import EditTournamentModal from '../components/EditTournamentModal'
 import ScoreStep from '../components/ScoreStep'
 import SponsorStrip from '../components/SponsorStrip'
@@ -109,7 +111,9 @@ export default function ManageEventPage() {
 
   const [toast, setToast] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(params.get('t'))
+  const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const isAdmin = user?.role === 'ADMIN'
   const [showAddTeam, setShowAddTeam] = useState(false)
   const [confirmGenerate, setConfirmGenerate] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
@@ -171,12 +175,15 @@ export default function ManageEventPage() {
 
   useEffect(() => {
     if (params.get('create') === '1') {
-      navigate('/admin', { replace: true })
+      setShowCreate(true)
+      const next = new URLSearchParams(params)
+      next.delete('create')
+      setSearchParams(next, { replace: true })
       return
     }
     const t = params.get('t')
     if (t) setSelectedId(t)
-  }, [params, navigate])
+  }, [params, setSearchParams])
 
   useEffect(() => {
     setPaymentFilter('all')
@@ -294,8 +301,16 @@ export default function ManageEventPage() {
     [friends],
   )
 
-  const inviteCode = tournamentDetail?.invite_code || ''
+  const inviteCode =
+    tournamentDetail?.invite_code || active?.tournament.invite_code || ''
   const joinUrl = inviteCode ? publicPathUrl(`/join/${inviteCode}`) : ''
+  const displayPath = active?.tournament.slug
+    ? `/tournament/${active.tournament.slug}/display${
+        inviteCode && active.tournament.is_official === false
+          ? `?code=${encodeURIComponent(inviteCode)}`
+          : ''
+      }`
+    : null
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -1362,8 +1377,8 @@ export default function ManageEventPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Admin access required</h1>
-          <p className="page-sub">Log in with the platform admin account to manage events.</p>
+          <h1 className="page-title">Log in to host</h1>
+          <p className="page-sub">Sign in to manage your private events, draws, and scores.</p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
             <Link to="/login?next=%2Fmanage" className="btn btn-primary">
               Log in
@@ -1383,7 +1398,7 @@ export default function ManageEventPage() {
       {toast && <div className="org-toast">{toast}</div>}
       <div className="org-shell">
         <aside className="org-nav">
-          <p className="org-nav-label">{user?.role === 'ADMIN' ? 'All events' : 'My events'}</p>
+          <p className="org-nav-label">{isAdmin ? 'All events' : 'My events'}</p>
           {tournaments.map((t) => (
             <button
               key={t.tournament.id}
@@ -1396,24 +1411,24 @@ export default function ManageEventPage() {
               <span className="org-nav-item-name">{t.tournament.name}</span>
               <span className="org-nav-item-meta">
                 {statusLabel(t.tournament.status)}
-                {user?.role === 'ADMIN'
-                  ? t.tournament.is_official
-                    ? ' · Official'
-                    : ' · Private'
-                  : ''}
+                {t.tournament.is_official ? ' · Official' : ' · Private'}
               </span>
             </button>
           ))}
           <button
             className="btn btn-ghost btn-block"
             type="button"
-            onClick={() => navigate('/admin')}
+            onClick={() => setShowCreate(true)}
           >
-            + New tournament
+            {isAdmin ? '+ New tournament' : '+ Host private event'}
           </button>
           <div className="org-aside-note">
-            <strong>Admin</strong>
-            <p>Open registration, generate the draw, go live, and score from here.</p>
+            <strong>{isAdmin ? 'Manage' : 'Private host'}</strong>
+            <p>
+              {isAdmin
+                ? 'Open registration, generate the draw, go live, and score from here.'
+                : 'Private events stay off the official list. Share the invite code with friends.'}
+            </p>
           </div>
         </aside>
 
@@ -1437,10 +1452,14 @@ export default function ManageEventPage() {
           )}
           {!active && !isLoading && !isError && (
             <div className="org-empty">
-              <h1>No tournaments yet</h1>
-              <p>Create an event from the admin portal, then manage the draw and scoring here.</p>
-              <button className="btn btn-primary" type="button" onClick={() => navigate('/admin')}>
-                Go to admin
+              <h1>{isAdmin ? 'No tournaments yet' : 'No events yet'}</h1>
+              <p>
+                {isAdmin
+                  ? 'Create an official tournament or a private event, then manage registration and scoring here.'
+                  : 'Host a private event for friends. It won’t show as an official SPI tournament — share the invite code.'}
+              </p>
+              <button className="btn btn-primary" type="button" onClick={() => setShowCreate(true)}>
+                {isAdmin ? 'New tournament' : 'Host private event'}
               </button>
             </div>
           )}
@@ -1451,13 +1470,19 @@ export default function ManageEventPage() {
                 <div>
                   <h1>{active.tournament.name}</h1>
                   <p className="org-header-meta">
+                    {active.tournament.is_official ? 'Official' : 'Private'}
+                    {' · '}
                     {statusLabel(active.tournament.status)}
                     {active.tournament.slug ? (
                       <>
                         {' · '}
                         <Link to={`/t/${active.tournament.slug}/live`}>Live</Link>
-                        {' · '}
-                        <Link to={`/tournament/${active.tournament.slug}/display`}>TV</Link>
+                        {displayPath ? (
+                          <>
+                            {' · '}
+                            <Link to={displayPath}>TV</Link>
+                          </>
+                        ) : null}
                       </>
                     ) : null}
                   </p>
@@ -1715,7 +1740,7 @@ export default function ManageEventPage() {
               <>
               <section className="org-section">
                 <h2>Invite</h2>
-                {inviteCode && active.tournament.status === 'REGISTRATION_OPEN' ? (
+                {inviteCode ? (
                   <div className="org-invite">
                     <div className="org-invite-code">
                       <span className="org-invite-label">Code</span>
@@ -1724,16 +1749,34 @@ export default function ManageEventPage() {
                         {codeCopied ? 'Copied' : 'Copy'}
                       </button>
                     </div>
-                    {joinUrl && <ShareQr url={joinUrl} openLabel="Join link" />}
+                    {active.tournament.status === 'REGISTRATION_OPEN' && joinUrl ? (
+                      <ShareQr url={joinUrl} openLabel="Join link" />
+                    ) : active.tournament.status === 'DRAFT' ? (
+                      <p className="muted">Open registration so friends can join with this code.</p>
+                    ) : fixturesExist ? (
+                      <p className="muted">
+                        Registration closed for the draw.{' '}
+                        <Link to={`/t/${active.tournament.slug}/live`}>Player live board</Link>
+                      </p>
+                    ) : (
+                      <p className="muted">Reopen registration if you still need late joiners.</p>
+                    )}
+                    {active.tournament.status === 'REGISTRATION_OPEN' &&
+                    active.tournament.slug &&
+                    !(tournamentDetail?.viewer_entered || active.tournament.viewer_entered) ? (
+                      <div className="org-invite-self">
+                        <Link
+                          to={`/t/${active.tournament.slug}/join`}
+                          className="btn btn-primary btn-sm"
+                        >
+                          Enter myself as a player
+                        </Link>
+                        <p className="muted org-invite-self-note">
+                          You’re the host — you can also play. Same join flow as everyone else.
+                        </p>
+                      </div>
+                    ) : null}
                   </div>
-                ) : inviteCode && active.tournament.status === 'DRAFT' ? (
-                  <p className="muted">Open registration to share the code.</p>
-                ) : inviteCode && fixturesExist ? (
-                  <p className="muted">
-                    <Link to={`/t/${active.tournament.slug}/live`}>Player live board</Link>
-                  </p>
-                ) : inviteCode ? (
-                  <p className="muted">Code ready if you reopen.</p>
                 ) : (
                   <p className="muted">Code appears after save.</p>
                 )}
@@ -2855,6 +2898,34 @@ export default function ManageEventPage() {
           )}
         </main>
       </div>
+
+      {showCreate && isAdmin && (
+        <CreateTournamentModal
+          onClose={() => setShowCreate(false)}
+          onToast={showToast}
+          onCreated={(msg, id) => {
+            showToast(msg)
+            setShowCreate(false)
+            if (id) {
+              setSelectedId(id)
+              setSearchParams({ t: id }, { replace: true })
+            }
+          }}
+        />
+      )}
+      {showCreate && !isAdmin && (
+        <CreatePrivateEventModal
+          onClose={() => setShowCreate(false)}
+          onCreated={(msg, id) => {
+            showToast(msg)
+            setShowCreate(false)
+            if (id) {
+              setSelectedId(id)
+              setSearchParams({ t: id }, { replace: true })
+            }
+          }}
+        />
+      )}
 
       {showEdit && tournamentDetail && (
         <EditTournamentModal

@@ -21,6 +21,7 @@ from app.api.deps import (
     user_owns_tournament,
 )
 from app.core.config import get_settings
+from app.core.rate_limit import rate_limit
 from app.core.roles import Role
 from app.core.security import hash_password
 from app.db.session import get_db
@@ -166,6 +167,55 @@ def _resolve_by_invite_code(db: Session, code: str) -> Tournament:
     if not t:
         raise HTTPException(404, "Tournament not found")
     return t
+
+
+def _invite_code_matches(tournament: Tournament, raw: str | None) -> bool:
+    if not raw or not tournament.invite_code:
+        return False
+    return _clean_invite_code(raw) == _clean_invite_code(tournament.invite_code)
+
+
+def _viewer_entered_tournament(db: Session, tournament: Tournament, user: User) -> bool:
+    return (
+        db.query(TeamPlayer.id)
+        .join(Team, Team.id == TeamPlayer.team_id)
+        .filter(
+            Team.tournament_id == tournament.id,
+            Team.withdrawn.is_(False),
+            TeamPlayer.user_id == user.id,
+        )
+        .limit(1)
+        .first()
+        is not None
+    )
+
+
+def _can_access_private_tournament(
+    db: Session,
+    tournament: Tournament,
+    user: User | None,
+    invite_code: str | None = None,
+) -> bool:
+    """Official events are public. Private events need host, entry, or invite code."""
+    if bool(getattr(tournament, "is_official", False)):
+        return True
+    if user and user_can_manage_tournament(user, tournament, db):
+        return True
+    if user and _viewer_entered_tournament(db, tournament, user):
+        return True
+    if _invite_code_matches(tournament, invite_code):
+        return True
+    return False
+
+
+def _assert_private_access(
+    db: Session,
+    tournament: Tournament,
+    user: User | None,
+    invite_code: str | None = None,
+) -> None:
+    if not _can_access_private_tournament(db, tournament, user, invite_code):
+        raise HTTPException(404, "Tournament not found")
 
 
 def _payment_via(reg: Registration | None) -> str | None:
@@ -705,6 +755,7 @@ def _tournament_out(
     *,
     viewer: User | None = None,
     viewer_entered: bool | None = None,
+    reveal_invite: bool = False,
 ) -> TournamentOut:
     _ensure_invite_code(db, t)
     courts = (
@@ -717,18 +768,9 @@ def _tournament_out(
     reg_fields = [field_to_out(f) for f in list_fields(db, t.id)]
     entered = bool(viewer_entered) if viewer_entered is not None else False
     if viewer and viewer_entered is None:
-        entered = (
-            db.query(TeamPlayer.id)
-            .join(Team, Team.id == TeamPlayer.team_id)
-            .filter(
-                Team.tournament_id == t.id,
-                Team.withdrawn.is_(False),
-                TeamPlayer.user_id == viewer.id,
-            )
-            .limit(1)
-            .first()
-            is not None
-        )
+        entered = _viewer_entered_tournament(db, t, viewer)
+    # Invite codes are host-only (and invite-code lookup). Never leak on public GETs.
+    show_invite = bool(reveal_invite or can_manage)
     # Always build plain data - never pass ORM Court objects into the response model
     return TournamentOut(
         id=t.id,
@@ -760,7 +802,7 @@ def _tournament_out(
         plate_size=int(getattr(t, "plate_size", 16) or 16),
         scoring_mode=getattr(t, "scoring_mode", None) or ScoringMode.SIMPLE.value,
         registered_teams=_team_count(db, t.id),
-        invite_code=t.invite_code,
+        invite_code=t.invite_code if show_invite else None,
         is_official=bool(getattr(t, "is_official", False)),
         courts=[
             {"number": c.court_number, "name": c.name, "id": str(c.id)} for c in courts
@@ -1339,10 +1381,12 @@ def list_tournaments(
 @router.get("/tournaments/{slug_or_id}", response_model=TournamentOut)
 def get_tournament(
     slug_or_id: str,
+    code: str | None = Query(None, description="Invite code unlocks private events"),
     user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
     t = _resolve_tournament(db, slug_or_id)
+    _assert_private_access(db, t, user, code)
     return _tournament_out(db, t, viewer=user)
 
 
@@ -1360,11 +1404,13 @@ def _resolve_tournament(db: Session, slug_or_id: str) -> Tournament:
 @router.post("/tournaments", response_model=TournamentOut)
 def create_tournament(
     body: TournamentCreate,
-    user: User = Depends(require_role(Role.ADMIN)),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Platform admins only — there is no separate organiser account type.
-    is_official = bool(body.is_official)
+    # Any logged-in player can host a private event. Only platform admins can
+    # create official (public catalogue) tournaments.
+    is_admin = user.role == Role.ADMIN.value
+    is_official = bool(body.is_official) if is_admin else False
     t = Tournament(
         name=body.name.strip(),
         slug=_unique_slug(db, body.name),
@@ -1521,24 +1567,34 @@ def delete_tournament(
 # ── Registration / Teams ──────────────────────────────────────
 
 @router.get("/invite/{invite_code}", response_model=InviteResolveOut)
-def resolve_invite_code(invite_code: str, db: Session = Depends(get_db)):
+def resolve_invite_code(
+    invite_code: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     """Find a tournament or community competition by invite code.
 
     One lookup so players can paste a code on any Join box.
     """
+    rate_limit(request, key="invite_resolve", limit=20, window_seconds=60)
     cleaned = _clean_invite_code(invite_code)
     if len(cleaned) < 6:
         raise HTTPException(404, "Invite code not found")
 
     t = db.query(Tournament).filter(Tournament.invite_code == cleaned).first()
     if t:
+        private = not bool(getattr(t, "is_official", False))
         return InviteResolveOut(
             kind="tournament",
             slug=t.slug,
             name=t.name,
             invite_code=cleaned,
-            join_path=f"/t/{t.slug}/join",
-            hint="Tournament event: register to play",
+            join_path=f"/t/{t.slug}/join?code={cleaned}",
+            hint=(
+                "Private event: register with this invite"
+                if private
+                else "Tournament event: register to play"
+            ),
         )
 
     c = db.query(CommunityCompetition).filter(CommunityCompetition.invite_code == cleaned).first()
@@ -1556,9 +1612,15 @@ def resolve_invite_code(invite_code: str, db: Session = Depends(get_db)):
 
 
 @router.get("/tournaments/code/{invite_code}", response_model=TournamentOut)
-def get_tournament_by_invite_code(invite_code: str, db: Session = Depends(get_db)):
+def get_tournament_by_invite_code(
+    invite_code: str,
+    request: Request,
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    rate_limit(request, key="invite_tournament", limit=20, window_seconds=60)
     t = _resolve_by_invite_code(db, invite_code)
-    return _tournament_out(db, t)
+    return _tournament_out(db, t, viewer=user, reveal_invite=True)
 
 
 @router.post("/tournaments/{tournament_id}/register", response_model=CheckoutResponse)
@@ -1584,6 +1646,15 @@ def register_team(
         if my_tp.slot != 1:
             raise HTTPException(400, _conflict_message(db, t.id, user.id, None, singles))
         resume_reg = my_reg
+
+    # Private events: hosts may enter freely; resume keeps working; others need invite
+    if not bool(getattr(t, "is_official", False)) and not resume_reg:
+        is_host = user_can_manage_tournament(user, t, db)
+        if not is_host and not _invite_code_matches(t, getattr(body, "invite_code", None)):
+            raise HTTPException(
+                403,
+                "This is a private event. Join with the invite code from the host.",
+            )
 
     if resume_reg:
         if t.status in (
@@ -1882,6 +1953,11 @@ def _checkout_success_cancel_urls(
     cancel_path: str | None = None,
     native_return: bool = False,
 ) -> tuple[str, str]:
+    # Private events need the invite on cancel so the join page still unlocks.
+    invite_q = ""
+    if not bool(getattr(t, "is_official", False)) and t.invite_code:
+        invite_q = f"&code={quote(t.invite_code, safe='')}"
+
     # Native: custom scheme keeps auth in the WebView. https success URLs are claimed by
     # Universal Links / open in SFSafariViewController without the app session cookie.
     if native_return:
@@ -1889,7 +1965,7 @@ def _checkout_success_cancel_urls(
             f"studentpadel://t/{t.slug}/confirmed"
             f"?session_id={{CHECKOUT_SESSION_ID}}&registration_id={reg.id}"
         )
-        cancel = f"studentpadel://t/{t.slug}/join?cancelled=1"
+        cancel = f"studentpadel://t/{t.slug}/join?cancelled=1{invite_q}"
         return success, cancel
 
     origin = _checkout_web_origin(return_origin)
@@ -1898,7 +1974,8 @@ def _checkout_success_cancel_urls(
         f"{origin}/t/{t.slug}/confirmed"
         f"?session_id={{CHECKOUT_SESSION_ID}}&registration_id={reg.id}"
     )
-    cancel = f"{origin}{cancel_path or f'/t/{t.slug}/join?cancelled=1'}"
+    default_cancel = f"/t/{t.slug}/join?cancelled=1{invite_q}"
+    cancel = f"{origin}{cancel_path or default_cancel}"
     return success, cancel
 
 
@@ -2198,7 +2275,7 @@ def _registration_payload(db: Session, reg: Registration, user: User) -> dict:
         "currency": reg.currency,
         "paid_at": reg.paid_at.isoformat() if reg.paid_at else None,
         "payment_via": _payment_via(reg),
-        "tournament": _tournament_out(db, t) if t else None,
+        "tournament": _tournament_out(db, t, viewer=user) if t else None,
         "team_name": team.name,
         "players": _unique_player_names(members),
         "slot": my_slot,
@@ -2942,10 +3019,12 @@ def generate(
 @router.get("/tournaments/{slug_or_id}/matches", response_model=list[MatchOut])
 def list_matches(
     slug_or_id: str,
+    code: str | None = Query(None),
     db: Session = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ):
     t = _resolve_tournament(db, slug_or_id)
+    _assert_private_access(db, t, user, code)
     matches = (
         db.query(Match)
         .options(joinedload(Match.score))
@@ -3363,12 +3442,10 @@ def move_match(
 
 # ── Standings ─────────────────────────────────────────────────
 
-@router.get("/tournaments/{slug_or_id}/standings")
-def get_standings(slug_or_id: str, db: Session = Depends(get_db)):
-    t = _resolve_tournament(db, slug_or_id)
+def _standings_payload(db: Session, t: Tournament) -> list[dict]:
     groups = db.query(Group).filter(Group.tournament_id == t.id).order_by(Group.sort_order).all()
     tie_order = [x.strip() for x in (t.tie_break_order or "").split(",") if x.strip()]
-    out = []
+    out: list[dict] = []
     for g in groups:
         gts = db.query(GroupTeam).filter(GroupTeam.group_id == g.id).all()
         team_ids = [str(gt.team_id) for gt in gts]
@@ -3424,11 +3501,29 @@ def get_standings(slug_or_id: str, db: Session = Depends(get_db)):
     return out
 
 
+@router.get("/tournaments/{slug_or_id}/standings")
+def get_standings(
+    slug_or_id: str,
+    code: str | None = Query(None),
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    t = _resolve_tournament(db, slug_or_id)
+    _assert_private_access(db, t, user, code)
+    return _standings_payload(db, t)
+
+
 # ── Announcements / Sponsors / Player view ────────────────────
 
 @router.get("/tournaments/{slug_or_id}/announcements", response_model=list[AnnouncementOut])
-def list_announcements(slug_or_id: str, db: Session = Depends(get_db)):
+def list_announcements(
+    slug_or_id: str,
+    code: str | None = Query(None),
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
     t = _resolve_tournament(db, slug_or_id)
+    _assert_private_access(db, t, user, code)
     return (
         db.query(Announcement)
         .filter(Announcement.tournament_id == t.id)
@@ -3707,8 +3802,14 @@ def _sponsor_out(s: Sponsor) -> SponsorOut:
 
 
 @router.get("/tournaments/{slug_or_id}/sponsors", response_model=list[SponsorOut])
-def list_sponsors(slug_or_id: str, db: Session = Depends(get_db)):
+def list_sponsors(
+    slug_or_id: str,
+    code: str | None = Query(None),
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
     t = _resolve_tournament(db, slug_or_id)
+    _assert_private_access(db, t, user, code)
     rows = (
         db.query(Sponsor)
         .filter(Sponsor.tournament_id == t.id)
@@ -3819,10 +3920,12 @@ def delete_sponsor(
 @router.get("/tournaments/{slug_or_id}/player-view")
 def player_view(
     slug_or_id: str,
+    code: str | None = Query(None),
     user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
     t = _resolve_tournament(db, slug_or_id)
+    _assert_private_access(db, t, user, code)
     my_team = None
     my_payment_status = None
     my_slot: int | None = None
@@ -3959,7 +4062,7 @@ def player_view(
         .all()
     )
     return {
-        "tournament": _tournament_out(db, t),
+        "tournament": _tournament_out(db, t, viewer=user),
         "my_team": (
             {
                 "id": my_team.id,
@@ -3985,7 +4088,7 @@ def player_view(
         "my_results": my_results,
         "live_matches": [_match_out(db, m, court_names) for m in live],
         "called_matches": [_match_out(db, m, court_names) for m in called],
-        "standings": get_standings(slug_or_id, db),
+        "standings": _standings_payload(db, t),
         "announcements": [
             {
                 "id": a.id,
@@ -4000,8 +4103,14 @@ def player_view(
 
 
 @router.get("/tournaments/{slug_or_id}/display")
-def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
+def tv_display(
+    slug_or_id: str,
+    code: str | None = Query(None),
+    user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
     t = _resolve_tournament(db, slug_or_id)
+    _assert_private_access(db, t, user, code)
     court_names = _court_label_map(db, t.id)
     matches = (
         db.query(Match)
@@ -4023,7 +4132,7 @@ def tv_display(slug_or_id: str, db: Session = Depends(get_db)):
             continue
         by_court.setdefault(m.court_number, []).append(_match_out(db, m, court_names))
     return {
-        "tournament": _tournament_out(db, t),
+        "tournament": _tournament_out(db, t, viewer=user),
         "courts": by_court,
         "court_names": {str(k): v for k, v in court_names.items()},
         "unassigned": unassigned,
@@ -4200,9 +4309,26 @@ def player_profile(
 
 
 @router.get("/organiser/dashboard")
-def organiser_dashboard(user: User = Depends(require_role(Role.ADMIN)), db: Session = Depends(get_db)):
-    # Admin-only manage hub — no separate organiser accounts.
-    tournaments = db.query(Tournament).order_by(Tournament.event_date.desc()).all()
+def organiser_dashboard(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Admins see every event; players only see events they own or co-admin.
+    if user.role == Role.ADMIN.value:
+        tournaments = db.query(Tournament).order_by(Tournament.event_date.desc()).all()
+    else:
+        co_admin_ids = [
+            row[0]
+            for row in db.query(TournamentAdmin.tournament_id)
+            .filter(TournamentAdmin.user_id == user.id)
+            .all()
+        ]
+        owner_filters = [Tournament.organiser_id == user.id]
+        if co_admin_ids:
+            owner_filters.append(Tournament.id.in_(co_admin_ids))
+        tournaments = (
+            db.query(Tournament)
+            .filter(or_(*owner_filters))
+            .order_by(Tournament.event_date.desc())
+            .all()
+        )
     stats = []
     for t in tournaments:
         teams = _team_count(db, t.id)
@@ -4262,7 +4388,7 @@ def organiser_dashboard(user: User = Depends(require_role(Role.ADMIN)), db: Sess
 
         stats.append(
             {
-                "tournament": _tournament_out(db, t),
+                "tournament": _tournament_out(db, t, viewer=user),
                 "teams": teams,
                 "players": teams * per_team,
                 "paid_registrations": paid,

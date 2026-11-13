@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrandLogo from '../components/BrandLogo'
 import SponsorStrip from '../components/SponsorStrip'
@@ -163,6 +163,8 @@ function UnassignedPanel({ matches }: { matches: Match[] }) {
 
 export default function TvDisplayPage() {
   const { id = '' } = useParams()
+  const [searchParams] = useSearchParams()
+  const displayCode = (searchParams.get('code') || '').trim()
   const navigate = useNavigate()
   const native = isNativeApp()
 
@@ -200,16 +202,18 @@ export default function TvDisplayPage() {
   }
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
-    queryKey: ['display', id],
-    queryFn: async () => (await tournamentApi.display(id)).data,
+    queryKey: ['display', id, displayCode],
+    queryFn: async () =>
+      (await tournamentApi.display(id, { code: displayCode || undefined })).data,
     enabled: !!id,
     refetchInterval: (query) => (query.state.status === 'error' ? 2500 : 2500),
     retry: 4,
     retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 8000),
   })
   const { data: sponsors = [] } = useQuery({
-    queryKey: ['sponsors', id],
-    queryFn: async () => (await tournamentApi.sponsors(id)).data,
+    queryKey: ['sponsors', id, displayCode],
+    queryFn: async () =>
+      (await tournamentApi.sponsors(id, { code: displayCode || undefined })).data,
     enabled: !!id,
     staleTime: 60_000,
   })

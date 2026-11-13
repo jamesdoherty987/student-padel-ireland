@@ -24,6 +24,7 @@ import {
   knockoutRoundLabel,
   reminderPromiseCopy,
 } from '../utils/format'
+import { getRememberedPrivateInvite } from '../utils/privateEventAccess'
 import './PlayerLive.css'
 import './Tournament.css'
 
@@ -505,6 +506,8 @@ export default function PlayerLivePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const qc = useQueryClient()
+  const privateCode =
+    (searchParams.get('code') || '').trim() || getRememberedPrivateInvite(slug) || undefined
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
   const [scoreSheetMode, setScoreSheetMode] = useState<'log' | 'fix' | 'edit'>('log')
   const [payNote, setPayNote] = useState('')
@@ -543,8 +546,9 @@ export default function PlayerLivePage() {
     isFetching,
     isFetched: viewFetched,
   } = useQuery({
-    queryKey: ['player-view', slug],
-    queryFn: async () => (await tournamentApi.playerView(slug)).data,
+    queryKey: ['player-view', slug, privateCode || ''],
+    queryFn: async () =>
+      (await tournamentApi.playerView(slug, { code: privateCode })).data,
     enabled: !!slug,
     retry: 4,
     retryDelay: (attempt) => Math.min(1500 * 2 ** attempt, 10000),
@@ -552,14 +556,16 @@ export default function PlayerLivePage() {
   })
 
   const { data: allMatches = [], isFetched: matchesFetched } = useQuery({
-    queryKey: ['matches', slug],
-    queryFn: async () => (await tournamentApi.matches(slug)).data,
+    queryKey: ['matches', slug, privateCode || ''],
+    queryFn: async () =>
+      (await tournamentApi.matches(slug, { code: privateCode })).data,
     enabled: !!slug,
     refetchInterval: 8000,
   })
   const { data: sponsors = [] } = useQuery({
-    queryKey: ['sponsors', slug],
-    queryFn: async () => (await tournamentApi.sponsors(slug)).data,
+    queryKey: ['sponsors', slug, privateCode || ''],
+    queryFn: async () =>
+      (await tournamentApi.sponsors(slug, { code: privateCode })).data,
     enabled: !!slug,
     staleTime: 60_000,
   })

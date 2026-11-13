@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
 import BrandLogo from '../components/BrandLogo'
+import { HaveCodeButton } from '../components/JoinCodeModal'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import SearchableSelect from '../components/SearchableSelect'
@@ -24,6 +25,8 @@ import {
   type RegistrationConfirm,
   type TournamentRegistrationField,
 } from '../services/api'
+import { cleanInviteCode } from '../utils/inviteCode'
+import { getRememberedPrivateInvite, rememberPrivateInvite } from '../utils/privateEventAccess'
 import {
   formatMoney,
   formatOnlineFee,
@@ -474,8 +477,14 @@ export default function JoinTournamentPage() {
   const sessionId = params.get('session_id')
   const registrationId = params.get('registration_id')
   const paymentCancelled = params.get('cancelled') === '1'
+  const inviteFromUrl = cleanInviteCode(params.get('code') || '')
+  const inviteCode =
+    inviteFromUrl.length >= 6 ? inviteFromUrl : getRememberedPrivateInvite(slug) || ''
   const isConfirmRoute = pathname.includes('/confirmed') || !!sessionId
   const hasConfirmParams = !!sessionId || !!registrationId
+  const joinPathWithCode = inviteCode
+    ? `/t/${slug}/join?code=${encodeURIComponent(inviteCode)}`
+    : `/t/${slug}/join`
 
   const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
@@ -489,6 +498,10 @@ export default function JoinTournamentPage() {
   useKeyboardInset(!isConfirmRoute)
 
   useEffect(() => {
+    if (inviteCode) rememberPrivateInvite(slug, inviteCode)
+  }, [slug, inviteCode])
+
+  useEffect(() => {
     const onFocus = (e: FocusEvent) => {
       const t = e.target
       if (!(t instanceof HTMLElement)) return
@@ -500,13 +513,18 @@ export default function JoinTournamentPage() {
   }, [])
 
   const { data: tournament, isLoading: tLoading, isError: tError } = useQuery({
-    queryKey: ['tournament', slug],
-    queryFn: async () => (await tournamentApi.get(slug)).data,
+    queryKey: ['tournament', slug, inviteCode || ''],
+    queryFn: async () => {
+      const { data } = await tournamentApi.get(slug, { code: inviteCode || undefined })
+      rememberPrivateInvite(slug, inviteCode)
+      rememberPrivateInvite(data.id, inviteCode)
+      return data
+    },
     enabled: !!slug && !isConfirmRoute,
   })
   const { data: sponsors = [] } = useQuery({
-    queryKey: ['sponsors', slug],
-    queryFn: async () => (await tournamentApi.sponsors(slug)).data,
+    queryKey: ['sponsors', slug, inviteCode || ''],
+    queryFn: async () => (await tournamentApi.sponsors(slug, { code: inviteCode || undefined })).data,
     enabled: !!slug && !isConfirmRoute,
     staleTime: 60_000,
   })
@@ -517,8 +535,9 @@ export default function JoinTournamentPage() {
     isError: pvError,
     refetch: refetchPlayerView,
   } = useQuery({
-    queryKey: ['player-view', slug],
-    queryFn: async () => (await tournamentApi.playerView(slug)).data,
+    queryKey: ['player-view', slug, inviteCode || ''],
+    queryFn: async () =>
+      (await tournamentApi.playerView(slug, { code: inviteCode || undefined })).data,
     enabled: !!slug && !!user && !isConfirmRoute,
   })
 
@@ -803,13 +822,17 @@ export default function JoinTournamentPage() {
   }
 
   if (!user) {
-    const next = encodeURIComponent(`/t/${slug}/join`)
+    const next = encodeURIComponent(joinPathWithCode)
     return (
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Join tournament</h1>
-          <p className="page-sub">Create an account or log in to register.</p>
+          <h1 className="page-title">Join event</h1>
+          <p className="page-sub">
+            {inviteCode
+              ? 'Create an account or log in to join this private event.'
+              : 'Create an account or log in to register.'}
+          </p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
             <Link to={`/signup?next=${next}`} className="btn btn-primary">
               Sign up
@@ -839,10 +862,18 @@ export default function JoinTournamentPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <p>Tournament not found.</p>
-          <Link to="/tournaments" className="btn btn-ghost" style={{ marginTop: 12 }}>
-            Browse tournaments
-          </Link>
+          <h1 className="page-title">Private or missing event</h1>
+          <p className="page-sub">
+            Private events aren’t listed publicly. Join with the host’s invite code or QR.
+          </p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <HaveCodeButton className="btn btn-primary" initialCode={inviteCode}>
+              Enter invite code
+            </HaveCodeButton>
+            <Link to="/tournaments" className="btn btn-ghost">
+              Browse tournaments
+            </Link>
+          </div>
         </main>
       </div>
     )
@@ -1259,6 +1290,7 @@ export default function JoinTournamentPage() {
         native_return: isNativeApp(),
         custom_answers: buildCustomAnswersPayload(),
       }
+      if (inviteCode) payload.invite_code = inviteCode
       if (!singles) {
         if (partnerMode === 'friend' && form.partner_user_id) {
           const fromFriends = friendPartners.find((f) => f.user_id === form.partner_user_id)
@@ -1312,6 +1344,11 @@ export default function JoinTournamentPage() {
               ? `Join ${tournament.name}`
               : `Register your team`}
         </h1>
+        {!tournament.is_official && (
+          <p className="page-sub page-sub-tight tour-private-note">
+            Private invite-only event · not an official Student Padel Ireland tournament
+          </p>
+        )}
         {!needsPartner && !singles ? (
           <p className="page-sub join-page-sub">{tournament.name}</p>
         ) : null}

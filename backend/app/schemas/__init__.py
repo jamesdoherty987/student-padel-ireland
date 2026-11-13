@@ -191,8 +191,8 @@ class TournamentCreate(BaseModel):
     plate_size: int = Field(default=16, ge=2, le=64)
     scoring_mode: ScoringMode = ScoringMode.SIMPLE
     tie_break_order: Optional[str] = None
-    # Admin create form defaults to public listing; dry-run scripts can pass False
-    is_official: bool = True
+    # Official listing is opt-in (admins only). Player hosts always force False.
+    is_official: bool = False
     registration_fields: list[RegistrationFieldIn] = Field(default_factory=list)
 
     @field_validator("court_names")
@@ -344,6 +344,8 @@ class RegisterTeamRequest(BaseModel):
     phone: Optional[str] = None
     university_id: Optional[UUID] = None
     student_number: Optional[str] = None
+    # Required for private (non-official) events unless the caller hosts the event
+    invite_code: Optional[str] = Field(default=None, max_length=12)
     # When tournament is pay-on-arrival, captain can still choose Stripe checkout for the full team fee
     pay_online_now: bool = False
     # Browser origin (e.g. https://www.studentpadel.ie) so Stripe returns to the same host

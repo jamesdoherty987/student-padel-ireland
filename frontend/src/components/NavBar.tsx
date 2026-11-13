@@ -158,6 +158,13 @@ export default function NavBar() {
         icon: 'fa-shield-halved',
         match: (p) => p.startsWith('/admin'),
       })
+    } else {
+      secondary.push({
+        to: '/manage',
+        label: 'Host',
+        icon: 'fa-clipboard-list',
+        match: (p) => p.startsWith('/manage'),
+      })
     }
     // Profile is on the native tab bar - don't duplicate in the drawer
     if (!tabsVisible) {

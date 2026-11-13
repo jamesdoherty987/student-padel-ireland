@@ -265,7 +265,7 @@ export default function App() {
                 <Route
                   path="/manage"
                   element={
-                    <ProtectedRoute roles={['ADMIN']}>
+                    <ProtectedRoute>
                       <ManageEventPage />
                     </ProtectedRoute>
                   }

@@ -95,6 +95,20 @@
   font-weight: 750;
 }
 
+.tour-card-private-label {
+  color: var(--ink-soft);
+  font-weight: 650;
+}
+
+.tour-card--private {
+  border-style: dashed;
+}
+
+.tour-private-note {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .tour-card-line {
   margin: 0.15rem 0 0;
   color: var(--ink-soft);
