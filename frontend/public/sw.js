@@ -1,5 +1,5 @@
 /* Student Padel Ireland - lightweight PWA service worker */
-const CACHE = 'spi-shell-v6'
+const CACHE = 'spi-shell-v7'
 const PRECACHE = [
   '/',
   '/index.html',
@@ -25,6 +25,12 @@ self.addEventListener('activate', (event) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   )
+})
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
 })
 
 self.addEventListener('fetch', (event) => {

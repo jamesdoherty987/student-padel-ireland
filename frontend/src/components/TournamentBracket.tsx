@@ -256,24 +256,25 @@ export default function TournamentBracket({
   useEffect(() => {
     const root = rootRef.current
     if (!root) return
+    const behavior: ScrollBehavior = reduceMotion ? 'auto' : 'smooth'
 
-    // Keep the selected round tab visible in the horizontal tab strip
+    // Horizontal only inside the tab strip — never scroll the page
+    const tabs = root.querySelector<HTMLElement>('.tb-tabs')
     const tab = root.querySelector<HTMLElement>('.tb-tab[aria-selected="true"]')
-    tab?.scrollIntoView({
-      inline: 'nearest',
-      block: 'nearest',
-      behavior: reduceMotion ? 'auto' : 'smooth',
-    })
+    if (tabs && tab) {
+      const target = tab.offsetLeft + tab.offsetWidth / 2 - tabs.clientWidth / 2
+      tabs.scrollTo({ left: Math.max(0, target), behavior })
+    }
 
+    // Desktop tree: pan the bracket scroller only
     const el = scrollerRef.current
     if (!el || !rounds.length) return
-    // Desktop-only scroll target; mobile uses the focused list
     if (window.matchMedia('(max-width: 899px)').matches) return
     const col = el.querySelector<HTMLElement>(`[data-round-index="${activeRound}"]`)
     if (!col) return
     const track = el.firstElementChild as HTMLElement | null
     const left = col.offsetLeft - (track?.offsetLeft ?? 0)
-    el.scrollTo({ left: Math.max(0, left - 8), behavior: reduceMotion ? 'auto' : 'smooth' })
+    el.scrollTo({ left: Math.max(0, left - 8), behavior })
   }, [activeRound, rounds.length, reduceMotion])
 
   if (!rounds.length) return null

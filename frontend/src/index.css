@@ -992,7 +992,8 @@ html.native-app .btn-xs {
   z-index: 95;
 }
 
-.notif-bell {
+.notif-bell,
+.header-reload {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -1007,9 +1008,25 @@ html.native-app .btn-xs {
 }
 
 .notif-bell.is-open,
-.notif-bell:hover {
+.notif-bell:hover,
+.header-reload:hover:not(:disabled) {
   background: rgba(11, 61, 46, 0.08);
   border-color: rgba(11, 61, 46, 0.25);
+}
+
+.header-reload:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.header-reload.is-busy svg {
+  animation: header-reload-spin 0.7s linear infinite;
+}
+
+@keyframes header-reload-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .notif-badge {

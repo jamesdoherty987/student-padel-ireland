@@ -49,6 +49,9 @@
 }
 
 .app-sidebar-bell {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   flex-shrink: 0;
   position: relative;
   z-index: 2;

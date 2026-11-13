@@ -8,6 +8,10 @@ import App from './App.tsx'
 import ErrorBoundary from './components/ErrorBoundary'
 import { apiBaseUrl, isNativeApp } from './native/platform'
 import { initNativeShell } from './native/shell'
+import {
+  clearServiceWorkerReloadGuard,
+  reloadOnceForServiceWorker,
+} from './utils/appRefresh'
 
 /** Wake a sleeping Render free instance as soon as the main module runs. */
 function wakeApi() {
@@ -32,17 +36,24 @@ function mount() {
 
 function registerServiceWorker() {
   if (isNativeApp() || !('serviceWorker' in navigator)) return
+
+  clearServiceWorkerReloadGuard()
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {
       /* offline / unsupported */
     })
   })
-  // If a new SW takes over after a bad deploy, reload once to pick up matching chunks
-  let refreshing = false
+
+  // New SW took control — silent reload once (no confirm / “refreshing” UI)
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return
-    refreshing = true
-    window.location.reload()
+    reloadOnceForServiceWorker()
+  })
+
+  // Quietly look for updates when the tab comes back
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return
+    void navigator.serviceWorker.getRegistration().then((reg) => reg?.update().catch(() => undefined))
   })
 }
 

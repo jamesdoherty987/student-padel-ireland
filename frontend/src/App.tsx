@@ -11,6 +11,7 @@ import { NativeDeepLinkRouter } from './native/NativeDeepLinkRouter'
 import { apiBaseUrl, isNativeApp } from './native/platform'
 import { communityApi, tournamentApi } from './services/api'
 import { clearQueryCachePersist, restoreQueryCache, schedulePersistQueryCache } from './utils/queryPersist'
+import { softRefreshApp } from './utils/appRefresh'
 import { homeForRole } from './utils/navigation'
 
 /** Marketing / SEO pages stay on the website - never inside the iOS/Android shell. */
@@ -80,6 +81,29 @@ function wakeApiEarly() {
   )
 }
 
+/** Soft-refresh active queries when returning to the app — no full-page reload popup. */
+function SoftRefreshOnResume() {
+  useEffect(() => {
+    let last = Date.now()
+    const run = () => {
+      const now = Date.now()
+      if (now - last < 8_000) return
+      last = now
+      void softRefreshApp(queryClient)
+    }
+    const onVis = () => {
+      if (document.visibilityState === 'visible') run()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('online', run)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('online', run)
+    }
+  }, [])
+  return null
+}
+
 function PrefetchWarmup() {
   const { user, token } = useAuth()
   const { pathname } = useLocation()
@@ -141,6 +165,7 @@ function AuthPersistBridge({ children }: { children: ReactNode }) {
   return (
     <>
       <PrefetchWarmup />
+      <SoftRefreshOnResume />
       {children}
     </>
   )

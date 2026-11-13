@@ -43,6 +43,62 @@ type ScoreSets = {
   set3_b: number
 }
 
+type PlayerViewCache = {
+  next_match?: Match | null
+  my_upcoming?: Match[]
+  my_results?: Match[]
+}
+
+function winnerFromSets(
+  sets: ScoreSets,
+  teamAId?: string | null,
+  teamBId?: string | null,
+  fallback = '',
+) {
+  const pairs: [number, number][] = [
+    [sets.set1_a, sets.set1_b],
+    [sets.set2_a, sets.set2_b],
+    [sets.set3_a, sets.set3_b],
+  ]
+  let aSets = 0
+  let bSets = 0
+  for (const [a, b] of pairs) {
+    if (!(a || b) || a === b) continue
+    if (a > b) aSets += 1
+    else bSets += 1
+  }
+  if (aSets > bSets) return teamAId || fallback
+  if (bSets > aSets) return teamBId || fallback
+  return fallback
+}
+
+function scoreCurrentSet(sets: ScoreSets) {
+  if (sets.set3_a || sets.set3_b) return 3
+  if (sets.set2_a || sets.set2_b) return 2
+  return 1
+}
+
+/** Keep next-match / bracket cards in sync without waiting on refetch. */
+function patchMatchInPlayerView(old: unknown, updated: Match): unknown {
+  if (!old || typeof old !== 'object') return old
+  const view = old as PlayerViewCache & Record<string, unknown>
+  const merge = (m: Match) => (m.id === updated.id ? { ...m, ...updated } : m)
+  return {
+    ...view,
+    next_match:
+      view.next_match?.id === updated.id
+        ? { ...view.next_match, ...updated }
+        : view.next_match,
+    my_upcoming: (view.my_upcoming || []).map(merge),
+    my_results: (view.my_results || []).map(merge),
+  }
+}
+
+function patchMatchInList(old: unknown, updated: Match): unknown {
+  if (!Array.isArray(old)) return old
+  return (old as Match[]).map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+}
+
 /** Normalize tournament scoring mode. Missing/unknown → treat as SIMPLE UI. */
 function tournamentScoringMode(raw?: string | null): 'SIMPLE' | 'BEST_OF_3' | 'LEGACY' {
   const mode = (raw || '').trim().toUpperCase()
@@ -477,7 +533,14 @@ export default function PlayerLivePage() {
     return () => document.removeEventListener('focusin', onFocus)
   }, [scoringMatch])
 
-  const { data, isLoading, isError, refetch, isFetching } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    isFetching,
+    isFetched: viewFetched,
+  } = useQuery({
     queryKey: ['player-view', slug],
     queryFn: async () => (await tournamentApi.playerView(slug)).data,
     enabled: !!slug,
@@ -486,7 +549,7 @@ export default function PlayerLivePage() {
     refetchInterval: (query) => (query.state.status === 'error' ? 2500 : 3000),
   })
 
-  const { data: allMatches = [] } = useQuery({
+  const { data: allMatches = [], isFetched: matchesFetched } = useQuery({
     queryKey: ['matches', slug],
     queryFn: async () => (await tournamentApi.matches(slug)).data,
     enabled: !!slug,
@@ -555,17 +618,50 @@ export default function PlayerLivePage() {
       setScoreSheetMode('log')
       setScoreError('')
       setActionError('')
+
+      const winnerId =
+        vars.winnerId ||
+        winnerFromSets(vars.sets, vars.match.team_a_id, vars.match.team_b_id)
+      const pending: Match = {
+        ...vars.match,
+        status: 'AWAITING_CONFIRM',
+        winner_id: winnerId || vars.match.winner_id || null,
+        score: {
+          set1_a: vars.sets.set1_a,
+          set1_b: vars.sets.set1_b,
+          set2_a: vars.sets.set2_a,
+          set2_b: vars.sets.set2_b,
+          set3_a: vars.sets.set3_a,
+          set3_b: vars.sets.set3_b,
+          current_set: scoreCurrentSet(vars.sets),
+        },
+        can_i_score: false,
+        needs_my_confirm: false,
+        score_submitted_by_me: true,
+      }
+      const prevView = qc.getQueryData(['player-view', slug])
+      const prevMatches = qc.getQueryData(['matches', slug])
+      qc.setQueryData(['player-view', slug], (old) => patchMatchInPlayerView(old, pending))
+      qc.setQueryData(['matches', slug], (old) => patchMatchInList(old, pending))
+
       return {
         closed: vars.match,
         closedMode: scoreSheetMode,
         closedSets: { ...vars.sets },
         closedWinner: vars.winnerId,
+        prevView,
+        prevMatches,
       }
     },
-    onSuccess: () => {
+    onSuccess: (m) => {
+      // Server match (with viewer flags) replaces optimistic patch; no wait on refetch
+      qc.setQueryData(['player-view', slug], (old) => patchMatchInPlayerView(old, m))
+      qc.setQueryData(['matches', slug], (old) => patchMatchInList(old, m))
       invalidate()
     },
     onError: (err, _vars, ctx) => {
+      if (ctx?.prevView !== undefined) qc.setQueryData(['player-view', slug], ctx.prevView)
+      if (ctx?.prevMatches !== undefined) qc.setQueryData(['matches', slug], ctx.prevMatches)
       if (ctx?.closed) {
         setScoringMatch(ctx.closed)
         setScoreSheetMode(ctx.closedMode)
@@ -586,19 +682,16 @@ export default function PlayerLivePage() {
       // Patch live board immediately with the confirmed match
       qc.setQueryData(['player-view', slug], (old: unknown) => {
         if (!old || typeof old !== 'object') return old
-        const view = old as {
-          next_match?: Match | null
-          my_upcoming?: Match[]
-          my_results?: Match[]
-        }
+        const view = old as PlayerViewCache & Record<string, unknown>
         const upcoming = (view.my_upcoming || []).filter((x) => x.id !== m.id)
         return {
           ...view,
           next_match: upcoming[0] || null,
           my_upcoming: upcoming,
-          my_results: [m, ...(view.my_results || [])],
+          my_results: [m, ...(view.my_results || []).filter((x) => x.id !== m.id)],
         }
       })
+      qc.setQueryData(['matches', slug], (old) => patchMatchInList(old, m))
       invalidate()
     },
     onError: (err) => setActionError(apiErrorMessage(err)),
@@ -681,7 +774,27 @@ export default function PlayerLivePage() {
     },
   })
 
-  if (isLoading) {
+  // Must stay above early returns (rules of hooks)
+  const bracketMatches = useMemo(() => {
+    const flags = new Map<string, Match>()
+    for (const m of [...(data?.my_upcoming || []), ...(data?.my_results || [])] as Match[]) {
+      flags.set(m.id, m)
+    }
+    if (data?.next_match) flags.set((data.next_match as Match).id, data.next_match as Match)
+    return allMatches.map((m) => {
+      const f = flags.get(m.id)
+      if (!f) return m
+      return {
+        ...m,
+        can_i_score: f.can_i_score ?? m.can_i_score,
+        needs_my_confirm: f.needs_my_confirm ?? m.needs_my_confirm,
+        score_submitted_by_me: f.score_submitted_by_me ?? m.score_submitted_by_me,
+      }
+    })
+  }, [allMatches, data?.my_upcoming, data?.my_results, data?.next_match])
+
+  // Wait for view + matches together so groups/bracket don’t flash the wrong stage
+  if (isLoading || !viewFetched || !matchesFetched) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -775,23 +888,6 @@ export default function PlayerLivePage() {
   const matchDayLive = hasPaidEntry && (t.status === 'LIVE' || drawReady)
   const myOnCourt =
     hasPaidEntry && next && (next.status === 'LIVE' || next.status === 'CALLED')
-  const bracketMatches = useMemo(() => {
-    const flags = new Map<string, Match>()
-    for (const m of [...(data?.my_upcoming || []), ...(data?.my_results || [])] as Match[]) {
-      flags.set(m.id, m)
-    }
-    if (data?.next_match) flags.set((data.next_match as Match).id, data.next_match as Match)
-    return allMatches.map((m) => {
-      const f = flags.get(m.id)
-      if (!f) return m
-      return {
-        ...m,
-        can_i_score: f.can_i_score ?? m.can_i_score,
-        needs_my_confirm: f.needs_my_confirm ?? m.needs_my_confirm,
-        score_submitted_by_me: f.score_submitted_by_me ?? m.score_submitted_by_me,
-      }
-    })
-  }, [allMatches, data?.my_upcoming, data?.my_results, data?.next_match])
   const championshipMatches = bracketMatches.filter((m) => m.stage === 'KNOCKOUT')
   const plateMatches = bracketMatches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]
@@ -1099,70 +1195,6 @@ export default function PlayerLivePage() {
           )}
         </section>
 
-        {matchDayLive &&
-          (myUpcoming.filter((m) => m.id !== next?.id).length > 0 ||
-            myResults.length > 0 ||
-            (knockoutActive && knockoutMatches.length > 0) ||
-            (!knockoutActive && standings.length > 0)) && (
-            <nav className="pl-jump" aria-label="Jump to section">
-              {myUpcoming.filter((m) => m.id !== next?.id).length > 0 && (
-                <button
-                  type="button"
-                  className="pl-jump-link"
-                  onClick={() =>
-                    document.getElementById('pl-later')?.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'start',
-                    })
-                  }
-                >
-                  Later
-                </button>
-              )}
-              {myResults.length > 0 && (
-                <button
-                  type="button"
-                  className="pl-jump-link"
-                  onClick={() =>
-                    document.getElementById('pl-results')?.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'start',
-                    })
-                  }
-                >
-                  Results
-                </button>
-              )}
-              {knockoutActive && knockoutMatches.length > 0 ? (
-                <button
-                  type="button"
-                  className="pl-jump-link"
-                  onClick={() =>
-                    document.getElementById('pl-draw')?.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'start',
-                    })
-                  }
-                >
-                  Draw
-                </button>
-              ) : standings.length > 0 ? (
-                <button
-                  type="button"
-                  className="pl-jump-link"
-                  onClick={() =>
-                    document.getElementById('pl-groups')?.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'start',
-                    })
-                  }
-                >
-                  Groups
-                </button>
-              ) : null}
-            </nav>
-          )}
-
         {hasPaidEntry && myUpcoming.filter((m) => m.id !== next?.id).length > 0 && (
           <section className="pl-block" id="pl-later">
             <h2>Later today</h2>
@@ -1217,7 +1249,8 @@ export default function PlayerLivePage() {
           </section>
         )}
 
-        {standings.length > 0 && (
+        {/* Group tables while still in groups — hide once knockout seats fill */}
+        {!knockoutActive && standings.length > 0 && (
           <div id="pl-groups">
             {standings.map((g) => (
               <section key={g.group} className="pl-block">
@@ -1236,6 +1269,7 @@ export default function PlayerLivePage() {
           </div>
         )}
 
+        {/* Bracket is KNOCKOUT / PLATE only — never group fixtures */}
         {knockoutActive && knockoutMatches.length > 0 && (
           <section className="pl-block pl-bracket" id="pl-draw">
             {championshipMatches.length > 0 && (

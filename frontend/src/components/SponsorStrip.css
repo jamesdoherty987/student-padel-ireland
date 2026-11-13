@@ -54,6 +54,29 @@
   transition: opacity 0.15s ease;
 }
 
+/* Tournament detail hero — logos read clearly without dominating */
+.sponsor-strip--hero .sponsor-strip-logo {
+  max-width: 10.5rem;
+  height: 3.5rem;
+}
+
+.sponsor-strip--hero .sponsor-strip-logos {
+  gap: 0.85rem 1.5rem;
+}
+
+.sponsor-strip--hero .sponsor-strip-fallback {
+  font-size: 0.95rem;
+  max-width: 9.5rem;
+}
+
+.sponsor-strip--hero.count-5 .sponsor-strip-logo,
+.sponsor-strip--hero.count-6 .sponsor-strip-logo,
+.sponsor-strip--hero.count-7 .sponsor-strip-logo,
+.sponsor-strip--hero.count-8 .sponsor-strip-logo {
+  max-width: 8rem;
+  height: 2.85rem;
+}
+
 .sponsor-strip-logo img {
   display: block;
   max-width: 100%;
@@ -168,6 +191,19 @@ html.native-app .sponsor-strip {
   .sponsor-strip-logo {
     max-width: 8.5rem;
     height: 2.6rem;
+  }
+
+  .sponsor-strip--hero .sponsor-strip-logo {
+    max-width: 12.5rem;
+    height: 4.25rem;
+  }
+
+  .sponsor-strip--hero.count-5 .sponsor-strip-logo,
+  .sponsor-strip--hero.count-6 .sponsor-strip-logo,
+  .sponsor-strip--hero.count-7 .sponsor-strip-logo,
+  .sponsor-strip--hero.count-8 .sponsor-strip-logo {
+    max-width: 9.5rem;
+    height: 3.35rem;
   }
 
   .sponsor-strip--compact .sponsor-strip-logo {

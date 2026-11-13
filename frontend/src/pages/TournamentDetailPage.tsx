@@ -90,40 +90,39 @@ export default function TournamentDetailPage() {
   // Day-of manage hub is platform-admin only (no organiser accounts).
   const isOps = !!user && user.role === 'ADMIN' && !!tournament?.can_manage
 
+  const teamForRedirect = playerView?.my_team as
+    | {
+        payment_status?: string
+        slot?: number | null
+        needs_partner?: boolean
+        partner_invite_pending?: boolean
+      }
+    | null
+    | undefined
+
+  const redirectToLive =
+    !!slug &&
+    !!tournament &&
+    !isOps &&
+    !playerViewPending &&
+    !playerViewError &&
+    !!teamForRedirect &&
+    teamForRedirect.payment_status === 'PAID' &&
+    !(teamForRedirect.needs_partner && teamForRedirect.slot === 1) &&
+    !(teamForRedirect.partner_invite_pending && teamForRedirect.slot === 2) &&
+    (tournament.status === 'LIVE' ||
+      !!(playerView?.next_match as Match | null | undefined) ||
+      (matches.length > 0 &&
+        tournament.status !== 'CANCELLED' &&
+        tournament.status !== 'COMPLETED'))
+
   // Match day: send entered players straight to Live (next match + score in one place)
   useEffect(() => {
-    if (!slug || !tournament || playerViewPending || playerViewError) return
-    if (isOps) return
-    const team = playerView?.my_team as
-      | {
-          payment_status?: string
-          slot?: number | null
-          needs_partner?: boolean
-          partner_invite_pending?: boolean
-        }
-      | null
-      | undefined
-    if (!team || team.payment_status !== 'PAID') return
-    if (team.needs_partner && team.slot === 1) return
-    if (team.partner_invite_pending && team.slot === 2) return
-    const onMatchDay =
-      tournament.status === 'LIVE' ||
-      (matches.length > 0 && tournament.status !== 'CANCELLED' && tournament.status !== 'COMPLETED')
-    const next = playerView?.next_match as Match | null | undefined
-    if (!onMatchDay && !next) return
+    if (!redirectToLive) return
     navigate(`/t/${slug}/live`, { replace: true })
-  }, [
-    slug,
-    tournament,
-    playerView,
-    playerViewPending,
-    playerViewError,
-    matches.length,
-    isOps,
-    navigate,
-  ])
+  }, [redirectToLive, slug, navigate])
 
-  if (isLoading) {
+  if (isLoading || (user && !isOps && playerViewPending) || redirectToLive) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -157,10 +156,6 @@ export default function TournamentDetailPage() {
 
   const pendingConfirm = matches.filter((m) => m.status === 'AWAITING_CONFIRM').slice(0, 6)
   const upcoming = matches.filter((m) => m.status === 'SCHEDULED').slice(0, 8)
-
-  const jumpTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
   const championshipMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
   const plateMatches = matches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]
@@ -506,24 +501,12 @@ export default function TournamentDetailPage() {
           </p>
         )}
 
-        {(knockoutActive || upcoming.length > 0 || matchDay) && (
-          <nav className="tour-jump" aria-label="Jump to section">
-            {matchDay && (
-              <Link to={`/t/${tournament.slug}/live`} className="tour-jump-link tour-jump-link--primary">
-                My match
-              </Link>
-            )}
-            {upcoming.length > 0 && (
-              <button type="button" className="tour-jump-link" onClick={() => jumpTo('tour-upcoming')}>
-                Coming up
-              </button>
-            )}
-            {knockoutActive && knockoutMatches.length > 0 && (
-              <button type="button" className="tour-jump-link" onClick={() => jumpTo('tour-draw')}>
-                Draw
-              </button>
-            )}
-          </nav>
+        {matchDay && hasPaidEntry && (
+          <div className="tour-jump">
+            <Link to={`/t/${tournament.slug}/live`} className="tour-jump-link tour-jump-link--primary">
+              My match
+            </Link>
+          </div>
         )}
 
         {knockoutActive && knockoutMatches.length > 0 && (

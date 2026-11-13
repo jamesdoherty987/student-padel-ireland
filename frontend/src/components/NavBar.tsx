@@ -7,6 +7,7 @@ import { appHomePath, guestBrowsePath, nativeBackFallback } from '../utils/navig
 import BackButton from './BackButton'
 import BrandLogo from './BrandLogo'
 import { nativeTabsVisibleForPath } from './NativeTabBar'
+import HeaderReloadButton from './HeaderReloadButton'
 import NotificationsBell from './NotificationsBell'
 import './AppSidebar.css'
 
@@ -184,7 +185,14 @@ export default function NavBar() {
         )}
         <BrandLogo to={brandTo} className="app-topbar-brand" size="sm" />
         <div className="app-topbar-end">
-          {user && !liveFocus ? <NotificationsBell /> : <span className="app-topbar-spacer" aria-hidden />}
+          {liveFocus ? (
+            <span className="app-topbar-spacer" aria-hidden />
+          ) : (
+            <>
+              <HeaderReloadButton />
+              {user ? <NotificationsBell /> : null}
+            </>
+          )}
         </div>
       </header>
     )
@@ -209,9 +217,10 @@ export default function NavBar() {
       >
         <div className="app-sidebar-head">
           <BrandLogo to={brandTo} className="app-sidebar-brand" size="sm" onClick={close} />
-          {user && desktop ? (
+          {desktop ? (
             <div className="app-sidebar-bell">
-              <NotificationsBell />
+              <HeaderReloadButton />
+              {user ? <NotificationsBell /> : null}
             </div>
           ) : null}
         </div>
@@ -315,6 +324,7 @@ export default function NavBar() {
               <i className={`fas ${open ? 'fa-times' : 'fa-bars'}`} />
             </button>
           ) : null}
+          {!desktop ? <HeaderReloadButton /> : null}
           {user && !desktop ? <NotificationsBell /> : null}
         </div>
       </header>
