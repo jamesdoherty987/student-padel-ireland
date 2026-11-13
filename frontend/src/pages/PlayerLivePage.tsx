@@ -42,6 +42,64 @@ type ScoreSets = {
   set3_b: number
 }
 
+/** Normalize tournament scoring mode. Missing/unknown → treat as SIMPLE UI. */
+function tournamentScoringMode(raw?: string | null): 'SIMPLE' | 'BEST_OF_3' | 'LEGACY' {
+  const mode = (raw || '').trim().toUpperCase()
+  if (mode === 'BEST_OF_3') return 'BEST_OF_3'
+  if (mode === 'SIMPLE') return 'SIMPLE'
+  // API older than scoring_mode always required two sets for player-score
+  if (!mode) return 'LEGACY'
+  return 'SIMPLE'
+}
+
+/**
+ * Build player-score body for the active API.
+ * LEGACY (no scoring_mode on tournament): synthesize a 2–0 set win from
+ * winner + optional overall points so old backends accept the result.
+ */
+function playerScorePayload(
+  scoringMode: 'SIMPLE' | 'BEST_OF_3' | 'LEGACY',
+  sets: ScoreSets,
+  winnerId: string,
+  teamAId: string | null | undefined,
+  teamBId: string | null | undefined,
+) {
+  if (scoringMode === 'BEST_OF_3') return { ...sets }
+
+  if (scoringMode === 'SIMPLE') {
+    return {
+      set1_a: sets.set1_a,
+      set1_b: sets.set1_b,
+      set2_a: 0,
+      set2_b: 0,
+      set3_a: 0,
+      set3_b: 0,
+      winner_id: winnerId || null,
+    }
+  }
+
+  const aWins = !!winnerId && winnerId === teamAId
+  const bWins = !!winnerId && winnerId === teamBId
+  let s1a = sets.set1_a
+  let s1b = sets.set1_b
+  if (!(s1a || s1b)) {
+    s1a = aWins ? 6 : 4
+    s1b = aWins ? 4 : 6
+  } else if (aWins && s1a <= s1b) {
+    s1a = Math.max(s1b + 2, 6)
+  } else if (bWins && s1b <= s1a) {
+    s1b = Math.max(s1a + 2, 6)
+  }
+  return {
+    set1_a: s1a,
+    set1_b: s1b,
+    set2_a: aWins ? 6 : 4,
+    set2_b: aWins ? 4 : 6,
+    set3_a: 0,
+    set3_b: 0,
+  }
+}
+
 function opponentName(m: Match, myTeamId?: string) {
   if (!myTeamId) return null
   if (m.team_a_id === myTeamId) return m.team_b_name || m.team_b_placeholder || 'Opponent'
@@ -197,21 +255,18 @@ function NextMatchCard({
         </div>
       )}
 
-      {next.status === 'SCHEDULED' && (
-        <p className="pl-next-hint">Updates when you’re called.</p>
-      )}
 
       <div className="pl-next-actions">
         {next.needs_my_confirm ? (
           <>
-            <p className="pl-pending-hint">Agree to lock it in, or fix it if it’s wrong.</p>
+            <p className="pl-pending-hint">Looks right?</p>
             <button
               type="button"
               className="btn btn-primary btn-block"
               disabled={actions.confirming || actions.cancelling}
               onClick={actions.onConfirm}
             >
-              {actions.confirming ? 'Saving…' : 'Yes, that’s right'}
+              {actions.confirming ? '…' : 'Confirm'}
             </button>
             <button
               type="button"
@@ -219,24 +274,24 @@ function NextMatchCard({
               disabled={actions.cancelling || actions.confirming}
               onClick={actions.onDisagree}
             >
-              {actions.cancelling ? 'Opening…' : 'Wrong — fix score'}
+              {actions.cancelling ? '…' : 'Fix'}
             </button>
           </>
         ) : next.score_submitted_by_me && pending ? (
           <>
-            <p className="pl-pending-hint">Waiting for the other team. You can still change it.</p>
+            <p className="pl-pending-hint">Waiting on them.</p>
             <button
               type="button"
               className="btn btn-ghost btn-block pl-btn-on-dark"
               disabled={actions.cancelling}
               onClick={actions.onEditPending}
             >
-              {actions.cancelling ? 'Opening…' : 'Change my score'}
+              {actions.cancelling ? '…' : 'Edit'}
             </button>
           </>
         ) : next.can_i_score ? (
           <button type="button" className="btn btn-primary btn-block" onClick={actions.onLogScore}>
-            Log result
+            Score
           </button>
         ) : null}
       </div>
@@ -339,18 +394,14 @@ export default function PlayerLivePage() {
   const scoreMut = useMutation({
     mutationFn: async () => {
       if (!scoringMatch) throw new Error('No match')
-      const simple = (data?.tournament?.scoring_mode || 'SIMPLE') !== 'BEST_OF_3'
-      const payload = simple
-        ? {
-            set1_a: sets.set1_a,
-            set1_b: sets.set1_b,
-            set2_a: 0,
-            set2_b: 0,
-            set3_a: 0,
-            set3_b: 0,
-            winner_id: winnerId || null,
-          }
-        : { ...sets }
+      const mode = tournamentScoringMode(data?.tournament?.scoring_mode)
+      const payload = playerScorePayload(
+        mode,
+        sets,
+        winnerId,
+        scoringMatch.team_a_id,
+        scoringMatch.team_b_id,
+      )
       return (await tournamentApi.playerSubmitScore(scoringMatch.id, payload)).data
     },
     onSuccess: () => {
@@ -1038,8 +1089,8 @@ export default function PlayerLivePage() {
             onSubmit={(e) => {
               e.preventDefault()
               setScoreError('')
-              const simple = (data?.tournament?.scoring_mode || 'SIMPLE') !== 'BEST_OF_3'
-              if (simple) {
+              const mode = tournamentScoringMode(data?.tournament?.scoring_mode)
+              if (mode !== 'BEST_OF_3') {
                 if (!winnerId) {
                   setScoreError('Tap who won')
                   return
@@ -1095,17 +1146,17 @@ export default function PlayerLivePage() {
             </h2>
             <p className="muted-note" style={{ marginTop: 0 }}>
               {scoreSheetMode === 'fix'
-                ? 'Adjust what’s wrong, then send it back for confirm.'
+                ? 'Fix it, then send again.'
                 : scoreSheetMode === 'edit'
-                  ? 'Update it, then send again for the other team to confirm.'
-                  : (data?.tournament?.scoring_mode || 'SIMPLE') === 'BEST_OF_3'
-                    ? 'Best of 3 · opponent confirms'
-                    : 'Opponent confirms'}
+                  ? 'Update, then send again.'
+                  : tournamentScoringMode(data?.tournament?.scoring_mode) === 'BEST_OF_3'
+                    ? 'Best of 3 · they confirm'
+                    : 'They confirm'}
             </p>
-            {(data?.tournament?.scoring_mode || 'SIMPLE') !== 'BEST_OF_3' ? (
+            {tournamentScoringMode(data?.tournament?.scoring_mode) !== 'BEST_OF_3' ? (
               <>
                 <p className="muted-note" style={{ marginTop: 0, marginBottom: '0.65rem' }}>
-                  Tap who won. Leave scores at 0 if you don’t need them.
+                  Tap the winner. Score optional.
                 </p>
                 <div className="score-team-grid" role="group" aria-label="Winner and score">
                   <div

@@ -14,7 +14,6 @@ import { publicPathUrl } from '../native/platform'
 import {
   bracketFormatHint,
   courtLabel,
-  currentSetScores,
   formatDate,
   formatMatchScore,
   formatMoney,
@@ -121,10 +120,6 @@ export default function TournamentDetailPage() {
     )
   }
 
-  // On court = called or live (Start live was removed; call is enough)
-  const live = matches.filter(
-    (m) => m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'AWAITING_CONFIRM',
-  )
   const pendingConfirm = matches.filter((m) => m.status === 'AWAITING_CONFIRM').slice(0, 6)
   const upcoming = matches.filter((m) => m.status === 'SCHEDULED').slice(0, 8)
 
@@ -474,17 +469,12 @@ export default function TournamentDetailPage() {
           </p>
         )}
 
-        {(knockoutActive || live.length > 0 || upcoming.length > 0 || matchDay) && (
+        {(knockoutActive || upcoming.length > 0 || matchDay) && (
           <nav className="tour-jump" aria-label="Jump to section">
             {matchDay && (
               <Link to={`/t/${tournament.slug}/live`} className="tour-jump-link tour-jump-link--primary">
                 My matches
               </Link>
-            )}
-            {live.length > 0 && (
-              <button type="button" className="tour-jump-link" onClick={() => jumpTo('tour-live')}>
-                Live
-              </button>
             )}
             {upcoming.length > 0 && (
               <button type="button" className="tour-jump-link" onClick={() => jumpTo('tour-upcoming')}>
@@ -511,38 +501,6 @@ export default function TournamentDetailPage() {
             {plateMatches.length > 0 && (
               <TournamentBracket matches={plateMatches} myTeamId={myTeamId} stage="PLATE" />
             )}
-          </section>
-        )}
-
-        {live.length > 0 && (
-          <section className="block" id="tour-live">
-            <h2>
-              <span className="live-dot" /> On court
-            </h2>
-            <div className="live-grid">
-              {live.map((m) => {
-                const s = currentSetScores(m.score)
-                const called = m.status === 'CALLED'
-                const pending = m.status === 'AWAITING_CONFIRM'
-                return (
-                  <div key={m.id} className={`live-tile${called ? ' is-called' : ''}`}>
-                    <div className="live-court">
-                      {courtLabel(m.court_name, m.court_number)}
-                      {called ? ' · Called' : pending ? ' · Confirm score' : ''}
-                    </div>
-                    <div className="live-score-row">
-                      <span>{m.team_a_name || m.team_a_placeholder || 'TBD'}</span>
-                      {!called ? <strong>{s.a}</strong> : null}
-                    </div>
-                    <div className="live-score-row">
-                      <span>{m.team_b_name || m.team_b_placeholder || 'TBD'}</span>
-                      {!called ? <strong>{s.b}</strong> : null}
-                    </div>
-                    {!called && !pending ? <div className="live-set">Set {s.set}</div> : null}
-                  </div>
-                )
-              })}
-            </div>
           </section>
         )}
 
@@ -580,19 +538,18 @@ export default function TournamentDetailPage() {
               {upcoming.map((m) => (
                 <li key={m.id}>
                   <span className="match-preview-court">
-                    {m.status === 'CALLED'
-                      ? `Called · ${courtLabel(m.court_name, m.court_number)}`
-                      : courtLabel(m.court_name, m.court_number)}
+                    {courtLabel(m.court_name, m.court_number)}
                   </span>
                   <span>
-                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                    {m.team_b_name || m.team_b_placeholder || 'TBD'}
                   </span>
                   <span className="match-preview-time">{formatTime(m.scheduled_start)}</span>
                 </li>
               ))}
             </ul>
             <Link to={`/t/${tournament.slug}/live`} className="tour-inline-link">
-              Full live view
+              Open live board
             </Link>
           </section>
         )}

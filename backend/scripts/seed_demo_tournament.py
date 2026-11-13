@@ -36,6 +36,7 @@ from app.models import (
     PlayFormat,
     Ranking,
     Registration,
+    ScoringMode,
     Team,
     TeamPlayer,
     Tournament,
@@ -261,7 +262,8 @@ def _ensure_tournament(
             "Private dry-run event for testing scoring, brackets, next-court, "
             "TV display, and player live view before the first real tournament."
         )
-        t.rules = "Best of 3 sets · demo scores only · not a public event."
+        t.rules = "Winner + optional score · demo only · not a public event."
+        t.scoring_mode = ScoringMode.SIMPLE.value
         t.is_official = False
         t.invite_code = _invite_or_fixed(db, INVITE_CODE)
         _sync_courts(db, t.id, courts)
@@ -285,7 +287,7 @@ def _ensure_tournament(
         ),
         format=TournamentFormat.GROUP_KNOCKOUT.value,
         play_format=PlayFormat.DOUBLES.value,
-        rules="Best of 3 sets · demo scores only · not a public event.",
+        rules="Winner + optional score · demo only · not a public event.",
         description=(
             "Private dry-run event for testing scoring, brackets, next-court, "
             "TV display, and player live view before the first real tournament."
@@ -298,6 +300,7 @@ def _ensure_tournament(
         enable_plate=enable_plate,
         championship_size=8 if teams <= 16 else 16,
         plate_size=8 if teams <= 16 else 16,
+        scoring_mode=ScoringMode.SIMPLE.value,
         invite_code=_invite_or_fixed(db, INVITE_CODE),
         is_official=False,
     )

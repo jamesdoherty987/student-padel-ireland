@@ -181,7 +181,8 @@ def main() -> None:
                     "PRIVATE dry-run for testing scoring, brackets, next-court, "
                     "and live views. Not a public event — delete after testing."
                 ),
-                "rules": "Demo scores only. Best of 3.",
+                "rules": "Demo scores only. Winner + optional score.",
+                "scoring_mode": "SIMPLE",
             },
         )
         if code not in (200, 201) or not isinstance(created, dict):
@@ -206,13 +207,28 @@ def main() -> None:
         invite = (opened or {}).get("invite_code") or invite
         print("Registration opened.")
 
-    # Ensure still private
+    # Ensure still private + simple (overall) scoring for the dry-run
     code, detail = _req(base, "GET", f"/api/tournaments/{slug}", token=host_token)
     if code == 200 and isinstance(detail, dict):
         if detail.get("is_official"):
             raise SystemExit("Tournament is official — aborting.")
         invite = detail.get("invite_code") or invite
         print(f"Confirmed private. invite={invite} status={detail.get('status')}")
+        if detail.get("scoring_mode") != "SIMPLE":
+            code, patched = _req(
+                base,
+                "PATCH",
+                f"/api/tournaments/{tid}",
+                token=host_token,
+                body={
+                    "scoring_mode": "SIMPLE",
+                    "rules": "Demo scores only. Winner + optional score.",
+                },
+            )
+            if code == 200:
+                print("Scoring mode set to SIMPLE (overall score).")
+            else:
+                print(f"Warning: could not set scoring_mode SIMPLE: {code} {patched}")
 
     # Existing teams by name
     code, teams_payload = _req(base, "GET", f"/api/tournaments/{tid}/teams", token=host_token)

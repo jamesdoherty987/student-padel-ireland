@@ -31,6 +31,10 @@ function gridDims(count: number): { cols: number; rows: number } {
   return { cols, rows: Math.ceil(n / cols) }
 }
 
+function isOnCourt(status: string) {
+  return status === 'LIVE' || status === 'CALLED' || status === 'AWAITING_CONFIRM'
+}
+
 function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
   const activePool = matches.filter(
     (m) =>
@@ -67,44 +71,52 @@ function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
   const status = current.status
   const board = formatLiveBoardScore(current.score)
   const games = currentSetScores(current.score)
-  const isLive = status === 'LIVE'
-  const isCalled = status === 'CALLED' || status === 'AWAITING_CONFIRM'
-  const hasScore = !!(current.score && (current.score.set1_a || current.score.set1_b || current.score.set2_a))
+  const onCourt = isOnCourt(status)
+  const hasScore = !!(
+    current.score &&
+    (current.score.set1_a ||
+      current.score.set1_b ||
+      current.score.set2_a ||
+      current.score.set2_b)
+  )
+  const pill =
+    status === 'AWAITING_CONFIRM'
+      ? { className: 'tv-pill tv-pill-called', label: 'Confirm' }
+      : status === 'CALLED'
+        ? { className: 'tv-pill tv-pill-called', label: 'Go now' }
+        : status === 'LIVE'
+          ? { className: 'tv-pill tv-pill-live', label: 'Live' }
+          : { className: 'tv-pill tv-pill-next', label: 'Next' }
 
   return (
     <article
-      className={`tv-court ${isLive ? 'is-live' : ''} ${isCalled ? 'is-called' : ''} ${status === 'SCHEDULED' ? 'is-upcoming' : ''}`}
+      className={`tv-court ${onCourt ? 'is-active' : ''} ${status === 'LIVE' ? 'is-live' : ''} ${status === 'CALLED' || status === 'AWAITING_CONFIRM' ? 'is-called' : ''} ${status === 'SCHEDULED' ? 'is-upcoming' : ''}`}
     >
       <div className="tv-court-num">
         <span>{label}</span>
-        {isLive && <span className="tv-pill tv-pill-live">LIVE</span>}
-        {status === 'CALLED' && <span className="tv-pill tv-pill-called">GO NOW</span>}
-        {status === 'AWAITING_CONFIRM' && <span className="tv-pill tv-pill-called">CONFIRM</span>}
-        {status === 'SCHEDULED' && <span className="tv-pill tv-pill-next">UP NEXT</span>}
+        <span className={pill.className}>{pill.label}</span>
       </div>
 
       <div className="tv-match">
-        {(isLive || isCalled) && (
+        {onCourt ? (
           <>
             <div className="tv-row">
               <span title={teamName(current, 'a')}>{teamName(current, 'a')}</span>
-              <strong>{isLive && hasScore ? games.a : '·'}</strong>
+              <strong>{hasScore ? games.a : '·'}</strong>
             </div>
             <div className="tv-row">
               <span title={teamName(current, 'b')}>{teamName(current, 'b')}</span>
-              <strong>{isLive && hasScore ? games.b : '·'}</strong>
+              <strong>{hasScore ? games.b : '·'}</strong>
             </div>
-            {isLive && board.sets && board.sets.includes(' ') ? (
+            {hasScore && board.sets && board.sets.includes(' ') ? (
               <div className="tv-meta">
                 <span>{board.sets}</span>
               </div>
             ) : null}
-            {status === 'CALLED' && <p className="tv-hint">Players to court</p>}
-            {status === 'AWAITING_CONFIRM' && <p className="tv-hint">Confirming score</p>}
+            {status === 'CALLED' && !hasScore ? <p className="tv-hint">Players to court</p> : null}
+            {status === 'AWAITING_CONFIRM' ? <p className="tv-hint">Confirming score</p> : null}
           </>
-        )}
-
-        {status === 'SCHEDULED' && (
+        ) : (
           <>
             <div className="tv-upcoming-names">
               <div title={teamName(current, 'a')}>{teamName(current, 'a')}</div>
@@ -136,8 +148,8 @@ function UnassignedPanel({ matches }: { matches: Match[] }) {
       <ul>
         {matches.map((m) => (
           <li key={m.id}>
-            <span className={`tv-pill ${m.status === 'LIVE' ? 'tv-pill-live' : 'tv-pill-called'}`}>
-              {m.status === 'LIVE' ? 'LIVE' : 'CALLED'}
+            <span className={`tv-pill ${isOnCourt(m.status) ? 'tv-pill-called' : 'tv-pill-next'}`}>
+              {m.status === 'LIVE' ? 'Live' : m.status === 'CALLED' ? 'Go now' : m.status.replace(/_/g, ' ')}
             </span>
             <span title={`${teamName(m, 'a')} vs ${teamName(m, 'b')}`}>
               {teamName(m, 'a')} vs {teamName(m, 'b')}
@@ -238,11 +250,11 @@ export default function TvDisplayPage() {
   const unassigned = (data.unassigned || []) as Match[]
   const total = data.tournament.number_of_courts || Object.keys(courts).length || 1
   const slots = Array.from({ length: Math.max(1, total) }, (_, i) => i + 1)
-  const liveCount =
-    typeof data.live_count === 'number'
-      ? data.live_count
-      : slots.reduce((n, c) => n + (courts[String(c)] || []).filter((m) => m.status === 'LIVE').length, 0) +
-        unassigned.filter((m) => m.status === 'LIVE').length
+  const onCourtCount =
+    slots.reduce(
+      (n, c) => n + (courts[String(c)] || []).filter((m) => isOnCourt(m.status)).length,
+      0,
+    ) + unassigned.filter((m) => isOnCourt(m.status)).length
 
   const { cols, rows } = gridDims(slots.length)
 
@@ -258,11 +270,11 @@ export default function TvDisplayPage() {
           <BrandLogo to={null} className="tv-brand" size="sm" />
           <div className="tv-title-row">
             <h1>{data.tournament.name}</h1>
-            {liveCount > 0 && (
-              <span className="tv-pill tv-pill-live">
-                {liveCount} LIVE
+            {onCourtCount > 0 ? (
+              <span className="tv-pill tv-pill-called">
+                {onCourtCount} on court
               </span>
-            )}
+            ) : null}
           </div>
         </div>
         {sponsors.length > 0 ? (

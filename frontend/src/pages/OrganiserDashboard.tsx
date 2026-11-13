@@ -1113,10 +1113,10 @@ export default function OrganiserDashboard() {
             type="button"
             className="btn btn-primary btn-sm"
             disabled={moveMut.isPending}
-            title="Tell players to go to this court"
+            title="Call players to this court"
             onClick={() => moveMut.mutate({ matchId: m.id, data: { status: 'CALLED' } })}
           >
-            Call to court
+            Call
           </button>
         )}
         {(m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'SCHEDULED' || pending) && (
@@ -1125,18 +1125,28 @@ export default function OrganiserDashboard() {
             className="btn btn-dark btn-sm"
             disabled={moveMut.isPending}
             onClick={onScore}
-            title={pending ? 'Confirm or correct the proposed result' : 'Log who won'}
+            title={pending ? 'Confirm or correct the result' : 'Log who won'}
           >
-            {pending ? 'Fix / finalise' : 'Score'}
+            {pending ? 'Fix' : 'Score'}
           </button>
         )}
         {done && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => openScore(m)}>
-            {locked ? 'Correct' : 'Score'}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            title={locked ? 'Correct result' : 'Edit score'}
+            onClick={() => openScore(m)}
+          >
+            {locked ? 'Fix' : 'Score'}
           </button>
         )}
         {!done && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => openMove(m)}>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            title="Change court or time"
+            onClick={() => openMove(m)}
+          >
             Move
           </button>
         )}
@@ -1264,11 +1274,16 @@ export default function OrganiserDashboard() {
               <header className="org-header">
                 <div>
                   <h1>{active.tournament.name}</h1>
-                  <p>
-                    {active.tournament.status.replace(/_/g, ' ')} ·{' '}
-                    {tournamentFormatSummary(activePlayFormat, activeFormat)} ·{' '}
-                    <Link to={`/t/${active.tournament.slug}`}>Public page</Link> ·{' '}
-                    <Link to={`/tournament/${active.tournament.slug}/display`}>TV display</Link>
+                  <p className="org-header-meta">
+                    {statusLabel(active.tournament.status)}
+                    {active.tournament.slug ? (
+                      <>
+                        {' · '}
+                        <Link to={`/t/${active.tournament.slug}/live`}>Live</Link>
+                        {' · '}
+                        <Link to={`/tournament/${active.tournament.slug}/display`}>TV</Link>
+                      </>
+                    ) : null}
                   </p>
                 </div>
                 <div className="org-header-actions">
@@ -1278,8 +1293,13 @@ export default function OrganiserDashboard() {
                     </button>
                   )}
                   {active.tournament.status === 'DRAFT' && (
-                    <button className="btn btn-primary" onClick={() => openMut.mutate()} disabled={openMut.isPending}>
-                      Open registration
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => openMut.mutate()}
+                      disabled={openMut.isPending}
+                      title="Open registration"
+                    >
+                      Open
                     </button>
                   )}
                   {active.tournament.status === 'REGISTRATION_OPEN' && !fixturesExist && (
@@ -1288,16 +1308,17 @@ export default function OrganiserDashboard() {
                         className="btn btn-ghost"
                         onClick={() => closeRegMut.mutate()}
                         disabled={closeRegMut.isPending}
+                        title="Close registration"
                       >
-                        Close registration
+                        Close
                       </button>
                       <button
                         className="btn btn-primary"
                         onClick={() => setConfirmGenerate(true)}
                         disabled={generateMut.isPending || !canOpenGenerate}
-                        title={generateBlockedReason || undefined}
+                        title={generateBlockedReason || 'Generate draw'}
                       >
-                        Generate draw
+                        Draw
                       </button>
                     </>
                   )}
@@ -1307,12 +1328,16 @@ export default function OrganiserDashboard() {
                         className="btn btn-ghost"
                         onClick={() => setConfirmGenerate(true)}
                         disabled={generateMut.isPending || !canOpenGenerate}
-                        title={generateBlockedReason || undefined}
+                        title={generateBlockedReason || 'Re-generate draw'}
                       >
-                        Re-generate
+                        Redraw
                       </button>
-                      <button className="btn btn-primary" onClick={() => goLiveMut.mutate()} disabled={goLiveMut.isPending}>
-                        Go LIVE
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => goLiveMut.mutate()}
+                        disabled={goLiveMut.isPending}
+                      >
+                        LIVE
                       </button>
                     </>
                   )}
@@ -1322,16 +1347,17 @@ export default function OrganiserDashboard() {
                         className="btn btn-ghost"
                         onClick={() => openMut.mutate()}
                         disabled={openMut.isPending}
+                        title="Reopen registration"
                       >
-                        Reopen registration
+                        Reopen
                       </button>
                       <button
                         className="btn btn-primary"
                         onClick={() => setConfirmGenerate(true)}
                         disabled={generateMut.isPending || !canOpenGenerate}
-                        title={generateBlockedReason || undefined}
+                        title={generateBlockedReason || 'Generate draw'}
                       >
-                        Generate draw
+                        Draw
                       </button>
                     </>
                   )}
@@ -1341,19 +1367,24 @@ export default function OrganiserDashboard() {
                         className="btn btn-ghost"
                         onClick={() => openMut.mutate()}
                         disabled={openMut.isPending}
+                        title="Reopen registration"
                       >
-                        Reopen registration
+                        Reopen
                       </button>
                       <button
                         className="btn btn-ghost"
                         onClick={() => setConfirmGenerate(true)}
                         disabled={generateMut.isPending || !canOpenGenerate}
-                        title={generateBlockedReason || undefined}
+                        title={generateBlockedReason || 'Re-generate draw'}
                       >
-                        Re-generate
+                        Redraw
                       </button>
-                      <button className="btn btn-primary" onClick={() => goLiveMut.mutate()} disabled={goLiveMut.isPending}>
-                        Go LIVE
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => goLiveMut.mutate()}
+                        disabled={goLiveMut.isPending}
+                      >
+                        LIVE
                       </button>
                     </>
                   )}
@@ -1363,15 +1394,16 @@ export default function OrganiserDashboard() {
                       onClick={() => {
                         void confirmDialog({
                           title: 'Mark completed?',
-                          message: 'This ends the tournament for players on the live board.',
-                          confirmLabel: 'Mark completed',
+                          message: 'This ends the event for players.',
+                          confirmLabel: 'Done',
                         }).then((ok) => {
                           if (ok) completeMut.mutate()
                         })
                       }}
                       disabled={completeMut.isPending}
+                      title="Mark tournament completed"
                     >
-                      Mark completed
+                      Done
                     </button>
                   )}
                   {active.tournament.status === 'CANCELLED' && (
@@ -1382,14 +1414,14 @@ export default function OrganiserDashboard() {
                       onClick={() => {
                         void confirmDialog({
                           title: 'Restore as draft?',
-                          message: 'Players will not see this event until you open registration again.',
+                          message: 'Open registration again when you’re ready.',
                           confirmLabel: 'Restore',
                         }).then((ok) => {
                           if (ok) restoreMut.mutate()
                         })
                       }}
                     >
-                      {restoreMut.isPending ? 'Restoring…' : 'Restore as draft'}
+                      {restoreMut.isPending ? '…' : 'Restore'}
                     </button>
                   )}
                 </div>
@@ -1485,9 +1517,9 @@ export default function OrganiserDashboard() {
               <div className="section-tabs" role="tablist" aria-label="Organiser sections">
                 {(
                   [
-                    { id: 'registration' as const, label: 'Registration' },
-                    { id: 'day-of' as const, label: 'Day-of' },
-                    { id: 'settings' as const, label: 'Settings' },
+                    { id: 'registration' as const, label: 'Entries' },
+                    { id: 'day-of' as const, label: 'Today' },
+                    { id: 'settings' as const, label: 'More' },
                   ] as const
                 ).map((tab) => (
                   <button
@@ -1506,29 +1538,28 @@ export default function OrganiserDashboard() {
               {orgPanel === 'registration' && (
               <>
               <section className="org-section">
-                <h2>Invite players</h2>
+                <h2>Invite</h2>
                 {inviteCode && active.tournament.status === 'REGISTRATION_OPEN' ? (
                   <div className="org-invite">
                     <div className="org-invite-code">
-                      <span className="org-invite-label">Join code</span>
+                      <span className="org-invite-label">Code</span>
                       <code className="share-code">{inviteCode}</code>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => void copyInviteCode()}>
-                        {codeCopied ? 'Copied' : 'Copy code'}
+                        {codeCopied ? 'Copied' : 'Copy'}
                       </button>
                     </div>
-                    {joinUrl && <ShareQr url={joinUrl} openLabel="Open join page" />}
+                    {joinUrl && <ShareQr url={joinUrl} openLabel="Join link" />}
                   </div>
                 ) : inviteCode && active.tournament.status === 'DRAFT' ? (
-                  <p className="muted">Join code is ready and will appear here after you open registration.</p>
+                  <p className="muted">Open registration to share the code.</p>
                 ) : inviteCode && fixturesExist ? (
                   <p className="muted">
-                    Live board:{' '}
-                    <Link to={`/t/${active.tournament.slug}/live`}>/t/{active.tournament.slug}/live</Link>
+                    <Link to={`/t/${active.tournament.slug}/live`}>Player live board</Link>
                   </p>
                 ) : inviteCode ? (
-                  <p className="muted">Join code stays available if you re-open registration.</p>
+                  <p className="muted">Code ready if you reopen.</p>
                 ) : (
-                  <p className="muted">Invite code will appear once the tournament is saved.</p>
+                  <p className="muted">Code appears after save.</p>
                 )}
               </section>
 
@@ -1544,9 +1575,8 @@ export default function OrganiserDashboard() {
                         onClick={() => {
                           void confirmDialog({
                             title: 'Send reminder emails?',
-                            message:
-                              'Emails paid players who haven’t received a reminder yet. Safe to run more than once - nobody gets a duplicate.',
-                            confirmLabel: 'Send now',
+                            message: 'Email paid players who haven’t had a reminder yet.',
+                            confirmLabel: 'Send',
                           }).then((ok) => {
                             if (ok) remindMut.mutate()
                           })
@@ -1806,35 +1836,12 @@ export default function OrganiserDashboard() {
 
               {orgPanel === 'day-of' && (
               <>
-              <section className="org-section org-day-guide">
-                <div className="org-section-head">
-                  <h2>Run the day</h2>
-                </div>
-                <ol className="org-day-steps">
-                  <li>Check teams in</li>
-                  <li>
-                    <strong>Call to court</strong> when a court is free (optional — emails players)
-                  </li>
-                  <li>
-                    <strong>Score</strong> when the match ends — tap who won
-                  </li>
-                </ol>
-                {active.tournament.slug ? (
-                  <p className="muted org-section-lead" style={{ marginBottom: 0 }}>
-                    <Link to={`/t/${active.tournament.slug}/live`}>Player live</Link>
-                    {' · '}
-                    <Link to={`/tournament/${active.tournament.slug}/display`}>TV</Link>
-                  </p>
-                ) : null}
-              </section>
-
               {courtsideNow.length > 0 && (
                 <section className="org-section org-now-board">
                   <div className="org-section-head">
-                    <h2>On court now</h2>
-                    <span className="muted">{courtsideNow.length} court{courtsideNow.length === 1 ? '' : 's'}</span>
+                    <h2>Now</h2>
+                    <span className="muted">{courtsideNow.length}</span>
                   </div>
-                  <p className="muted org-section-lead">One match per court.</p>
                   <div className="org-now-grid">
                     {courtsideNow.map((slot) => {
                       const m = slot.match
@@ -1850,9 +1857,9 @@ export default function OrganiserDashboard() {
                               ? 'Live'
                               : slot.kind === 'called'
                                 ? m.status === 'AWAITING_CONFIRM'
-                                  ? 'Confirm score'
+                                  ? 'Confirm'
                                   : 'Called'
-                                : 'Up next'}
+                                : 'Next'}
                           </span>
                           <strong>{slot.label}</strong>
                           <p>
@@ -1873,126 +1880,9 @@ export default function OrganiserDashboard() {
                 </section>
               )}
 
-              {checkInPool.length > 0 && (
-                <section className="org-section org-checkin">
-                  <div className="org-section-head">
-                    <h2>Check-in</h2>
-                    <span className="org-checkin-count">
-                      {checkedInCount}/{checkInPool.length} in
-                    </span>
-                  </div>
-                  <div className="org-entries-search" style={{ marginBottom: '0.75rem' }}>
-                    <label className="visually-hidden" htmlFor="checkin-search">
-                      Search teams
-                    </label>
-                    <input
-                      id="checkin-search"
-                      className="form-input"
-                      type="search"
-                      placeholder="Search team or player…"
-                      value={checkInQuery}
-                      onChange={(e) => setCheckInQuery(e.target.value)}
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div
-                    className="org-view-toggle org-pay-filters"
-                    role="group"
-                    aria-label="Check-in filter"
-                  >
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${checkInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
-                      onClick={() => setCheckInFilter('out')}
-                    >
-                      Not in ({awaitingCheckInCount})
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${checkInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
-                      onClick={() => setCheckInFilter('in')}
-                    >
-                      In ({checkedInCount})
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${checkInFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
-                      onClick={() => setCheckInFilter('all')}
-                    >
-                      All
-                    </button>
-                  </div>
-                  <div className="org-table org-checkin-table">
-                    {checkInRows.map((team) => {
-                      const owesOnArrival = team.payment_via === 'pay_on_arrival'
-                      return (
-                        <div
-                          key={team.id}
-                          className={`org-row org-checkin-row${team.checked_in ? ' is-in' : ''}`}
-                        >
-                          <div>
-                            <strong>{team.name}</strong>
-                            <span>{team.player_names?.join(' / ')}</span>
-                            {owesOnArrival ? (
-                              <span className="badge badge-warn">Collect fee</span>
-                            ) : null}
-                          </div>
-                          <div className="org-row-right org-pay-actions">
-                            {team.checked_in ? (
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-sm"
-                                disabled={checkInMut.isPending}
-                                onClick={() =>
-                                  checkInMut.mutate({ teamId: team.id, present: false })
-                                }
-                              >
-                                Undo check-in
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn btn-dark btn-sm"
-                                disabled={checkInMut.isPending}
-                                onClick={() => {
-                                  if (owesOnArrival) {
-                                    void confirmDialog({
-                                      title: 'Check in before collecting?',
-                                      message: `${team.name} still owes at the venue. Check them in anyway?`,
-                                      confirmLabel: 'Check in',
-                                    }).then((ok) => {
-                                      if (ok) checkInMut.mutate({ teamId: team.id, present: true })
-                                    })
-                                    return
-                                  }
-                                  checkInMut.mutate({ teamId: team.id, present: true })
-                                }}
-                              >
-                                Check in
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                    {checkInRows.length === 0 && (
-                      <p className="muted">
-                        {checkInQuery.trim()
-                          ? 'No teams match that search.'
-                          : checkInFilter === 'out'
-                            ? 'Everyone paid is checked in.'
-                            : checkInFilter === 'in'
-                              ? 'Nobody checked in yet.'
-                              : 'No paid entries yet.'}
-                      </p>
-                    )}
-                  </div>
-                </section>
-              )}
-
               <section className="org-section">
                 <div className="org-section-head">
-                  <h2>Matches & scoring</h2>
+                  <h2>Matches</h2>
                   {matches.some((m) => m.stage === 'KNOCKOUT' && (!m.team_a_id || !m.team_b_id)) &&
                     matches.some((m) => m.stage === 'GROUP') && (
                       <button
@@ -2001,7 +1891,7 @@ export default function OrganiserDashboard() {
                         disabled={seedKoMut.isPending}
                         onClick={() => seedKoMut.mutate()}
                       >
-                        {seedKoMut.isPending ? 'Seeding…' : 'Seed knockout'}
+                        {seedKoMut.isPending ? '…' : 'Seed KO'}
                       </button>
                     )}
                 </div>
@@ -2020,7 +1910,7 @@ export default function OrganiserDashboard() {
                         className={`btn btn-sm ${matchView === 'courts' ? 'btn-dark' : 'btn-ghost'}`}
                         onClick={() => setMatchView('courts')}
                       >
-                        By court
+                        Courts
                       </button>
                       {hasKnockoutMatches && (
                         <button
@@ -2028,7 +1918,7 @@ export default function OrganiserDashboard() {
                           className={`btn btn-sm ${matchView === 'bracket' ? 'btn-dark' : 'btn-ghost'}`}
                           onClick={() => setMatchView('bracket')}
                         >
-                          Bracket
+                          Draw
                         </button>
                       )}
                     </div>
@@ -2043,11 +1933,11 @@ export default function OrganiserDashboard() {
                         }
                         aria-label="Filter matches"
                       >
-                        <option value="now">Happening now</option>
-                        <option value="upcoming">Up next (queued)</option>
-                        <option value="active">All open matches</option>
-                        <option value="done">Completed</option>
-                        <option value="all">All matches</option>
+                        <option value="now">Now</option>
+                        <option value="upcoming">Next</option>
+                        <option value="active">Open</option>
+                        <option value="done">Done</option>
+                        <option value="all">All</option>
                       </select>
                     )}
                     {matchView === 'list' && (
@@ -2161,17 +2051,140 @@ export default function OrganiserDashboard() {
                       )
                     })}
                     {matches.length === 0 && (
-                      <p className="muted">Generate the tournament to create fixtures.</p>
+                      <p className="muted">Generate the draw first.</p>
                     )}
                     {matches.length > 0 && filteredMatches.length === 0 && (
-                      <p className="muted">No matches match this filter.</p>
+                      <p className="muted">Nothing here.</p>
                     )}
                   </div>
                 )}
               </section>
 
-              <section className="org-section">
-                <h2>Announcements</h2>
+              {checkInPool.length > 0 && (
+                <details className="org-section org-checkin" open={awaitingCheckInCount > 0}>
+                  <summary className="org-section-head org-checkin-summary">
+                    <h2>Check-in</h2>
+                    <span className="org-checkin-count">
+                      {checkedInCount}/{checkInPool.length}
+                    </span>
+                  </summary>
+                  <div className="org-entries-search" style={{ marginBottom: '0.75rem' }}>
+                    <label className="visually-hidden" htmlFor="checkin-search">
+                      Search teams
+                    </label>
+                    <input
+                      id="checkin-search"
+                      className="form-input"
+                      type="search"
+                      placeholder="Search…"
+                      value={checkInQuery}
+                      onChange={(e) => setCheckInQuery(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div
+                    className="org-view-toggle org-pay-filters"
+                    role="group"
+                    aria-label="Check-in filter"
+                  >
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${checkInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
+                      onClick={() => setCheckInFilter('out')}
+                    >
+                      Out ({awaitingCheckInCount})
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${checkInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
+                      onClick={() => setCheckInFilter('in')}
+                    >
+                      In ({checkedInCount})
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${checkInFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
+                      onClick={() => setCheckInFilter('all')}
+                    >
+                      All
+                    </button>
+                  </div>
+                  <div className="org-table org-checkin-table">
+                    {checkInRows.map((team) => {
+                      const owesOnArrival = team.payment_via === 'pay_on_arrival'
+                      return (
+                        <div
+                          key={team.id}
+                          className={`org-row org-checkin-row${team.checked_in ? ' is-in' : ''}`}
+                        >
+                          <div>
+                            <strong>{team.name}</strong>
+                            <span>{team.player_names?.join(' / ')}</span>
+                            {owesOnArrival ? (
+                              <span className="badge badge-warn">Pay</span>
+                            ) : null}
+                          </div>
+                          <div className="org-row-right org-pay-actions">
+                            {team.checked_in ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                disabled={checkInMut.isPending}
+                                title="Undo check-in"
+                                onClick={() =>
+                                  checkInMut.mutate({ teamId: team.id, present: false })
+                                }
+                              >
+                                Undo
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-dark btn-sm"
+                                disabled={checkInMut.isPending}
+                                onClick={() => {
+                                  if (owesOnArrival) {
+                                    void confirmDialog({
+                                      title: 'Still owes?',
+                                      message: `${team.name} hasn’t paid at the venue. Check in anyway?`,
+                                      confirmLabel: 'Check in',
+                                    }).then((ok) => {
+                                      if (ok) checkInMut.mutate({ teamId: team.id, present: true })
+                                    })
+                                    return
+                                  }
+                                  checkInMut.mutate({ teamId: team.id, present: true })
+                                }}
+                              >
+                                In
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {checkInRows.length === 0 && (
+                      <p className="muted">
+                        {checkInQuery.trim()
+                          ? 'No match.'
+                          : checkInFilter === 'out'
+                            ? 'All in.'
+                            : checkInFilter === 'in'
+                              ? 'Nobody yet.'
+                              : 'No entries.'}
+                      </p>
+                    )}
+                  </div>
+                </details>
+              )}
+
+              <details className="org-section org-announce-block">
+                <summary className="org-section-head">
+                  <h2>Announce</h2>
+                  {announcements.length > 0 ? (
+                    <span className="muted">{announcements.length}</span>
+                  ) : null}
+                </summary>
                 {announcements.length > 0 && (
                   <ul className="org-announce-list">
                     {announcements.slice(0, 8).map((a) => (
@@ -2186,8 +2199,8 @@ export default function OrganiserDashboard() {
                           disabled={deleteAnnounceMut.isPending}
                           onClick={() => {
                             void confirmDialog({
-                              title: 'Delete announcement?',
-                              message: `Delete “${a.title}”?`,
+                              title: 'Delete?',
+                              message: `Remove “${a.title}”?`,
                               confirmLabel: 'Delete',
                               danger: true,
                             }).then((ok) => {
@@ -2212,7 +2225,8 @@ export default function OrganiserDashboard() {
                 <div className="form-group">
                   <textarea
                     className="form-textarea"
-                    placeholder="Court 4 matches delayed by 10 minutes"
+                    rows={2}
+                    placeholder="e.g. Court 4 delayed 10 mins"
                     value={announce.body}
                     onChange={(e) => setAnnounce({ ...announce, body: e.target.value })}
                   />
@@ -2222,9 +2236,9 @@ export default function OrganiserDashboard() {
                   disabled={!announce.title || !announce.body || announceMut.isPending}
                   onClick={() => announceMut.mutate()}
                 >
-                  Post announcement
+                  Post
                 </button>
-              </section>
+              </details>
               </>
               )}
 
@@ -2564,13 +2578,13 @@ export default function OrganiserDashboard() {
             </h2>
             {scoreMatch.status === 'AWAITING_CONFIRM' && (
               <p className="muted-note" style={{ marginTop: 0 }}>
-                Players disagree or need a ruling — change anything below and save to finalise.
+                Fix and save to finalise.
               </p>
             )}
             {scoringMode === 'SIMPLE' ? (
               <>
                 <p className="muted-note" style={{ marginTop: 0 }}>
-                  Tap who won. Leave scores at 0 if you don’t need them.
+                  Tap the winner. Score optional.
                 </p>
                 <div className="score-team-grid" role="group" aria-label="Winner and score">
                   <div
