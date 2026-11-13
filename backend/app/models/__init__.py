@@ -65,6 +65,13 @@ class PlayFormat(StrEnum):
     DOUBLES = "DOUBLES"
 
 
+class ScoringMode(StrEnum):
+    """How match results are entered on the day."""
+
+    SIMPLE = "SIMPLE"  # Winner required; optional single score (e.g. 21–15)
+    BEST_OF_3 = "BEST_OF_3"  # Classic set scoring
+
+
 class MatchStatus(StrEnum):
     SCHEDULED = "SCHEDULED"
     CALLED = "CALLED"
@@ -171,6 +178,8 @@ class Tournament(Base, TimestampMixin):
     enable_plate: Mapped[bool] = mapped_column(Boolean, default=False)
     championship_size: Mapped[int] = mapped_column(Integer, default=16)
     plate_size: Mapped[int] = mapped_column(Integer, default=16)
+    # SIMPLE (default) = pick winner + optional points; BEST_OF_3 = set scoring
+    scoring_mode: Mapped[str] = mapped_column(String(20), default=ScoringMode.SIMPLE.value)
     # JSON-ish comma list of tie-break keys
     tie_break_order: Mapped[str] = mapped_column(
         String(200),

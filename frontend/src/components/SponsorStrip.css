@@ -1,78 +1,60 @@
+/* Quiet logo band — no cards, logo-first */
+
 .sponsor-strip {
-  margin: 1.25rem 0 0.35rem;
+  margin: 1rem 0 0.25rem;
   padding: 0;
 }
 
 .sponsor-strip--hero {
-  margin: 0.85rem 0 1.1rem;
-  padding: 0.8rem 0.95rem 0.9rem;
-  border-radius: 16px;
-  border: 1px solid rgba(11, 61, 46, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 247, 0.9));
+  margin: 0.65rem 0 0.85rem;
 }
 
 .sponsor-strip--compact {
-  margin-top: 0.75rem;
-  margin-bottom: 0.85rem;
-}
-
-.sponsor-strip--compact.sponsor-strip--hero {
-  padding: 0.65rem 0.8rem 0.75rem;
+  margin-top: 0.55rem;
+  margin-bottom: 0.55rem;
 }
 
 .sponsor-strip:not(.sponsor-strip--hero) {
-  padding-top: 1rem;
+  padding-top: 0.85rem;
   border-top: 1px solid var(--line);
 }
 
-.sponsor-strip-featured + .sponsor-strip-partners {
-  margin-top: 0.75rem;
-  padding-top: 0.7rem;
-  border-top: 1px solid rgba(11, 61, 46, 0.08);
-}
-
 .sponsor-strip-label {
-  margin: 0 0 0.5rem;
-  font-size: 0.68rem;
+  margin: 0 0 0.45rem;
+  font-size: 0.65rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
+  text-align: center;
 }
 
-/* ── Shared item ─────────────────────────────────────────── */
-
-.sponsor-strip-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
-  min-height: 0;
+.sponsor-strip-logos {
+  list-style: none;
+  margin: 0;
   padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  text-decoration: none;
-  color: var(--court-deep);
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-  transition: opacity 0.15s ease, transform 0.12s ease;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem 1.15rem;
 }
 
-.sponsor-strip-mark {
+.sponsor-strip-logo {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid rgba(11, 61, 46, 0.08);
+  max-width: 7.5rem;
+  height: 2.35rem;
+  text-decoration: none;
+  color: var(--court-deep);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  opacity: 0.92;
+  transition: opacity 0.15s ease;
 }
 
-.sponsor-strip-item img {
+.sponsor-strip-logo img {
   display: block;
   max-width: 100%;
   max-height: 100%;
@@ -83,358 +65,113 @@
   pointer-events: none;
 }
 
-.sponsor-strip-initial {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  font-weight: 750;
-  color: var(--court-mid);
-  letter-spacing: 0.02em;
-}
-
-.sponsor-strip-copy {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.1rem;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.sponsor-strip-name {
-  width: 100%;
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
+.sponsor-strip-fallback {
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--court-deep);
+  max-width: 7rem;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  color: var(--court-deep);
+  white-space: nowrap;
 }
 
-.sponsor-strip-link-hint {
-  display: none;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--court-mid);
+.sponsor-strip-logo.name-only {
+  height: auto;
+  min-height: 1.5rem;
+  padding: 0.15rem 0;
 }
 
-a.sponsor-strip-item:active {
-  transform: scale(0.99);
-  opacity: 0.92;
+a.sponsor-strip-logo:hover,
+a.sponsor-strip-logo:focus-visible {
+  opacity: 1;
 }
 
-a.sponsor-strip-item:focus-visible {
+a.sponsor-strip-logo:focus-visible {
   outline: 2px solid var(--court-mid);
-  outline-offset: 3px;
-  border-radius: 10px;
+  outline-offset: 4px;
+  border-radius: 6px;
 }
 
-@media (hover: hover) {
-  a.sponsor-strip-item:hover .sponsor-strip-link-hint {
-    display: block;
-  }
-
-  a.sponsor-strip-item:hover .sponsor-strip-name {
-    color: var(--court-mid);
-  }
+a.sponsor-strip-logo:active {
+  opacity: 0.8;
 }
 
-/* ── Solo: fills the whole Supported by box ──────────────── */
-
-.sponsor-strip.is-solo .sponsor-strip-item.is-solo,
-.sponsor-strip-featured-row.count-1 .sponsor-strip-item.is-solo {
-  min-height: 4.25rem;
-  padding: 0.15rem 0.1rem;
+/* Compact (live / join) */
+.sponsor-strip--compact .sponsor-strip-logo {
+  max-width: 5.75rem;
+  height: 1.85rem;
 }
 
-.sponsor-strip.is-solo .sponsor-strip-mark,
-.sponsor-strip-featured-row.count-1 .sponsor-strip-mark {
-  width: 5.5rem;
-  height: 3.6rem;
-  border-radius: 12px;
+.sponsor-strip--compact .sponsor-strip-logos {
+  gap: 0.45rem 0.85rem;
 }
 
-.sponsor-strip.is-solo .sponsor-strip-name,
-.sponsor-strip-featured-row.count-1 .sponsor-strip-name {
-  font-size: 1.05rem;
-  -webkit-line-clamp: 2;
-}
-
-.sponsor-strip.is-solo .sponsor-strip-initial,
-.sponsor-strip-featured-row.count-1 .sponsor-strip-initial {
-  font-size: 1.35rem;
-}
-
-.sponsor-strip--compact.is-solo .sponsor-strip-item.is-solo {
-  min-height: 3.5rem;
-}
-
-.sponsor-strip--compact.is-solo .sponsor-strip-mark {
-  width: 4.5rem;
-  height: 3rem;
-}
-
-.sponsor-strip--compact.is-solo .sponsor-strip-name {
-  font-size: 0.95rem;
-}
-
-/* ── Featured leads (2+) ─────────────────────────────────── */
-
-.sponsor-strip-featured-row {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.55rem;
-}
-
-.sponsor-strip-featured-row.count-1 {
-  grid-template-columns: 1fr;
-}
-
-.sponsor-strip-featured-row.count-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.sponsor-strip-featured-row.count-3,
-.sponsor-strip-featured-row.count-4 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-@media (min-width: 640px) {
-  .sponsor-strip-featured-row.count-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .sponsor-strip-featured-row.count-4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-.sponsor-strip-item.is-lead {
-  padding: 0.65rem 0.75rem;
-  border-radius: 12px;
-  border: 1px solid rgba(11, 61, 46, 0.1);
-  background: rgba(255, 255, 255, 0.85);
-  min-height: 3.6rem;
-}
-
-.sponsor-strip-item.is-lead .sponsor-strip-mark {
-  width: 3.6rem;
-  height: 2.6rem;
-  border-radius: 10px;
-}
-
-.sponsor-strip-item.is-lead .sponsor-strip-name {
-  font-size: 0.88rem;
-}
-
-.sponsor-strip-item.is-lead .sponsor-strip-initial {
-  font-size: 1.05rem;
-}
-
-/* ── Partner tiles: equal-width grid that fills the box ──── */
-
-.sponsor-strip-row {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.sponsor-strip-row.count-1 {
-  grid-template-columns: 1fr;
-}
-
-.sponsor-strip-row.count-2 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.sponsor-strip-row.count-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.sponsor-strip-row.count-4,
-.sponsor-strip-row.count-5,
-.sponsor-strip-row.count-6 {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-@media (min-width: 520px) {
-  .sponsor-strip-row.count-4 {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-
-  .sponsor-strip-row.count-5,
-  .sponsor-strip-row.count-6 {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 720px) {
-  .sponsor-strip-row.count-5 {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .sponsor-strip-row.count-6 {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-}
-
-.sponsor-strip-item.is-tile {
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  gap: 0.4rem;
-  min-height: 4.6rem;
-  padding: 0.55rem 0.45rem 0.5rem;
-  border-radius: 12px;
-  border: 1px solid rgba(11, 61, 46, 0.1);
-  background: rgba(255, 255, 255, 0.92);
-}
-
-.sponsor-strip-item.is-tile .sponsor-strip-mark {
-  width: 100%;
-  max-width: 4.5rem;
-  height: 2.35rem;
-  border-radius: 8px;
-  background: transparent;
-  border: 0;
-}
-
-.sponsor-strip-item.is-tile.name-only .sponsor-strip-mark {
-  width: 2.35rem;
-  height: 2.35rem;
-  border-radius: 999px;
-  background: rgba(246, 250, 247, 0.95);
-  border: 1px solid rgba(11, 61, 46, 0.08);
-}
-
-.sponsor-strip-item.is-tile .sponsor-strip-copy {
-  align-items: center;
-  width: 100%;
-}
-
-.sponsor-strip-item.is-tile .sponsor-strip-name {
+.sponsor-strip--compact .sponsor-strip-fallback {
   font-size: 0.74rem;
-  font-weight: 650;
-  text-align: center;
-  -webkit-line-clamp: 2;
+  max-width: 5.5rem;
 }
 
-.sponsor-strip-item.is-tile .sponsor-strip-link-hint {
-  display: none;
+/* Many logos: slightly tighter */
+.sponsor-strip.count-5 .sponsor-strip-logo,
+.sponsor-strip.count-6 .sponsor-strip-logo,
+.sponsor-strip.count-7 .sponsor-strip-logo,
+.sponsor-strip.count-8 .sponsor-strip-logo {
+  max-width: 5.5rem;
+  height: 1.9rem;
 }
 
-.sponsor-strip-item.is-tile .sponsor-strip-initial {
-  font-size: 0.9rem;
-}
-
-/* Single tile in a partners row (e.g. 1 non-featured beside featured) fills width */
-.sponsor-strip-row.count-1 .sponsor-strip-item.is-tile {
-  flex-direction: row;
-  justify-content: flex-start;
-  align-items: center;
-  text-align: left;
-  gap: 0.75rem;
-  min-height: 3.75rem;
-  padding: 0.65rem 0.85rem;
-}
-
-.sponsor-strip-row.count-1 .sponsor-strip-item.is-tile .sponsor-strip-mark {
-  width: 4.25rem;
-  max-width: none;
-  height: 2.85rem;
-  border-radius: 10px;
-  background: #fff;
-  border: 1px solid rgba(11, 61, 46, 0.08);
-}
-
-.sponsor-strip-row.count-1 .sponsor-strip-item.is-tile .sponsor-strip-copy {
-  align-items: flex-start;
-}
-
-.sponsor-strip-row.count-1 .sponsor-strip-item.is-tile .sponsor-strip-name {
-  font-size: 0.92rem;
-  font-weight: 700;
-  text-align: left;
-}
-
-.sponsor-strip--compact .sponsor-strip-item.is-tile {
-  min-height: 4.1rem;
-  padding: 0.45rem 0.35rem;
-}
-
-.sponsor-strip--compact .sponsor-strip-item.is-tile .sponsor-strip-mark {
-  height: 2.05rem;
-}
-
-.sponsor-strip--compact .sponsor-strip-item.is-tile .sponsor-strip-name {
-  font-size: 0.7rem;
-}
-
-/* ── Dark / TV ───────────────────────────────────────────── */
-
+/* Dark / TV — logos sit quietly under the title */
 .sponsor-strip--dark {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.sponsor-strip--dark .sponsor-strip-label {
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.sponsor-strip--dark .sponsor-strip-featured + .sponsor-strip-partners {
-  border-top-color: rgba(255, 255, 255, 0.1);
+  border-top-color: transparent;
 }
 
 .sponsor-strip--dark.sponsor-strip:not(.sponsor-strip--hero) {
-  border-top-color: rgba(255, 255, 255, 0.12);
+  border-top-color: rgba(255, 255, 255, 0.1);
 }
 
-.sponsor-strip--dark .sponsor-strip-name {
-  color: #fff;
+.sponsor-strip--dark .sponsor-strip-label {
+  color: rgba(255, 255, 255, 0.45);
 }
 
-.sponsor-strip--dark .sponsor-strip-mark {
-  background: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.sponsor-strip--dark .sponsor-strip-item.is-tile,
-.sponsor-strip--dark .sponsor-strip-item.is-lead {
+.sponsor-strip--dark .sponsor-strip-logo {
+  height: 2.1rem;
+  max-width: 6.5rem;
+  padding: 0.25rem 0.45rem;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.96);
-  border-color: rgba(255, 255, 255, 0.16);
+  opacity: 1;
 }
 
-.sponsor-strip--dark .sponsor-strip-item.is-tile .sponsor-strip-name,
-.sponsor-strip--dark .sponsor-strip-item.is-lead .sponsor-strip-name {
+.sponsor-strip--dark .sponsor-strip-fallback {
   color: var(--court-deep);
+  font-size: 0.75rem;
 }
 
-.sponsor-strip--dark .sponsor-strip-link-hint {
-  color: rgba(180, 230, 200, 0.9);
+.sponsor-strip--dark.sponsor-strip--compact .sponsor-strip-logo {
+  height: 1.75rem;
+  max-width: 5.25rem;
+  padding: 0.2rem 0.35rem;
 }
 
-@media (hover: hover) {
-  .sponsor-strip--dark a.sponsor-strip-item:hover .sponsor-strip-name {
-    color: #fff;
-  }
-
-  .sponsor-strip--dark a.sponsor-strip-item.is-tile:hover .sponsor-strip-name,
-  .sponsor-strip--dark a.sponsor-strip-item.is-lead:hover .sponsor-strip-name {
-    color: var(--court-mid);
-  }
+.sponsor-strip--dark .sponsor-strip-logos {
+  gap: 0.5rem 0.75rem;
 }
 
 html.native-app .sponsor-strip {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+@media (min-width: 720px) {
+  .sponsor-strip-logo {
+    max-width: 8.5rem;
+    height: 2.6rem;
+  }
+
+  .sponsor-strip--compact .sponsor-strip-logo {
+    max-width: 6.5rem;
+    height: 2.1rem;
+  }
 }

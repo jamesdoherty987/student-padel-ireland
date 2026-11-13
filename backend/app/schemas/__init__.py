@@ -6,7 +6,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.models import MatchStatus, PlayFormat, TournamentFormat, TournamentStatus, UserRole
+from app.models import (
+    MatchStatus,
+    PlayFormat,
+    ScoringMode,
+    TournamentFormat,
+    TournamentStatus,
+    UserRole,
+)
 
 
 class RegistrationFieldIn(BaseModel):
@@ -182,6 +189,7 @@ class TournamentCreate(BaseModel):
     enable_plate: bool = False
     championship_size: int = Field(default=16, ge=2, le=64)
     plate_size: int = Field(default=16, ge=2, le=64)
+    scoring_mode: ScoringMode = ScoringMode.SIMPLE
     tie_break_order: Optional[str] = None
     registration_fields: list[RegistrationFieldIn] = Field(default_factory=list)
 
@@ -232,6 +240,7 @@ class TournamentUpdate(BaseModel):
     enable_plate: Optional[bool] = None
     championship_size: Optional[int] = Field(default=None, ge=2, le=64)
     plate_size: Optional[int] = Field(default=None, ge=2, le=64)
+    scoring_mode: Optional[ScoringMode] = None
     tie_break_order: Optional[str] = None
     # Platform ADMIN only - list on landing / public browse
     is_official: Optional[bool] = None
@@ -292,6 +301,7 @@ class TournamentOut(BaseModel):
     enable_plate: bool = False
     championship_size: int = 16
     plate_size: int = 16
+    scoring_mode: str = ScoringMode.SIMPLE.value
     registered_teams: int = 0
     invite_code: Optional[str] = None
     is_official: bool = False
@@ -381,28 +391,33 @@ class GenerateRequest(BaseModel):
 
 
 class ScoreUpdate(BaseModel):
-    set1_a: int = Field(ge=0, le=20)
-    set1_b: int = Field(ge=0, le=20)
-    set2_a: int = Field(default=0, ge=0, le=20)
-    set2_b: int = Field(default=0, ge=0, le=20)
-    set3_a: int = Field(default=0, ge=0, le=20)
-    set3_b: int = Field(default=0, ge=0, le=20)
+    set1_a: int = Field(default=0, ge=0, le=99)
+    set1_b: int = Field(default=0, ge=0, le=99)
+    set2_a: int = Field(default=0, ge=0, le=99)
+    set2_b: int = Field(default=0, ge=0, le=99)
+    set3_a: int = Field(default=0, ge=0, le=99)
+    set3_b: int = Field(default=0, ge=0, le=99)
     current_set: int = Field(default=1, ge=1, le=3)
-    status: MatchStatus = MatchStatus.LIVE
+    status: MatchStatus = MatchStatus.COMPLETED
     winner_id: Optional[UUID] = None
     # Allow correcting a finished match (standings/bracket only - ratings stay as first applied)
     force: bool = False
 
 
 class PlayerScoreSubmit(BaseModel):
-    """Final result proposed by a player - opponent (or organiser) must confirm."""
+    """Final result proposed by a player - opponent (or organiser) must confirm.
 
-    set1_a: int = Field(ge=0, le=20)
-    set1_b: int = Field(ge=0, le=20)
-    set2_a: int = Field(default=0, ge=0, le=20)
-    set2_b: int = Field(default=0, ge=0, le=20)
-    set3_a: int = Field(default=0, ge=0, le=20)
-    set3_b: int = Field(default=0, ge=0, le=20)
+    SIMPLE scoring: winner_id required; set1_* optional points.
+    BEST_OF_3: set scores must determine a winner (winner_id optional override).
+    """
+
+    set1_a: int = Field(default=0, ge=0, le=99)
+    set1_b: int = Field(default=0, ge=0, le=99)
+    set2_a: int = Field(default=0, ge=0, le=99)
+    set2_b: int = Field(default=0, ge=0, le=99)
+    set3_a: int = Field(default=0, ge=0, le=99)
+    set3_b: int = Field(default=0, ge=0, le=99)
+    winner_id: Optional[UUID] = None
 
 
 class MatchOut(BaseModel):
@@ -442,6 +457,8 @@ class MatchMove(BaseModel):
     team_a_id: Optional[UUID] = None
     team_b_id: Optional[UUID] = None
     status: Optional[MatchStatus] = None
+    # When calling a match, email players (default on). Score-entry path can set false.
+    notify_players: Optional[bool] = None
 
 
 class AnnouncementCreate(BaseModel):

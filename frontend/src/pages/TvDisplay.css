@@ -1,6 +1,10 @@
 .tv-root {
   min-height: 100vh;
   min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background:
     radial-gradient(ellipse 70% 50% at 15% 0%, rgba(200, 230, 0, 0.08), transparent 55%),
     radial-gradient(ellipse 50% 40% at 90% 100%, rgba(20, 102, 68, 0.18), transparent 50%),
@@ -103,19 +107,44 @@
 }
 
 .tv-sponsors {
-  margin: 0.85rem auto 0;
-  max-width: min(920px, 100%);
+  margin: 0.65rem auto 0;
+  max-width: min(720px, 100%);
 }
 
-.tv-sponsors .sponsor-strip--hero {
+.tv-sponsors .sponsor-strip {
   margin: 0;
 }
 
+.tv-sponsors .sponsor-strip-label {
+  margin-bottom: 0.35rem;
+}
+
 .tv-grid {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
   gap: clamp(0.75rem, 2vw, 1.25rem);
   align-items: stretch;
+}
+
+.tv-court-next {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  gap: 0.2rem;
+  font-size: clamp(0.78rem, 1.4vw, 0.95rem);
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.3;
+}
+
+.tv-court-next-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(200, 230, 0, 0.85);
 }
 
 .tv-court {

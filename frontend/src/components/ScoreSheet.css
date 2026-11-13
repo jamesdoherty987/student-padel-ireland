@@ -166,6 +166,40 @@
   margin-top: 0.75rem;
 }
 
+.org-winner-picks {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.org-winner-pick {
+  appearance: none;
+  border: 1.5px solid var(--line);
+  background: var(--white);
+  border-radius: 14px;
+  padding: 1rem 0.9rem;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--court-deep);
+  text-align: center;
+  min-height: 3.25rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.org-winner-pick.is-selected {
+  border-color: var(--court-deep);
+  background: var(--court-deep);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(11, 61, 46, 0.18);
+}
+
+.org-simple-score {
+  justify-content: center;
+  margin: 0.25rem 0 0.5rem;
+}
+
 @media (min-width: 640px) {
   .score-modal-backdrop.pl-score-backdrop,
   .org-score-backdrop.score-modal-backdrop,

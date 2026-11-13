@@ -635,27 +635,24 @@ html.native-app.has-native-tabs .org-toast {
 
 .org-sponsor-preview {
   margin: 0 0 1rem;
-  padding: 0.85rem 0.9rem 0.35rem;
-  border-radius: 14px;
-  border: 1px dashed rgba(11, 61, 46, 0.18);
-  background: rgba(246, 250, 247, 0.65);
+  padding: 0.75rem 0.85rem 0.85rem;
+  border-radius: 12px;
+  border: 1px dashed rgba(11, 61, 46, 0.16);
+  background: rgba(246, 250, 247, 0.5);
 }
 
 .org-sponsor-preview-label {
-  margin: 0 0 0.35rem;
-  font-size: 0.72rem;
+  margin: 0 0 0.25rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
+  text-align: center;
 }
 
-.org-sponsor-preview .sponsor-strip--hero {
+.org-sponsor-preview .sponsor-strip {
   margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
 }
 
 .org-sponsor-list {
@@ -966,6 +963,59 @@ html.native-app.has-native-tabs .org-toast {
 .org-now-card .org-match-actions,
 .org-now-card .org-row-right {
   margin-top: 0.35rem;
+}
+
+.org-day-guide {
+  background: linear-gradient(165deg, rgba(11, 61, 46, 0.06), rgba(255, 255, 255, 0.9));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md, 12px);
+  padding: 0.85rem 1rem 1rem;
+}
+
+.org-day-steps {
+  margin: 0.35rem 0 0.75rem;
+  padding-left: 1.2rem;
+  color: var(--ink, #122);
+  line-height: 1.45;
+  font-size: 0.95rem;
+}
+
+.org-day-steps li + li {
+  margin-top: 0.35rem;
+}
+
+.org-winner-picks {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+}
+
+.org-winner-pick {
+  appearance: none;
+  border: 1.5px solid var(--line);
+  background: var(--white);
+  border-radius: 14px;
+  padding: 1rem 0.9rem;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--court-deep);
+  text-align: center;
+  min-height: 3.25rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.org-winner-pick.is-selected {
+  border-color: var(--court-deep);
+  background: var(--court-deep);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(11, 61, 46, 0.18);
+}
+
+.org-simple-score {
+  justify-content: center;
+  margin: 0.25rem 0 0.5rem;
 }
 
 .muted {

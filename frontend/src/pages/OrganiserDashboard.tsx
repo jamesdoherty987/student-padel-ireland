@@ -128,12 +128,15 @@ export default function OrganiserDashboard() {
   const [moveForm, setMoveForm] = useState({ court_number: 1, scheduled_time: '' })
   const [matchView, setMatchView] = useState<'list' | 'courts' | 'bracket'>('list')
   const [courtFilter, setCourtFilter] = useState<string>('all')
-  const [matchFilter, setMatchFilter] = useState<'active' | 'all' | 'done'>('active')
+  const [matchFilter, setMatchFilter] = useState<'now' | 'upcoming' | 'active' | 'all' | 'done'>(
+    'now',
+  )
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'owing'>('all')
   const [entriesCheckInFilter, setEntriesCheckInFilter] = useState<'all' | 'in' | 'out'>('all')
   const [entriesQuery, setEntriesQuery] = useState('')
   const [entriesSort, setEntriesSort] = useState<'newest' | 'oldest' | 'name'>('newest')
   const [checkInFilter, setCheckInFilter] = useState<'all' | 'out' | 'in'>('out')
+  const [checkInQuery, setCheckInQuery] = useState('')
   const [orgPanel, setOrgPanel] = useState<OrgPanel>('registration')
   const [scoreForm, setScoreForm] = useState({
     set1_a: 0,
@@ -143,11 +146,12 @@ export default function OrganiserDashboard() {
     set3_a: 0,
     set3_b: 0,
     current_set: 1,
-    status: 'LIVE',
+    status: 'COMPLETED',
     winner_id: '',
     force: false,
   })
   const [scoreError, setScoreError] = useState('')
+  const [includeScore, setIncludeScore] = useState(false)
 
   useKeyboardInset(!!scoreMatch)
   useEffect(() => {
@@ -177,6 +181,8 @@ export default function OrganiserDashboard() {
     setEntriesQuery('')
     setEntriesSort('newest')
     setCheckInFilter('out')
+    setCheckInQuery('')
+    setMatchFilter('now')
     setSponsorForm({ name: '', website: '', featured: false, logo: null })
     setSponsorLogoKey((k) => k + 1)
   }, [selectedId])
@@ -262,6 +268,10 @@ export default function OrganiserDashboard() {
     enabled: !!tid && canOrganise,
   })
 
+  const scoringMode =
+    (tournamentDetail?.scoring_mode || 'SIMPLE').toUpperCase() === 'BEST_OF_3'
+      ? 'BEST_OF_3'
+      : 'SIMPLE'
   const isSingles = (tournamentDetail?.play_format || active?.tournament.play_format) === 'SINGLES'
   const activeFormat =
     tournamentDetail?.format || active?.tournament.format || 'GROUP_KNOCKOUT'
@@ -531,10 +541,18 @@ export default function OrganiserDashboard() {
 
   const scoreMut = useMutation({
     mutationFn: () => {
-      const current_set = resolveCurrentSet(scoreForm)
+      const simple = scoringMode === 'SIMPLE'
+      const withScore = !simple || includeScore
+      const current_set = simple ? 1 : resolveCurrentSet(scoreForm)
       return tournamentApi.updateScore(scoreMatch!.id, {
-        ...scoreForm,
+        set1_a: withScore ? scoreForm.set1_a : 0,
+        set1_b: withScore ? scoreForm.set1_b : 0,
+        set2_a: simple ? 0 : scoreForm.set2_a,
+        set2_b: simple ? 0 : scoreForm.set2_b,
+        set3_a: simple ? 0 : scoreForm.set3_a,
+        set3_b: simple ? 0 : scoreForm.set3_b,
         current_set,
+        status: scoreForm.status,
         winner_id: scoreForm.winner_id || null,
         force: scoreForm.force || !!scoreMatch?.ratings_applied,
       })
@@ -561,35 +579,45 @@ export default function OrganiserDashboard() {
 
   const saveScore = () => {
     setScoreError('')
-    if (scoreForm.status === 'COMPLETED') {
-      const tally = tallySets(scoreForm)
-      if (!tally.ok) {
-        setScoreError(tally.reason)
-        return
-      }
-      const hasWinner = !!scoreForm.winner_id
-      if (!hasWinner) {
-        if (tally.played < 2) {
-          setScoreError('Enter at least two sets (best of 3), or pick a winner.')
+    if (scoreForm.status === 'COMPLETED' || scoreForm.status === 'WALKOVER') {
+      if (scoringMode === 'SIMPLE') {
+        if (!scoreForm.winner_id) {
+          setScoreError('Tap who won.')
           return
         }
-        if (Math.max(tally.aSets, tally.bSets) < 2) {
-          setScoreError('One side needs two sets to win, or pick a winner.')
+        if (includeScore && scoreForm.set1_a === scoreForm.set1_b && (scoreForm.set1_a || scoreForm.set1_b)) {
+          setScoreError('Score can’t be tied — clear it or change it.')
           return
         }
-      }
-      if (
-        tally.ok &&
-        ((tally.aSets === 2 && tally.bSets === 0) || (tally.bSets === 2 && tally.aSets === 0)) &&
-        (scoreForm.set3_a || scoreForm.set3_b)
-      ) {
-        setScoreError('Clear set 3 when the match finished 2–0')
+      } else if (scoreForm.status === 'COMPLETED') {
+        const tally = tallySets(scoreForm)
+        if (!tally.ok) {
+          setScoreError(tally.reason)
+          return
+        }
+        const hasWinner = !!scoreForm.winner_id
+        if (!hasWinner) {
+          if (tally.played < 2) {
+            setScoreError('Enter at least two sets, or pick a winner.')
+            return
+          }
+          if (Math.max(tally.aSets, tally.bSets) < 2) {
+            setScoreError('One side needs two sets to win, or pick a winner.')
+            return
+          }
+        }
+        if (
+          tally.ok &&
+          ((tally.aSets === 2 && tally.bSets === 0) || (tally.bSets === 2 && tally.aSets === 0)) &&
+          (scoreForm.set3_a || scoreForm.set3_b)
+        ) {
+          setScoreError('Clear set 3 when the match finished 2–0')
+          return
+        }
+      } else if (!scoreForm.winner_id) {
+        setScoreError('Pick a winner for the walkover.')
         return
       }
-    }
-    if (scoreForm.status === 'WALKOVER' && !scoreForm.winner_id) {
-      setScoreError('Pick a winner for the walkover.')
-      return
     }
     const correcting =
       !!scoreMatch &&
@@ -628,7 +656,16 @@ export default function OrganiserDashboard() {
         qc.invalidateQueries({ queryKey: ['matches', slug] })
         qc.invalidateQueries({ queryKey: ['display', slug] })
       }
-      if (!vars.silent) showToast('Match updated')
+      if (!vars.silent) {
+        const st = vars.data?.status
+        showToast(
+          st === 'CALLED'
+            ? 'Called to court — players notified'
+            : st === 'LIVE'
+              ? 'Match live'
+              : 'Match updated',
+        )
+      }
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not update match')),
   })
@@ -789,33 +826,82 @@ export default function OrganiserDashboard() {
   const checkedInCount = checkInPool.filter((t) => t.checked_in).length
   const awaitingCheckInCount = checkInPool.length - checkedInCount
   const checkInRows = useMemo(() => {
+    const q = checkInQuery.trim().toLowerCase()
     return [...checkInPool]
       .sort((a, b) => {
         if (a.checked_in !== b.checked_in) return a.checked_in ? 1 : -1
         return a.name.localeCompare(b.name)
       })
       .filter((t) => {
-        if (checkInFilter === 'in') return t.checked_in
-        if (checkInFilter === 'out') return !t.checked_in
-        return true
+        if (checkInFilter === 'in' && !t.checked_in) return false
+        if (checkInFilter === 'out' && t.checked_in) return false
+        if (!q) return true
+        const hay = `${t.name} ${(t.player_names || []).join(' ')}`.toLowerCase()
+        return hay.includes(q)
       })
-  }, [checkInPool, checkInFilter])
+  }, [checkInPool, checkInFilter, checkInQuery])
 
-  const liveNowMatches = useMemo(
-    () => matches.filter((m) => m.status === 'LIVE'),
-    [matches],
-  )
-  const calledNowMatches = useMemo(
-    () => matches.filter((m) => m.status === 'CALLED'),
-    [matches],
-  )
-  const upNextMatches = useMemo(
-    () =>
-      matches
-        .filter((m) => m.status === 'SCHEDULED' && m.team_a_id && m.team_b_id)
-        .slice(0, 6),
-    [matches],
-  )
+  /** One card per court: LIVE beats CALLED beats next SCHEDULED. */
+  const courtsideNow = useMemo(() => {
+    type Slot = { courtKey: string; label: string; match: Match; kind: 'live' | 'called' | 'next' }
+    const byCourt = new Map<number, Match[]>()
+    const unassigned: Match[] = []
+    for (const m of matches) {
+      if (!m.team_a_id || !m.team_b_id) continue
+      if (
+        m.status !== 'LIVE' &&
+        m.status !== 'CALLED' &&
+        m.status !== 'SCHEDULED' &&
+        m.status !== 'AWAITING_CONFIRM'
+      ) {
+        continue
+      }
+      if (m.court_number == null) {
+        if (m.status === 'LIVE' || m.status === 'CALLED') unassigned.push(m)
+        continue
+      }
+      const list = byCourt.get(m.court_number) || []
+      list.push(m)
+      byCourt.set(m.court_number, list)
+    }
+    const pick = (list: Match[]): Match | null =>
+      list.find((m) => m.status === 'LIVE') ||
+      list.find((m) => m.status === 'CALLED') ||
+      list.find((m) => m.status === 'AWAITING_CONFIRM') ||
+      list
+        .filter((m) => m.status === 'SCHEDULED')
+        .sort((a, b) => {
+          const ta = a.scheduled_start ? new Date(a.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
+          const tb = b.scheduled_start ? new Date(b.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
+          if (ta !== tb) return ta - tb
+          return (a.sort_order || 0) - (b.sort_order || 0)
+        })[0] ||
+      null
+
+    const slots: Slot[] = []
+    const courtNums = Array.from(byCourt.keys()).sort((a, b) => a - b)
+    for (const num of courtNums) {
+      const m = pick(byCourt.get(num) || [])
+      if (!m) continue
+      const kind =
+        m.status === 'LIVE' ? 'live' : m.status === 'CALLED' || m.status === 'AWAITING_CONFIRM' ? 'called' : 'next'
+      slots.push({
+        courtKey: `c-${num}`,
+        label: courtLabel(m.court_name, m.court_number),
+        match: m,
+        kind,
+      })
+    }
+    for (const m of unassigned) {
+      slots.push({
+        courtKey: `u-${m.id}`,
+        label: 'Needs court',
+        match: m,
+        kind: m.status === 'LIVE' ? 'live' : 'called',
+      })
+    }
+    return slots
+  }, [matches])
 
   const paymentLabel = (team: TournamentTeam) => {
     if (team.payment_via === 'pay_on_arrival') return 'Not paid · venue'
@@ -913,8 +999,29 @@ export default function OrganiserDashboard() {
   const courtNumbers = useMemo(() => courtColumns.map((c) => c.number), [courtColumns])
 
   const filteredMatches = useMemo(() => {
-    return matches.filter((m) => {
+    const now = Date.now()
+    const windowMs = 45 * 60 * 1000
+    const sorted = [...matches].sort((a, b) => {
+      const ta = a.scheduled_start ? new Date(a.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
+      const tb = b.scheduled_start ? new Date(b.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
+      if (ta !== tb) return ta - tb
+      return (a.sort_order || 0) - (b.sort_order || 0)
+    })
+    return sorted.filter((m) => {
       if (courtFilter !== 'all' && String(m.court_number) !== courtFilter) return false
+      if (matchFilter === 'now') {
+        return (
+          m.status === 'LIVE' ||
+          m.status === 'CALLED' ||
+          m.status === 'AWAITING_CONFIRM' ||
+          (m.status === 'SCHEDULED' &&
+            !!m.scheduled_start &&
+            Math.abs(new Date(m.scheduled_start).getTime() - now) <= windowMs)
+        )
+      }
+      if (matchFilter === 'upcoming') {
+        return m.status === 'SCHEDULED' && !!m.team_a_id && !!m.team_b_id
+      }
       if (matchFilter === 'active') {
         return (
           m.status === 'SCHEDULED' ||
@@ -944,12 +1051,12 @@ export default function OrganiserDashboard() {
     if (!m.team_a_id || !m.team_b_id) return
     setScoreError('')
     setScoreMatch(m)
+    const hasPoints = !!(m.score && ((m.score.set1_a || 0) > 0 || (m.score.set1_b || 0) > 0))
+    setIncludeScore(scoringMode === 'BEST_OF_3' || hasPoints)
     const defaultStatus =
       m.status === 'COMPLETED' || m.status === 'WALKOVER'
         ? m.status
-        : m.status === 'AWAITING_CONFIRM'
-          ? 'COMPLETED'
-          : 'LIVE'
+        : 'COMPLETED'
     setScoreForm({
       set1_a: m.score?.set1_a ?? 0,
       set1_b: m.score?.set1_b ?? 0,
@@ -984,8 +1091,13 @@ export default function OrganiserDashboard() {
     const pending = m.status === 'AWAITING_CONFIRM'
     const onScore = () => {
       if (m.status === 'SCHEDULED') {
+        // Mark called for board state, but don't email — Call to court does that.
         moveMut.mutate(
-          { matchId: m.id, data: { status: 'CALLED' }, silent: true },
+          {
+            matchId: m.id,
+            data: { status: 'CALLED', notify_players: false },
+            silent: true,
+          },
           { onSuccess: () => openScore({ ...m, status: 'CALLED' }) },
         )
         return
@@ -1712,56 +1824,69 @@ export default function OrganiserDashboard() {
 
               {orgPanel === 'day-of' && (
               <>
-              {(liveNowMatches.length > 0 ||
-                calledNowMatches.length > 0 ||
-                upNextMatches.length > 0) && (
+              <section className="org-section org-day-guide">
+                <div className="org-section-head">
+                  <h2>Run the day</h2>
+                </div>
+                <ol className="org-day-steps">
+                  <li>Check teams in</li>
+                  <li>
+                    <strong>Call to court</strong> (emails players)
+                  </li>
+                  <li>
+                    <strong>Score</strong> → tap who won
+                  </li>
+                </ol>
+                {active.tournament.slug ? (
+                  <p className="muted org-section-lead" style={{ marginBottom: 0 }}>
+                    <Link to={`/t/${active.tournament.slug}/live`}>Player live</Link>
+                    {' · '}
+                    <Link to={`/tournament/${active.tournament.slug}/display`}>TV</Link>
+                  </p>
+                ) : null}
+              </section>
+
+              {courtsideNow.length > 0 && (
                 <section className="org-section org-now-board">
                   <div className="org-section-head">
-                    <h2>Courtside now</h2>
+                    <h2>On court now</h2>
+                    <span className="muted">{courtsideNow.length} court{courtsideNow.length === 1 ? '' : 's'}</span>
                   </div>
+                  <p className="muted org-section-lead">One match per court.</p>
                   <div className="org-now-grid">
-                    {liveNowMatches.map((m) => (
-                      <div key={m.id} className="org-now-card is-live">
-                        <span className="org-now-kicker">Live</span>
-                        <strong>{courtLabel(m.court_name, m.court_number)}</strong>
-                        <p>
-                          {m.team_a_name || 'TBD'} vs {m.team_b_name || 'TBD'}
-                        </p>
-                        {m.score ? (
-                          <span className="org-now-meta">{formatMatchScore(m.score)}</span>
-                        ) : null}
-                        {renderMatchActions(m, true)}
-                      </div>
-                    ))}
-                    {calledNowMatches.map((m) => (
-                      <div key={m.id} className="org-now-card is-called">
-                        <span className="org-now-kicker">Called</span>
-                        <strong>{courtLabel(m.court_name, m.court_number)}</strong>
-                        <p>
-                          {m.team_a_name || 'TBD'} vs {m.team_b_name || 'TBD'}
-                        </p>
-                        {renderMatchActions(m, true)}
-                      </div>
-                    ))}
-                    {liveNowMatches.length === 0 &&
-                      calledNowMatches.length === 0 &&
-                      upNextMatches.map((m) => (
-                        <div key={m.id} className="org-now-card">
-                          <span className="org-now-kicker">Up next</span>
-                          <strong>
-                            {m.court_number != null || m.court_name
-                              ? courtLabel(m.court_name, m.court_number)
-                              : m.scheduled_start
-                                ? formatTime(m.scheduled_start)
-                                : 'Soon'}
-                          </strong>
+                    {courtsideNow.map((slot) => {
+                      const m = slot.match
+                      return (
+                        <div
+                          key={slot.courtKey}
+                          className={`org-now-card ${
+                            slot.kind === 'live' ? 'is-live' : slot.kind === 'called' ? 'is-called' : ''
+                          }`}
+                        >
+                          <span className="org-now-kicker">
+                            {slot.kind === 'live'
+                              ? 'Live'
+                              : slot.kind === 'called'
+                                ? m.status === 'AWAITING_CONFIRM'
+                                  ? 'Confirm score'
+                                  : 'Called'
+                                : 'Up next'}
+                          </span>
+                          <strong>{slot.label}</strong>
                           <p>
                             {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
                             {m.team_b_name || m.team_b_placeholder || 'TBD'}
                           </p>
+                          {m.score && (m.score.set1_a || m.score.set1_b) ? (
+                            <span className="org-now-meta">{formatMatchScore(m.score)}</span>
+                          ) : null}
+                          {m.scheduled_start && slot.kind === 'next' ? (
+                            <span className="org-now-meta">{formatTime(m.scheduled_start)}</span>
+                          ) : null}
                           {renderMatchActions(m, true)}
                         </div>
-                      ))}
+                      )
+                    })}
                   </div>
                 </section>
               )}
@@ -1774,10 +1899,20 @@ export default function OrganiserDashboard() {
                       {checkedInCount}/{checkInPool.length} in
                     </span>
                   </div>
-                  <p className="muted org-section-lead">
-                    Check {isSingles ? 'players' : 'teams'} in as they arrive. Undo if you tap by
-                    mistake.
-                  </p>
+                  <div className="org-entries-search" style={{ marginBottom: '0.75rem' }}>
+                    <label className="visually-hidden" htmlFor="checkin-search">
+                      Search teams
+                    </label>
+                    <input
+                      id="checkin-search"
+                      className="form-input"
+                      type="search"
+                      placeholder="Search team or player…"
+                      value={checkInQuery}
+                      onChange={(e) => setCheckInQuery(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </div>
                   <div
                     className="org-view-toggle org-pay-filters"
                     role="group"
@@ -1860,11 +1995,13 @@ export default function OrganiserDashboard() {
                     })}
                     {checkInRows.length === 0 && (
                       <p className="muted">
-                        {checkInFilter === 'out'
-                          ? 'Everyone paid is checked in.'
-                          : checkInFilter === 'in'
-                            ? 'Nobody checked in yet.'
-                            : 'No paid entries yet.'}
+                        {checkInQuery.trim()
+                          ? 'No teams match that search.'
+                          : checkInFilter === 'out'
+                            ? 'Everyone paid is checked in.'
+                            : checkInFilter === 'in'
+                              ? 'Nobody checked in yet.'
+                              : 'No paid entries yet.'}
                       </p>
                     )}
                   </div>
@@ -1917,10 +2054,16 @@ export default function OrganiserDashboard() {
                       <select
                         className="form-select"
                         value={matchFilter}
-                        onChange={(e) => setMatchFilter(e.target.value as 'active' | 'all' | 'done')}
-                        aria-label="Filter matches by status"
+                        onChange={(e) =>
+                          setMatchFilter(
+                            e.target.value as 'now' | 'upcoming' | 'active' | 'all' | 'done',
+                          )
+                        }
+                        aria-label="Filter matches"
                       >
-                        <option value="active">Active (scheduled / called / live)</option>
+                        <option value="now">Happening now</option>
+                        <option value="upcoming">Up next (queued)</option>
+                        <option value="active">All open matches</option>
                         <option value="done">Completed</option>
                         <option value="all">All matches</option>
                       </select>
@@ -2434,110 +2577,180 @@ export default function OrganiserDashboard() {
               {scoreMatch.ratings_applied ||
               scoreMatch.status === 'COMPLETED' ||
               scoreMatch.status === 'WALKOVER'
-                ? 'Correct score'
-                : 'Enter score'}
+                ? 'Correct result'
+                : 'Who won?'}
             </h2>
-            <p className="muted-note" style={{ marginTop: 0 }}>
-              Best of 3. Tap + / −, then mark Completed.
-            </p>
             {scoreMatch.status === 'AWAITING_CONFIRM' && (
               <p className="muted-note" style={{ marginTop: 0 }}>
-                Players haven’t confirmed yet — saving as Completed finalises it.
+                Players proposed a result — saving finalises it.
               </p>
             )}
-            <div className="score-sides-label">
-              <div>
-                <span className="muted-note">A</span>
-                <strong>{scoreMatch.team_a_name || 'Team A'}</strong>
-              </div>
-              <div>
-                <span className="muted-note">B</span>
-                <strong>{scoreMatch.team_b_name || 'Team B'}</strong>
-              </div>
-            </div>
-            <div className="score-grid">
-              {(
-                [
-                  ['set1_a', 'set1_b', 'Set 1', 1] as const,
-                  ['set2_a', 'set2_b', 'Set 2', 2] as const,
-                  ...(scoreForm.set3_a > 0 ||
-                  scoreForm.set3_b > 0 ||
-                  scoreForm.current_set >= 3 ||
-                  (scoreForm.set1_a !== scoreForm.set1_b &&
-                    scoreForm.set2_a !== scoreForm.set2_b &&
-                    (scoreForm.set1_a > scoreForm.set1_b) !== (scoreForm.set2_a > scoreForm.set2_b))
-                    ? ([['set3_a', 'set3_b', 'Set 3', 3]] as const)
-                    : []),
-                ] as const
-              ).map(([ka, kb, label, setNum]) => {
-                const isDecider = label === 'Set 3'
-                const maxGames = isDecider ? 15 : 7
-                return (
-                  <div key={label} className="form-group pl-score-row">
-                    <label>{isDecider ? 'Set 3 / TB' : label}</label>
-                    <div className="score-pair pl-score-pair">
-                      <ScoreStep
-                        label={`${label} side A`}
-                        value={scoreForm[ka]}
-                        max={maxGames}
-                        onChange={(n) =>
-                          setScoreForm({
-                            ...scoreForm,
-                            [ka]: n,
-                            current_set: Math.max(scoreForm.current_set, setNum),
-                          })
-                        }
-                      />
-                      <span className="pl-score-dash">–</span>
-                      <ScoreStep
-                        label={`${label} side B`}
-                        value={scoreForm[kb]}
-                        max={maxGames}
-                        onChange={(n) =>
-                          setScoreForm({
-                            ...scoreForm,
-                            [kb]: n,
-                            current_set: Math.max(scoreForm.current_set, setNum),
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="org-score-meta">
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Status</label>
-                <select
-                  className="form-select"
-                  value={scoreForm.status === 'CANCELLED' ? 'LIVE' : scoreForm.status}
-                  onChange={(e) => setScoreForm({ ...scoreForm, status: e.target.value })}
-                >
-                  <option value="LIVE">Live</option>
-                  <option value="COMPLETED">Completed</option>
-                  <option value="WALKOVER">Walkover</option>
-                </select>
-              </div>
-              {(scoreForm.status === 'COMPLETED' || scoreForm.status === 'WALKOVER') && (
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Winner</label>
-                  <select
-                    className="form-select"
-                    value={scoreForm.winner_id}
-                    onChange={(e) => setScoreForm({ ...scoreForm, winner_id: e.target.value })}
+            {scoringMode === 'SIMPLE' ? (
+              <>
+                <div className="org-winner-picks" role="group" aria-label="Winner">
+                  <button
+                    type="button"
+                    className={`org-winner-pick ${
+                      scoreForm.winner_id === scoreMatch.team_a_id ? 'is-selected' : ''
+                    }`}
+                    onClick={() =>
+                      setScoreForm({
+                        ...scoreForm,
+                        winner_id: scoreMatch.team_a_id || '',
+                        status: 'COMPLETED',
+                      })
+                    }
                   >
-                    <option value="">Auto from scores</option>
-                    {scoreMatch.team_a_id && (
-                      <option value={scoreMatch.team_a_id}>{scoreMatch.team_a_name}</option>
-                    )}
-                    {scoreMatch.team_b_id && (
-                      <option value={scoreMatch.team_b_id}>{scoreMatch.team_b_name}</option>
-                    )}
-                  </select>
+                    {scoreMatch.team_a_name || 'Team A'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`org-winner-pick ${
+                      scoreForm.winner_id === scoreMatch.team_b_id ? 'is-selected' : ''
+                    }`}
+                    onClick={() =>
+                      setScoreForm({
+                        ...scoreForm,
+                        winner_id: scoreMatch.team_b_id || '',
+                        status: 'COMPLETED',
+                      })
+                    }
+                  >
+                    {scoreMatch.team_b_name || 'Team B'}
+                  </button>
                 </div>
-              )}
-            </div>
+                <label className="tf-check" style={{ margin: '0.75rem 0' }}>
+                  <input
+                    type="checkbox"
+                    checked={includeScore}
+                    onChange={(e) => {
+                      setIncludeScore(e.target.checked)
+                      if (!e.target.checked) {
+                        setScoreForm({ ...scoreForm, set1_a: 0, set1_b: 0 })
+                      }
+                    }}
+                  />
+                  <span>Add score (optional)</span>
+                </label>
+                {includeScore && (
+                  <div className="score-pair pl-score-pair org-simple-score">
+                    <ScoreStep
+                      label={`${scoreMatch.team_a_name || 'A'} points`}
+                      value={scoreForm.set1_a}
+                      max={99}
+                      onChange={(n) => setScoreForm({ ...scoreForm, set1_a: n })}
+                    />
+                    <span className="pl-score-dash">–</span>
+                    <ScoreStep
+                      label={`${scoreMatch.team_b_name || 'B'} points`}
+                      value={scoreForm.set1_b}
+                      max={99}
+                      onChange={(n) => setScoreForm({ ...scoreForm, set1_b: n })}
+                    />
+                  </div>
+                )}
+                <div className="org-score-meta" style={{ marginTop: '0.75rem' }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${scoreForm.status === 'WALKOVER' ? 'btn-dark' : 'btn-ghost'}`}
+                    onClick={() =>
+                      setScoreForm({
+                        ...scoreForm,
+                        status: scoreForm.status === 'WALKOVER' ? 'COMPLETED' : 'WALKOVER',
+                      })
+                    }
+                  >
+                    Walkover
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="muted-note" style={{ marginTop: 0 }}>
+                  Best of 3. Tap + / −, then save.
+                </p>
+                <div className="score-sides-label">
+                  <div>
+                    <span className="muted-note">A</span>
+                    <strong>{scoreMatch.team_a_name || 'Team A'}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-note">B</span>
+                    <strong>{scoreMatch.team_b_name || 'Team B'}</strong>
+                  </div>
+                </div>
+                <div className="score-grid">
+                  {(
+                    [
+                      ['set1_a', 'set1_b', 'Set 1', 1] as const,
+                      ['set2_a', 'set2_b', 'Set 2', 2] as const,
+                      ...(scoreForm.set3_a > 0 ||
+                      scoreForm.set3_b > 0 ||
+                      scoreForm.current_set >= 3 ||
+                      (scoreForm.set1_a !== scoreForm.set1_b &&
+                        scoreForm.set2_a !== scoreForm.set2_b &&
+                        (scoreForm.set1_a > scoreForm.set1_b) !==
+                          (scoreForm.set2_a > scoreForm.set2_b))
+                        ? ([['set3_a', 'set3_b', 'Set 3', 3]] as const)
+                        : []),
+                    ] as const
+                  ).map(([ka, kb, label, setNum]) => {
+                    const isDecider = label === 'Set 3'
+                    const maxGames = isDecider ? 15 : 7
+                    return (
+                      <div key={label} className="form-group pl-score-row">
+                        <label>{isDecider ? 'Set 3 / TB' : label}</label>
+                        <div className="score-pair pl-score-pair">
+                          <ScoreStep
+                            label={`${label} side A`}
+                            value={scoreForm[ka]}
+                            max={maxGames}
+                            onChange={(n) =>
+                              setScoreForm({
+                                ...scoreForm,
+                                [ka]: n,
+                                current_set: Math.max(scoreForm.current_set, setNum),
+                              })
+                            }
+                          />
+                          <span className="pl-score-dash">–</span>
+                          <ScoreStep
+                            label={`${label} side B`}
+                            value={scoreForm[kb]}
+                            max={maxGames}
+                            onChange={(n) =>
+                              setScoreForm({
+                                ...scoreForm,
+                                [kb]: n,
+                                current_set: Math.max(scoreForm.current_set, setNum),
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="org-score-meta">
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Winner</label>
+                    <select
+                      className="form-select"
+                      value={scoreForm.winner_id}
+                      onChange={(e) => setScoreForm({ ...scoreForm, winner_id: e.target.value })}
+                    >
+                      <option value="">Auto from sets</option>
+                      {scoreMatch.team_a_id && (
+                        <option value={scoreMatch.team_a_id}>{scoreMatch.team_a_name}</option>
+                      )}
+                      {scoreMatch.team_b_id && (
+                        <option value={scoreMatch.team_b_id}>{scoreMatch.team_b_name}</option>
+                      )}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
             {scoreMatch.ratings_applied && (
               <p className="muted-note" style={{ margin: '0.75rem 0 0' }}>
                 Ratings already applied - this corrects standings and the bracket only.
@@ -2557,9 +2770,7 @@ export default function OrganiserDashboard() {
                       scoreMatch.status === 'COMPLETED' ||
                       scoreMatch.status === 'WALKOVER'
                     ? 'Save correction'
-                    : scoreForm.status === 'COMPLETED'
-                      ? 'Save final score'
-                      : 'Save score'}
+                    : 'Save result'}
               </button>
               <button
                 type="button"

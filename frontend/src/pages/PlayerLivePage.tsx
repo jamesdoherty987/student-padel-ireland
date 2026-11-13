@@ -163,19 +163,24 @@ function NextMatchCard({
         ) : null}
       </div>
 
-      {board && (
+      {board && (board.games !== '0-0' || board.sets) ? (
         <p className="pl-next-score">
-          Set {board.set} · {board.games}
-          {board.sets ? ` · Sets ${board.sets}` : ''}
+          {board.sets && board.sets.includes('  ')
+            ? `Sets ${board.sets}`
+            : board.sets || board.games}
+        </p>
+      ) : null}
+
+      {next.status === 'AWAITING_CONFIRM' && (
+        <p className="pl-next-score">
+          {next.score && formatMatchScore(next.score) !== '-'
+            ? `Proposed · ${formatMatchScore(next.score)}`
+            : 'Proposed · winner only'}
         </p>
       )}
 
-      {next.status === 'AWAITING_CONFIRM' && next.score && (
-        <p className="pl-next-score">Proposed · {formatMatchScore(next.score)}</p>
-      )}
-
       {next.status === 'SCHEDULED' && (
-        <p className="pl-next-hint">Keep this page open - it updates when you’re called.</p>
+        <p className="pl-next-hint">Updates when you’re called.</p>
       )}
 
       <div className="pl-next-actions">
@@ -187,7 +192,7 @@ function NextMatchCard({
               disabled={actions.confirming || actions.cancelling}
               onClick={actions.onConfirm}
             >
-              {actions.confirming ? 'Confirming…' : 'Confirm score'}
+              {actions.confirming ? 'Confirming…' : 'Confirm'}
             </button>
             <button
               type="button"
@@ -195,24 +200,24 @@ function NextMatchCard({
               disabled={actions.cancelling || actions.confirming}
               onClick={actions.onRejectPending}
             >
-              {actions.cancelling ? 'Rejecting…' : 'Reject score'}
+              {actions.cancelling ? 'Rejecting…' : 'Reject'}
             </button>
           </>
         ) : next.can_i_score ? (
           <button type="button" className="btn btn-primary btn-block" onClick={actions.onLogScore}>
-            Enter score
+            Log result
           </button>
         ) : null}
         {next.score_submitted_by_me && next.status === 'AWAITING_CONFIRM' && (
           <>
-            <p className="pl-pending-hint">The other team needs to confirm before this counts.</p>
+            <p className="pl-pending-hint">Waiting for the other team to confirm.</p>
             <button
               type="button"
               className="btn btn-ghost btn-block pl-btn-on-dark"
               disabled={actions.cancelling}
               onClick={actions.onEditPending}
             >
-              {actions.cancelling ? 'Opening…' : 'Edit score'}
+              {actions.cancelling ? 'Opening…' : 'Edit'}
             </button>
           </>
         )}
@@ -240,6 +245,8 @@ export default function PlayerLivePage() {
     set3_a: 0,
     set3_b: 0,
   })
+  const [winnerId, setWinnerId] = useState('')
+  const [includeScore, setIncludeScore] = useState(false)
   const [scoreError, setScoreError] = useState('')
   const [actionError, setActionError] = useState('')
   useKeyboardInset(!!scoringMatch)
@@ -313,7 +320,19 @@ export default function PlayerLivePage() {
   const scoreMut = useMutation({
     mutationFn: async () => {
       if (!scoringMatch) throw new Error('No match')
-      return (await tournamentApi.playerSubmitScore(scoringMatch.id, sets)).data
+      const simple = (data?.tournament?.scoring_mode || 'SIMPLE') !== 'BEST_OF_3'
+      const payload = simple
+        ? {
+            set1_a: includeScore ? sets.set1_a : 0,
+            set1_b: includeScore ? sets.set1_b : 0,
+            set2_a: 0,
+            set2_b: 0,
+            set3_a: 0,
+            set3_b: 0,
+            winner_id: winnerId || null,
+          }
+        : { ...sets }
+      return (await tournamentApi.playerSubmitScore(scoringMatch.id, payload)).data
     },
     onSuccess: () => {
       setScoringMatch(null)
@@ -361,6 +380,9 @@ export default function PlayerLivePage() {
   const openScoreSheet = (m: Match) => {
     setScoreError('')
     setActionError('')
+    const hasPoints = !!(m.score && ((m.score.set1_a || 0) > 0 || (m.score.set1_b || 0) > 0))
+    setIncludeScore(hasPoints)
+    setWinnerId(m.winner_id || '')
     setSets({
       set1_a: m.score?.set1_a ?? 0,
       set1_b: m.score?.set1_b ?? 0,
@@ -523,18 +545,19 @@ export default function PlayerLivePage() {
               <span className="badge badge-official">Called</span>
             ) : null}
           </div>
-          {!myOnCourt && (
+          {!myOnCourt && waitingOnDraw && (
             <p className="pl-lead">
-              {waitingOnDraw
-                ? reminderNote
-                  ? `You’re registered. ${reminderNote} Your next court appears here when the draw goes live.`
-                  : 'You’re registered. We’ll show your next court here when the draw goes live.'
-                : matchDayLive
-                  ? 'Next court, opponent, and score - updates live.'
-                  : 'Courts, calls, and scores - updates every few seconds.'}
+              {reminderNote
+                ? `${reminderNote} Your next court shows here when play starts.`
+                : 'Your next court shows here when play starts.'}
             </p>
           )}
-          <SponsorStrip sponsors={sponsors} placement="hero" compact />
+          {!myOnCourt && matchDayLive && (
+            <p className="pl-lead">Your next match updates live.</p>
+          )}
+          {sponsors.length > 0 ? (
+            <SponsorStrip sponsors={sponsors} placement="hero" compact />
+          ) : null}
           {payNote && (
             <p className="pl-pay-venue" role="status">
               {payNote}
@@ -643,22 +666,21 @@ export default function PlayerLivePage() {
               {leaveBtn}
             </div>
           ) : waitingOnDraw ? (
-            <div className="pl-next-card pl-youre-in-card">
-              <p className="pl-youre-in-badge">You’re in</p>
+            <div className="pl-next-card pl-next-card--quiet">
               <p className="pl-empty" style={{ marginBottom: 8 }}>
                 {myTeam?.name ? (
                   <>
-                    <strong>{myTeam.name}</strong>
+                    Registered as <strong>{myTeam.name}</strong>
                     {myTeam.players?.length ? (
                       <span className="pl-youre-in-players"> · {myTeam.players.join(' / ')}</span>
                     ) : null}
                   </>
                 ) : (
-                  'Your entry is confirmed.'
+                  'You’re registered.'
                 )}
               </p>
               <p className="muted-note" style={{ marginBottom: 12 }}>
-                Waiting for the draw. This page updates automatically - no need to refresh.
+                Your next court appears here when play starts.
               </p>
               <div className="pl-youre-in-meta">
                 <span>{t.venue}</span>
@@ -668,9 +690,6 @@ export default function PlayerLivePage() {
                 </span>
               </div>
               {leaveBtn}
-              <Link to={`/t/${slug}`} className="pl-details-link">
-                Tournament details
-              </Link>
             </div>
           ) : next && hasPaidEntry ? (
             <>
@@ -918,6 +937,23 @@ export default function PlayerLivePage() {
             onSubmit={(e) => {
               e.preventDefault()
               setScoreError('')
+              const simple = (data?.tournament?.scoring_mode || 'SIMPLE') !== 'BEST_OF_3'
+              if (simple) {
+                if (!winnerId) {
+                  setScoreError('Tap who won')
+                  return
+                }
+                if (
+                  includeScore &&
+                  sets.set1_a === sets.set1_b &&
+                  (sets.set1_a || sets.set1_b)
+                ) {
+                  setScoreError('Score can’t be tied')
+                  return
+                }
+                scoreMut.mutate()
+                return
+              }
               const pairs: [number, number][] = [
                 [sets.set1_a, sets.set1_b],
                 [sets.set2_a, sets.set2_b],
@@ -937,7 +973,7 @@ export default function PlayerLivePage() {
                 else bSets += 1
               }
               if (played < 2) {
-                setScoreError('Enter at least two sets (best of 3)')
+                setScoreError('Enter at least two sets')
                 return
               }
               if (Math.max(aSets, bSets) < 2) {
@@ -953,66 +989,123 @@ export default function PlayerLivePage() {
               scoreMut.mutate()
             }}
           >
-            <h2 id="pl-score-title">Log final score</h2>
+            <h2 id="pl-score-title">Who won?</h2>
             <p className="muted-note" style={{ marginTop: 0 }}>
-              Best of 3. Opponent confirms before it counts.
+              {(data?.tournament?.scoring_mode || 'SIMPLE') === 'BEST_OF_3'
+                ? 'Best of 3 · opponent confirms'
+                : 'Opponent confirms'}
             </p>
-            <div className="score-sides-label">
-              <div>
-                <span className="muted-note">
-                  {scoringMatch.team_a_id === myTeamId ? 'You' : 'Opponent'}
-                </span>
-                <strong>{scoringMatch.team_a_name || 'Team A'}</strong>
-              </div>
-              <div>
-                <span className="muted-note">
-                  {scoringMatch.team_b_id === myTeamId ? 'You' : 'Opponent'}
-                </span>
-                <strong>{scoringMatch.team_b_name || 'Team B'}</strong>
-              </div>
-            </div>
-            <div className="score-grid">
-              {(
-                [
-                  ['set1_a', 'set1_b', 'Set 1'],
-                  ['set2_a', 'set2_b', 'Set 2'],
-                  ...(sets.set3_a > 0 ||
-                  sets.set3_b > 0 ||
-                  (sets.set1_a !== sets.set1_b &&
-                    sets.set2_a !== sets.set2_b &&
-                    (sets.set1_a > sets.set1_b) !== (sets.set2_a > sets.set2_b))
-                    ? ([['set3_a', 'set3_b', 'Set 3']] as const)
-                    : []),
-                ] as const
-              ).map(([ka, kb, label]) => {
-                const isDecider = label === 'Set 3'
-                const maxGames = isDecider ? 15 : 7
-                return (
-                  <div key={label} className="form-group pl-score-row">
-                    <label>{isDecider ? 'Set 3 / TB' : label}</label>
-                    <div className="score-pair pl-score-pair">
-                      <ScoreStep
-                        label={`${label} left`}
-                        value={sets[ka]}
-                        max={maxGames}
-                        onChange={(n) => setSets((s) => ({ ...s, [ka]: n }))}
-                      />
-                      <span className="pl-score-dash">–</span>
-                      <ScoreStep
-                        label={`${label} right`}
-                        value={sets[kb]}
-                        max={maxGames}
-                        onChange={(n) => setSets((s) => ({ ...s, [kb]: n }))}
-                      />
-                    </div>
+            {(data?.tournament?.scoring_mode || 'SIMPLE') !== 'BEST_OF_3' ? (
+              <>
+                <div className="org-winner-picks" role="group" aria-label="Winner">
+                  <button
+                    type="button"
+                    className={`org-winner-pick ${
+                      winnerId === scoringMatch.team_a_id ? 'is-selected' : ''
+                    }`}
+                    onClick={() => setWinnerId(scoringMatch.team_a_id || '')}
+                  >
+                    {scoringMatch.team_a_id === myTeamId ? 'We won' : scoringMatch.team_a_name || 'Team A'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`org-winner-pick ${
+                      winnerId === scoringMatch.team_b_id ? 'is-selected' : ''
+                    }`}
+                    onClick={() => setWinnerId(scoringMatch.team_b_id || '')}
+                  >
+                    {scoringMatch.team_b_id === myTeamId ? 'We won' : scoringMatch.team_b_name || 'Team B'}
+                  </button>
+                </div>
+                <label className="tf-check" style={{ margin: '0.85rem 0 0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={includeScore}
+                    onChange={(e) => {
+                      setIncludeScore(e.target.checked)
+                      if (!e.target.checked) setSets((s) => ({ ...s, set1_a: 0, set1_b: 0 }))
+                    }}
+                  />
+                  <span>Add score (optional)</span>
+                </label>
+                {includeScore && (
+                  <div className="score-pair pl-score-pair org-simple-score">
+                    <ScoreStep
+                      label="Points A"
+                      value={sets.set1_a}
+                      max={99}
+                      onChange={(n) => setSets((s) => ({ ...s, set1_a: n }))}
+                    />
+                    <span className="pl-score-dash">–</span>
+                    <ScoreStep
+                      label="Points B"
+                      value={sets.set1_b}
+                      max={99}
+                      onChange={(n) => setSets((s) => ({ ...s, set1_b: n }))}
+                    />
                   </div>
-                )
-              })}
-            </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="score-sides-label">
+                  <div>
+                    <span className="muted-note">
+                      {scoringMatch.team_a_id === myTeamId ? 'You' : 'Opponent'}
+                    </span>
+                    <strong>{scoringMatch.team_a_name || 'Team A'}</strong>
+                  </div>
+                  <div>
+                    <span className="muted-note">
+                      {scoringMatch.team_b_id === myTeamId ? 'You' : 'Opponent'}
+                    </span>
+                    <strong>{scoringMatch.team_b_name || 'Team B'}</strong>
+                  </div>
+                </div>
+                <div className="score-grid">
+                  {(
+                    [
+                      ['set1_a', 'set1_b', 'Set 1'],
+                      ['set2_a', 'set2_b', 'Set 2'],
+                      ...(sets.set3_a > 0 ||
+                      sets.set3_b > 0 ||
+                      (sets.set1_a !== sets.set1_b &&
+                        sets.set2_a !== sets.set2_b &&
+                        (sets.set1_a > sets.set1_b) !== (sets.set2_a > sets.set2_b))
+                        ? ([['set3_a', 'set3_b', 'Set 3']] as const)
+                        : []),
+                    ] as const
+                  ).map(([ka, kb, label]) => {
+                    const isDecider = label === 'Set 3'
+                    const maxGames = isDecider ? 15 : 7
+                    return (
+                      <div key={label} className="form-group pl-score-row">
+                        <label>{isDecider ? 'Set 3 / TB' : label}</label>
+                        <div className="score-pair pl-score-pair">
+                          <ScoreStep
+                            label={`${label} left`}
+                            value={sets[ka]}
+                            max={maxGames}
+                            onChange={(n) => setSets((s) => ({ ...s, [ka]: n }))}
+                          />
+                          <span className="pl-score-dash">–</span>
+                          <ScoreStep
+                            label={`${label} right`}
+                            value={sets[kb]}
+                            max={maxGames}
+                            onChange={(n) => setSets((s) => ({ ...s, [kb]: n }))}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
             {scoreError && <p className="form-error">{scoreError}</p>}
             <div className="form-actions pl-score-actions">
               <button type="submit" className="btn btn-primary btn-block" disabled={scoreMut.isPending}>
-                {scoreMut.isPending ? 'Sending…' : 'Submit for confirm'}
+                {scoreMut.isPending ? 'Sending…' : 'Send for confirm'}
               </button>
               <button
                 type="button"

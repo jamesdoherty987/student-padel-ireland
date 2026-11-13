@@ -17,11 +17,28 @@ function teamName(m: Match, side: 'a' | 'b') {
 }
 
 function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
+  const activePool = matches.filter(
+    (m) =>
+      m.status === 'LIVE' ||
+      m.status === 'CALLED' ||
+      m.status === 'SCHEDULED' ||
+      m.status === 'AWAITING_CONFIRM',
+  )
   const current =
-    matches.find((m) => m.status === 'LIVE') ||
-    matches.find((m) => m.status === 'CALLED') ||
-    matches.find((m) => m.status === 'SCHEDULED') ||
+    activePool.find((m) => m.status === 'LIVE') ||
+    activePool.find((m) => m.status === 'CALLED') ||
+    activePool.find((m) => m.status === 'AWAITING_CONFIRM') ||
+    activePool.find((m) => m.status === 'SCHEDULED') ||
     null
+  const nextUp =
+    current &&
+    activePool
+      .filter((m) => m.id !== current.id && m.status === 'SCHEDULED')
+      .sort((a, b) => {
+        const ta = a.scheduled_start ? new Date(a.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
+        const tb = b.scheduled_start ? new Date(b.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
+        return ta - tb
+      })[0]
 
   if (!current) {
     return (
@@ -36,7 +53,8 @@ function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
   const board = formatLiveBoardScore(current.score)
   const games = currentSetScores(current.score)
   const isLive = status === 'LIVE'
-  const isCalled = status === 'CALLED'
+  const isCalled = status === 'CALLED' || status === 'AWAITING_CONFIRM'
+  const hasScore = !!(current.score && (current.score.set1_a || current.score.set1_b || current.score.set2_a))
 
   return (
     <article
@@ -45,7 +63,8 @@ function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
       <div className="tv-court-num">
         <span>{label}</span>
         {isLive && <span className="tv-pill tv-pill-live">LIVE</span>}
-        {isCalled && <span className="tv-pill tv-pill-called">CALLED</span>}
+        {status === 'CALLED' && <span className="tv-pill tv-pill-called">GO NOW</span>}
+        {status === 'AWAITING_CONFIRM' && <span className="tv-pill tv-pill-called">CONFIRM</span>}
         {status === 'SCHEDULED' && <span className="tv-pill tv-pill-next">UP NEXT</span>}
       </div>
 
@@ -53,19 +72,19 @@ function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
         <>
           <div className="tv-row">
             <span title={teamName(current, 'a')}>{teamName(current, 'a')}</span>
-            <strong>{isLive ? games.a : '-'}</strong>
+            <strong>{isLive && hasScore ? games.a : '·'}</strong>
           </div>
           <div className="tv-row">
             <span title={teamName(current, 'b')}>{teamName(current, 'b')}</span>
-            <strong>{isLive ? games.b : '-'}</strong>
+            <strong>{isLive && hasScore ? games.b : '·'}</strong>
           </div>
-          {isLive && (
+          {isLive && board.sets && board.sets.includes(' ') ? (
             <div className="tv-meta">
-              <span>Set {board.set}</span>
-              {board.sets && <span>Sets {board.sets}</span>}
+              <span>{board.sets}</span>
             </div>
-          )}
-          {isCalled && <p className="tv-hint">Players to court</p>}
+          ) : null}
+          {status === 'CALLED' && <p className="tv-hint">Players to court</p>}
+          {status === 'AWAITING_CONFIRM' && <p className="tv-hint">Confirming score</p>}
         </>
       )}
 
@@ -79,6 +98,15 @@ function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
           <p className="tv-hint">{formatTime(current.scheduled_start)}</p>
         </>
       )}
+
+      {nextUp ? (
+        <div className="tv-court-next">
+          <span className="tv-court-next-label">Then</span>
+          <span>
+            {teamName(nextUp, 'a')} vs {teamName(nextUp, 'b')}
+          </span>
+        </div>
+      ) : null}
     </article>
   )
 }

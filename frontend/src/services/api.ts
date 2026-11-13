@@ -95,6 +95,8 @@ export type Tournament = {
   enable_plate?: boolean
   championship_size?: number
   plate_size?: number
+  /** SIMPLE = winner + optional points (default); BEST_OF_3 = set scoring */
+  scoring_mode?: 'SIMPLE' | 'BEST_OF_3' | string
   registered_teams: number
   invite_code?: string | null
   /** Listed on landing / public browse - admin-created events only */
@@ -479,6 +481,7 @@ export const tournamentApi = {
       set2_b?: number
       set3_a?: number
       set3_b?: number
+      winner_id?: string | null
     },
   ) => api.patch<Match>(`/api/matches/${matchId}/player-score`, data),
   confirmScore: (matchId: string) => api.post<Match>(`/api/matches/${matchId}/confirm-score`),

@@ -47,6 +47,7 @@ function defaultForm(variant: CreateTournamentVariant): TournamentFormState {
     group_size: 4,
     teams_advance_per_group: 2,
     enable_plate: official,
+    scoring_mode: 'SIMPLE',
     championship_size: 16,
     plate_size: 16,
   }
@@ -165,6 +166,7 @@ export default function CreateTournamentModal({
         enable_plate: form.enable_plate,
         championship_size: form.championship_size,
         plate_size: form.plate_size,
+        scoring_mode: form.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
         registration_deadline: form.registration_deadline
           ? new Date(form.registration_deadline).toISOString()
           : null,

@@ -31,6 +31,8 @@ export type TournamentFormState = {
   enable_plate: boolean
   championship_size: number
   plate_size: number
+  /** SIMPLE (default) or BEST_OF_3 */
+  scoring_mode: string
 }
 
 export type TournamentFormSection =
@@ -194,6 +196,22 @@ export default function TournamentFormFields({
                 onValueChange={(n) => onChange({ group_size: n })}
                 disabled={formatLocked}
               />
+            </div>
+
+            <div className="form-group" style={{ marginTop: '0.75rem' }}>
+              <label className="form-label" htmlFor="tf-scoring-mode">
+                Match scoring
+              </label>
+              <select
+                id="tf-scoring-mode"
+                className="form-select"
+                value={form.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE'}
+                disabled={formatLocked}
+                onChange={(e) => onChange({ scoring_mode: e.target.value })}
+              >
+                <option value="SIMPLE">Winner + optional score (e.g. 21–15)</option>
+                <option value="BEST_OF_3">Best of 3 sets</option>
+              </select>
             </div>
 
             <label className="tf-check" style={{ marginTop: '0.5rem' }}>

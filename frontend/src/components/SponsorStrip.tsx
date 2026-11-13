@@ -6,22 +6,15 @@ import './SponsorStrip.css'
 
 type Props = {
   sponsors: TournamentSponsor[]
-  /** Slightly tighter strip for dense pages */
+  /** Tighter spacing for live / join headers */
   compact?: boolean
-  /** Sit under the title instead of mid-page */
+  /** Under a page title */
   placement?: 'inline' | 'hero'
-  /** For dark boards (TV display) */
+  /** TV / dark boards */
   tone?: 'light' | 'dark'
 }
 
-function SponsorCard({
-  sponsor,
-  size = 'tile',
-}: {
-  sponsor: TournamentSponsor
-  /** solo = fills the strip; lead = featured row; tile = grid cell */
-  size?: 'solo' | 'lead' | 'tile'
-}) {
+function SponsorLogo({ sponsor }: { sponsor: TournamentSponsor }) {
   const src = mediaUrl(sponsor.logo_url)
   const [broken, setBroken] = useState(false)
   const showLogo = !!src && !broken
@@ -32,33 +25,19 @@ function SponsorCard({
     void openExternalUrl(sponsor.website)
   }
 
-  const className = [
-    'sponsor-strip-item',
-    `is-${size}`,
-    showLogo ? 'has-logo' : 'name-only',
-  ].join(' ')
-
-  const inner = (
-    <>
-      <span className="sponsor-strip-mark" aria-hidden={!showLogo}>
-        {showLogo ? (
-          <img
-            src={src}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            onError={() => setBroken(true)}
-          />
-        ) : (
-          <span className="sponsor-strip-initial">{sponsor.name.slice(0, 1).toUpperCase()}</span>
-        )}
-      </span>
-      <span className="sponsor-strip-copy">
-        <span className="sponsor-strip-name">{sponsor.name}</span>
-        {sponsor.website ? <span className="sponsor-strip-link-hint">Visit site</span> : null}
-      </span>
-    </>
+  const inner = showLogo ? (
+    <img
+      src={src}
+      alt={sponsor.name}
+      loading="lazy"
+      decoding="async"
+      onError={() => setBroken(true)}
+    />
+  ) : (
+    <span className="sponsor-strip-fallback">{sponsor.name}</span>
   )
+
+  const className = ['sponsor-strip-logo', showLogo ? 'has-img' : 'name-only'].join(' ')
 
   if (sponsor.website) {
     return (
@@ -67,7 +46,8 @@ function SponsorCard({
         href={sponsor.website}
         target="_blank"
         rel="noopener noreferrer"
-        title={`Visit ${sponsor.name}`}
+        title={sponsor.name}
+        aria-label={sponsor.name}
         onClick={onSponsorClick}
       >
         {inner}
@@ -76,13 +56,16 @@ function SponsorCard({
   }
 
   return (
-    <span className={className} title={sponsor.name}>
+    <span className={className} title={sponsor.name} aria-label={sponsor.name}>
       {inner}
     </span>
   )
 }
 
-/** Clean “Supported by” logo band - hidden when empty. Always shows name + logo. */
+/**
+ * Quiet logo band — logos first, no cards.
+ * Featured (MAIN) sponsors lead; others follow in one row.
+ */
 export default function SponsorStrip({
   sponsors,
   compact = false,
@@ -91,19 +74,15 @@ export default function SponsorStrip({
 }: Props) {
   if (!sponsors.length) return null
 
-  const solo = sponsors.length === 1
   const featured = sponsors.filter((s) => s.level === 'MAIN')
   const rest = sponsors.filter((s) => s.level !== 'MAIN')
-  // One sponsor always gets the full-width treatment, featured or not
-  const showFeaturedBlock = !solo && featured.length > 0
-  const rowSponsors = showFeaturedBlock ? rest : sponsors
-  const label = solo
-    ? featured.length || sponsors[0]?.level === 'MAIN'
+  const ordered = featured.length ? [...featured, ...rest] : sponsors
+  const label =
+    featured.length > 0 && featured.length === sponsors.length
       ? 'Presented by'
-      : 'Supported by'
-    : showFeaturedBlock
-      ? 'Also supported by'
-      : 'Supported by'
+      : featured.length > 0
+        ? 'Partners'
+        : 'Supported by'
 
   return (
     <section
@@ -112,50 +91,20 @@ export default function SponsorStrip({
         compact ? 'sponsor-strip--compact' : '',
         placement === 'hero' ? 'sponsor-strip--hero' : '',
         tone === 'dark' ? 'sponsor-strip--dark' : '',
-        solo ? 'is-solo' : 'is-multi',
-        showFeaturedBlock ? 'has-featured' : '',
-        `count-${Math.min(sponsors.length, 6)}`,
+        `count-${Math.min(ordered.length, 8)}`,
       ]
         .filter(Boolean)
         .join(' ')}
       aria-label="Sponsors"
     >
-      {solo && (
-        <div className="sponsor-strip-solo">
-          <p className="sponsor-strip-label">{label}</p>
-          <SponsorCard sponsor={sponsors[0]} size="solo" />
-        </div>
-      )}
-
-      {!solo && showFeaturedBlock && (
-        <div className="sponsor-strip-featured">
-          <p className="sponsor-strip-label">Presented by</p>
-          <ul
-            className={`sponsor-strip-featured-row count-${Math.min(featured.length, 4)}`}
-          >
-            {featured.map((s) => (
-              <li key={s.id}>
-                <SponsorCard sponsor={s} size={featured.length === 1 ? 'solo' : 'lead'} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {!solo && rowSponsors.length > 0 && (
-        <div className="sponsor-strip-partners">
-          <p className="sponsor-strip-label">{label}</p>
-          <ul
-            className={`sponsor-strip-row count-${Math.min(rowSponsors.length, 6)}`}
-          >
-            {rowSponsors.map((s) => (
-              <li key={s.id}>
-                <SponsorCard sponsor={s} size="tile" />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <p className="sponsor-strip-label">{label}</p>
+      <ul className="sponsor-strip-logos">
+        {ordered.map((s) => (
+          <li key={s.id}>
+            <SponsorLogo sponsor={s} />
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }

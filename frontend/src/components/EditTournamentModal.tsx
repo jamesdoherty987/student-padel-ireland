@@ -46,6 +46,7 @@ function toForm(tournament: Tournament): TournamentFormState {
     enable_plate: !!tournament.enable_plate,
     championship_size: tournament.championship_size || 16,
     plate_size: tournament.plate_size || 16,
+    scoring_mode: tournament.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
   }
 }
 
@@ -144,6 +145,7 @@ export default function EditTournamentModal({
         enable_plate: form.enable_plate,
         championship_size: form.championship_size,
         plate_size: form.plate_size,
+        scoring_mode: form.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
         registration_deadline: form.registration_deadline
           ? new Date(form.registration_deadline).toISOString()
           : null,

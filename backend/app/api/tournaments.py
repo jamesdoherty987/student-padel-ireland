@@ -35,6 +35,7 @@ from app.models import (
     Ranking,
     RankingHistory,
     Registration,
+    ScoringMode,
     Sponsor,
     Team,
     TeamPlayer,
@@ -48,7 +49,7 @@ from app.models import (
 )
 
 from app.db.seed import PREFERRED_UNIVERSITY_SLUGS
-from app.services.email import send_email
+from app.services.email import render_simple_email, send_email
 from app.services.rating import INITIAL_RATING, rate_match
 from app.services.registration_fields import (
     answers_for_team,
@@ -514,6 +515,81 @@ def _require_best_of_three_winner(
     return winner_id
 
 
+def _tournament_scoring_mode(t: Tournament | None) -> str:
+    mode = (getattr(t, "scoring_mode", None) or ScoringMode.SIMPLE.value).upper()
+    if mode == ScoringMode.BEST_OF_3.value:
+        return ScoringMode.BEST_OF_3.value
+    return ScoringMode.SIMPLE.value
+
+
+def _match_player_emails(db: Session, m: Match) -> list[tuple[str, str]]:
+    """Return [(email, full_name)] for active players on both sides."""
+    team_ids = [tid for tid in (m.team_a_id, m.team_b_id) if tid]
+    if not team_ids:
+        return []
+    rows = (
+        db.query(User.email, User.full_name)
+        .join(TeamPlayer, TeamPlayer.user_id == User.id)
+        .filter(TeamPlayer.team_id.in_(team_ids), User.is_active.is_(True))
+        .all()
+    )
+    out: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for email, name in rows:
+        key = (email or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append((key, (name or "Player").strip() or "Player"))
+    return out
+
+
+def _notify_call_to_court(db: Session, t: Tournament, m: Match) -> None:
+    """Email players when a match is called to court (best-effort)."""
+    settings = get_settings()
+    front = (settings.frontend_url or "https://www.studentpadel.ie").rstrip("/")
+    live_url = f"{front}/t/{t.slug}/live"
+    court = None
+    if m.court_number is not None:
+        names = _court_label_map(db, t.id)
+        court = names.get(m.court_number) or f"Court {m.court_number}"
+    a_name = None
+    b_name = None
+    if m.team_a_id:
+        ta = db.get(Team, m.team_a_id)
+        a_name = ta.name if ta else None
+    if m.team_b_id:
+        tb = db.get(Team, m.team_b_id)
+        b_name = tb.name if tb else None
+    fixture = f"{a_name or 'TBD'} vs {b_name or 'TBD'}"
+    details: list[tuple[str, str]] = [
+        ("Event", t.name),
+        ("Match", fixture),
+    ]
+    if court:
+        details.append(("Court", court))
+    details.append(("Round", (m.round or "").replace("_", " ")))
+
+    for email, name in _match_player_emails(db, m):
+        text, html_body = render_simple_email(
+            title="You're called to court",
+            greeting=f"Hi {name.split()[0]},",
+            paragraphs=[
+                f"Your match is ready{f' on {court}' if court else ''}. Head to the court now.",
+                "Open Live for opponent, court, and score.",
+            ],
+            detail_lines=details,
+            cta_label="Open live board",
+            cta_url=live_url,
+        )
+        send_email(
+            to=email,
+            subject=f"Called to court · {t.name}",
+            text=text,
+            html_body=html_body,
+        )
+
+
 def _advance_winner_to_next(db: Session, m: Match, winner_id: UUID) -> None:
     if not m.next_match_id or not m.next_match_slot:
         return
@@ -653,6 +729,7 @@ def _tournament_out(
         enable_plate=bool(getattr(t, "enable_plate", False)),
         championship_size=int(getattr(t, "championship_size", 16) or 16),
         plate_size=int(getattr(t, "plate_size", 16) or 16),
+        scoring_mode=getattr(t, "scoring_mode", None) or ScoringMode.SIMPLE.value,
         registered_teams=_team_count(db, t.id),
         invite_code=t.invite_code,
         is_official=bool(getattr(t, "is_official", False)),
@@ -1284,6 +1361,11 @@ def create_tournament(
         enable_plate=bool(body.enable_plate),
         championship_size=body.championship_size,
         plate_size=body.plate_size,
+        scoring_mode=(
+            body.scoring_mode.value
+            if getattr(body, "scoring_mode", None) is not None
+            else ScoringMode.SIMPLE.value
+        ),
         invite_code=_unique_invite_code(db),
         is_official=is_official,
         tie_break_order=body.tie_break_order
@@ -2990,26 +3072,52 @@ def player_submit_score(
     ):
         raise HTTPException(400, "This match can’t take a new score right now")
 
-    winner_id = _require_best_of_three_winner(
-        m,
-        body.set1_a,
-        body.set1_b,
-        body.set2_a,
-        body.set2_b,
-        body.set3_a,
-        body.set3_b,
-    )
+    mode = _tournament_scoring_mode(t)
+    if mode == ScoringMode.BEST_OF_3.value:
+        winner_id = _require_best_of_three_winner(
+            m,
+            body.set1_a,
+            body.set1_b,
+            body.set2_a,
+            body.set2_b,
+            body.set3_a,
+            body.set3_b,
+        )
+        if body.winner_id and body.winner_id != winner_id:
+            raise HTTPException(400, "Winner must match the set scores")
+    else:
+        # SIMPLE: winner is required; optional set1 points (e.g. 21–15)
+        winner_id = body.winner_id
+        if not winner_id:
+            if body.set1_a != body.set1_b and (body.set1_a or body.set1_b):
+                winner_id = m.team_a_id if body.set1_a > body.set1_b else m.team_b_id
+            else:
+                raise HTTPException(400, "Pick a winner")
+        if winner_id not in (m.team_a_id, m.team_b_id):
+            raise HTTPException(400, "Winner must be one of the match teams")
+        if body.set1_a or body.set1_b:
+            if body.set1_a == body.set1_b:
+                raise HTTPException(400, "Score can’t be tied — clear it or pick a winner only")
 
     if not m.score:
         m.score = MatchScore(match_id=m.id)
         db.add(m.score)
     m.score.set1_a = body.set1_a
     m.score.set1_b = body.set1_b
-    m.score.set2_a = body.set2_a
-    m.score.set2_b = body.set2_b
-    m.score.set3_a = body.set3_a
-    m.score.set3_b = body.set3_b
-    m.score.current_set = 3 if (body.set3_a or body.set3_b) else (2 if (body.set2_a or body.set2_b) else 1)
+    if mode == ScoringMode.BEST_OF_3.value:
+        m.score.set2_a = body.set2_a
+        m.score.set2_b = body.set2_b
+        m.score.set3_a = body.set3_a
+        m.score.set3_b = body.set3_b
+        m.score.current_set = (
+            3 if (body.set3_a or body.set3_b) else (2 if (body.set2_a or body.set2_b) else 1)
+        )
+    else:
+        m.score.set2_a = 0
+        m.score.set2_b = 0
+        m.score.set3_a = 0
+        m.score.set3_b = 0
+        m.score.current_set = 1
     m.score.entered_by_id = user.id
     m.score.confirmed_by_id = None
     m.winner_id = winner_id
@@ -3140,7 +3248,9 @@ def move_match(
     if not t:
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t, db)
+    prev_status = m.status
     data = body.model_dump(exclude_unset=True)
+    notify_players = data.pop("notify_players", None)
     if "status" in data and data["status"] is not None:
         data["status"] = data["status"].value
     for k, v in data.items():
@@ -3153,8 +3263,17 @@ def move_match(
         if t.status != TournamentStatus.LIVE.value:
             t.status = TournamentStatus.LIVE.value
     _apply_tournament_match_ratings(db, m, t)
+    newly_called = (
+        m.status == MatchStatus.CALLED.value and prev_status != MatchStatus.CALLED.value
+    )
+    should_email = newly_called and notify_players is not False
     db.commit()
     db.refresh(m)
+    if should_email:
+        try:
+            _notify_call_to_court(db, t, m)
+        except Exception:
+            logging.getLogger(__name__).exception("Call-to-court email failed for match %s", m.id)
     return _match_out(db, m)
 
 
