@@ -920,9 +920,12 @@
   border: 1px solid rgba(11, 61, 46, 0.14);
   background: var(--white);
   color: var(--court-deep);
+  font: inherit;
   font-size: 0.82rem;
   font-weight: 650;
+  line-height: 1.2;
   text-decoration: none;
+  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 

@@ -118,6 +118,15 @@ html.native-app .native-tab {
   touch-action: manipulation;
 }
 
+/* Venue TV display: no page scroll while the board is open */
+html.tv-display-active,
+html.tv-display-active body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  height: 100%;
+  touch-action: none;
+}
+
 body {
   font-family: var(--font-body);
   background: var(--bg-primary);

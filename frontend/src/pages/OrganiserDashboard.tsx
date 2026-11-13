@@ -151,7 +151,6 @@ export default function OrganiserDashboard() {
     force: false,
   })
   const [scoreError, setScoreError] = useState('')
-  const [includeScore, setIncludeScore] = useState(false)
 
   useKeyboardInset(!!scoreMatch)
   useEffect(() => {
@@ -542,11 +541,10 @@ export default function OrganiserDashboard() {
   const scoreMut = useMutation({
     mutationFn: () => {
       const simple = scoringMode === 'SIMPLE'
-      const withScore = !simple || includeScore
       const current_set = simple ? 1 : resolveCurrentSet(scoreForm)
       return tournamentApi.updateScore(scoreMatch!.id, {
-        set1_a: withScore ? scoreForm.set1_a : 0,
-        set1_b: withScore ? scoreForm.set1_b : 0,
+        set1_a: scoreForm.set1_a,
+        set1_b: scoreForm.set1_b,
         set2_a: simple ? 0 : scoreForm.set2_a,
         set2_b: simple ? 0 : scoreForm.set2_b,
         set3_a: simple ? 0 : scoreForm.set3_a,
@@ -585,8 +583,11 @@ export default function OrganiserDashboard() {
           setScoreError('Tap who won.')
           return
         }
-        if (includeScore && scoreForm.set1_a === scoreForm.set1_b && (scoreForm.set1_a || scoreForm.set1_b)) {
-          setScoreError('Score can’t be tied — clear it or change it.')
+        if (
+          scoreForm.set1_a === scoreForm.set1_b &&
+          (scoreForm.set1_a > 0 || scoreForm.set1_b > 0)
+        ) {
+          setScoreError('Score can’t be tied — change it or leave both at 0.')
           return
         }
       } else if (scoreForm.status === 'COMPLETED') {
@@ -658,13 +659,7 @@ export default function OrganiserDashboard() {
       }
       if (!vars.silent) {
         const st = vars.data?.status
-        showToast(
-          st === 'CALLED'
-            ? 'Called to court — players notified'
-            : st === 'LIVE'
-              ? 'Match live'
-              : 'Match updated',
-        )
+        showToast(st === 'CALLED' ? 'Called to court — players notified' : 'Match updated')
       }
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not update match')),
@@ -1051,8 +1046,6 @@ export default function OrganiserDashboard() {
     if (!m.team_a_id || !m.team_b_id) return
     setScoreError('')
     setScoreMatch(m)
-    const hasPoints = !!(m.score && ((m.score.set1_a || 0) > 0 || (m.score.set1_b || 0) > 0))
-    setIncludeScore(scoringMode === 'BEST_OF_3' || hasPoints)
     const defaultStatus =
       m.status === 'COMPLETED' || m.status === 'WALKOVER'
         ? m.status
@@ -1120,21 +1113,10 @@ export default function OrganiserDashboard() {
             type="button"
             className="btn btn-primary btn-sm"
             disabled={moveMut.isPending}
-            title="Call players to this court"
+            title="Tell players to go to this court"
             onClick={() => moveMut.mutate({ matchId: m.id, data: { status: 'CALLED' } })}
           >
             Call to court
-          </button>
-        )}
-        {m.status === 'CALLED' && (
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            disabled={moveMut.isPending}
-            title="Mark the match as live"
-            onClick={() => moveMut.mutate({ matchId: m.id, data: { status: 'LIVE' } })}
-          >
-            Start live
           </button>
         )}
         {(m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'SCHEDULED' || pending) && (
@@ -1143,9 +1125,9 @@ export default function OrganiserDashboard() {
             className="btn btn-dark btn-sm"
             disabled={moveMut.isPending}
             onClick={onScore}
-            title={pending ? 'Override and finalise as organiser' : 'Enter score'}
+            title={pending ? 'Confirm or correct the proposed result' : 'Log who won'}
           >
-            {pending ? 'Finalise' : 'Score'}
+            {pending ? 'Fix / finalise' : 'Score'}
           </button>
         )}
         {done && (
@@ -1831,10 +1813,10 @@ export default function OrganiserDashboard() {
                 <ol className="org-day-steps">
                   <li>Check teams in</li>
                   <li>
-                    <strong>Call to court</strong> (emails players)
+                    <strong>Call to court</strong> when a court is free (optional — emails players)
                   </li>
                   <li>
-                    <strong>Score</strong> → tap who won
+                    <strong>Score</strong> when the match ends — tap who won
                   </li>
                 </ol>
                 {active.tournament.slug ? (
@@ -2582,74 +2564,89 @@ export default function OrganiserDashboard() {
             </h2>
             {scoreMatch.status === 'AWAITING_CONFIRM' && (
               <p className="muted-note" style={{ marginTop: 0 }}>
-                Players proposed a result — saving finalises it.
+                Players disagree or need a ruling — change anything below and save to finalise.
               </p>
             )}
             {scoringMode === 'SIMPLE' ? (
               <>
-                <div className="org-winner-picks" role="group" aria-label="Winner">
-                  <button
-                    type="button"
-                    className={`org-winner-pick ${
-                      scoreForm.winner_id === scoreMatch.team_a_id ? 'is-selected' : ''
+                <p className="muted-note" style={{ marginTop: 0 }}>
+                  Tap who won. Leave scores at 0 if you don’t need them.
+                </p>
+                <div className="score-team-grid" role="group" aria-label="Winner and score">
+                  <div
+                    className={`score-team-card ${
+                      scoreForm.winner_id === scoreMatch.team_a_id ? 'is-winner' : ''
                     }`}
-                    onClick={() =>
-                      setScoreForm({
-                        ...scoreForm,
-                        winner_id: scoreMatch.team_a_id || '',
-                        status: 'COMPLETED',
-                      })
-                    }
                   >
-                    {scoreMatch.team_a_name || 'Team A'}
-                  </button>
-                  <button
-                    type="button"
-                    className={`org-winner-pick ${
-                      scoreForm.winner_id === scoreMatch.team_b_id ? 'is-selected' : ''
-                    }`}
-                    onClick={() =>
-                      setScoreForm({
-                        ...scoreForm,
-                        winner_id: scoreMatch.team_b_id || '',
-                        status: 'COMPLETED',
-                      })
-                    }
-                  >
-                    {scoreMatch.team_b_name || 'Team B'}
-                  </button>
-                </div>
-                <label className="tf-check" style={{ margin: '0.75rem 0' }}>
-                  <input
-                    type="checkbox"
-                    checked={includeScore}
-                    onChange={(e) => {
-                      setIncludeScore(e.target.checked)
-                      if (!e.target.checked) {
-                        setScoreForm({ ...scoreForm, set1_a: 0, set1_b: 0 })
+                    <button
+                      type="button"
+                      className="score-team-win"
+                      onClick={() =>
+                        setScoreForm({
+                          ...scoreForm,
+                          winner_id: scoreMatch.team_a_id || '',
+                          status: scoreForm.status === 'WALKOVER' ? 'WALKOVER' : 'COMPLETED',
+                        })
                       }
-                    }}
-                  />
-                  <span>Add score (optional)</span>
-                </label>
-                {includeScore && (
-                  <div className="score-pair pl-score-pair org-simple-score">
-                    <ScoreStep
-                      label={`${scoreMatch.team_a_name || 'A'} points`}
-                      value={scoreForm.set1_a}
-                      max={99}
-                      onChange={(n) => setScoreForm({ ...scoreForm, set1_a: n })}
-                    />
-                    <span className="pl-score-dash">–</span>
-                    <ScoreStep
-                      label={`${scoreMatch.team_b_name || 'B'} points`}
-                      value={scoreForm.set1_b}
-                      max={99}
-                      onChange={(n) => setScoreForm({ ...scoreForm, set1_b: n })}
-                    />
+                    >
+                      <span className="score-team-win-label">
+                        {scoreForm.winner_id === scoreMatch.team_a_id ? 'Winner' : 'Tap if won'}
+                      </span>
+                      <strong>{scoreMatch.team_a_name || 'Team A'}</strong>
+                    </button>
+                    <div className="score-team-points">
+                      <span className="score-team-points-label">Score</span>
+                      <ScoreStep
+                        label={`${scoreMatch.team_a_name || 'Team A'} score`}
+                        value={scoreForm.set1_a}
+                        max={99}
+                        onChange={(n) => {
+                          const next = { ...scoreForm, set1_a: n, status: 'COMPLETED' as string }
+                          if (n > scoreForm.set1_b) next.winner_id = scoreMatch.team_a_id || ''
+                          else if (n < scoreForm.set1_b) next.winner_id = scoreMatch.team_b_id || ''
+                          setScoreForm(next)
+                        }}
+                      />
+                    </div>
                   </div>
-                )}
-                <div className="org-score-meta" style={{ marginTop: '0.75rem' }}>
+                  <div
+                    className={`score-team-card ${
+                      scoreForm.winner_id === scoreMatch.team_b_id ? 'is-winner' : ''
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      className="score-team-win"
+                      onClick={() =>
+                        setScoreForm({
+                          ...scoreForm,
+                          winner_id: scoreMatch.team_b_id || '',
+                          status: scoreForm.status === 'WALKOVER' ? 'WALKOVER' : 'COMPLETED',
+                        })
+                      }
+                    >
+                      <span className="score-team-win-label">
+                        {scoreForm.winner_id === scoreMatch.team_b_id ? 'Winner' : 'Tap if won'}
+                      </span>
+                      <strong>{scoreMatch.team_b_name || 'Team B'}</strong>
+                    </button>
+                    <div className="score-team-points">
+                      <span className="score-team-points-label">Score</span>
+                      <ScoreStep
+                        label={`${scoreMatch.team_b_name || 'Team B'} score`}
+                        value={scoreForm.set1_b}
+                        max={99}
+                        onChange={(n) => {
+                          const next = { ...scoreForm, set1_b: n, status: 'COMPLETED' as string }
+                          if (n > scoreForm.set1_a) next.winner_id = scoreMatch.team_b_id || ''
+                          else if (n < scoreForm.set1_a) next.winner_id = scoreMatch.team_a_id || ''
+                          setScoreForm(next)
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="org-score-meta">
                   <button
                     type="button"
                     className={`btn btn-sm ${scoreForm.status === 'WALKOVER' ? 'btn-dark' : 'btn-ghost'}`}

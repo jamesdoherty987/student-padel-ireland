@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
-import { confirmDialog } from '../components/ConfirmDialog'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
 import ScoreStep from '../components/ScoreStep'
@@ -103,9 +102,18 @@ type NextActions = {
   onLogScore: () => void
   onConfirm: () => void
   onEditPending: () => void
-  onRejectPending: () => void
+  onDisagree: () => void
   confirming: boolean
   cancelling: boolean
+}
+
+function proposedWinnerLabel(m: Match, myTeamId?: string) {
+  if (!m.winner_id) return null
+  if (myTeamId && m.winner_id === myTeamId) return 'You won'
+  if (myTeamId && (m.team_a_id === myTeamId || m.team_b_id === myTeamId)) return 'They won'
+  if (m.winner_id === m.team_a_id) return m.team_a_name || 'Team A'
+  if (m.winner_id === m.team_b_id) return m.team_b_name || 'Team B'
+  return null
 }
 
 function NextMatchCard({
@@ -130,10 +138,14 @@ function NextMatchCard({
   const round = knockoutRoundLabel(next.round, next.stage)
   const sideA = next.team_a_name || next.team_a_placeholder || 'TBD'
   const sideB = next.team_b_name || next.team_b_placeholder || 'TBD'
+  const pending = next.status === 'AWAITING_CONFIRM'
+  const scoreText =
+    next.score && formatMatchScore(next.score) !== '-' ? formatMatchScore(next.score) : null
+  const winnerText = proposedWinnerLabel(next, myTeamId)
 
   return (
     <div
-      className={`pl-next-card pl-next-card--glance ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''} ${next.status === 'AWAITING_CONFIRM' ? 'is-pending' : ''}`}
+      className={`pl-next-card pl-next-card--glance ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''} ${pending ? 'is-pending' : ''}`}
     >
       <div className="pl-next-top">
         <p className={`pl-go-now${chip.soft ? ' pl-go-now--soft' : ''}`}>{chip.label}</p>
@@ -171,12 +183,18 @@ function NextMatchCard({
         </p>
       ) : null}
 
-      {next.status === 'AWAITING_CONFIRM' && (
-        <p className="pl-next-score">
-          {next.score && formatMatchScore(next.score) !== '-'
-            ? `Proposed · ${formatMatchScore(next.score)}`
-            : 'Proposed · winner only'}
-        </p>
+      {pending && (
+        <div className="pl-propose" role="status">
+          <span className="pl-propose-label">
+            {next.needs_my_confirm
+              ? 'Opponent entered'
+              : next.score_submitted_by_me
+                ? 'You entered'
+                : 'Proposed result'}
+          </span>
+          {winnerText ? <strong className="pl-propose-winner">{winnerText}</strong> : null}
+          <span className="pl-propose-score">{scoreText || 'Winner only · no score'}</span>
+        </div>
       )}
 
       {next.status === 'SCHEDULED' && (
@@ -186,21 +204,34 @@ function NextMatchCard({
       <div className="pl-next-actions">
         {next.needs_my_confirm ? (
           <>
+            <p className="pl-pending-hint">Agree to lock it in, or fix it if it’s wrong.</p>
             <button
               type="button"
               className="btn btn-primary btn-block"
               disabled={actions.confirming || actions.cancelling}
               onClick={actions.onConfirm}
             >
-              {actions.confirming ? 'Confirming…' : 'Confirm'}
+              {actions.confirming ? 'Saving…' : 'Yes, that’s right'}
             </button>
             <button
               type="button"
               className="btn btn-ghost btn-block pl-btn-on-dark"
               disabled={actions.cancelling || actions.confirming}
-              onClick={actions.onRejectPending}
+              onClick={actions.onDisagree}
             >
-              {actions.cancelling ? 'Rejecting…' : 'Reject'}
+              {actions.cancelling ? 'Opening…' : 'Wrong — fix score'}
+            </button>
+          </>
+        ) : next.score_submitted_by_me && pending ? (
+          <>
+            <p className="pl-pending-hint">Waiting for the other team. You can still change it.</p>
+            <button
+              type="button"
+              className="btn btn-ghost btn-block pl-btn-on-dark"
+              disabled={actions.cancelling}
+              onClick={actions.onEditPending}
+            >
+              {actions.cancelling ? 'Opening…' : 'Change my score'}
             </button>
           </>
         ) : next.can_i_score ? (
@@ -208,19 +239,6 @@ function NextMatchCard({
             Log result
           </button>
         ) : null}
-        {next.score_submitted_by_me && next.status === 'AWAITING_CONFIRM' && (
-          <>
-            <p className="pl-pending-hint">Waiting for the other team to confirm.</p>
-            <button
-              type="button"
-              className="btn btn-ghost btn-block pl-btn-on-dark"
-              disabled={actions.cancelling}
-              onClick={actions.onEditPending}
-            >
-              {actions.cancelling ? 'Opening…' : 'Edit'}
-            </button>
-          </>
-        )}
       </div>
 
       <Link to={`/t/${slug}`} className="pl-details-link">
@@ -236,6 +254,7 @@ export default function PlayerLivePage() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
+  const [scoreSheetMode, setScoreSheetMode] = useState<'log' | 'fix' | 'edit'>('log')
   const [payNote, setPayNote] = useState('')
   const [sets, setSets] = useState<ScoreSets>({
     set1_a: 0,
@@ -246,7 +265,6 @@ export default function PlayerLivePage() {
     set3_b: 0,
   })
   const [winnerId, setWinnerId] = useState('')
-  const [includeScore, setIncludeScore] = useState(false)
   const [scoreError, setScoreError] = useState('')
   const [actionError, setActionError] = useState('')
   useKeyboardInset(!!scoringMatch)
@@ -306,6 +324,7 @@ export default function PlayerLivePage() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setScoringMatch(null)
+        setScoreSheetMode('log')
         setScoreError('')
       }
     }
@@ -323,8 +342,8 @@ export default function PlayerLivePage() {
       const simple = (data?.tournament?.scoring_mode || 'SIMPLE') !== 'BEST_OF_3'
       const payload = simple
         ? {
-            set1_a: includeScore ? sets.set1_a : 0,
-            set1_b: includeScore ? sets.set1_b : 0,
+            set1_a: sets.set1_a,
+            set1_b: sets.set1_b,
             set2_a: 0,
             set2_b: 0,
             set3_a: 0,
@@ -336,6 +355,7 @@ export default function PlayerLivePage() {
     },
     onSuccess: () => {
       setScoringMatch(null)
+      setScoreSheetMode('log')
       setScoreError('')
       setActionError('')
       invalidate()
@@ -353,14 +373,30 @@ export default function PlayerLivePage() {
   })
 
   const cancelMut = useMutation({
-    mutationFn: async ({ matchId, reopen }: { matchId: string; reopen: boolean }) => {
+    mutationFn: async ({
+      matchId,
+      reopen,
+      mode,
+      draft,
+    }: {
+      matchId: string
+      reopen: boolean
+      mode: 'fix' | 'edit'
+      draft?: { winner_id: string; sets: ScoreSets }
+    }) => {
       const m = (await tournamentApi.cancelPendingScore(matchId)).data
-      return { m, reopen }
+      return { m, reopen, mode, draft }
     },
-    onSuccess: ({ m, reopen }) => {
+    onSuccess: ({ m, reopen, mode, draft }) => {
       setActionError('')
       invalidate()
-      if (reopen) openScoreSheet(m)
+      if (reopen) {
+        openScoreSheet(m, {
+          mode,
+          winner_id: draft?.winner_id,
+          sets: draft?.sets,
+        })
+      }
     },
     onError: (err) => setActionError(apiErrorMessage(err)),
   })
@@ -377,22 +413,38 @@ export default function PlayerLivePage() {
     onError: (err) => setActionError(apiErrorMessage(err)),
   })
 
-  const openScoreSheet = (m: Match) => {
+  const openScoreSheet = (
+    m: Match,
+    opts?: { mode?: 'log' | 'fix' | 'edit'; winner_id?: string; sets?: ScoreSets },
+  ) => {
     setScoreError('')
     setActionError('')
-    const hasPoints = !!(m.score && ((m.score.set1_a || 0) > 0 || (m.score.set1_b || 0) > 0))
-    setIncludeScore(hasPoints)
-    setWinnerId(m.winner_id || '')
-    setSets({
+    setScoreSheetMode(opts?.mode || 'log')
+    setWinnerId(opts?.winner_id ?? m.winner_id ?? '')
+    setSets(
+      opts?.sets || {
+        set1_a: m.score?.set1_a ?? 0,
+        set1_b: m.score?.set1_b ?? 0,
+        set2_a: m.score?.set2_a ?? 0,
+        set2_b: m.score?.set2_b ?? 0,
+        set3_a: m.score?.set3_a ?? 0,
+        set3_b: m.score?.set3_b ?? 0,
+      },
+    )
+    setScoringMatch(m)
+  }
+
+  const pendingDraft = (m: Match) => ({
+    winner_id: m.winner_id || '',
+    sets: {
       set1_a: m.score?.set1_a ?? 0,
       set1_b: m.score?.set1_b ?? 0,
       set2_a: m.score?.set2_a ?? 0,
       set2_b: m.score?.set2_b ?? 0,
       set3_a: m.score?.set3_a ?? 0,
       set3_b: m.score?.set3_b ?? 0,
-    })
-    setScoringMatch(m)
-  }
+    },
+  })
 
   if (isLoading) {
     return (
@@ -497,21 +549,24 @@ export default function PlayerLivePage() {
   const knockoutActive = isKnockoutActive(allMatches)
 
   const nextActions: NextActions = {
-    onLogScore: () => next && openScoreSheet(next),
+    onLogScore: () => next && openScoreSheet(next, { mode: 'log' }),
     onConfirm: () => next && confirmMut.mutate(next.id),
-    onEditPending: () => next && cancelMut.mutate({ matchId: next.id, reopen: true }),
-    onRejectPending: () => {
-      if (!next) return
-      void confirmDialog({
-        title: 'Reject this score?',
-        message: 'The proposed result will be cleared so either team can enter the score again.',
-        confirmLabel: 'Reject score',
-        cancelLabel: 'Keep it',
-        danger: true,
-      }).then((ok) => {
-        if (ok) cancelMut.mutate({ matchId: next.id, reopen: false })
-      })
-    },
+    onEditPending: () =>
+      next &&
+      cancelMut.mutate({
+        matchId: next.id,
+        reopen: true,
+        mode: 'edit',
+        draft: pendingDraft(next),
+      }),
+    onDisagree: () =>
+      next &&
+      cancelMut.mutate({
+        matchId: next.id,
+        reopen: true,
+        mode: 'fix',
+        draft: pendingDraft(next),
+      }),
     confirming: confirmMut.isPending && confirmMut.variables === next?.id,
     cancelling: cancelMut.isPending && cancelMut.variables?.matchId === next?.id,
   }
@@ -743,29 +798,74 @@ export default function PlayerLivePage() {
             knockoutActive) && (
             <nav className="pl-jump" aria-label="Jump to section">
               {myUpcoming.filter((m) => m.id !== next?.id).length > 0 && (
-                <a href="#pl-later" className="pl-jump-link">
+                <button
+                  type="button"
+                  className="pl-jump-link"
+                  onClick={() =>
+                    document.getElementById('pl-later')?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'start',
+                    })
+                  }
+                >
                   Later
-                </a>
+                </button>
               )}
               {myResults.length > 0 && (
-                <a href="#pl-results" className="pl-jump-link">
+                <button
+                  type="button"
+                  className="pl-jump-link"
+                  onClick={() =>
+                    document.getElementById('pl-results')?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'start',
+                    })
+                  }
+                >
                   Results
-                </a>
+                </button>
               )}
               {standings.length > 0 && (
-                <a href="#pl-groups" className="pl-jump-link">
+                <button
+                  type="button"
+                  className="pl-jump-link"
+                  onClick={() =>
+                    document.getElementById('pl-groups')?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'start',
+                    })
+                  }
+                >
                   Groups
-                </a>
+                </button>
               )}
               {knockoutActive && knockoutMatches.length > 0 && (
-                <a href="#pl-draw" className="pl-jump-link">
+                <button
+                  type="button"
+                  className="pl-jump-link"
+                  onClick={() =>
+                    document.getElementById('pl-draw')?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'start',
+                    })
+                  }
+                >
                   Draw
-                </a>
+                </button>
               )}
               {showVenueBoard && (liveMatches.length > 0 || calledMatches.length > 0) && (
-                <a href="#pl-venue" className="pl-jump-link">
+                <button
+                  type="button"
+                  className="pl-jump-link"
+                  onClick={() =>
+                    document.getElementById('pl-venue')?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'start',
+                    })
+                  }
+                >
                   Courts
-                </a>
+                </button>
               )}
             </nav>
           )}
@@ -925,6 +1025,7 @@ export default function PlayerLivePage() {
           className="score-modal-backdrop pl-score-backdrop"
           onClick={() => {
             setScoringMatch(null)
+            setScoreSheetMode('log')
             setScoreError('')
           }}
         >
@@ -943,12 +1044,8 @@ export default function PlayerLivePage() {
                   setScoreError('Tap who won')
                   return
                 }
-                if (
-                  includeScore &&
-                  sets.set1_a === sets.set1_b &&
-                  (sets.set1_a || sets.set1_b)
-                ) {
-                  setScoreError('Score can’t be tied')
+                if (sets.set1_a === sets.set1_b && (sets.set1_a > 0 || sets.set1_b > 0)) {
+                  setScoreError('Score can’t be tied — change it or leave both at 0')
                   return
                 }
                 scoreMut.mutate()
@@ -989,62 +1086,99 @@ export default function PlayerLivePage() {
               scoreMut.mutate()
             }}
           >
-            <h2 id="pl-score-title">Who won?</h2>
+            <h2 id="pl-score-title">
+              {scoreSheetMode === 'fix'
+                ? 'Enter the right result'
+                : scoreSheetMode === 'edit'
+                  ? 'Change your score'
+                  : 'Who won?'}
+            </h2>
             <p className="muted-note" style={{ marginTop: 0 }}>
-              {(data?.tournament?.scoring_mode || 'SIMPLE') === 'BEST_OF_3'
-                ? 'Best of 3 · opponent confirms'
-                : 'Opponent confirms'}
+              {scoreSheetMode === 'fix'
+                ? 'Adjust what’s wrong, then send it back for confirm.'
+                : scoreSheetMode === 'edit'
+                  ? 'Update it, then send again for the other team to confirm.'
+                  : (data?.tournament?.scoring_mode || 'SIMPLE') === 'BEST_OF_3'
+                    ? 'Best of 3 · opponent confirms'
+                    : 'Opponent confirms'}
             </p>
             {(data?.tournament?.scoring_mode || 'SIMPLE') !== 'BEST_OF_3' ? (
               <>
-                <div className="org-winner-picks" role="group" aria-label="Winner">
-                  <button
-                    type="button"
-                    className={`org-winner-pick ${
-                      winnerId === scoringMatch.team_a_id ? 'is-selected' : ''
+                <p className="muted-note" style={{ marginTop: 0, marginBottom: '0.65rem' }}>
+                  Tap who won. Leave scores at 0 if you don’t need them.
+                </p>
+                <div className="score-team-grid" role="group" aria-label="Winner and score">
+                  <div
+                    className={`score-team-card ${
+                      winnerId === scoringMatch.team_a_id ? 'is-winner' : ''
                     }`}
-                    onClick={() => setWinnerId(scoringMatch.team_a_id || '')}
                   >
-                    {scoringMatch.team_a_id === myTeamId ? 'We won' : scoringMatch.team_a_name || 'Team A'}
-                  </button>
-                  <button
-                    type="button"
-                    className={`org-winner-pick ${
-                      winnerId === scoringMatch.team_b_id ? 'is-selected' : ''
-                    }`}
-                    onClick={() => setWinnerId(scoringMatch.team_b_id || '')}
-                  >
-                    {scoringMatch.team_b_id === myTeamId ? 'We won' : scoringMatch.team_b_name || 'Team B'}
-                  </button>
-                </div>
-                <label className="tf-check" style={{ margin: '0.85rem 0 0.5rem' }}>
-                  <input
-                    type="checkbox"
-                    checked={includeScore}
-                    onChange={(e) => {
-                      setIncludeScore(e.target.checked)
-                      if (!e.target.checked) setSets((s) => ({ ...s, set1_a: 0, set1_b: 0 }))
-                    }}
-                  />
-                  <span>Add score (optional)</span>
-                </label>
-                {includeScore && (
-                  <div className="score-pair pl-score-pair org-simple-score">
-                    <ScoreStep
-                      label="Points A"
-                      value={sets.set1_a}
-                      max={99}
-                      onChange={(n) => setSets((s) => ({ ...s, set1_a: n }))}
-                    />
-                    <span className="pl-score-dash">–</span>
-                    <ScoreStep
-                      label="Points B"
-                      value={sets.set1_b}
-                      max={99}
-                      onChange={(n) => setSets((s) => ({ ...s, set1_b: n }))}
-                    />
+                    <button
+                      type="button"
+                      className="score-team-win"
+                      onClick={() => setWinnerId(scoringMatch.team_a_id || '')}
+                    >
+                      <span className="score-team-win-label">
+                        {winnerId === scoringMatch.team_a_id
+                          ? 'Winner'
+                          : scoringMatch.team_a_id === myTeamId
+                            ? 'We won'
+                            : 'Tap if won'}
+                      </span>
+                      <strong>{scoringMatch.team_a_name || 'Team A'}</strong>
+                    </button>
+                    <div className="score-team-points">
+                      <span className="score-team-points-label">
+                        {scoringMatch.team_a_id === myTeamId ? 'Your score' : 'Their score'}
+                      </span>
+                      <ScoreStep
+                        label={`${scoringMatch.team_a_name || 'Team A'} score`}
+                        value={sets.set1_a}
+                        max={99}
+                        onChange={(n) => {
+                          setSets((s) => ({ ...s, set1_a: n }))
+                          if (n > sets.set1_b) setWinnerId(scoringMatch.team_a_id || '')
+                          else if (n < sets.set1_b) setWinnerId(scoringMatch.team_b_id || '')
+                        }}
+                      />
+                    </div>
                   </div>
-                )}
+                  <div
+                    className={`score-team-card ${
+                      winnerId === scoringMatch.team_b_id ? 'is-winner' : ''
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      className="score-team-win"
+                      onClick={() => setWinnerId(scoringMatch.team_b_id || '')}
+                    >
+                      <span className="score-team-win-label">
+                        {winnerId === scoringMatch.team_b_id
+                          ? 'Winner'
+                          : scoringMatch.team_b_id === myTeamId
+                            ? 'We won'
+                            : 'Tap if won'}
+                      </span>
+                      <strong>{scoringMatch.team_b_name || 'Team B'}</strong>
+                    </button>
+                    <div className="score-team-points">
+                      <span className="score-team-points-label">
+                        {scoringMatch.team_b_id === myTeamId ? 'Your score' : 'Their score'}
+                      </span>
+                      <ScoreStep
+                        label={`${scoringMatch.team_b_name || 'Team B'} score`}
+                        value={sets.set1_b}
+                        max={99}
+                        onChange={(n) => {
+                          setSets((s) => ({ ...s, set1_b: n }))
+                          if (n > sets.set1_a) setWinnerId(scoringMatch.team_b_id || '')
+                          else if (n < sets.set1_a) setWinnerId(scoringMatch.team_a_id || '')
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
               </>
             ) : (
               <>
@@ -1105,13 +1239,20 @@ export default function PlayerLivePage() {
             {scoreError && <p className="form-error">{scoreError}</p>}
             <div className="form-actions pl-score-actions">
               <button type="submit" className="btn btn-primary btn-block" disabled={scoreMut.isPending}>
-                {scoreMut.isPending ? 'Sending…' : 'Send for confirm'}
+                {scoreMut.isPending
+                  ? 'Sending…'
+                  : scoreSheetMode === 'fix'
+                    ? 'Send corrected score'
+                    : scoreSheetMode === 'edit'
+                      ? 'Send updated score'
+                      : 'Send for confirm'}
               </button>
               <button
                 type="button"
                 className="btn btn-ghost btn-block"
                 onClick={() => {
                   setScoringMatch(null)
+                  setScoreSheetMode('log')
                   setScoreError('')
                 }}
               >

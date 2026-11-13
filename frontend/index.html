@@ -159,25 +159,32 @@
         rel="stylesheet"
       />
     </noscript>
+    <link rel="preload" as="image" href="/images/spi-logo.png" fetchpriority="high" />
     <link rel="preload" as="image" href="/images/heroes/hero-03.webp" fetchpriority="high" />
   </head>
   <body>
     <div id="root">
       <div
         id="boot-splash"
+        role="status"
+        aria-label="Loading Student Padel Ireland"
         style="
           min-height: 100dvh;
           display: flex;
           align-items: center;
           justify-content: center;
           background: #0d623e;
-          color: #c8e600;
-          font-family: system-ui, sans-serif;
-          font-weight: 700;
-          letter-spacing: 0.02em;
+          margin: 0;
         "
       >
-        Student Padel Ireland
+        <img
+          src="/images/spi-logo.png"
+          alt="Student Padel Ireland"
+          width="180"
+          height="167"
+          decoding="sync"
+          style="width: min(42vw, 11.5rem); height: auto; display: block"
+        />
       </div>
     </div>
     <noscript>

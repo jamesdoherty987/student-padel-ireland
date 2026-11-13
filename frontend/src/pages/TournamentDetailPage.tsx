@@ -121,11 +121,16 @@ export default function TournamentDetailPage() {
     )
   }
 
-  const live = matches.filter((m) => m.status === 'LIVE')
+  // On court = called or live (Start live was removed; call is enough)
+  const live = matches.filter(
+    (m) => m.status === 'LIVE' || m.status === 'CALLED' || m.status === 'AWAITING_CONFIRM',
+  )
   const pendingConfirm = matches.filter((m) => m.status === 'AWAITING_CONFIRM').slice(0, 6)
-  const upcoming = matches
-    .filter((m) => m.status === 'SCHEDULED' || m.status === 'CALLED')
-    .slice(0, 8)
+  const upcoming = matches.filter((m) => m.status === 'SCHEDULED').slice(0, 8)
+
+  const jumpTo = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   const championshipMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
   const plateMatches = matches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]
@@ -469,7 +474,7 @@ export default function TournamentDetailPage() {
           </p>
         )}
 
-        {(knockoutActive || live.length > 0 || upcoming.length > 0) && (
+        {(knockoutActive || live.length > 0 || upcoming.length > 0 || matchDay) && (
           <nav className="tour-jump" aria-label="Jump to section">
             {matchDay && (
               <Link to={`/t/${tournament.slug}/live`} className="tour-jump-link tour-jump-link--primary">
@@ -477,19 +482,19 @@ export default function TournamentDetailPage() {
               </Link>
             )}
             {live.length > 0 && (
-              <a href="#tour-live" className="tour-jump-link">
+              <button type="button" className="tour-jump-link" onClick={() => jumpTo('tour-live')}>
                 Live
-              </a>
+              </button>
             )}
             {upcoming.length > 0 && (
-              <a href="#tour-upcoming" className="tour-jump-link">
+              <button type="button" className="tour-jump-link" onClick={() => jumpTo('tour-upcoming')}>
                 Coming up
-              </a>
+              </button>
             )}
             {knockoutActive && knockoutMatches.length > 0 && (
-              <a href="#tour-draw" className="tour-jump-link">
+              <button type="button" className="tour-jump-link" onClick={() => jumpTo('tour-draw')}>
                 Draw
-              </a>
+              </button>
             )}
           </nav>
         )}
@@ -512,23 +517,28 @@ export default function TournamentDetailPage() {
         {live.length > 0 && (
           <section className="block" id="tour-live">
             <h2>
-              <span className="live-dot" /> Live now
+              <span className="live-dot" /> On court
             </h2>
             <div className="live-grid">
               {live.map((m) => {
                 const s = currentSetScores(m.score)
+                const called = m.status === 'CALLED'
+                const pending = m.status === 'AWAITING_CONFIRM'
                 return (
-                  <div key={m.id} className="live-tile">
-                    <div className="live-court">{courtLabel(m.court_name, m.court_number)}</div>
+                  <div key={m.id} className={`live-tile${called ? ' is-called' : ''}`}>
+                    <div className="live-court">
+                      {courtLabel(m.court_name, m.court_number)}
+                      {called ? ' · Called' : pending ? ' · Confirm score' : ''}
+                    </div>
                     <div className="live-score-row">
                       <span>{m.team_a_name || m.team_a_placeholder || 'TBD'}</span>
-                      <strong>{s.a}</strong>
+                      {!called ? <strong>{s.a}</strong> : null}
                     </div>
                     <div className="live-score-row">
                       <span>{m.team_b_name || m.team_b_placeholder || 'TBD'}</span>
-                      <strong>{s.b}</strong>
+                      {!called ? <strong>{s.b}</strong> : null}
                     </div>
-                    <div className="live-set">Set {s.set}</div>
+                    {!called && !pending ? <div className="live-set">Set {s.set}</div> : null}
                   </div>
                 )
               })}

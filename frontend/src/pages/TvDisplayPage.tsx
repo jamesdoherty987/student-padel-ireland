@@ -16,6 +16,21 @@ function teamName(m: Match, side: 'a' | 'b') {
   return m.team_b_name || m.team_b_placeholder || 'TBD'
 }
 
+/** Even grid that stays on one TV screen (e.g. 4 courts → 2×2). */
+function gridDims(count: number): { cols: number; rows: number } {
+  const n = Math.max(1, count)
+  if (n <= 1) return { cols: 1, rows: 1 }
+  if (n === 2) return { cols: 2, rows: 1 }
+  if (n === 3) return { cols: 3, rows: 1 }
+  if (n === 4) return { cols: 2, rows: 2 }
+  if (n <= 6) return { cols: 3, rows: 2 }
+  if (n <= 8) return { cols: 4, rows: 2 }
+  if (n <= 9) return { cols: 3, rows: 3 }
+  if (n <= 12) return { cols: 4, rows: 3 }
+  const cols = Math.ceil(Math.sqrt(n))
+  return { cols, rows: Math.ceil(n / cols) }
+}
+
 function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
   const activePool = matches.filter(
     (m) =>
@@ -68,41 +83,43 @@ function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
         {status === 'SCHEDULED' && <span className="tv-pill tv-pill-next">UP NEXT</span>}
       </div>
 
-      {(isLive || isCalled) && (
-        <>
-          <div className="tv-row">
-            <span title={teamName(current, 'a')}>{teamName(current, 'a')}</span>
-            <strong>{isLive && hasScore ? games.a : '·'}</strong>
-          </div>
-          <div className="tv-row">
-            <span title={teamName(current, 'b')}>{teamName(current, 'b')}</span>
-            <strong>{isLive && hasScore ? games.b : '·'}</strong>
-          </div>
-          {isLive && board.sets && board.sets.includes(' ') ? (
-            <div className="tv-meta">
-              <span>{board.sets}</span>
+      <div className="tv-match">
+        {(isLive || isCalled) && (
+          <>
+            <div className="tv-row">
+              <span title={teamName(current, 'a')}>{teamName(current, 'a')}</span>
+              <strong>{isLive && hasScore ? games.a : '·'}</strong>
             </div>
-          ) : null}
-          {status === 'CALLED' && <p className="tv-hint">Players to court</p>}
-          {status === 'AWAITING_CONFIRM' && <p className="tv-hint">Confirming score</p>}
-        </>
-      )}
+            <div className="tv-row">
+              <span title={teamName(current, 'b')}>{teamName(current, 'b')}</span>
+              <strong>{isLive && hasScore ? games.b : '·'}</strong>
+            </div>
+            {isLive && board.sets && board.sets.includes(' ') ? (
+              <div className="tv-meta">
+                <span>{board.sets}</span>
+              </div>
+            ) : null}
+            {status === 'CALLED' && <p className="tv-hint">Players to court</p>}
+            {status === 'AWAITING_CONFIRM' && <p className="tv-hint">Confirming score</p>}
+          </>
+        )}
 
-      {status === 'SCHEDULED' && (
-        <>
-          <div className="tv-upcoming-names">
-            <div>{teamName(current, 'a')}</div>
-            <span>vs</span>
-            <div>{teamName(current, 'b')}</div>
-          </div>
-          <p className="tv-hint">{formatTime(current.scheduled_start)}</p>
-        </>
-      )}
+        {status === 'SCHEDULED' && (
+          <>
+            <div className="tv-upcoming-names">
+              <div title={teamName(current, 'a')}>{teamName(current, 'a')}</div>
+              <span>vs</span>
+              <div title={teamName(current, 'b')}>{teamName(current, 'b')}</div>
+            </div>
+            <p className="tv-hint">{formatTime(current.scheduled_start)}</p>
+          </>
+        )}
+      </div>
 
       {nextUp ? (
         <div className="tv-court-next">
           <span className="tv-court-next-label">Then</span>
-          <span>
+          <span title={`${teamName(nextUp, 'a')} vs ${teamName(nextUp, 'b')}`}>
             {teamName(nextUp, 'a')} vs {teamName(nextUp, 'b')}
           </span>
         </div>
@@ -122,7 +139,7 @@ function UnassignedPanel({ matches }: { matches: Match[] }) {
             <span className={`tv-pill ${m.status === 'LIVE' ? 'tv-pill-live' : 'tv-pill-called'}`}>
               {m.status === 'LIVE' ? 'LIVE' : 'CALLED'}
             </span>
-            <span>
+            <span title={`${teamName(m, 'a')} vs ${teamName(m, 'b')}`}>
               {teamName(m, 'a')} vs {teamName(m, 'b')}
             </span>
           </li>
@@ -139,8 +156,24 @@ export default function TvDisplayPage() {
 
   useEffect(() => {
     void setStatusBarForDarkScreen()
+    const html = document.documentElement
+    const body = document.body
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = body.style.overflow
+    const prevHtmlOverscroll = html.style.overscrollBehavior
+    const prevBodyOverscroll = body.style.overscrollBehavior
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    html.style.overscrollBehavior = 'none'
+    body.style.overscrollBehavior = 'none'
+    html.classList.add('tv-display-active')
     return () => {
       void setStatusBarForLightScreen()
+      html.style.overflow = prevHtmlOverflow
+      body.style.overflow = prevBodyOverflow
+      html.style.overscrollBehavior = prevHtmlOverscroll
+      body.style.overscrollBehavior = prevBodyOverscroll
+      html.classList.remove('tv-display-active')
     }
   }, [])
 
@@ -154,7 +187,7 @@ export default function TvDisplayPage() {
     navigate(id ? `/organiser?t=${id}` : '/organiser')
   }
 
-  const { data, isLoading, isError, dataUpdatedAt, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, refetch, isFetching } = useQuery({
     queryKey: ['display', id],
     queryFn: async () => (await tournamentApi.display(id)).data,
     enabled: !!id,
@@ -211,7 +244,7 @@ export default function TvDisplayPage() {
       : slots.reduce((n, c) => n + (courts[String(c)] || []).filter((m) => m.status === 'LIVE').length, 0) +
         unassigned.filter((m) => m.status === 'LIVE').length
 
-  const cols = slots.length <= 1 ? 1 : slots.length === 2 ? 2 : Math.min(slots.length, 3)
+  const { cols, rows } = gridDims(slots.length)
 
   return (
     <div className="tv-root">
@@ -221,27 +254,28 @@ export default function TvDisplayPage() {
         </button>
       ) : null}
       <header className="tv-header">
-        <BrandLogo to={null} className="tv-brand" size="md" />
-        <div className="tv-title-row">
-          <h1>{data.tournament.name}</h1>
-          {liveCount > 0 && (
-            <span className="tv-pill tv-pill-live">
-              {liveCount} LIVE
-            </span>
-          )}
+        <div className="tv-header-main">
+          <BrandLogo to={null} className="tv-brand" size="sm" />
+          <div className="tv-title-row">
+            <h1>{data.tournament.name}</h1>
+            {liveCount > 0 && (
+              <span className="tv-pill tv-pill-live">
+                {liveCount} LIVE
+              </span>
+            )}
+          </div>
         </div>
-        {dataUpdatedAt > 0 && (
-          <p className="tv-updated">
-            Updated {new Date(dataUpdatedAt).toLocaleTimeString('en-IE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-            {isFetching ? ' · refreshing…' : ''}
-          </p>
-        )}
-        <div className="tv-sponsors">
-          <SponsorStrip sponsors={sponsors} placement="hero" compact tone="dark" />
-        </div>
+        {sponsors.length > 0 ? (
+          <div className="tv-sponsors">
+            <SponsorStrip sponsors={sponsors} placement="hero" compact tone="dark" />
+          </div>
+        ) : null}
       </header>
 
-      <div className="tv-grid" style={{ '--cols': cols } as CSSProperties}>
+      <div
+        className="tv-grid"
+        style={{ '--cols': cols, '--rows': rows } as CSSProperties}
+      >
         {slots.map((n) => (
           <CourtPanel
             key={n}

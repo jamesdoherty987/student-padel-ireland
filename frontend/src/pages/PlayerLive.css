@@ -731,6 +731,39 @@ html.native-app .pl-page {
   box-shadow: 0 0 0 3px rgba(200, 230, 0, 0.4);
 }
 
+.pl-propose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0.85rem 0 0;
+  padding: 0.85rem 0.95rem;
+  border-radius: var(--radius-sm, 10px);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.pl-propose-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.pl-propose-winner {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.pl-propose-score {
+  font-size: 1.05rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--ball, #c8e600);
+}
+
 .pl-go-now--soft {
   background: rgba(255, 255, 255, 0.18);
   color: #fff;
@@ -805,9 +838,12 @@ html.native-app .pl-page {
   border: 1px solid rgba(11, 61, 46, 0.14);
   background: var(--white);
   color: var(--court-deep);
+  font: inherit;
   font-size: 0.82rem;
   font-weight: 650;
+  line-height: 1.2;
   text-decoration: none;
+  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
