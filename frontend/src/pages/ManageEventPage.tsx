@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import NavBar from '../components/NavBar'
 import { ShareQr } from '../components/ShareQr'
@@ -100,7 +100,6 @@ function resolveCurrentSet(form: {
 export default function ManageEventPage() {
   const { user, loading: authLoading } = useAuth()
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const [params, setSearchParams] = useSearchParams()
   const canOrganise = !!user
   const { data, isLoading, isError, refetch, isFetching } = useQuery({
