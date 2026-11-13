@@ -780,9 +780,13 @@ export default function PlayerProfilePage() {
                     <Link to="/tournaments" className="btn btn-ghost btn-block">
                       Tournaments
                     </Link>
-                    {user?.role === 'ADMIN' && (
+                    {user?.role === 'ADMIN' ? (
                       <Link to="/admin" className="btn btn-ghost btn-block">
                         Admin
+                      </Link>
+                    ) : (
+                      <Link to="/tournaments?create=1" className="btn btn-ghost btn-block">
+                        Host private event
                       </Link>
                     )}
                     <button

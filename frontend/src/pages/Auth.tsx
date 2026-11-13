@@ -130,15 +130,17 @@ export function LoginPage() {
     ? 'Log in with the account used at checkout to confirm your registration.'
     : next.includes('/join')
       ? 'Log in to finish joining.'
-      : next.includes('create=1') || next.startsWith('/admin') || next.startsWith('/manage')
-        ? 'Log in with an admin account to manage events.'
-        : next.includes('filter=mine')
-          ? 'Log in with an admin account to see events you manage.'
-          : next.includes('/rankings')
-            ? 'Log in to filter rankings by your events, friends, or university.'
-            : next.includes('/community')
-              ? 'Log in to add friends and join with a code.'
-              : 'Log in to join tournaments and manage your entries.'
+      : next.startsWith('/admin')
+        ? 'Log in with a platform admin account.'
+        : next.includes('create=1') || next.startsWith('/manage')
+          ? 'Log in to host a private event or manage yours.'
+          : next.includes('filter=mine')
+            ? 'Log in to see events you host.'
+            : next.includes('/rankings')
+              ? 'Log in to filter rankings by your events, friends, or university.'
+              : next.includes('/community')
+                ? 'Log in to add friends and join with a code.'
+                : 'Log in to join tournaments and manage your entries.'
 
   if (authLoading) {
     return (
@@ -347,11 +349,13 @@ export function SignupPage() {
               ? 'Create an account to finish joining with your invite.'
               : next.includes('/confirmed') || next.includes('/live')
                 ? 'Create an account to continue to your match.'
-                : next.includes('create=1') || next.startsWith('/admin') || next.startsWith('/manage')
-                  ? 'Admin accounts are provisioned separately — create a player account to join events.'
-                  : next.includes('/community')
-                    ? 'Create an account to add friends and join events.'
-                    : 'A few details and you’re ready to play and join events.'}
+                : next.startsWith('/admin')
+                  ? 'Admin accounts are provisioned separately — create a player account to join or host events.'
+                  : next.includes('create=1') || next.startsWith('/manage')
+                    ? 'Create an account to host a private event for friends.'
+                    : next.includes('/community')
+                      ? 'Create an account to add friends and join events.'
+                      : 'A few details and you’re ready to play and join events.'}
         </p>
         <form onSubmit={onSubmit}>
           <div className="form-group">

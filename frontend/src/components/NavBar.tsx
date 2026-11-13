@@ -160,8 +160,15 @@ export default function NavBar() {
       })
     } else {
       secondary.push({
-        to: '/manage',
+        to: '/tournaments?create=1',
         label: 'Host',
+        icon: 'fa-plus',
+        // Query-only destination — never steal the Tournaments tab active state
+        match: () => false,
+      })
+      secondary.push({
+        to: '/manage',
+        label: 'My events',
         icon: 'fa-clipboard-list',
         match: (p) => p.startsWith('/manage'),
       })
