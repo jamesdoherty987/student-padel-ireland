@@ -728,6 +728,17 @@ def _apply_tournament_match_ratings(db: Session, m: Match, t: Tournament | None)
     side_b = _team_user_ids(db, m.team_b_id)
     if not side_a or not side_b:
         return
+    # Dry-run / App Store demo accounts must not move real Ireland rankings.
+    from app.services.accounts import is_demo_account
+
+    participants = (
+        db.query(User)
+        .filter(User.id.in_([*side_a, *side_b]))
+        .all()
+    )
+    if participants and all(is_demo_account(u) for u in participants):
+        m.ratings_applied = True
+        return
     score = m.score
     sets = [
         (score.set1_a if score else 0, score.set1_b if score else 0),
@@ -4206,7 +4217,14 @@ def _ranking_board_rows(
             AvatarMedia,
             (AvatarMedia.user_id == User.id) & (AvatarMedia.is_avatar.is_(True)),
         )
-        .filter(or_(Ranking.matches_played > 0, Ranking.tournaments_played > 0))
+        .filter(
+            User.is_active.is_(True),
+            or_(Ranking.matches_played > 0, Ranking.tournaments_played > 0),
+            # Exclude dry-run demo logins from public boards / uni filters
+            ~User.email.ilike("dryrun%@example.com"),
+            User.email != "dryrun.host@example.com",
+            or_(User.bio.is_(None), User.bio != "dry-run-demo"),
+        )
     )
     if user_ids is not None:
         if not user_ids:

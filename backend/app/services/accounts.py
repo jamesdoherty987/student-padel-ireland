@@ -78,6 +78,26 @@ def is_deleted_placeholder_email(email: str) -> bool:
     return email.endswith("@deleted.studentpadelireland.ie")
 
 
+def is_demo_account(user_or_email: User | str | None, *, bio: str | None = None) -> bool:
+    """Dry-run / App Store demo accounts — hide from public rankings & search.
+
+    Matched by email (dryrun*@example.com) or bio marker set by seed scripts.
+    """
+    if user_or_email is None:
+        return False
+    if isinstance(user_or_email, User):
+        email = (user_or_email.email or "").strip().lower()
+        bio_val = (getattr(user_or_email, "bio", None) or bio or "").strip().lower()
+    else:
+        email = (user_or_email or "").strip().lower()
+        bio_val = (bio or "").strip().lower()
+    if bio_val == "dry-run-demo":
+        return True
+    if email == "dryrun.host@example.com":
+        return True
+    return email.startswith("dryrun") and email.endswith("@example.com")
+
+
 def user_is_sole_admin(db: Session, user_id: UUID) -> bool:
     admins = (
         db.query(User.id)

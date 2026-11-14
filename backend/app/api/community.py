@@ -353,6 +353,9 @@ def search_players(
             User.is_active.is_(True),
             User.id != user.id,
             User.full_name.ilike(term),
+            ~User.email.ilike("dryrun%@example.com"),
+            User.email != "dryrun.host@example.com",
+            or_(User.bio.is_(None), User.bio != "dry-run-demo"),
         )
         .limit(20)
         .all()
