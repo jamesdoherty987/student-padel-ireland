@@ -78,7 +78,7 @@ If Connect says you must finish setup in Xcode once: use a cheap cloud Mac for ~
 1. Bump iOS version/build if needed (`MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` in `project.pbxproj`).
 2. Commit + push to `main`.
 3. Wait for the Xcode Cloud build (App Store Connect → Xcode Cloud).
-4. When it appears in **TestFlight**, open the app version → add **1.0.1** (or next) → What’s New → **Submit for Review**.
+4. When it appears in **TestFlight**, open the app version → add **1.0.6** (or next) → What’s New → **Submit for Review**.
 
 Apple often rejects thin “website wrappers.” Strong points for review: live scores, organiser scoring, community competitions, rankings, account deletion, native share / status bar / splash.
 
