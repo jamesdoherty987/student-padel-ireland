@@ -529,6 +529,16 @@ export const tournamentApi = {
     tournamentId: string,
     data: { emails: string[]; note?: string | null },
   ) => api.post<FreeEntry[]>(`/api/tournaments/${tournamentId}/free-entries`, data),
+  createFreeTeam: (
+    tournamentId: string,
+    data: {
+      player1: { email: string; full_name: string }
+      player2?: { email: string; full_name: string } | null
+      team_name?: string
+      note?: string
+      custom_answers?: Array<{ field_id: string; value: string; slot?: number | null }>
+    },
+  ) => api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/free-teams`, data),
   removeFreeEntry: (tournamentId: string, entryId: string) =>
     api.delete(`/api/tournaments/${tournamentId}/free-entries/${entryId}`),
   updateScore: (matchId: string, data: Record<string, unknown>) =>
@@ -605,6 +615,14 @@ export const tournamentApi = {
     }>(`/api/tournaments/${tournamentId}/reminders`, {}, {
       params: dryRun ? { dry_run: true } : undefined,
     }),
+  emailEntrants: (
+    tournamentId: string,
+    data: { subject: string; body: string; paid_only?: boolean },
+  ) =>
+    api.post<{ ok: boolean; recipients: number; sent: number; failed: number }>(
+      `/api/tournaments/${tournamentId}/email-entrants`,
+      data,
+    ),
   respondPartnerInvite: (tournamentId: string, accept: boolean) =>
     api.post<{
       ok: boolean

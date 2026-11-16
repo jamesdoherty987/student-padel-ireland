@@ -64,6 +64,7 @@ from app.services.free_entries import (
     consume_free_entries_for_registration,
     free_entry_to_out,
     list_free_entries,
+    normalize_email,
 )
 from app.services.registration_fields import (
     answers_for_team,
@@ -79,8 +80,11 @@ from app.schemas import (
     AnnouncementUpdate,
     AnswerFulfillmentRequest,
     CheckInRequest,
+    BulkEmailEntrantsOut,
+    BulkEmailEntrantsRequest,
     FreeEntryCreate,
     FreeEntryOut,
+    FreeTeamCreate,
     OrganiserAddPartnerRequest,
     OrganiserUpdatePlayerRequest,
     OrganiserUpdateTeamRequest,
@@ -2584,6 +2588,7 @@ def organiser_update_team(
     tournament_id: UUID,
     team_id: UUID,
     body: OrganiserUpdateTeamRequest,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -2592,15 +2597,55 @@ def organiser_update_team(
     if not t:
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t, db)
+    rate_limit(request, key=f"edit-team:{t.id}", limit=120, window_seconds=3600)
     team = _load_manage_team(db, tournament_id, team_id)
-    if body.name is not None:
-        name = body.name.strip()
+    data = body.model_dump(exclude_unset=True)
+    if "name" in data and data["name"] is not None:
+        name = str(data["name"]).strip()
         if len(name) < 2:
             raise HTTPException(400, "Team name is too short")
         team.name = name
     db.commit()
     team = _load_manage_team(db, tournament_id, team_id)
     return _team_out(team, db, include_player_details=True, singles=_is_singles(t))
+
+
+def _notify_stub_claim_after_email_change(
+    *,
+    tournament: Tournament,
+    player: User,
+    reply_to: str | None,
+) -> None:
+    """Stub account email was corrected - send a fresh signup claim link."""
+    settings = get_settings()
+    front = (settings.frontend_url or "https://www.studentpadel.ie").rstrip("/")
+    first = (player.full_name or "there").strip().split()[0] or "there"
+    signup_qs = (
+        f"email={quote(player.email)}&name={quote(player.full_name or '')}"
+        f"&next={quote(f'/t/{tournament.slug}')}"
+    )
+    text, html_body = render_simple_email(
+        title="Confirm your entry",
+        greeting=f"Hi {first},",
+        paragraphs=[
+            f"Your email was updated for {tournament.name}.",
+            "Create your account with this email to see your entry and court updates.",
+        ],
+        detail_lines=[("Event", tournament.name)],
+        cta_label="Create account",
+        cta_url=f"{front}/signup?{signup_qs}",
+        footer="Student Padel Ireland",
+    )
+    try:
+        send_email(
+            to=player.email,
+            subject=f"Confirm your entry · {tournament.name}",
+            text=text,
+            html_body=html_body,
+            reply_to=reply_to,
+        )
+    except Exception:
+        logger.exception("Stub claim email failed for %s", player.email)
 
 
 @router.patch(
@@ -2612,59 +2657,88 @@ def organiser_update_player(
     team_id: UUID,
     player_user_id: UUID,
     body: OrganiserUpdatePlayerRequest,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Organiser edits a player’s name / email / phone / student number on an entry."""
+    from sqlalchemy import func
+    from sqlalchemy.exc import IntegrityError
+
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t, db)
+    rate_limit(request, key=f"edit-player:{t.id}", limit=120, window_seconds=3600)
     team = _load_manage_team(db, tournament_id, team_id)
     member = next((m for m in (team.members or []) if m.user_id == player_user_id), None)
     if not member or not member.user:
         raise HTTPException(404, "Player not found on this team")
     target = member.user
     resend_invite = False
+    data = body.model_dump(exclude_unset=True)
 
-    if body.full_name is not None:
-        name = body.full_name.strip()
+    if "full_name" in data and data["full_name"] is not None:
+        name = str(data["full_name"]).strip()
         if len(name) < 2:
             raise HTTPException(400, "Name is too short")
         target.full_name = name
 
-    if body.phone is not None:
-        target.phone = (body.phone or "").strip()[:40] or None
+    # null clears optional contact fields (exclude_unset distinguishes omit vs clear)
+    if "phone" in data:
+        raw_phone = data["phone"]
+        target.phone = (str(raw_phone).strip()[:40] if raw_phone else None) or None
 
-    if body.student_number is not None:
-        target.student_number = (body.student_number or "").strip()[:80] or None
+    if "student_number" in data:
+        raw_sn = data["student_number"]
+        target.student_number = (str(raw_sn).strip()[:80] if raw_sn else None) or None
 
-    if body.email is not None:
-        new_email = str(body.email).lower().strip()
-        if new_email != (target.email or "").lower():
+    if "email" in data and data["email"] is not None:
+        new_email = normalize_email(str(data["email"]))
+        if new_email != normalize_email(target.email or ""):
             clash = (
                 db.query(User)
-                .filter(User.email == new_email, User.id != target.id)
+                .filter(func.lower(User.email) == new_email, User.id != target.id)
                 .first()
             )
             if clash:
                 raise HTTPException(400, "That email is already used by another account")
+            # Also block if the other teammate already uses this email
+            teammate_emails = {
+                normalize_email(m.user.email)
+                for m in (team.members or [])
+                if m.user and m.user_id != target.id and m.user.email
+            }
+            if new_email in teammate_emails:
+                raise HTTPException(400, "That email is already used by the other player on this team")
             target.email = new_email
-            # Stub invitees should get the invite at the new address
             if bool(getattr(target, "must_set_password", False)):
                 resend_invite = True
 
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(400, "That email is already used by another account")
 
-    if resend_invite and member.slot == 2:
-        captain_tp = next((m for m in (team.members or []) if m.slot == 1), None)
-        captain = captain_tp.user if captain_tp else None
-        if captain:
-            _notify_email_partner(
-                captain=captain,
-                partner=target,
-                tournament=t,
-                needs_signup=True,
+    if resend_invite:
+        if member.slot == 2:
+            captain_tp = next((m for m in (team.members or []) if m.slot == 1), None)
+            captain = captain_tp.user if captain_tp else None
+            if captain:
+                _notify_email_partner(
+                    captain=captain,
+                    partner=target,
+                    tournament=t,
+                    needs_signup=True,
+                )
+            else:
+                _notify_stub_claim_after_email_change(
+                    tournament=t, player=target, reply_to=(user.email or None)
+                )
+        else:
+            _notify_stub_claim_after_email_change(
+                tournament=t, player=target, reply_to=(user.email or None)
             )
 
     team = _load_manage_team(db, tournament_id, team_id)
@@ -2679,6 +2753,7 @@ def organiser_add_partner(
     tournament_id: UUID,
     team_id: UUID,
     body: OrganiserAddPartnerRequest,
+    request: Request,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -2687,6 +2762,7 @@ def organiser_add_partner(
     if not t:
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t, db)
+    rate_limit(request, key=f"add-partner:{t.id}", limit=60, window_seconds=3600)
     if _is_singles(t):
         raise HTTPException(400, "Singles events don’t use partners")
     if t.status in (
@@ -2704,10 +2780,14 @@ def organiser_add_partner(
     if not captain_tp or not captain_tp.user:
         raise HTTPException(400, "Team captain not found")
 
+    partner_email = normalize_email(str(body.partner_email))
+    if partner_email == normalize_email(captain_tp.user.email or ""):
+        raise HTTPException(400, "Partner must be a different player")
+
     partner, partner_needs_signup, notify_email = _resolve_partner_from_body(
         db,
         partner_user_id=body.partner_user_id,
-        partner_email=str(body.partner_email),
+        partner_email=partner_email,
         partner_name=body.partner_name or "",
         allow_missing=False,
     )
@@ -2729,12 +2809,15 @@ def organiser_add_partner(
     db.commit()
 
     if notify_email or partner_needs_signup:
-        _notify_email_partner(
-            captain=captain_tp.user,
-            partner=partner,
-            tournament=t,
-            needs_signup=partner_needs_signup,
-        )
+        try:
+            _notify_email_partner(
+                captain=captain_tp.user,
+                partner=partner,
+                tournament=t,
+                needs_signup=partner_needs_signup,
+            )
+        except Exception:
+            logger.exception("Organiser add-partner email failed for %s", partner.email)
 
     team = _load_manage_team(db, tournament_id, team_id)
     return _team_out(team, db, include_player_details=True, singles=False)
@@ -3910,6 +3993,50 @@ def delete_announcement(
     return {"ok": True}
 
 
+# ── Bulk email entrants ───────────────────────────────────────
+
+@router.post(
+    "/tournaments/{tournament_id}/email-entrants",
+    response_model=BulkEmailEntrantsOut,
+)
+def email_entrants(
+    tournament_id: UUID,
+    body: BulkEmailEntrantsRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organiser emails all entrants (default: paid, non-withdrawn)."""
+    from app.core.rate_limit import rate_limit
+    from app.services.bulk_email import send_bulk_email_to_entrants
+
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    if t.status == TournamentStatus.CANCELLED.value:
+        raise HTTPException(400, "Can’t email entrants for a cancelled event")
+
+    rate_limit(request, key=f"email-entrants:{t.id}", limit=8, window_seconds=3600)
+
+    subject = (body.subject or "").strip()
+    message = (body.body or "").strip()
+    if len(subject) < 3 or len(message) < 3:
+        raise HTTPException(400, "Subject and message are required")
+
+    result = send_bulk_email_to_entrants(
+        db,
+        t,
+        subject=subject,
+        body=message,
+        paid_only=bool(body.paid_only),
+        reply_to=(user.email or None),
+    )
+    if result["recipients"] == 0:
+        raise HTTPException(400, "No entrants to email yet")
+    return BulkEmailEntrantsOut(ok=True, **result)
+
+
 # ── Free entry emails ─────────────────────────────────────────
 
 @router.get("/tournaments/{tournament_id}/free-entries", response_model=list[FreeEntryOut])
@@ -3947,6 +4074,308 @@ def create_free_entries(
     for row in rows:
         db.refresh(row)
     return [free_entry_to_out(r) for r in rows]
+
+
+def _resolve_or_create_player_by_email(
+    db: Session,
+    *,
+    email: str,
+    full_name: str,
+) -> tuple[User, bool]:
+    """Return (user, needs_signup). Updates stub name when provided."""
+    from sqlalchemy import func
+    from sqlalchemy.exc import IntegrityError
+
+    clean_email = normalize_email(email)
+    name = (full_name or "").strip()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(400, "Valid player email is required")
+    if len(name) < 2:
+        raise HTTPException(400, "Player name is required")
+
+    existing = (
+        db.query(User)
+        .filter(func.lower(User.email) == clean_email)
+        .first()
+    )
+    if existing:
+        if not existing.is_active or existing.is_suspended:
+            raise HTTPException(400, f"{clean_email} can’t be added")
+        if bool(getattr(existing, "must_set_password", False)):
+            existing.full_name = name
+        return existing, bool(getattr(existing, "must_set_password", False))
+
+    player = User(
+        email=clean_email,
+        password_hash=hash_password(str(uuid4())),
+        full_name=name,
+        role="PLAYER",
+        university_id=None,
+        must_set_password=True,
+    )
+    try:
+        with db.begin_nested():
+            db.add(player)
+            db.flush()
+    except IntegrityError:
+        # Concurrent signup with same email - re-fetch inside outer transaction
+        existing = (
+            db.query(User)
+            .filter(func.lower(User.email) == clean_email)
+            .first()
+        )
+        if not existing:
+            raise HTTPException(400, f"Could not add {clean_email}")
+        if not existing.is_active or existing.is_suspended:
+            raise HTTPException(400, f"{clean_email} can’t be added")
+        return existing, bool(getattr(existing, "must_set_password", False))
+    _ensure_ranking(db, player.id)
+    return player, True
+
+
+def _notify_free_entry_player(
+    *,
+    tournament: Tournament,
+    player: User,
+    needs_signup: bool,
+    organiser: User,
+) -> bool:
+    """Email the player about complimentary entry. Returns True if send claimed success."""
+    settings = get_settings()
+    front = (settings.frontend_url or "https://www.studentpadel.ie").rstrip("/")
+    first = (player.full_name or "there").strip().split()[0] or "there"
+    if needs_signup:
+        signup_qs = (
+            f"email={quote(player.email)}&name={quote(player.full_name or '')}"
+            f"&next={quote(f'/t/{tournament.slug}')}"
+        )
+        cta_url = f"{front}/signup?{signup_qs}"
+        cta_label = "Create account"
+        paragraphs = [
+            f"You’ve been given a free entry to {tournament.name}.",
+            "Create your account with this email to see your entry, draw, and court updates.",
+        ]
+    else:
+        cta_url = f"{front}/t/{tournament.slug}/live"
+        cta_label = "Open event"
+        paragraphs = [
+            f"You’ve been given a free entry to {tournament.name}.",
+            "You’re all set — no payment needed. Open the event to check details.",
+        ]
+    text, html_body = render_simple_email(
+        title="Free entry",
+        greeting=f"Hi {first},",
+        paragraphs=paragraphs,
+        detail_lines=[("Event", tournament.name)],
+        cta_label=cta_label,
+        cta_url=cta_url,
+        footer="Student Padel Ireland · Complimentary entry from the organiser",
+    )
+    return bool(
+        send_email(
+            to=player.email,
+            subject=f"Free entry · {tournament.name}",
+            text=text,
+            html_body=html_body,
+            reply_to=(organiser.email or None),
+        )
+    )
+
+
+def _mark_free_entry_emails_used(
+    db: Session,
+    *,
+    tournament_id: UUID,
+    registration_id: UUID,
+    emails: list[str],
+    note: str | None,
+    created_by_id: UUID | None,
+) -> None:
+    for raw in emails:
+        email = normalize_email(raw)
+        if not email:
+            continue
+        existing = (
+            db.query(TournamentFreeEntry)
+            .filter(
+                TournamentFreeEntry.tournament_id == tournament_id,
+                TournamentFreeEntry.email == email,
+            )
+            .first()
+        )
+        if existing:
+            if existing.used_by_registration_id is None:
+                existing.used_by_registration_id = registration_id
+            if note and not existing.note:
+                existing.note = note
+        else:
+            db.add(
+                TournamentFreeEntry(
+                    tournament_id=tournament_id,
+                    email=email,
+                    note=note,
+                    created_by_id=created_by_id,
+                    used_by_registration_id=registration_id,
+                )
+            )
+
+
+@router.post("/tournaments/{tournament_id}/free-teams", response_model=TeamOut)
+def create_free_team(
+    tournament_id: UUID,
+    body: FreeTeamCreate,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organiser registers a complimentary entry with player emails, names, and answers."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    rate_limit(request, key=f"free-team:{t.id}", limit=40, window_seconds=3600)
+
+    if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        raise HTTPException(400, "Cannot add entries to a finished tournament")
+    if t.status == TournamentStatus.LIVE.value:
+        raise HTTPException(400, "Cannot add entries while the event is live")
+    if _paid_team_count(db, t.id) >= t.max_teams:
+        raise HTTPException(400, "Tournament is full")
+    if db.query(Match).filter(Match.tournament_id == t.id).count() > 0:
+        raise HTTPException(
+            400,
+            "Fixtures already exist - add players before generate, or regenerate the draw afterwards",
+        )
+
+    singles = _is_singles(t)
+    p1_email = normalize_email(str(body.player1.email))
+    p2_email = normalize_email(str(body.player2.email)) if body.player2 else ""
+
+    if singles:
+        if body.player2 is not None:
+            raise HTTPException(400, "Singles tournaments only need one player")
+    else:
+        if body.player2 is None:
+            raise HTTPException(400, "Add player 2 email and name for doubles")
+        if p1_email == p2_email:
+            raise HTTPException(400, "Player 1 and player 2 must use different emails")
+
+    p1, p1_needs = _resolve_or_create_player_by_email(
+        db,
+        email=p1_email,
+        full_name=body.player1.full_name,
+    )
+    p2: User | None = None
+    p2_needs = False
+    if not singles and body.player2 is not None:
+        p2, p2_needs = _resolve_or_create_player_by_email(
+            db,
+            email=p2_email,
+            full_name=body.player2.full_name,
+        )
+        if p1.id == p2.id:
+            raise HTTPException(400, "Player 1 and player 2 must be different")
+
+    ids = [p1.id] if singles or p2 is None else [p1.id, p2.id]
+    if _players_already_registered(db, t.id, ids):
+        raise HTTPException(400, "One of these players is already in this tournament")
+
+    team_name = (body.team_name or "").strip()
+    if len(team_name) < 2:
+        if singles or p2 is None:
+            team_name = (p1.full_name or "Player").strip() or "Player"
+        else:
+            a = (p1.full_name or "Player").strip().split()[0] or "Player"
+            b = (p2.full_name or "Player").strip().split()[0] or "Player"
+            team_name = f"{a} / {b}"
+
+    team = Team(
+        tournament_id=t.id,
+        name=team_name[:120],
+        university_id=p1.university_id or (p2.university_id if p2 else None),
+    )
+    db.add(team)
+    db.flush()
+    db.add(TeamPlayer(team_id=team.id, user_id=p1.id, slot=1, invitation_accepted=True))
+    if p2:
+        db.add(TeamPlayer(team_id=team.id, user_id=p2.id, slot=2, invitation_accepted=True))
+        _ensure_pending_friendship(db, p1.id, p2.id)
+    db.flush()
+
+    reg = Registration(
+        tournament_id=t.id,
+        team_id=team.id,
+        status=PaymentStatus.PAID.value,
+        amount_cents=0,
+        currency=t.currency,
+        paid_at=datetime.now(timezone.utc),
+        stripe_payment_intent_id="free_entry",
+    )
+    db.add(reg)
+    db.flush()
+
+    save_answers_for_registration(
+        db,
+        tournament=t,
+        registration_id=reg.id,
+        team_id=team.id,
+        answers=body.custom_answers or [],
+        singles=singles,
+    )
+
+    note = (body.note or "").strip()[:200] or None
+    _mark_free_entry_emails_used(
+        db,
+        tournament_id=t.id,
+        registration_id=reg.id,
+        emails=[p1.email] + ([p2.email] if p2 else []),
+        note=note,
+        created_by_id=user.id,
+    )
+
+    db.commit()
+
+    from app.services.reminders import maybe_remind_team_after_paid
+
+    maybe_remind_team_after_paid(db, t.id, team.id)
+
+    notify_targets: list[tuple[User, bool]] = [(p1, p1_needs)]
+    if p2 is not None:
+        notify_targets.append((p2, p2_needs))
+    emailed = 0
+    for player, needs in notify_targets:
+        try:
+            if _notify_free_entry_player(
+                tournament=t, player=player, needs_signup=needs, organiser=user
+            ):
+                emailed += 1
+            else:
+                logger.warning(
+                    "Free-entry email not sent to %s for tournament %s",
+                    player.email,
+                    t.id,
+                )
+        except Exception:
+            logger.exception(
+                "Free-entry email failed for %s / tournament %s",
+                getattr(player, "email", "?"),
+                t.id,
+            )
+    if emailed == 0:
+        logger.warning("Free team %s created but no notification emails were sent", team.id)
+
+    team = (
+        db.query(Team)
+        .options(
+            joinedload(Team.members).joinedload(TeamPlayer.user),
+            joinedload(Team.registration),
+        )
+        .filter(Team.id == team.id)
+        .first()
+    )
+    if not team:
+        raise HTTPException(500, "Free entry was saved but could not be loaded")
+    return _team_out(team, db, include_player_details=True, singles=singles)
 
 
 @router.delete("/tournaments/{tournament_id}/free-entries/{entry_id}")

@@ -25,6 +25,7 @@ import {
   type Match,
   type ManageDashRow,
   type PlayerSearch,
+  type TournamentRegistrationField,
   type TournamentTeam,
 } from '../services/api'
 import {
@@ -119,6 +120,7 @@ export default function ManageEventPage() {
   const [confirmGenerate, setConfirmGenerate] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [announce, setAnnounce] = useState({ title: '', body: '' })
+  const [bulkEmail, setBulkEmail] = useState({ subject: '', body: '', paidOnly: true })
   const [sponsorForm, setSponsorForm] = useState({
     name: '',
     website: '',
@@ -131,8 +133,15 @@ export default function ManageEventPage() {
   const [adminResults, setAdminResults] = useState<PlayerSearch[]>([])
   const [adminSearching, setAdminSearching] = useState(false)
   const adminSearchSeq = useRef(0)
-  const [freeEntryEmails, setFreeEntryEmails] = useState('')
-  const [freeEntryNote, setFreeEntryNote] = useState('')
+  const [freeForm, setFreeForm] = useState({
+    teamName: '',
+    note: '',
+    p1Email: '',
+    p1Name: '',
+    p2Email: '',
+    p2Name: '',
+  })
+  const [freeAnswers, setFreeAnswers] = useState<Record<string, string>>({})
   const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
   const [moveMatch, setMoveMatch] = useState<Match | null>(null)
   const [moveForm, setMoveForm] = useState({ court_number: 1, scheduled_time: '' })
@@ -537,15 +546,33 @@ export default function ManageEventPage() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not remove admin')),
   })
 
-  const addFreeEntriesMut = useMutation({
-    mutationFn: (payload: { emails: string[]; note?: string }) =>
-      tournamentApi.addFreeEntries(tid!, payload),
-    onSuccess: (res) => {
-      const n = res.data.length
-      setFreeEntryEmails('')
-      setFreeEntryNote('')
+  const addFreeTeamMut = useMutation({
+    mutationFn: (payload: {
+      player1: { email: string; full_name: string }
+      player2?: { email: string; full_name: string } | null
+      team_name?: string
+      note?: string
+      custom_answers?: Array<{ field_id: string; value: string; slot?: number | null }>
+    }) => tournamentApi.createFreeTeam(tid!, payload),
+    onSuccess: () => {
+      setFreeForm({
+        teamName: '',
+        note: '',
+        p1Email: '',
+        p1Name: '',
+        p2Email: '',
+        p2Name: '',
+      })
+      setFreeAnswers({})
       qc.invalidateQueries({ queryKey: ['free-entries', tid] })
-      showToast(n === 1 ? 'Free entry added' : `${n} free entries added`)
+      qc.invalidateQueries({ queryKey: ['org-teams'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
+      qc.invalidateQueries({ queryKey: ['tournament', slug] })
+      showToast(
+        isSingles
+          ? 'Free player added · email sent'
+          : 'Free team added · players emailed',
+      )
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not add free entry')),
   })
@@ -868,6 +895,31 @@ export default function ManageEventPage() {
       }
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not send reminders')),
+  })
+
+  const bulkEmailMut = useMutation({
+    mutationFn: () =>
+      tournamentApi.emailEntrants(tid!, {
+        subject: bulkEmail.subject.trim(),
+        body: bulkEmail.body.trim(),
+        paid_only: bulkEmail.paidOnly,
+      }),
+    onSuccess: (res) => {
+      const d = res.data
+      setBulkEmail({ subject: '', body: '', paidOnly: true })
+      if (d.sent > 0) {
+        showToast(
+          `Emailed ${d.sent} player${d.sent === 1 ? '' : 's'}${
+            d.failed > 0 ? ` · ${d.failed} failed` : ''
+          }`,
+        )
+      } else if (d.failed > 0) {
+        showToast('Could not send - check that email (Resend) is configured')
+      } else {
+        showToast('No recipients')
+      }
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not email entrants')),
   })
 
   const collectFeeMut = useMutation({
@@ -1369,6 +1421,80 @@ export default function ManageEventPage() {
   const scoreMatchQuick = (m: Match) => {
     openScore(m)
   }
+
+  const renderBulkEmailSection = (idPrefix: string) => (
+    <section className="org-section org-bulk-email">
+      <div className="org-section-head">
+        <h2>Email entrants</h2>
+      </div>
+      <p className="muted org-bulk-email-copy">
+        Message every player on the list. Replies go to your account email.
+      </p>
+      <div className="org-bulk-email-form">
+        <div className="form-group">
+          <label className="form-label" htmlFor={`${idPrefix}-subject`}>
+            Subject
+          </label>
+          <input
+            id={`${idPrefix}-subject`}
+            className="form-input"
+            value={bulkEmail.subject}
+            onChange={(e) => setBulkEmail((s) => ({ ...s, subject: e.target.value }))}
+            placeholder="e.g. Parking update"
+            maxLength={120}
+            enterKeyHint="next"
+            autoCapitalize="sentences"
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label" htmlFor={`${idPrefix}-body`}>
+            Message
+          </label>
+          <textarea
+            id={`${idPrefix}-body`}
+            className="form-input form-textarea"
+            rows={4}
+            value={bulkEmail.body}
+            onChange={(e) => setBulkEmail((s) => ({ ...s, body: e.target.value }))}
+            placeholder="Keep it short - time, venue changes, what to bring…"
+            maxLength={4000}
+            enterKeyHint="done"
+            autoCapitalize="sentences"
+          />
+        </div>
+        <label className="org-bulk-email-check">
+          <input
+            type="checkbox"
+            checked={bulkEmail.paidOnly}
+            onChange={(e) => setBulkEmail((s) => ({ ...s, paidOnly: e.target.checked }))}
+          />
+          <span>Paid entries only (recommended)</span>
+        </label>
+        <button
+          type="button"
+          className="btn btn-dark"
+          disabled={
+            bulkEmailMut.isPending ||
+            bulkEmail.subject.trim().length < 3 ||
+            bulkEmail.body.trim().length < 3
+          }
+          onClick={() => {
+            void confirmDialog({
+              title: 'Email all entrants?',
+              message: bulkEmail.paidOnly
+                ? 'This emails every player on a paid entry. Replies come to you.'
+                : 'This emails players on paid and unfinished entries. Replies come to you.',
+              confirmLabel: 'Send emails',
+            }).then((ok) => {
+              if (ok) bulkEmailMut.mutate()
+            })
+          }}
+        >
+          {bulkEmailMut.isPending ? 'Sending…' : 'Send to entrants'}
+        </button>
+      </div>
+    </section>
+  )
 
   const renderMatchActions = (m: Match, compact = false) => {
     const canScore = !!(m.team_a_id && m.team_b_id)
@@ -2061,6 +2187,9 @@ export default function ManageEventPage() {
                   </div>
                 )}
 
+                <p className="muted org-entries-edit-hint">
+                  Tap a team to edit names, emails, or add a missing partner.
+                </p>
                 <div className="org-table">
                   {filteredTeams.map((team) => {
                     const owing = paymentBucket(team) === 'owing'
@@ -2072,7 +2201,23 @@ export default function ManageEventPage() {
                       team.payment_status === 'FAILED' ||
                       team.payment_status === 'REFUNDED'
                     return (
-                      <div key={team.id} className={`org-row org-pay-row${owing ? ' is-owing' : ''}`}>
+                      <div
+                        key={team.id}
+                        className={`org-row org-pay-row is-tap${owing ? ' is-owing' : ''}`}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Edit ${team.name}`}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('button, a, label, input')) return
+                          setEditTeam(team)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' && e.key !== ' ') return
+                          if ((e.target as HTMLElement).closest('button, a, label, input')) return
+                          e.preventDefault()
+                          setEditTeam(team)
+                        }}
+                      >
                         <div>
                           <div className="org-entry-title-row">
                             <strong>{team.name}</strong>
@@ -2247,32 +2392,25 @@ export default function ManageEventPage() {
                 <section className="org-section org-free-entries">
                   <div className="org-section-head">
                     <h2>Free entry</h2>
-                    {freeEntries.length > 0 && (
-                      <span className="muted">
-                        {freeEntries.filter((e) => !e.used).length} open
-                        {freeEntries.some((e) => e.used)
-                          ? ` · ${freeEntries.filter((e) => e.used).length} used`
-                          : ''}
-                      </span>
-                    )}
                   </div>
                   <p className="muted org-free-entries-copy">
                     {isSingles
-                      ? 'Add player emails who should skip payment when they sign up.'
-                      : 'Add one or both player emails for a team. If either listed email signs up, the whole entry is free.'}
+                      ? 'Add a player for free — they’re entered and marked paid.'
+                      : 'Add a doubles pair for free — they’re entered and marked paid. Both get an email.'}
                   </p>
-                  {freeEntries.length > 0 && (
+                  {freeEntries.filter((e) => !e.used).length > 0 && (
                     <ul className="org-admin-list org-free-entry-list">
-                      {freeEntries.map((entry: FreeEntry) => (
-                        <li key={entry.id}>
-                          <div>
-                            <strong>{entry.email}</strong>
-                            <span className="muted">
-                              {entry.used ? 'Used' : 'Available'}
-                              {entry.note ? ` · ${entry.note}` : ''}
-                            </span>
-                          </div>
-                          {!entry.used && (
+                      {freeEntries
+                        .filter((e) => !e.used)
+                        .map((entry: FreeEntry) => (
+                          <li key={entry.id}>
+                            <div>
+                              <strong>{entry.email}</strong>
+                              <span className="muted">
+                                Waiting to sign up
+                                {entry.note ? ` · ${entry.note}` : ''}
+                              </span>
+                            </div>
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm"
@@ -2290,79 +2428,348 @@ export default function ManageEventPage() {
                             >
                               Remove
                             </button>
-                          )}
-                        </li>
-                      ))}
+                          </li>
+                        ))}
                     </ul>
                   )}
-                  <form
-                    className="org-free-entry-add"
-                    onSubmit={(e: FormEvent) => {
-                      e.preventDefault()
-                      const emails = [
-                        ...new Set(
-                          freeEntryEmails
-                            .split(/[\s,;]+/)
-                            .map((s) => s.trim().toLowerCase())
-                            .filter(Boolean),
-                        ),
-                      ]
-                      if (emails.length === 0) {
-                        showToast('Enter at least one email')
-                        return
+                  {(() => {
+                    const signupFields = (active.tournament.registration_fields ||
+                      []) as TournamentRegistrationField[]
+                    const teamFields = signupFields.filter((f) => f.scope === 'team')
+                    const playerFields = signupFields.filter((f) => f.scope !== 'team')
+                    const answerKey = (fieldId: string, slot?: number) =>
+                      slot != null ? `${fieldId}:${slot}` : fieldId
+                    const setAnswer = (fieldId: string, value: string, slot?: number) => {
+                      const key = answerKey(fieldId, slot)
+                      setFreeAnswers((prev) => ({ ...prev, [key]: value }))
+                    }
+                    const renderField = (
+                      field: TournamentRegistrationField,
+                      slot?: number,
+                      who?: string,
+                    ) => {
+                      const key = answerKey(field.id, slot)
+                      const id = `free-cf-${field.id}${slot != null ? `-${slot}` : ''}`
+                      const label = who ? `${who} · ${field.label}` : field.label
+                      if (field.field_type === 'boolean') {
+                        return (
+                          <div className="form-group" key={key}>
+                            <span className="form-label" id={`${id}-label`}>
+                              {label}
+                              {!field.required ? <span className="muted"> (optional)</span> : null}
+                            </span>
+                            <div className="join-yesno" role="group" aria-labelledby={`${id}-label`}>
+                              {(
+                                [
+                                  ['yes', 'Yes'],
+                                  ['no', 'No'],
+                                ] as const
+                              ).map(([val, lab]) => (
+                                <button
+                                  key={val}
+                                  type="button"
+                                  className={`filter-chip join-yesno-btn ${
+                                    freeAnswers[key] === val ? 'on' : ''
+                                  }`}
+                                  aria-pressed={freeAnswers[key] === val}
+                                  onClick={() => setAnswer(field.id, val, slot)}
+                                >
+                                  {lab}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )
                       }
-                      addFreeEntriesMut.mutate({
-                        emails,
-                        note: freeEntryNote.trim() || undefined,
-                      })
-                    }}
-                  >
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="free-entry-emails">
-                        {isSingles ? 'Player email' : 'Player email(s)'}
-                      </label>
-                      <textarea
-                        id="free-entry-emails"
-                        className="form-input"
-                        rows={2}
-                        placeholder={
-                          isSingles
-                            ? 'player@college.ie'
-                            : 'captain@college.ie, partner@college.ie'
-                        }
-                        value={freeEntryEmails}
-                        onChange={(e) => setFreeEntryEmails(e.target.value)}
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        enterKeyHint="done"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="free-entry-note">
-                        Note (optional)
-                      </label>
-                      <input
-                        id="free-entry-note"
-                        className="form-input"
-                        placeholder="e.g. Sponsor guest / volunteer"
-                        value={freeEntryNote}
-                        onChange={(e) => setFreeEntryNote(e.target.value)}
-                        maxLength={200}
-                        enterKeyHint="done"
-                        autoCapitalize="sentences"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="btn btn-dark btn-sm"
-                      disabled={addFreeEntriesMut.isPending || !freeEntryEmails.trim()}
-                    >
-                      {addFreeEntriesMut.isPending ? 'Adding…' : 'Add free entry'}
-                    </button>
-                  </form>
+                      if (field.field_type === 'select') {
+                        return (
+                          <div className="form-group" key={key}>
+                            <label className="form-label" htmlFor={id}>
+                              {label}
+                              {!field.required ? <span className="muted"> (optional)</span> : null}
+                            </label>
+                            <select
+                              id={id}
+                              className="form-input"
+                              value={freeAnswers[key] || ''}
+                              required={field.required}
+                              onChange={(e) => setAnswer(field.id, e.target.value, slot)}
+                            >
+                              <option value="">Select…</option>
+                              {(field.options || []).map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="form-group" key={key}>
+                          <label className="form-label" htmlFor={id}>
+                            {label}
+                            {!field.required ? <span className="muted"> (optional)</span> : null}
+                          </label>
+                          <input
+                            id={id}
+                            className="form-input"
+                            value={freeAnswers[key] || ''}
+                            required={field.required}
+                            maxLength={500}
+                            enterKeyHint="next"
+                            autoCapitalize="sentences"
+                            onChange={(e) => setAnswer(field.id, e.target.value, slot)}
+                            placeholder={field.required ? undefined : 'Optional'}
+                          />
+                        </div>
+                      )
+                    }
+                    const emailOk = (raw: string) =>
+                      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim().toLowerCase())
+                    const p1Email = freeForm.p1Email.trim().toLowerCase()
+                    const p2Email = freeForm.p2Email.trim().toLowerCase()
+                    const canSubmit =
+                      emailOk(p1Email) &&
+                      freeForm.p1Name.trim().length >= 2 &&
+                      (isSingles ||
+                        (emailOk(p2Email) &&
+                          freeForm.p2Name.trim().length >= 2 &&
+                          p1Email !== p2Email))
+                    return (
+                      <form
+                        className="org-free-entry-add"
+                        onSubmit={(e: FormEvent) => {
+                          e.preventDefault()
+                          if (addFreeTeamMut.isPending) return
+                          if (!canSubmit) {
+                            if (!isSingles && p1Email && p1Email === p2Email) {
+                              showToast('Player 1 and player 2 need different emails')
+                              return
+                            }
+                            showToast(
+                              isSingles
+                                ? 'Enter a valid player email and name'
+                                : 'Enter a valid email and name for both players',
+                            )
+                            return
+                          }
+                          const missingRequired = signupFields.some((field) => {
+                            if (!field.required) return false
+                            if (field.scope === 'team') {
+                              return !(freeAnswers[answerKey(field.id)] || '').trim()
+                            }
+                            const slots = isSingles ? [1] : [1, 2]
+                            return slots.some(
+                              (slot) => !(freeAnswers[answerKey(field.id, slot)] || '').trim(),
+                            )
+                          })
+                          if (missingRequired) {
+                            showToast('Fill required signup questions')
+                            return
+                          }
+                          const custom_answers: Array<{
+                            field_id: string
+                            value: string
+                            slot?: number | null
+                          }> = []
+                          for (const field of teamFields) {
+                            const value = (freeAnswers[answerKey(field.id)] || '').trim()
+                            if (value) custom_answers.push({ field_id: field.id, value })
+                          }
+                          for (const field of playerFields) {
+                            const slots = isSingles ? [1] : [1, 2]
+                            for (const slot of slots) {
+                              const value = (freeAnswers[answerKey(field.id, slot)] || '').trim()
+                              if (value) {
+                                custom_answers.push({
+                                  field_id: field.id,
+                                  value,
+                                  slot,
+                                })
+                              }
+                            }
+                          }
+                          const payload = {
+                            player1: {
+                              email: p1Email,
+                              full_name: freeForm.p1Name.trim(),
+                            },
+                            player2: isSingles
+                              ? null
+                              : {
+                                  email: p2Email,
+                                  full_name: freeForm.p2Name.trim(),
+                                },
+                            team_name: freeForm.teamName.trim() || undefined,
+                            note: freeForm.note.trim() || undefined,
+                            custom_answers,
+                          }
+                          void confirmDialog({
+                            title: isSingles ? 'Add free player?' : 'Add free team?',
+                            message: isSingles
+                              ? `Enter ${payload.player1.full_name} for free and email them.`
+                              : `Enter ${payload.player1.full_name} & ${payload.player2?.full_name} for free and email both.`,
+                            confirmLabel: isSingles ? 'Add player' : 'Add team',
+                          }).then((ok) => {
+                            if (ok) addFreeTeamMut.mutate(payload)
+                          })
+                        }}
+                      >
+                        {!isSingles && (
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="free-team-name">
+                              Team name <span className="muted">(optional)</span>
+                            </label>
+                            <input
+                              id="free-team-name"
+                              className="form-input"
+                              value={freeForm.teamName}
+                              onChange={(e) =>
+                                setFreeForm((s) => ({ ...s, teamName: e.target.value }))
+                              }
+                              placeholder="Auto from first names if blank"
+                              maxLength={120}
+                              enterKeyHint="next"
+                              autoCapitalize="words"
+                            />
+                          </div>
+                        )}
+
+                        <div className="org-free-player-card">
+                          <h3>{isSingles ? 'Player' : 'Player 1'}</h3>
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="free-p1-name">
+                              Full name
+                            </label>
+                            <input
+                              id="free-p1-name"
+                              className="form-input"
+                              value={freeForm.p1Name}
+                              onChange={(e) =>
+                                setFreeForm((s) => ({ ...s, p1Name: e.target.value }))
+                              }
+                              required
+                              minLength={2}
+                              placeholder="e.g. Aoife Murphy"
+                              autoComplete="name"
+                              enterKeyHint="next"
+                              autoCapitalize="words"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="free-p1-email">
+                              Email
+                            </label>
+                            <input
+                              id="free-p1-email"
+                              className="form-input"
+                              type="email"
+                              inputMode="email"
+                              value={freeForm.p1Email}
+                              onChange={(e) =>
+                                setFreeForm((s) => ({ ...s, p1Email: e.target.value }))
+                              }
+                              required
+                              placeholder="player@college.ie"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
+                              enterKeyHint="next"
+                            />
+                          </div>
+                          {playerFields.map((field) =>
+                            renderField(field, 1, isSingles ? undefined : 'Player 1'),
+                          )}
+                        </div>
+
+                        {!isSingles && (
+                          <div className="org-free-player-card">
+                            <h3>Player 2</h3>
+                            <div className="form-group">
+                              <label className="form-label" htmlFor="free-p2-name">
+                                Full name
+                              </label>
+                              <input
+                                id="free-p2-name"
+                                className="form-input"
+                                value={freeForm.p2Name}
+                                onChange={(e) =>
+                                  setFreeForm((s) => ({ ...s, p2Name: e.target.value }))
+                                }
+                                required
+                                minLength={2}
+                                placeholder="e.g. Ciara Byrne"
+                                autoComplete="name"
+                                enterKeyHint="next"
+                                autoCapitalize="words"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label" htmlFor="free-p2-email">
+                                Email
+                              </label>
+                              <input
+                                id="free-p2-email"
+                                className="form-input"
+                                type="email"
+                                inputMode="email"
+                                value={freeForm.p2Email}
+                                onChange={(e) =>
+                                  setFreeForm((s) => ({ ...s, p2Email: e.target.value }))
+                                }
+                                required
+                                placeholder="partner@college.ie"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
+                                enterKeyHint="next"
+                              />
+                            </div>
+                            {playerFields.map((field) => renderField(field, 2, 'Player 2'))}
+                          </div>
+                        )}
+
+                        {teamFields.length > 0 && (
+                          <div className="org-free-player-card">
+                            <h3>Team details</h3>
+                            {teamFields.map((field) => renderField(field))}
+                          </div>
+                        )}
+
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="free-entry-note">
+                            Note <span className="muted">(optional)</span>
+                          </label>
+                          <input
+                            id="free-entry-note"
+                            className="form-input"
+                            placeholder="e.g. Sponsor guest / volunteer"
+                            value={freeForm.note}
+                            onChange={(e) => setFreeForm((s) => ({ ...s, note: e.target.value }))}
+                            maxLength={200}
+                            enterKeyHint="done"
+                            autoCapitalize="sentences"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="btn btn-dark"
+                          disabled={addFreeTeamMut.isPending || !canSubmit}
+                        >
+                          {addFreeTeamMut.isPending
+                            ? 'Adding…'
+                            : isSingles
+                              ? 'Add free player'
+                              : 'Add free team'}
+                        </button>
+                      </form>
+                    )
+                  })()}
                 </section>
               )}
+
+              {orgTeams.length > 0 && renderBulkEmailSection('bulk-email-reg')}
               </>
               )}
 
@@ -2876,6 +3283,8 @@ export default function ManageEventPage() {
                   </div>
                 </details>
               )}
+
+              {orgTeams.length > 0 && renderBulkEmailSection('bulk-email-day')}
 
               <details className="org-section org-announce-block">
                 <summary className="org-section-head">
@@ -3692,8 +4101,11 @@ function EditEntryModal({
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
+  const emailOk = (raw: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim().toLowerCase())
+
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
+    if (saving) return
     setError('')
     if (teamName.trim().length < 2) {
       setError(isSingles ? 'Enter an entry name' : 'Enter a team name')
@@ -3705,21 +4117,51 @@ function EditEntryModal({
         return
       }
       if (p.hasEmail || p.email.trim()) {
-        if (!p.email.trim() || !p.email.includes('@')) {
+        if (!emailOk(p.email)) {
           setError('Each player needs a valid email')
           return
         }
       }
     }
+    const emails = playerForms
+      .map((p) => p.email.trim().toLowerCase())
+      .filter(Boolean)
+    if (new Set(emails).size !== emails.length) {
+      setError('Players on a team need different emails')
+      return
+    }
     if (canAddPartner) {
       const email = partnerEmail.trim()
       const name = partnerName.trim()
       if (email || name) {
-        if (!email || !email.includes('@') || name.length < 2) {
+        if (!emailOk(email) || name.length < 2) {
           setError('Enter the new partner’s name and email')
           return
         }
+        if (emails.includes(email.toLowerCase())) {
+          setError('Partner email must be different from players already on the team')
+          return
+        }
       }
+    }
+
+    const claimedEmailChanges = playerForms.filter((p) => {
+      const original = players.find((x) => x.user_id === p.user_id)
+      if (!original || original.must_set_password) return false
+      const next = p.email.trim().toLowerCase()
+      const prev = (original.email || '').toLowerCase()
+      return !!next && next !== prev
+    })
+    if (claimedEmailChanges.length > 0) {
+      const ok = await confirmDialog({
+        title: 'Change login email?',
+        message:
+          claimedEmailChanges.length === 1
+            ? `This updates ${claimedEmailChanges[0].full_name || 'their'} login email for the whole app.`
+            : 'This updates login emails for claimed accounts across the whole app.',
+        confirmLabel: 'Change email',
+      })
+      if (!ok) return
     }
 
     setSaving(true)
@@ -3727,6 +4169,7 @@ function EditEntryModal({
       if (teamName.trim() !== team.name) {
         await tournamentApi.updateTeam(tournamentId, team.id, { name: teamName.trim() })
       }
+      const failures: string[] = []
       for (const p of playerForms) {
         const original = players.find((x) => x.user_id === p.user_id)
         if (!original) continue
@@ -3741,19 +4184,28 @@ function EditEntryModal({
           p.email.trim() &&
           p.email.trim().toLowerCase() !== (original.email || '').toLowerCase()
         ) {
-          patch.email = p.email.trim()
+          patch.email = p.email.trim().toLowerCase()
         }
         if ((p.phone || '') !== (original.phone || '')) patch.phone = p.phone.trim() || null
         if ((p.student_number || '') !== (original.student_number || '')) {
           patch.student_number = p.student_number.trim() || null
         }
-        if (Object.keys(patch).length > 0) {
+        if (Object.keys(patch).length === 0) continue
+        try {
           await tournamentApi.updateTeamPlayer(tournamentId, team.id, p.user_id, patch)
+        } catch (err: unknown) {
+          failures.push(
+            apiErrorMessage(err, `Could not update ${p.full_name.trim() || 'player'}`),
+          )
         }
+      }
+      if (failures.length > 0) {
+        setError(failures[0])
+        return
       }
       if (canAddPartner && partnerEmail.trim() && partnerName.trim().length >= 2) {
         await tournamentApi.addTeamPartner(tournamentId, team.id, {
-          partner_email: partnerEmail.trim(),
+          partner_email: partnerEmail.trim().toLowerCase(),
           partner_name: partnerName.trim(),
         })
         onSaved('Partner added - invite emailed')

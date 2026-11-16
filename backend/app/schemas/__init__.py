@@ -567,6 +567,37 @@ class FreeEntryCreate(BaseModel):
     note: Optional[str] = Field(default=None, max_length=200)
 
 
+class FreeEntryPlayerIn(BaseModel):
+    email: EmailStr
+    full_name: str = Field(min_length=2, max_length=120)
+
+
+class FreeTeamCreate(BaseModel):
+    """Organiser creates a complimentary paid entry with player details."""
+
+    player1: FreeEntryPlayerIn
+    player2: Optional[FreeEntryPlayerIn] = None
+    team_name: Optional[str] = Field(default=None, max_length=120)
+    note: Optional[str] = Field(default=None, max_length=200)
+    custom_answers: list[CustomAnswerIn] = Field(default_factory=list)
+
+
+class BulkEmailEntrantsRequest(BaseModel):
+    """Organiser message emailed to all entrants."""
+
+    subject: str = Field(min_length=3, max_length=120)
+    body: str = Field(min_length=3, max_length=4000)
+    # True = paid spots only; False = include unfinished checkouts too
+    paid_only: bool = True
+
+
+class BulkEmailEntrantsOut(BaseModel):
+    ok: bool = True
+    recipients: int = 0
+    sent: int = 0
+    failed: int = 0
+
+
 class FreeEntryOut(BaseModel):
     id: UUID
     tournament_id: UUID
