@@ -74,6 +74,8 @@ export function nativeBackFallback(
     pathname === '/rankings' ||
     pathname === '/login' ||
     pathname === '/signup' ||
+    pathname === '/forgot-password' ||
+    pathname === '/reset-password' ||
     pathname === '/welcome'
   ) {
     return null

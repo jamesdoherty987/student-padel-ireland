@@ -67,6 +67,17 @@ class CustomAnswerOut(BaseModel):
     slot: Optional[int] = None
     player_name: Optional[str] = None
     value: str
+    fulfilled: bool = False
+    fulfilled_at: Optional[datetime] = None
+
+
+class AnswerFulfillmentRequest(BaseModel):
+    """Organiser ticks off a signup answer (e.g. jersey received)."""
+
+    field_id: UUID
+    # 1 = captain, 2 = partner for player-scoped fields; omit/null for team-scoped
+    slot: Optional[int] = Field(default=None, ge=1, le=2)
+    fulfilled: bool = True
 
 
 class TokenResponse(BaseModel):
@@ -97,6 +108,15 @@ class UserCreate(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    password: str = Field(min_length=8, max_length=128)
 
 
 class AccountDeleteRequest(BaseModel):
@@ -316,6 +336,19 @@ class TournamentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TeamPlayerOut(BaseModel):
+    """Per-slot player on a team (organiser manage views include contact fields)."""
+
+    user_id: UUID
+    slot: int
+    full_name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    student_number: Optional[str] = None
+    must_set_password: bool = False
+    invitation_accepted: bool = True
+
+
 class TeamOut(BaseModel):
     id: UUID
     tournament_id: UUID
@@ -326,6 +359,8 @@ class TeamOut(BaseModel):
     checked_in: bool
     withdrawn: bool
     player_names: list[str] = []
+    players: list[TeamPlayerOut] = Field(default_factory=list)
+    needs_partner: bool = False
     payment_status: Optional[str] = None
     # free_entry | pay_on_arrival | demo_payment | online | None
     payment_via: Optional[str] = None
@@ -333,6 +368,23 @@ class TeamOut(BaseModel):
     custom_answers: list[CustomAnswerOut] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+
+class OrganiserUpdateTeamRequest(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+
+
+class OrganiserUpdatePlayerRequest(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=200)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(default=None, max_length=40)
+    student_number: Optional[str] = Field(default=None, max_length=80)
+
+
+class OrganiserAddPartnerRequest(BaseModel):
+    partner_email: EmailStr
+    partner_name: str = Field(default="", max_length=200)
+    partner_user_id: Optional[UUID] = None
 
 
 class RegisterTeamRequest(BaseModel):
@@ -503,6 +555,25 @@ class TournamentAdminOut(BaseModel):
     email: str
     role: str
     is_owner: bool = False
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class FreeEntryCreate(BaseModel):
+    """One or more emails granted complimentary entry for this event."""
+
+    emails: list[EmailStr] = Field(min_length=1, max_length=40)
+    note: Optional[str] = Field(default=None, max_length=200)
+
+
+class FreeEntryOut(BaseModel):
+    id: UUID
+    tournament_id: UUID
+    email: str
+    note: Optional[str] = None
+    used: bool = False
+    used_by_registration_id: Optional[UUID] = None
     created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}

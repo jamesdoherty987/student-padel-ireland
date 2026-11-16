@@ -1,12 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import rate_limit
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
 from app.models import Ranking, TeamPlayer, User, UserRole
-from app.schemas import AccountDeleteRequest, TokenResponse, UserCreate, UserLogin, UserPublic
+from app.schemas import (
+    AccountDeleteRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserCreate,
+    UserLogin,
+    UserPublic,
+)
 from app.services.accounts import anonymise_user
+from app.services.password_reset import request_password_reset, reset_password_with_token
 from app.services.rating import INITIAL_RATING
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -62,6 +72,37 @@ def login(body: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     if user.is_suspended:
         raise HTTPException(status_code=403, detail="Account suspended")
+    token = create_access_token(user.id, {"role": user.role})
+    return TokenResponse(access_token=token, user=UserPublic.model_validate(user))
+
+
+@router.post("/forgot-password")
+def forgot_password(
+    body: ForgotPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Always returns a generic success message (no email enumeration)."""
+    rate_limit(request, key="forgot-password", limit=5, window_seconds=3600)
+    rate_limit(
+        request,
+        key=f"forgot-password-email:{(body.email or '').lower()}",
+        limit=3,
+        window_seconds=3600,
+    )
+    message = request_password_reset(db, str(body.email))
+    return {"ok": True, "message": message}
+
+
+@router.post("/reset-password", response_model=TokenResponse)
+def reset_password(
+    body: ResetPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Set a new password from an emailed one-time link and sign the user in."""
+    rate_limit(request, key="reset-password", limit=10, window_seconds=3600)
+    user = reset_password_with_token(db, token=body.token, password=body.password)
     token = create_access_token(user.id, {"role": user.role})
     return TokenResponse(access_token=token, user=UserPublic.model_validate(user))
 

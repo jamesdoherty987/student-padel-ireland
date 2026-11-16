@@ -21,6 +21,7 @@ import {
   communityApi,
   platformApi,
   tournamentApi,
+  type FreeEntry,
   type Match,
   type ManageDashRow,
   type PlayerSearch,
@@ -114,6 +115,7 @@ export default function ManageEventPage() {
   const [showEdit, setShowEdit] = useState(false)
   const isAdmin = user?.role === 'ADMIN'
   const [showAddTeam, setShowAddTeam] = useState(false)
+  const [editTeam, setEditTeam] = useState<TournamentTeam | null>(null)
   const [confirmGenerate, setConfirmGenerate] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
   const [announce, setAnnounce] = useState({ title: '', body: '' })
@@ -129,6 +131,8 @@ export default function ManageEventPage() {
   const [adminResults, setAdminResults] = useState<PlayerSearch[]>([])
   const [adminSearching, setAdminSearching] = useState(false)
   const adminSearchSeq = useRef(0)
+  const [freeEntryEmails, setFreeEntryEmails] = useState('')
+  const [freeEntryNote, setFreeEntryNote] = useState('')
   const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
   const [moveMatch, setMoveMatch] = useState<Match | null>(null)
   const [moveForm, setMoveForm] = useState({ court_number: 1, scheduled_time: '' })
@@ -159,18 +163,18 @@ export default function ManageEventPage() {
   })
   const [scoreError, setScoreError] = useState('')
 
-  useKeyboardInset(!!scoreMatch)
+  useKeyboardInset(!!scoreMatch || !!editTeam || showAddTeam)
   useEffect(() => {
-    if (!scoreMatch) return
+    if (!scoreMatch && !editTeam && !showAddTeam) return
     const onFocus = (e: FocusEvent) => {
       const t = e.target
       if (!(t instanceof HTMLElement)) return
-      if (!t.closest('.score-modal')) return
+      if (!t.closest('.score-modal, .modal, [role="dialog"]')) return
       if (t.matches('input, textarea, select')) scrollFieldAboveKeyboard(t)
     }
     document.addEventListener('focusin', onFocus)
     return () => document.removeEventListener('focusin', onFocus)
-  }, [scoreMatch])
+  }, [scoreMatch, editTeam, showAddTeam])
 
   useEffect(() => {
     if (params.get('create') === '1') {
@@ -199,23 +203,25 @@ export default function ManageEventPage() {
   }, [selectedId])
 
   useEffect(() => {
-    const open = showEdit || confirmGenerate || !!scoreMatch || showAddTeam || !!moveMatch
+    const open =
+      showEdit || confirmGenerate || !!scoreMatch || showAddTeam || !!moveMatch || !!editTeam
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch])
+  }, [showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch, editTeam])
 
   useEffect(() => {
-    // Generate / edit use ModalShell (own Escape). This covers score / add-team / move.
-    if (!scoreMatch && !showAddTeam && !moveMatch) return
+    // Generate / edit use ModalShell (own Escape). This covers score / add-team / move / edit entry.
+    if (!scoreMatch && !showAddTeam && !moveMatch && !editTeam) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setScoreMatch(null)
       setShowAddTeam(false)
       setMoveMatch(null)
+      setEditTeam(null)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [scoreMatch, showAddTeam, moveMatch])
+  }, [scoreMatch, showAddTeam, moveMatch, editTeam])
 
   const tournaments: ManageDashRow[] = data?.tournaments || []
 
@@ -276,6 +282,12 @@ export default function ManageEventPage() {
   const { data: tournamentAdmins = [] } = useQuery({
     queryKey: ['tournament-admins', tid],
     queryFn: async () => (await tournamentApi.admins(tid!)).data,
+    enabled: !!tid && canOrganise,
+  })
+
+  const { data: freeEntries = [] } = useQuery({
+    queryKey: ['free-entries', tid],
+    queryFn: async () => (await tournamentApi.freeEntries(tid!)).data,
     enabled: !!tid && canOrganise,
   })
 
@@ -525,6 +537,28 @@ export default function ManageEventPage() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not remove admin')),
   })
 
+  const addFreeEntriesMut = useMutation({
+    mutationFn: (payload: { emails: string[]; note?: string }) =>
+      tournamentApi.addFreeEntries(tid!, payload),
+    onSuccess: (res) => {
+      const n = res.data.length
+      setFreeEntryEmails('')
+      setFreeEntryNote('')
+      qc.invalidateQueries({ queryKey: ['free-entries', tid] })
+      showToast(n === 1 ? 'Free entry added' : `${n} free entries added`)
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not add free entry')),
+  })
+
+  const removeFreeEntryMut = useMutation({
+    mutationFn: (entryId: string) => tournamentApi.removeFreeEntry(tid!, entryId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['free-entries', tid] })
+      showToast('Removed')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not remove')),
+  })
+
   const searchAdmins = async (q: string) => {
     setAdminQuery(q)
     const seq = ++adminSearchSeq.current
@@ -764,6 +798,60 @@ export default function ManageEventPage() {
     onError: (e: unknown, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(['org-teams', tid], ctx.prev)
       showToast(apiErrorMessage(e, 'Check-in failed'))
+    },
+  })
+
+  const answerFulfillMut = useMutation({
+    mutationFn: ({
+      teamId,
+      fieldId,
+      slot,
+      fulfilled,
+    }: {
+      teamId: string
+      fieldId: string
+      slot?: number | null
+      fulfilled: boolean
+    }) =>
+      tournamentApi.setAnswerFulfillment(tid!, teamId, {
+        field_id: fieldId,
+        slot: slot ?? null,
+        fulfilled,
+      }),
+    onMutate: async (vars) => {
+      void hapticLight()
+      await qc.cancelQueries({ queryKey: ['org-teams', tid] })
+      const prev = qc.getQueryData<TournamentTeam[]>(['org-teams', tid])
+      qc.setQueryData<TournamentTeam[]>(['org-teams', tid], (old) =>
+        (old || []).map((t) => {
+          if (t.id !== vars.teamId) return t
+          return {
+            ...t,
+            custom_answers: (t.custom_answers || []).map((a) => {
+              const sameField = a.field_id === vars.fieldId
+              const sameSlot =
+                vars.slot == null
+                  ? a.scope === 'team' || a.slot == null
+                  : Number(a.slot) === Number(vars.slot)
+              if (!sameField || !sameSlot) return a
+              return {
+                ...a,
+                fulfilled: vars.fulfilled,
+                fulfilled_at: vars.fulfilled ? new Date().toISOString() : null,
+              }
+            }),
+          }
+        }),
+      )
+      return { prev }
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['org-teams'] })
+      showToast(vars.fulfilled ? 'Marked done' : 'Unchecked')
+    },
+    onError: (e: unknown, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['org-teams', tid], ctx.prev)
+      showToast(apiErrorMessage(e, 'Could not update'))
     },
   })
 
@@ -1127,7 +1215,7 @@ export default function ManageEventPage() {
         (team) =>
           team.payment_status === 'PAID' &&
           !team.withdrawn &&
-          (team.player_names?.length || 0) < 2,
+          (team.needs_partner || (team.players?.length || team.player_names?.length || 0) < 2),
       ).length
     : 0
   const canOpenGenerate = paidCount >= 2
@@ -1136,7 +1224,7 @@ export default function ManageEventPage() {
       return `Need at least 2 paid ${isSingles ? 'players' : 'teams'} to generate (you have ${paidCount}).`
     }
     if (incompleteDoubles > 0) {
-      return `${incompleteDoubles} paid team${incompleteDoubles === 1 ? ' is' : 's are'} missing a partner. Ask them to add one, or withdraw those entries.`
+      return `${incompleteDoubles} paid team${incompleteDoubles === 1 ? ' is' : 's are'} missing a partner. Open Edit on those entries to add their email, or ask the captain to add one.`
     }
     if (drawPreview && !drawPreview.ok) {
       return drawPreview.error || 'Draw settings look invalid - check group / plate sizes in Edit.'
@@ -1990,7 +2078,16 @@ export default function ManageEventPage() {
                             <strong>{team.name}</strong>
                             {signedUp && <span className="org-entry-signed-up">{signedUp}</span>}
                           </div>
-                          <span>{team.player_names?.join(' / ')}</span>
+                          <span>
+                            {team.players?.length
+                              ? team.players
+                                  .map((p) => p.full_name || p.email || 'Player')
+                                  .join(' / ')
+                              : team.player_names?.join(' / ')}
+                          </span>
+                          {team.needs_partner && (
+                            <span className="badge badge-warn">Needs partner</span>
+                          )}
                           <span className={paymentBadgeClass(team)}>{paymentLabel(team)}</span>
                           {!!team.custom_answers?.length && (
                             <ul className="org-custom-answers">
@@ -2003,8 +2100,38 @@ export default function ManageEventPage() {
                                       : null
                                 const display =
                                   a.value === 'yes' ? 'Yes' : a.value === 'no' ? 'No' : a.value
+                                const done = !!a.fulfilled
+                                const checkId = `ans-${team.id}-${a.field_id}-${a.slot ?? 't'}-${i}`
                                 return (
-                                  <li key={`${a.field_id}-${a.slot ?? 't'}-${i}`}>
+                                  <li
+                                    key={`${a.field_id}-${a.slot ?? 't'}-${i}`}
+                                    className={done ? 'is-fulfilled' : undefined}
+                                  >
+                                    <label className="org-custom-check" htmlFor={checkId}>
+                                      <input
+                                        id={checkId}
+                                        type="checkbox"
+                                        checked={done}
+                                        disabled={answerFulfillMut.isPending}
+                                        title={
+                                          done
+                                            ? `Unmark ${a.label}`
+                                            : `Mark ${a.label} done (e.g. handed out)`
+                                        }
+                                        onChange={(e) =>
+                                          answerFulfillMut.mutate({
+                                            teamId: team.id,
+                                            fieldId: a.field_id,
+                                            slot:
+                                              a.scope === 'player'
+                                                ? a.slot ?? 1
+                                                : null,
+                                            fulfilled: e.target.checked,
+                                          })
+                                        }
+                                      />
+                                      <span className="org-custom-check-mark" aria-hidden />
+                                    </label>
                                     <span className="org-custom-label">
                                       {who ? `${who} · ${a.label}` : a.label}
                                     </span>
@@ -2016,6 +2143,13 @@ export default function ManageEventPage() {
                           )}
                         </div>
                         <div className="org-row-right org-pay-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setEditTeam(team)}
+                          >
+                            Edit
+                          </button>
                           {canCollect && (
                             <button
                               type="button"
@@ -2108,6 +2242,127 @@ export default function ManageEventPage() {
                   )}
                 </div>
               </section>
+
+              {(active.tournament.entry_fee_cents > 0 || freeEntries.length > 0) && (
+                <section className="org-section org-free-entries">
+                  <div className="org-section-head">
+                    <h2>Free entry</h2>
+                    {freeEntries.length > 0 && (
+                      <span className="muted">
+                        {freeEntries.filter((e) => !e.used).length} open
+                        {freeEntries.some((e) => e.used)
+                          ? ` · ${freeEntries.filter((e) => e.used).length} used`
+                          : ''}
+                      </span>
+                    )}
+                  </div>
+                  <p className="muted org-free-entries-copy">
+                    {isSingles
+                      ? 'Add player emails who should skip payment when they sign up.'
+                      : 'Add one or both player emails for a team. If either listed email signs up, the whole entry is free.'}
+                  </p>
+                  {freeEntries.length > 0 && (
+                    <ul className="org-admin-list org-free-entry-list">
+                      {freeEntries.map((entry: FreeEntry) => (
+                        <li key={entry.id}>
+                          <div>
+                            <strong>{entry.email}</strong>
+                            <span className="muted">
+                              {entry.used ? 'Used' : 'Available'}
+                              {entry.note ? ` · ${entry.note}` : ''}
+                            </span>
+                          </div>
+                          {!entry.used && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              disabled={removeFreeEntryMut.isPending}
+                              onClick={() => {
+                                void confirmDialog({
+                                  title: 'Remove free entry?',
+                                  message: `Remove ${entry.email} from the free-entry list?`,
+                                  confirmLabel: 'Remove',
+                                  danger: true,
+                                }).then((ok) => {
+                                  if (ok) removeFreeEntryMut.mutate(entry.id)
+                                })
+                              }}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <form
+                    className="org-free-entry-add"
+                    onSubmit={(e: FormEvent) => {
+                      e.preventDefault()
+                      const emails = [
+                        ...new Set(
+                          freeEntryEmails
+                            .split(/[\s,;]+/)
+                            .map((s) => s.trim().toLowerCase())
+                            .filter(Boolean),
+                        ),
+                      ]
+                      if (emails.length === 0) {
+                        showToast('Enter at least one email')
+                        return
+                      }
+                      addFreeEntriesMut.mutate({
+                        emails,
+                        note: freeEntryNote.trim() || undefined,
+                      })
+                    }}
+                  >
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="free-entry-emails">
+                        {isSingles ? 'Player email' : 'Player email(s)'}
+                      </label>
+                      <textarea
+                        id="free-entry-emails"
+                        className="form-input"
+                        rows={2}
+                        placeholder={
+                          isSingles
+                            ? 'player@college.ie'
+                            : 'captain@college.ie, partner@college.ie'
+                        }
+                        value={freeEntryEmails}
+                        onChange={(e) => setFreeEntryEmails(e.target.value)}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        enterKeyHint="done"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="free-entry-note">
+                        Note (optional)
+                      </label>
+                      <input
+                        id="free-entry-note"
+                        className="form-input"
+                        placeholder="e.g. Sponsor guest / volunteer"
+                        value={freeEntryNote}
+                        onChange={(e) => setFreeEntryNote(e.target.value)}
+                        maxLength={200}
+                        enterKeyHint="done"
+                        autoCapitalize="sentences"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="btn btn-dark btn-sm"
+                      disabled={addFreeEntriesMut.isPending || !freeEntryEmails.trim()}
+                    >
+                      {addFreeEntriesMut.isPending ? 'Adding…' : 'Add free entry'}
+                    </button>
+                  </form>
+                </section>
+              )}
               </>
               )}
 
@@ -3009,6 +3264,31 @@ export default function ManageEventPage() {
         />
       )}
 
+      {editTeam && tid && (
+        <EditEntryModal
+          tournamentId={tid}
+          team={editTeam}
+          isSingles={isSingles}
+          canAddPartner={
+            !isSingles &&
+            !!editTeam.needs_partner &&
+            active?.tournament.status !== 'LIVE' &&
+            active?.tournament.status !== 'COMPLETED' &&
+            active?.tournament.status !== 'CANCELLED' &&
+            !fixturesExist
+          }
+          onClose={() => setEditTeam(null)}
+          onSaved={(msg) => {
+            showToast(msg)
+            setEditTeam(null)
+            qc.invalidateQueries({ queryKey: ['org-teams'] })
+            qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
+            qc.invalidateQueries({ queryKey: ['tournament', slug] })
+            qc.invalidateQueries({ queryKey: ['player-view'] })
+          }}
+        />
+      )}
+
       <GenerateDrawModal
         open={confirmGenerate}
         fixturesExist={fixturesExist}
@@ -3376,6 +3656,314 @@ export default function ManageEventPage() {
   )
 }
 
+
+function EditEntryModal({
+  tournamentId,
+  team,
+  isSingles,
+  canAddPartner,
+  onClose,
+  onSaved,
+}: {
+  tournamentId: string
+  team: TournamentTeam
+  isSingles: boolean
+  canAddPartner: boolean
+  onClose: () => void
+  onSaved: (msg: string) => void
+}) {
+  const players = team.players || []
+  const [teamName, setTeamName] = useState(team.name)
+  const [playerForms, setPlayerForms] = useState(
+    () =>
+      players.map((p) => ({
+        user_id: p.user_id,
+        slot: p.slot,
+        full_name: p.full_name || '',
+        email: p.email || '',
+        phone: p.phone || '',
+        student_number: p.student_number || '',
+        must_set_password: !!p.must_set_password,
+        hasEmail: !!p.email,
+      })),
+  )
+  const [partnerName, setPartnerName] = useState('')
+  const [partnerEmail, setPartnerEmail] = useState('')
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (teamName.trim().length < 2) {
+      setError(isSingles ? 'Enter an entry name' : 'Enter a team name')
+      return
+    }
+    for (const p of playerForms) {
+      if (p.full_name.trim().length < 2) {
+        setError('Each player needs a name')
+        return
+      }
+      if (p.hasEmail || p.email.trim()) {
+        if (!p.email.trim() || !p.email.includes('@')) {
+          setError('Each player needs a valid email')
+          return
+        }
+      }
+    }
+    if (canAddPartner) {
+      const email = partnerEmail.trim()
+      const name = partnerName.trim()
+      if (email || name) {
+        if (!email || !email.includes('@') || name.length < 2) {
+          setError('Enter the new partner’s name and email')
+          return
+        }
+      }
+    }
+
+    setSaving(true)
+    try {
+      if (teamName.trim() !== team.name) {
+        await tournamentApi.updateTeam(tournamentId, team.id, { name: teamName.trim() })
+      }
+      for (const p of playerForms) {
+        const original = players.find((x) => x.user_id === p.user_id)
+        if (!original) continue
+        const patch: {
+          full_name?: string
+          email?: string
+          phone?: string | null
+          student_number?: string | null
+        } = {}
+        if (p.full_name.trim() !== (original.full_name || '')) patch.full_name = p.full_name.trim()
+        if (
+          p.email.trim() &&
+          p.email.trim().toLowerCase() !== (original.email || '').toLowerCase()
+        ) {
+          patch.email = p.email.trim()
+        }
+        if ((p.phone || '') !== (original.phone || '')) patch.phone = p.phone.trim() || null
+        if ((p.student_number || '') !== (original.student_number || '')) {
+          patch.student_number = p.student_number.trim() || null
+        }
+        if (Object.keys(patch).length > 0) {
+          await tournamentApi.updateTeamPlayer(tournamentId, team.id, p.user_id, patch)
+        }
+      }
+      if (canAddPartner && partnerEmail.trim() && partnerName.trim().length >= 2) {
+        await tournamentApi.addTeamPartner(tournamentId, team.id, {
+          partner_email: partnerEmail.trim(),
+          partner_name: partnerName.trim(),
+        })
+        onSaved('Partner added - invite emailed')
+        return
+      }
+      onSaved('Entry updated')
+    } catch (err: unknown) {
+      setError(apiErrorMessage(err, 'Could not update entry'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(e) => {
+        if (!saving && e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div
+        className="modal modal-wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-entry-title"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <h2 id="edit-entry-title">Edit entry</h2>
+        <p className="muted" style={{ marginBottom: '1rem' }}>
+          {canAddPartner
+            ? 'Update details, or add the missing partner by email so they get the usual invite.'
+            : 'Update the team name and player details.'}
+        </p>
+        <form onSubmit={onSubmit} className="org-edit-entry-form">
+          <div className="form-group">
+            <label className="form-label" htmlFor="edit-team-name">
+              {isSingles ? 'Entry name' : 'Team name'}
+            </label>
+            <input
+              id="edit-team-name"
+              className="form-input"
+              value={teamName}
+              onChange={(e) => setTeamName(e.target.value)}
+              required
+              minLength={2}
+              autoCapitalize="words"
+              enterKeyHint="next"
+            />
+          </div>
+
+          {playerForms.length === 0 && (
+            <p className="muted-note">
+              Player contact details aren’t loaded yet - close and reopen Edit, or refresh the page.
+            </p>
+          )}
+
+          {playerForms.map((p, idx) => (
+            <fieldset key={p.user_id} className="org-edit-player">
+              <legend>
+                {isSingles ? 'Player' : p.slot === 1 ? 'Captain' : 'Partner'}
+                {p.must_set_password ? ' · invite pending' : ''}
+              </legend>
+              <div className="form-group">
+                <label className="form-label" htmlFor={`edit-name-${p.user_id}`}>
+                  Name
+                </label>
+                <input
+                  id={`edit-name-${p.user_id}`}
+                  className="form-input"
+                  value={p.full_name}
+                  onChange={(e) =>
+                    setPlayerForms((rows) =>
+                      rows.map((r, i) => (i === idx ? { ...r, full_name: e.target.value } : r)),
+                    )
+                  }
+                  required
+                  minLength={2}
+                  autoComplete="name"
+                  autoCapitalize="words"
+                  enterKeyHint="next"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor={`edit-email-${p.user_id}`}>
+                  Email
+                </label>
+                <input
+                  id={`edit-email-${p.user_id}`}
+                  className="form-input"
+                  type="email"
+                  value={p.email}
+                  onChange={(e) =>
+                    setPlayerForms((rows) =>
+                      rows.map((r, i) => (i === idx ? { ...r, email: e.target.value } : r)),
+                    )
+                  }
+                  required={p.hasEmail}
+                  autoComplete="email"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="next"
+                />
+                {!p.must_set_password && p.hasEmail && (
+                  <p className="muted-note">Changing email updates their login for the whole app.</p>
+                )}
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor={`edit-phone-${p.user_id}`}>
+                  Phone <span className="muted">(optional)</span>
+                </label>
+                <input
+                  id={`edit-phone-${p.user_id}`}
+                  className="form-input"
+                  type="tel"
+                  value={p.phone}
+                  onChange={(e) =>
+                    setPlayerForms((rows) =>
+                      rows.map((r, i) => (i === idx ? { ...r, phone: e.target.value } : r)),
+                    )
+                  }
+                  autoComplete="tel"
+                  inputMode="tel"
+                  enterKeyHint="next"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor={`edit-student-${p.user_id}`}>
+                  Student number <span className="muted">(optional)</span>
+                </label>
+                <input
+                  id={`edit-student-${p.user_id}`}
+                  className="form-input"
+                  value={p.student_number}
+                  onChange={(e) =>
+                    setPlayerForms((rows) =>
+                      rows.map((r, i) =>
+                        i === idx ? { ...r, student_number: e.target.value } : r,
+                      ),
+                    )
+                  }
+                  enterKeyHint="done"
+                />
+              </div>
+            </fieldset>
+          ))}
+
+          {canAddPartner && (
+            <fieldset className="org-edit-player org-edit-player--add">
+              <legend>Add partner</legend>
+              <p className="muted-note">
+                They get the usual invite - signup if new, or Accept / Decline if they already have
+                an account.
+              </p>
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-partner-name">
+                  Partner name
+                </label>
+                <input
+                  id="edit-partner-name"
+                  className="form-input"
+                  value={partnerName}
+                  onChange={(e) => setPartnerName(e.target.value)}
+                  placeholder="Full name"
+                  autoComplete="name"
+                  autoCapitalize="words"
+                  enterKeyHint="next"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="edit-partner-email">
+                  Partner email
+                </label>
+                <input
+                  id="edit-partner-email"
+                  className="form-input"
+                  type="email"
+                  value={partnerEmail}
+                  onChange={(e) => setPartnerEmail(e.target.value)}
+                  placeholder="partner@college.ie"
+                  autoComplete="email"
+                  inputMode="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="done"
+                />
+              </div>
+            </fieldset>
+          )}
+
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="modal-actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? 'Saving…' : canAddPartner && partnerEmail.trim() ? 'Save & invite' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 function AddTeamModal({
   tournamentId,

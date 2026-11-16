@@ -256,6 +256,30 @@
   margin-top: 0.85rem;
 }
 
+.auth-forgot {
+  margin: -0.35rem 0 0.85rem;
+  text-align: right;
+  font-size: 0.9rem;
+  line-height: 1.3;
+}
+
+.auth-forgot a {
+  color: var(--court-mid);
+  font-weight: 650;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.auth-forgot a:hover,
+.auth-forgot a:focus-visible {
+  text-decoration: underline;
+}
+
+.auth-lead--tight {
+  margin-top: -0.35rem;
+}
+
 .auth-remember {
   display: flex;
   align-items: center;

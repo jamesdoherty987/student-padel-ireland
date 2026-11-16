@@ -14,6 +14,8 @@ type AuthState = {
   loading: boolean
   login: (email: string, password: string, remember?: boolean) => Promise<User>
   register: (data: Record<string, unknown>, remember?: boolean) => Promise<User>
+  /** Apply a new password from an emailed reset link and sign in. */
+  resetPassword: (token: string, password: string, remember?: boolean) => Promise<User>
   logout: () => void
   /** Patch fields on the in-memory + stored user (e.g. after profile name edit). */
   patchUser: (patch: Partial<User>) => void
@@ -98,6 +100,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return session.user
   }
 
+  const resetPassword = async (tokenValue: string, password: string, remember = true) => {
+    const { data } = await authApi.resetPassword({ token: tokenValue, password })
+    const session = readSession(data)
+    persist(session.access_token, session.user, remember)
+    return session.user
+  }
+
   const logout = () => {
     clearAuthStorage()
     setToken(null)
@@ -115,7 +124,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, patchUser }}>
+    <AuthContext.Provider
+      value={{ user, token, loading, login, register, resetPassword, logout, patchUser }}
+    >
       {children}
     </AuthContext.Provider>
   )

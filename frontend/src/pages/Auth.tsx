@@ -9,7 +9,7 @@ import { scrollFieldAboveKeyboard, useKeyboardInset } from '../hooks/useKeyboard
 import { usePageSeo } from '../hooks/usePageSeo'
 import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
-import { apiErrorMessage, platformApi } from '../services/api'
+import { apiErrorMessage, authApi, platformApi } from '../services/api'
 import { appHomePath, homeForRole, safeNextPath } from '../utils/navigation'
 import './Auth.css'
 
@@ -51,9 +51,11 @@ function PasswordField({
 
   return (
     <div className="form-group">
-      <label className="form-label" htmlFor={id}>
-        {label}
-      </label>
+      {label ? (
+        <label className="form-label" htmlFor={id}>
+          {label}
+        </label>
+      ) : null}
       <div className="auth-password">
         <input
           id={id}
@@ -69,6 +71,7 @@ function PasswordField({
           spellCheck={false}
           autoCapitalize="off"
           autoCorrect="off"
+          aria-label={label || undefined}
           aria-invalid={invalid || undefined}
           aria-describedby={hint ? hintId : undefined}
         />
@@ -209,6 +212,17 @@ export function LoginPage() {
             enterKeyHint="go"
             invalid={Boolean(error)}
           />
+          <p className="auth-forgot">
+            <Link
+              to={
+                next
+                  ? `/forgot-password?next=${encodeURIComponent(next)}`
+                  : '/forgot-password'
+              }
+            >
+              Forgot password?
+            </Link>
+          </p>
           <label className="auth-remember">
             <input
               type="checkbox"
@@ -521,6 +535,304 @@ export function SignupPage() {
             <Link to="/tournaments">Browse tournaments without an account</Link>
           </p>
         )}
+      </div>
+    </div>
+  )
+}
+
+export function ForgotPasswordPage() {
+  useDarkStatusBar()
+  useKeyboardInset(true)
+  usePageSeo({
+    title: 'Forgot password',
+    description: 'Reset your Student Padel Ireland password.',
+    path: '/forgot-password',
+    noIndex: true,
+  })
+  const { user, loading: authLoading } = useAuth()
+  const [params] = useSearchParams()
+  const next = safeNextPath(params.get('next'))
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [sent, setSent] = useState(false)
+  const native = isNativeApp()
+
+  useEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (!t.closest('.auth-page')) return
+      if (t.matches('input, textarea, select, [contenteditable]')) {
+        scrollFieldAboveKeyboard(t)
+      }
+    }
+    document.addEventListener('focusin', onFocus)
+    return () => document.removeEventListener('focusin', onFocus)
+  }, [])
+
+  if (authLoading) {
+    return (
+      <div className={`auth-page${native ? ' auth-page--native' : ''}`}>
+        <div className="auth-panel" aria-busy="true">
+          <div className="skeleton" style={{ height: 28, width: '55%', marginBottom: 16 }} />
+          <div className="skeleton" style={{ height: 120 }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (user) {
+    return <Navigate to={next || homeForRole(user.role)} replace />
+  }
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      await authApi.forgotPassword(email.trim())
+      setSent(true)
+    } catch (err) {
+      setError(apiErrorMessage(err, 'Could not send reset email. Try again shortly.'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className={`auth-page${native ? ' auth-page--native' : ''}`}>
+      <div className="auth-panel">
+        <BrandLogo to={native ? null : appHomePath()} className="auth-brand" size="md" />
+        <h1>{sent ? 'Check your email' : 'Forgot password?'}</h1>
+        {sent ? (
+          <>
+            <p className="auth-lead">
+              If an account exists for <strong>{email.trim()}</strong>, we sent a link to choose a
+              new password. It expires in 1 hour.
+            </p>
+            <p className="auth-lead auth-lead--tight">
+              Open the link on this phone or computer - it works in the app and in the browser.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary btn-block auth-submit"
+              disabled={loading}
+              onClick={() => {
+                void (async () => {
+                  setError('')
+                  setLoading(true)
+                  try {
+                    await authApi.forgotPassword(email.trim())
+                    setSent(true)
+                  } catch (err) {
+                    setError(apiErrorMessage(err, 'Could not resend. Try again shortly.'))
+                  } finally {
+                    setLoading(false)
+                  }
+                })()
+              }}
+            >
+              {loading ? 'Sending…' : 'Resend link'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-block auth-submit"
+              disabled={loading}
+              onClick={() => {
+                setSent(false)
+                setError('')
+              }}
+            >
+              Use a different email
+            </button>
+            {error && (
+              <p className="auth-error" role="alert">
+                {error}
+              </p>
+            )}
+            <p className="auth-foot">
+              <Link to={next ? `/login?next=${encodeURIComponent(next)}` : '/login'}>
+                Back to log in
+              </Link>
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="auth-lead">
+              Enter the email for your account and we’ll send a reset link.
+            </p>
+            <form onSubmit={onSubmit}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="forgot-email">
+                  Email
+                </label>
+                <input
+                  id="forgot-email"
+                  className="form-input"
+                  type="email"
+                  name="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  inputMode="email"
+                  enterKeyHint="send"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+              </div>
+              {error && (
+                <p className="auth-error" role="alert">
+                  {error}
+                </p>
+              )}
+              <button className="btn btn-primary btn-block auth-submit" disabled={loading}>
+                {loading ? 'Sending…' : 'Send reset link'}
+              </button>
+            </form>
+            <p className="auth-foot">
+              Remembered it?{' '}
+              <Link to={next ? `/login?next=${encodeURIComponent(next)}` : '/login'}>Log in</Link>
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function ResetPasswordPage() {
+  useDarkStatusBar()
+  useKeyboardInset(true)
+  usePageSeo({
+    title: 'Choose a new password',
+    description: 'Set a new password for your Student Padel Ireland account.',
+    path: '/reset-password',
+    noIndex: true,
+  })
+  const { resetPassword, user, loading: authLoading } = useAuth()
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const token = (params.get('token') || '').trim()
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const native = isNativeApp()
+
+  useEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target
+      if (!(t instanceof HTMLElement)) return
+      if (!t.closest('.auth-page')) return
+      if (t.matches('input, textarea, select, [contenteditable]')) {
+        scrollFieldAboveKeyboard(t)
+      }
+    }
+    document.addEventListener('focusin', onFocus)
+    return () => document.removeEventListener('focusin', onFocus)
+  }, [])
+
+  if (authLoading) {
+    return (
+      <div className={`auth-page${native ? ' auth-page--native' : ''}`}>
+        <div className="auth-panel" aria-busy="true">
+          <div className="skeleton" style={{ height: 28, width: '55%', marginBottom: 16 }} />
+          <div className="skeleton" style={{ height: 120 }} />
+        </div>
+      </div>
+    )
+  }
+
+  if (user && !token) {
+    return <Navigate to={homeForRole(user.role)} replace />
+  }
+
+  if (!token) {
+    return (
+      <div className={`auth-page${native ? ' auth-page--native' : ''}`}>
+        <div className="auth-panel">
+          <BrandLogo to={native ? null : appHomePath()} className="auth-brand" size="md" />
+          <h1>Link missing</h1>
+          <p className="auth-lead">
+            Open the reset link from your email, or request a new one.
+          </p>
+          <Link to="/forgot-password" className="btn btn-primary btn-block auth-submit">
+            Request a new link
+          </Link>
+          <p className="auth-foot">
+            <Link to="/login">Back to log in</Link>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const onSubmit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (password.length < 8) {
+      setError('Use at least 8 characters')
+      return
+    }
+    if (password !== confirm) {
+      setError('Passwords don’t match')
+      return
+    }
+    setLoading(true)
+    try {
+      const u = await resetPassword(token, password, true)
+      navigate(homeForRole(u.role), { replace: true })
+    } catch (err) {
+      setError(apiErrorMessage(err, 'This reset link is invalid or has expired'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className={`auth-page${native ? ' auth-page--native' : ''}`}>
+      <div className="auth-panel">
+        <BrandLogo to={native ? null : appHomePath()} className="auth-brand" size="md" />
+        <h1>Choose a new password</h1>
+        <p className="auth-lead">Pick something you’ll remember - at least 8 characters.</p>
+        <form onSubmit={onSubmit}>
+          <PasswordField
+            id="reset-password"
+            label="New password"
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            minLength={8}
+            required
+            enterKeyHint="next"
+            hint="At least 8 characters"
+          />
+          <PasswordField
+            id="reset-password-confirm"
+            label="Confirm password"
+            value={confirm}
+            onChange={setConfirm}
+            autoComplete="new-password"
+            minLength={8}
+            required
+            enterKeyHint="done"
+            invalid={Boolean(confirm) && confirm !== password}
+          />
+          {error && (
+            <p className="auth-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button className="btn btn-primary btn-block auth-submit" disabled={loading}>
+            {loading ? 'Saving…' : 'Save password & continue'}
+          </button>
+        </form>
+        <p className="auth-foot">
+          <Link to="/forgot-password">Need a new link?</Link>
+        </p>
       </div>
     </div>
   )

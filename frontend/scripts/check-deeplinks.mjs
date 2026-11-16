@@ -40,6 +40,12 @@ const cases = [
   ['studentpadel://', null],
   ['studentpadel:///', null],
   ['studentpadel://t/x/confirmed?registration_id=1', '/t/x/confirmed?registration_id=1'],
+  [
+    'https://studentpadel.ie/reset-password?token=abc',
+    '/reset-password?token=abc',
+  ],
+  ['studentpadel://reset-password?token=abc', '/reset-password?token=abc'],
+  ['studentpadel://forgot-password', '/forgot-password'],
   ['not a url', null],
 ]
 

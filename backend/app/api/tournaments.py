@@ -48,6 +48,7 @@ from app.models import (
     TeamPlayer,
     Tournament,
     TournamentAdmin,
+    TournamentFreeEntry,
     TournamentRegistrationAnswer,
     TournamentRegistrationField,
     TournamentStatus,
@@ -58,18 +59,31 @@ from app.models import (
 from app.db.seed import PREFERRED_UNIVERSITY_SLUGS
 from app.services.email import render_simple_email, send_email
 from app.services.rating import INITIAL_RATING, rate_match
+from app.services.free_entries import (
+    add_free_entries,
+    consume_free_entries_for_registration,
+    free_entry_to_out,
+    list_free_entries,
+)
 from app.services.registration_fields import (
     answers_for_team,
     field_to_out,
     list_fields,
     save_answers_for_registration,
+    set_answer_fulfillment,
     sync_registration_fields,
 )
 from app.schemas import (
     AnnouncementCreate,
     AnnouncementOut,
     AnnouncementUpdate,
+    AnswerFulfillmentRequest,
     CheckInRequest,
+    FreeEntryCreate,
+    FreeEntryOut,
+    OrganiserAddPartnerRequest,
+    OrganiserUpdatePlayerRequest,
+    OrganiserUpdateTeamRequest,
     CheckoutResponse,
     GenerateRequest,
     InviteResolveOut,
@@ -246,10 +260,33 @@ def _unique_player_names(members) -> list[str]:
     return names
 
 
-def _team_out(team: Team, db: Session | None = None) -> TeamOut:
+def _team_out(
+    team: Team,
+    db: Session | None = None,
+    *,
+    include_player_details: bool = False,
+    singles: bool = False,
+) -> TeamOut:
     names = _unique_player_names(team.members)
     custom = answers_for_team(db, team) if db is not None else []
     uni = getattr(team, "university", None)
+    players: list = []
+    member_count = 0
+    for m in sorted((x for x in (team.members or []) if getattr(x, "user", None)), key=lambda x: x.slot):
+        member_count += 1
+        u = m.user
+        players.append(
+            {
+                "user_id": u.id,
+                "slot": m.slot,
+                "full_name": (u.full_name or "").strip(),
+                "email": u.email if include_player_details else None,
+                "phone": u.phone if include_player_details else None,
+                "student_number": u.student_number if include_player_details else None,
+                "must_set_password": bool(getattr(u, "must_set_password", False)),
+                "invitation_accepted": bool(m.invitation_accepted),
+            }
+        )
     return TeamOut(
         id=team.id,
         tournament_id=team.tournament_id,
@@ -260,11 +297,57 @@ def _team_out(team: Team, db: Session | None = None) -> TeamOut:
         checked_in=team.checked_in,
         withdrawn=team.withdrawn,
         player_names=names,
+        players=players,
+        needs_partner=not singles and member_count < 2,
         payment_status=team.registration.status if team.registration else None,
         payment_via=_payment_via(team.registration),
         created_at=getattr(team, "created_at", None),
         custom_answers=custom,
     )
+
+
+def _resolve_partner_from_body(
+    db: Session,
+    *,
+    partner_user_id: UUID | None,
+    partner_email: str | None,
+    partner_name: str,
+    allow_missing: bool = False,
+) -> tuple[User | None, bool, bool]:
+    """Return (partner, needs_signup, notify_email)."""
+    if partner_user_id:
+        partner = db.get(User, partner_user_id)
+        if not partner or not partner.is_active:
+            raise HTTPException(400, "Partner not found")
+        return partner, False, False
+    if partner_email:
+        email = partner_email.lower().strip()
+        partner = db.query(User).filter(User.email == email).first()
+        if partner:
+            needs_signup = bool(getattr(partner, "must_set_password", False))
+            if needs_signup:
+                name = (partner_name or "").strip()
+                if len(name) >= 2:
+                    partner.full_name = name
+            return partner, needs_signup, True
+        name = (partner_name or "").strip()
+        if len(name) < 2:
+            raise HTTPException(400, "Partner name is required for a new email")
+        partner = User(
+            email=email,
+            password_hash=hash_password(str(uuid4())),
+            full_name=name,
+            role="PLAYER",
+            university_id=None,
+            must_set_password=True,
+        )
+        db.add(partner)
+        db.flush()
+        _ensure_ranking(db, partner.id)
+        return partner, True, True
+    if allow_missing:
+        return None, False, False
+    raise HTTPException(400, "Pick a partner or enter their email")
 
 
 def _active_entry_statuses() -> tuple[str, ...]:
@@ -1272,6 +1355,9 @@ def _purge_tournament(db: Session, t: Tournament) -> None:
             TournamentRegistrationAnswer.registration_id.in_(reg_ids)
         ).delete(synchronize_session=False)
         db.query(Payment).filter(Payment.registration_id.in_(reg_ids)).delete(synchronize_session=False)
+    db.query(TournamentFreeEntry).filter(TournamentFreeEntry.tournament_id == tid).delete(
+        synchronize_session=False
+    )
     db.query(Payment).filter(Payment.tournament_id == tid).delete(synchronize_session=False)
     db.query(Registration).filter(Registration.tournament_id == tid).delete(synchronize_session=False)
     if team_ids:
@@ -1708,43 +1794,15 @@ def register_team(
         if body.partner_user_id or body.partner_email:
             raise HTTPException(400, "This is a singles tournament - no partner needed")
     else:
-        if body.partner_user_id:
-            partner = db.get(User, body.partner_user_id)
-            if not partner or not partner.is_active:
-                raise HTTPException(400, "Partner not found")
-            # Any registered player can be named as tournament partner (friends not required)
-        elif body.partner_email:
-            email = body.partner_email.lower().strip()
-            partner = db.query(User).filter(User.email == email).first()
-            if partner:
-                # Existing account (or prior invite stub) - link that user as partner
-                partner_needs_signup = bool(getattr(partner, "must_set_password", False))
-                if partner_needs_signup:
-                    name = (body.partner_name or "").strip()
-                    if len(name) >= 2:
-                        partner.full_name = name
-                notify_email_partner = True
-            else:
-                name = (body.partner_name or "").strip()
-                if len(name) < 2:
-                    raise HTTPException(400, "Partner name is required for a new email")
-                partner = User(
-                    email=email,
-                    password_hash=hash_password(str(uuid4())),
-                    full_name=name,
-                    role="PLAYER",
-                    university_id=None,
-                    must_set_password=True,
-                )
-                db.add(partner)
-                db.flush()
-                _ensure_ranking(db, partner.id)
-                partner_needs_signup = True
-                notify_email_partner = True
-        else:
-            raise HTTPException(400, "Pick a partner or enter their email")
-
-        if partner.id == user.id:
+        # Partner optional - captain can enter alone and add a partner later (or admin can)
+        partner, partner_needs_signup, notify_email_partner = _resolve_partner_from_body(
+            db,
+            partner_user_id=body.partner_user_id,
+            partner_email=str(body.partner_email) if body.partner_email else None,
+            partner_name=body.partner_name or "",
+            allow_missing=True,
+        )
+        if partner and partner.id == user.id:
             raise HTTPException(400, "Partner must be a different player")
 
     if partner:
@@ -1958,7 +2016,9 @@ def organiser_add_team(
         .filter(Team.id == team.id)
         .first()
     )
-    return _team_out(team, db)
+    return _team_out(
+        team, db, include_player_details=True, singles=_is_singles(t)
+    )
 
 
 def _checkout_web_origin(return_origin: str | None) -> str:
@@ -2032,6 +2092,26 @@ def _issue_checkout(
             registration_id=reg.id,
             demo_mode=True,
             message="Registration confirmed - free entry.",
+        )
+
+    # Organiser email allowlist (captain and/or partner) → complimentary entry
+    matched = consume_free_entries_for_registration(
+        db, tournament_id=t.id, team=team, registration=reg
+    )
+    if matched:
+        from app.services.payments import mark_registration_paid
+        from app.services.reminders import maybe_remind_team_after_paid
+
+        reg.amount_cents = 0
+        reg.currency = t.currency
+        mark_registration_paid(db, reg, stripe_payment_id="free_entry")
+        db.commit()
+        maybe_remind_team_after_paid(db, t.id, reg.team_id)
+        return CheckoutResponse(
+            checkout_url=None,
+            registration_id=reg.id,
+            demo_mode=False,
+            message="Registration confirmed - free entry (organiser complimentary).",
         )
 
     # Admin collects cash/card at the venue - confirm the spot without Stripe
@@ -2376,7 +2456,16 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/tournaments/{tournament_id}/teams", response_model=list[TeamOut])
-def list_teams(tournament_id: UUID, db: Session = Depends(get_db)):
+def list_teams(
+    tournament_id: UUID,
+    db: Session = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    include_details = bool(user and user_can_manage_tournament(user, t, db))
+    singles = _is_singles(t)
     teams = (
         db.query(Team)
         .options(
@@ -2388,7 +2477,10 @@ def list_teams(tournament_id: UUID, db: Session = Depends(get_db)):
         .order_by(Team.name)
         .all()
     )
-    return [_team_out(team, db) for team in teams]
+    return [
+        _team_out(team, db, include_player_details=include_details, singles=singles)
+        for team in teams
+    ]
 
 
 @router.post("/tournaments/{tournament_id}/teams/{team_id}/check-in", response_model=TeamOut)
@@ -2424,7 +2516,228 @@ def check_in_team(
         team.checked_in = body.player1_present and body.player2_present
     db.commit()
     db.refresh(team)
-    return _team_out(team, db)
+    return _team_out(
+        team, db, include_player_details=True, singles=_is_singles(t)
+    )
+
+
+@router.post(
+    "/tournaments/{tournament_id}/teams/{team_id}/answer-fulfillment",
+    response_model=TeamOut,
+)
+def set_team_answer_fulfillment(
+    tournament_id: UUID,
+    team_id: UUID,
+    body: AnswerFulfillmentRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organiser ticks off a signup answer (e.g. jersey handed out)."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    team = (
+        db.query(Team)
+        .options(
+            joinedload(Team.members).joinedload(TeamPlayer.user),
+            joinedload(Team.registration),
+            joinedload(Team.university),
+        )
+        .filter(Team.id == team_id, Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
+        .first()
+    )
+    if not team:
+        raise HTTPException(404, "Team not found")
+    set_answer_fulfillment(
+        db,
+        team=team,
+        field_id=body.field_id,
+        slot=body.slot,
+        fulfilled=body.fulfilled,
+    )
+    db.commit()
+    db.refresh(team)
+    return _team_out(
+        team, db, include_player_details=True, singles=_is_singles(t)
+    )
+
+
+def _load_manage_team(db: Session, tournament_id: UUID, team_id: UUID) -> Team:
+    team = (
+        db.query(Team)
+        .options(
+            joinedload(Team.members).joinedload(TeamPlayer.user),
+            joinedload(Team.registration),
+            joinedload(Team.university),
+        )
+        .filter(Team.id == team_id, Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
+        .first()
+    )
+    if not team:
+        raise HTTPException(404, "Team not found")
+    return team
+
+
+@router.patch("/tournaments/{tournament_id}/teams/{team_id}", response_model=TeamOut)
+def organiser_update_team(
+    tournament_id: UUID,
+    team_id: UUID,
+    body: OrganiserUpdateTeamRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organiser renames a team / entry."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    team = _load_manage_team(db, tournament_id, team_id)
+    if body.name is not None:
+        name = body.name.strip()
+        if len(name) < 2:
+            raise HTTPException(400, "Team name is too short")
+        team.name = name
+    db.commit()
+    team = _load_manage_team(db, tournament_id, team_id)
+    return _team_out(team, db, include_player_details=True, singles=_is_singles(t))
+
+
+@router.patch(
+    "/tournaments/{tournament_id}/teams/{team_id}/players/{player_user_id}",
+    response_model=TeamOut,
+)
+def organiser_update_player(
+    tournament_id: UUID,
+    team_id: UUID,
+    player_user_id: UUID,
+    body: OrganiserUpdatePlayerRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organiser edits a player’s name / email / phone / student number on an entry."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    team = _load_manage_team(db, tournament_id, team_id)
+    member = next((m for m in (team.members or []) if m.user_id == player_user_id), None)
+    if not member or not member.user:
+        raise HTTPException(404, "Player not found on this team")
+    target = member.user
+    resend_invite = False
+
+    if body.full_name is not None:
+        name = body.full_name.strip()
+        if len(name) < 2:
+            raise HTTPException(400, "Name is too short")
+        target.full_name = name
+
+    if body.phone is not None:
+        target.phone = (body.phone or "").strip()[:40] or None
+
+    if body.student_number is not None:
+        target.student_number = (body.student_number or "").strip()[:80] or None
+
+    if body.email is not None:
+        new_email = str(body.email).lower().strip()
+        if new_email != (target.email or "").lower():
+            clash = (
+                db.query(User)
+                .filter(User.email == new_email, User.id != target.id)
+                .first()
+            )
+            if clash:
+                raise HTTPException(400, "That email is already used by another account")
+            target.email = new_email
+            # Stub invitees should get the invite at the new address
+            if bool(getattr(target, "must_set_password", False)):
+                resend_invite = True
+
+    db.commit()
+
+    if resend_invite and member.slot == 2:
+        captain_tp = next((m for m in (team.members or []) if m.slot == 1), None)
+        captain = captain_tp.user if captain_tp else None
+        if captain:
+            _notify_email_partner(
+                captain=captain,
+                partner=target,
+                tournament=t,
+                needs_signup=True,
+            )
+
+    team = _load_manage_team(db, tournament_id, team_id)
+    return _team_out(team, db, include_player_details=True, singles=_is_singles(t))
+
+
+@router.post(
+    "/tournaments/{tournament_id}/teams/{team_id}/add-partner",
+    response_model=TeamOut,
+)
+def organiser_add_partner(
+    tournament_id: UUID,
+    team_id: UUID,
+    body: OrganiserAddPartnerRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Organiser adds a missing doubles partner by email (invite / accept flow)."""
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    if _is_singles(t):
+        raise HTTPException(400, "Singles events don’t use partners")
+    if t.status in (
+        TournamentStatus.LIVE.value,
+        TournamentStatus.COMPLETED.value,
+        TournamentStatus.CANCELLED.value,
+    ) or _tournament_has_fixtures(db, t.id):
+        raise HTTPException(400, "Can’t add a partner after the draw is published")
+
+    team = _load_manage_team(db, tournament_id, team_id)
+    slot2 = next((m for m in (team.members or []) if m.slot == 2), None)
+    if slot2:
+        raise HTTPException(400, "This team already has a partner")
+    captain_tp = next((m for m in (team.members or []) if m.slot == 1), None)
+    if not captain_tp or not captain_tp.user:
+        raise HTTPException(400, "Team captain not found")
+
+    partner, partner_needs_signup, notify_email = _resolve_partner_from_body(
+        db,
+        partner_user_id=body.partner_user_id,
+        partner_email=str(body.partner_email),
+        partner_name=body.partner_name or "",
+        allow_missing=False,
+    )
+    assert partner is not None
+    if partner.id == captain_tp.user_id:
+        raise HTTPException(400, "Partner must be a different player")
+    if _players_already_registered(db, t.id, [partner.id]):
+        raise HTTPException(400, "That player is already entered in this tournament")
+
+    db.add(
+        TeamPlayer(
+            team_id=team.id,
+            user_id=partner.id,
+            slot=2,
+            invitation_accepted=True,
+        )
+    )
+    _ensure_pending_friendship(db, captain_tp.user_id, partner.id)
+    db.commit()
+
+    if notify_email or partner_needs_signup:
+        _notify_email_partner(
+            captain=captain_tp.user,
+            partner=partner,
+            tournament=t,
+            needs_signup=partner_needs_signup,
+        )
+
+    team = _load_manage_team(db, tournament_id, team_id)
+    return _team_out(team, db, include_player_details=True, singles=False)
 
 
 @router.post("/tournaments/{tournament_id}/teams/{team_id}/mark-fee-collected", response_model=TeamOut)
@@ -2472,7 +2785,9 @@ def mark_fee_collected(
         payment_row.stripe_payment_id = "collected_on_arrival"
     db.commit()
     db.refresh(team)
-    return _team_out(team, db)
+    return _team_out(
+        team, db, include_player_details=True, singles=_is_singles(t)
+    )
 
 
 def _entry_is_paid(team: Team) -> bool:
@@ -2640,42 +2955,14 @@ def replace_partner(
     if tp.slot != 1:
         raise HTTPException(400, "Only the team captain can change the partner")
 
-    partner: User | None = None
-    notify_email_partner = False
-    partner_needs_signup = False
-    if body.partner_user_id:
-        partner = db.get(User, body.partner_user_id)
-        if not partner or not partner.is_active:
-            raise HTTPException(400, "Partner not found")
-    elif body.partner_email:
-        email = body.partner_email.lower().strip()
-        partner = db.query(User).filter(User.email == email).first()
-        if partner:
-            partner_needs_signup = bool(getattr(partner, "must_set_password", False))
-            if partner_needs_signup:
-                name = (body.partner_name or "").strip()
-                if len(name) >= 2:
-                    partner.full_name = name
-            notify_email_partner = True
-        else:
-            name = (body.partner_name or "").strip()
-            if len(name) < 2:
-                raise HTTPException(400, "Partner name is required for a new email")
-            partner = User(
-                email=email,
-                password_hash=hash_password(str(uuid4())),
-                full_name=name,
-                role="PLAYER",
-                university_id=None,
-                must_set_password=True,
-            )
-            db.add(partner)
-            db.flush()
-            _ensure_ranking(db, partner.id)
-            partner_needs_signup = True
-            notify_email_partner = True
-    else:
-        raise HTTPException(400, "Pick a partner or enter their email")
+    partner, partner_needs_signup, notify_email_partner = _resolve_partner_from_body(
+        db,
+        partner_user_id=body.partner_user_id,
+        partner_email=str(body.partner_email) if body.partner_email else None,
+        partner_name=body.partner_name or "",
+        allow_missing=False,
+    )
+    assert partner is not None
 
     if partner.id == user.id:
         raise HTTPException(400, "Partner must be a different player")
@@ -3619,6 +3906,66 @@ def delete_announcement(
     if not a or a.tournament_id != t.id:
         raise HTTPException(404, "Announcement not found")
     db.delete(a)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Free entry emails ─────────────────────────────────────────
+
+@router.get("/tournaments/{tournament_id}/free-entries", response_model=list[FreeEntryOut])
+def get_free_entries(
+    tournament_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    return [free_entry_to_out(r) for r in list_free_entries(db, t.id)]
+
+
+@router.post("/tournaments/{tournament_id}/free-entries", response_model=list[FreeEntryOut])
+def create_free_entries(
+    tournament_id: UUID,
+    body: FreeEntryCreate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    rows = add_free_entries(
+        db,
+        tournament_id=t.id,
+        emails=[str(e) for e in body.emails],
+        note=body.note,
+        created_by_id=user.id,
+    )
+    db.commit()
+    for row in rows:
+        db.refresh(row)
+    return [free_entry_to_out(r) for r in rows]
+
+
+@router.delete("/tournaments/{tournament_id}/free-entries/{entry_id}")
+def delete_free_entry(
+    tournament_id: UUID,
+    entry_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    row = db.get(TournamentFreeEntry, entry_id)
+    if not row or row.tournament_id != t.id:
+        raise HTTPException(404, "Free entry not found")
+    if row.used_by_registration_id is not None:
+        raise HTTPException(400, "This free entry has already been used")
+    db.delete(row)
     db.commit()
     return {"ok": True}
 

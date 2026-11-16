@@ -176,6 +176,14 @@ def init_db() -> None:
     _pg_add_column_if_missing("tournaments", "refunds_on_withdrawal", "BOOLEAN DEFAULT TRUE")
     _sqlite_add_column_if_missing("tournaments", "scoring_mode", "VARCHAR(20) DEFAULT 'SIMPLE'")
     _pg_add_column_if_missing("tournaments", "scoring_mode", "VARCHAR(20) DEFAULT 'SIMPLE'")
+    _sqlite_add_column_if_missing(
+        "tournament_registration_answers", "fulfilled", "BOOLEAN DEFAULT 0"
+    )
+    _pg_add_column_if_missing(
+        "tournament_registration_answers", "fulfilled", "BOOLEAN DEFAULT FALSE"
+    )
+    _sqlite_add_column_if_missing("tournament_registration_answers", "fulfilled_at", "DATETIME")
+    _pg_add_column_if_missing("tournament_registration_answers", "fulfilled_at", "TIMESTAMPTZ")
     _backfill_tournament_is_official()
     _sqlite_ensure_ranking_history_nullable_tournament()
     _pg_ensure_ranking_history_nullable_tournament()

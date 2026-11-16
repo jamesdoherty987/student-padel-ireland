@@ -143,6 +143,25 @@ class User(Base, TimestampMixin):
     media: Mapped[list["ProfileMedia"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", order_by="ProfileMedia.sort_order"
     )
+    password_reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class PasswordResetToken(Base, TimestampMixin):
+    """One-time reset link token (store SHA-256 hash of the secret only)."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship(back_populates="password_reset_tokens")
 
 
 class Tournament(Base, TimestampMixin):
@@ -205,6 +224,34 @@ class Tournament(Base, TimestampMixin):
         cascade="all, delete-orphan",
         order_by="TournamentRegistrationField.sort_order",
     )
+    free_entries: Mapped[list["TournamentFreeEntry"]] = relationship(
+        back_populates="tournament",
+        cascade="all, delete-orphan",
+    )
+
+
+class TournamentFreeEntry(Base, TimestampMixin):
+    """Email allowlisted by the organiser for complimentary entry."""
+
+    __tablename__ = "tournament_free_entries"
+    __table_args__ = (
+        UniqueConstraint("tournament_id", "email", name="uq_tournament_free_entry_email"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    note: Mapped[Optional[str]] = mapped_column(String(200))
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL")
+    )
+    used_by_registration_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        ForeignKey("registrations.id", ondelete="SET NULL")
+    )
+
+    tournament: Mapped[Tournament] = relationship(back_populates="free_entries")
 
 
 class TournamentRegistrationField(Base, TimestampMixin):
@@ -255,6 +302,9 @@ class TournamentRegistrationAnswer(Base, TimestampMixin):
         ForeignKey("team_players.id", ondelete="CASCADE"), nullable=True, index=True
     )
     value: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    # Organiser checkoff (e.g. jersey handed out for a jersey-size answer)
+    fulfilled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    fulfilled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     field: Mapped[TournamentRegistrationField] = relationship(back_populates="answers")
 

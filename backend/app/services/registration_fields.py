@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -249,7 +250,16 @@ def save_answers_for_registration(
                         + (" for your partner" if slot == 2 else ""),
                     )
 
-    # Clear previous answers for this registration then rewrite
+    # Preserve organiser checkoffs across rewrite (keyed by field + player)
+    prior_rows = (
+        db.query(TournamentRegistrationAnswer)
+        .filter(TournamentRegistrationAnswer.registration_id == registration_id)
+        .all()
+    )
+    prior_fulfilled: dict[tuple[UUID, UUID | None], tuple[bool, datetime | None]] = {
+        (r.field_id, r.team_player_id): (bool(r.fulfilled), r.fulfilled_at) for r in prior_rows
+    }
+
     db.query(TournamentRegistrationAnswer).filter(
         TournamentRegistrationAnswer.registration_id == registration_id
     ).delete(synchronize_session=False)
@@ -262,12 +272,15 @@ def save_answers_for_registration(
             val = submitted[key]
             if field.field_type != "boolean" and not val:
                 continue
+            was_done, done_at = prior_fulfilled.get((field.id, None), (False, None))
             db.add(
                 TournamentRegistrationAnswer(
                     field_id=field.id,
                     registration_id=registration_id,
                     team_player_id=None,
                     value=val,
+                    fulfilled=was_done,
+                    fulfilled_at=done_at if was_done else None,
                 )
             )
             continue
@@ -283,12 +296,15 @@ def save_answers_for_registration(
             val = submitted[key]
             if field.field_type != "boolean" and not val:
                 continue
+            was_done, done_at = prior_fulfilled.get((field.id, tp.id), (False, None))
             db.add(
                 TournamentRegistrationAnswer(
                     field_id=field.id,
                     registration_id=registration_id,
                     team_player_id=tp.id,
                     value=val,
+                    fulfilled=was_done,
+                    fulfilled_at=done_at if was_done else None,
                 )
             )
 
@@ -330,6 +346,56 @@ def answers_for_team(db: Session, team: Team) -> list[CustomAnswerOut]:
                 slot=slot,
                 player_name=player_name,
                 value=row.value,
+                fulfilled=bool(row.fulfilled),
+                fulfilled_at=row.fulfilled_at,
             )
         )
     return out
+
+
+def set_answer_fulfillment(
+    db: Session,
+    *,
+    team: Team,
+    field_id: UUID,
+    slot: int | None,
+    fulfilled: bool,
+) -> list[CustomAnswerOut]:
+    """Toggle organiser checkoff for one signup answer on a team."""
+    if not team.registration:
+        raise HTTPException(404, "No registration for this team")
+
+    field = db.get(TournamentRegistrationField, field_id)
+    if not field or field.tournament_id != team.tournament_id:
+        raise HTTPException(404, "Signup question not found")
+
+    members = {m.slot: m for m in (team.members or [])}
+    team_player_id: UUID | None = None
+    if (field.scope or "player") == "team":
+        team_player_id = None
+    else:
+        use_slot = int(slot or 1)
+        if use_slot not in (1, 2):
+            raise HTTPException(400, "slot must be 1 or 2")
+        member = members.get(use_slot)
+        if not member:
+            raise HTTPException(404, "Player not found on this team")
+        team_player_id = member.id
+
+    q = db.query(TournamentRegistrationAnswer).filter(
+        TournamentRegistrationAnswer.registration_id == team.registration.id,
+        TournamentRegistrationAnswer.field_id == field_id,
+    )
+    if team_player_id is None:
+        q = q.filter(TournamentRegistrationAnswer.team_player_id.is_(None))
+    else:
+        q = q.filter(TournamentRegistrationAnswer.team_player_id == team_player_id)
+
+    row = q.first()
+    if not row:
+        raise HTTPException(404, "Answer not found")
+
+    row.fulfilled = bool(fulfilled)
+    row.fulfilled_at = datetime.now(timezone.utc) if fulfilled else None
+    db.flush()
+    return answers_for_team(db, team)

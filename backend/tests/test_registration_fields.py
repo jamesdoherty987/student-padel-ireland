@@ -24,6 +24,7 @@ from app.services.registration_fields import (
     answers_for_team,
     list_fields,
     save_answers_for_registration,
+    set_answer_fulfillment,
     sync_registration_fields,
 )
 from app.services.reminders import ireland_today
@@ -317,3 +318,112 @@ def test_sync_can_reuse_key_after_removing_field():
     assert fields[0].key == "jersey_size"
     assert fields[0].id != old.id
     assert json.loads(fields[0].options_json) == ["S", "M", "L"]
+
+
+def test_answer_fulfillment_per_player_and_persists_on_rewrite():
+    db = _session()
+    t = _tournament(db)
+    sync_registration_fields(
+        db,
+        t.id,
+        [
+            RegistrationFieldIn(
+                label="Jersey size",
+                field_type="select",
+                options=["S", "M", "L"],
+                required=True,
+                scope="player",
+            )
+        ],
+    )
+    db.commit()
+    field = list_fields(db, t.id)[0]
+
+    captain = User(
+        id=uuid4(),
+        email="cap2@ex.com",
+        password_hash="x",
+        full_name="Captain",
+        role=UserRole.PLAYER.value,
+    )
+    partner = User(
+        id=uuid4(),
+        email="par2@ex.com",
+        password_hash="x",
+        full_name="Partner",
+        role=UserRole.PLAYER.value,
+    )
+    db.add_all([captain, partner])
+    team = Team(id=uuid4(), tournament_id=t.id, name="Cap / Par")
+    db.add(team)
+    db.flush()
+    db.add(TeamPlayer(team_id=team.id, user_id=captain.id, slot=1))
+    db.add(TeamPlayer(team_id=team.id, user_id=partner.id, slot=2))
+    reg = Registration(
+        tournament_id=t.id,
+        team_id=team.id,
+        status=PaymentStatus.PAID.value,
+        amount_cents=5000,
+        currency="EUR",
+    )
+    db.add(reg)
+    db.flush()
+    save_answers_for_registration(
+        db,
+        tournament=t,
+        registration_id=reg.id,
+        team_id=team.id,
+        answers=[
+            CustomAnswerIn(field_id=field.id, value="M", slot=1),
+            CustomAnswerIn(field_id=field.id, value="L", slot=2),
+        ],
+        singles=False,
+    )
+    db.commit()
+
+    from sqlalchemy.orm import joinedload
+
+    team = (
+        db.query(Team)
+        .options(joinedload(Team.members).joinedload(TeamPlayer.user), joinedload(Team.registration))
+        .filter(Team.id == team.id)
+        .one()
+    )
+    outs = set_answer_fulfillment(db, team=team, field_id=field.id, slot=1, fulfilled=True)
+    db.commit()
+    by_slot = {o.slot: o for o in outs}
+    assert by_slot[1].fulfilled is True
+    assert by_slot[1].fulfilled_at is not None
+    assert by_slot[2].fulfilled is False
+
+    # Rewriting answers must keep the captain checkoff
+    save_answers_for_registration(
+        db,
+        tournament=t,
+        registration_id=reg.id,
+        team_id=team.id,
+        answers=[
+            CustomAnswerIn(field_id=field.id, value="S", slot=1),
+            CustomAnswerIn(field_id=field.id, value="L", slot=2),
+        ],
+        singles=False,
+    )
+    db.commit()
+    team = (
+        db.query(Team)
+        .options(joinedload(Team.members).joinedload(TeamPlayer.user), joinedload(Team.registration))
+        .filter(Team.id == team.id)
+        .one()
+    )
+    outs = answers_for_team(db, team)
+    by_slot = {o.slot: o for o in outs}
+    assert by_slot[1].value == "S"
+    assert by_slot[1].fulfilled is True
+    assert by_slot[2].fulfilled is False
+
+    rows = (
+        db.query(TournamentRegistrationAnswer)
+        .filter(TournamentRegistrationAnswer.registration_id == reg.id)
+        .all()
+    )
+    assert any(r.fulfilled for r in rows)

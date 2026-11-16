@@ -13,6 +13,8 @@ export function nativeTabsHiddenForPath(pathname: string): boolean {
   if (pathname === '/welcome' || pathname === '/') return true
   if (pathname === '/login' || pathname.startsWith('/login/')) return true
   if (pathname === '/signup' || pathname.startsWith('/signup/')) return true
+  if (pathname === '/forgot-password' || pathname.startsWith('/forgot-password/')) return true
+  if (pathname === '/reset-password' || pathname.startsWith('/reset-password/')) return true
   // Match-day live scoring - full focus, no chrome distraction
   if (/^\/t\/[^/]+\/live(\/|$)/.test(pathname)) return true
   // Venue TV display

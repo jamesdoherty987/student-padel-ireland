@@ -127,6 +127,8 @@ export type CustomAnswer = {
   slot?: number | null
   player_name?: string | null
   value: string
+  fulfilled?: boolean
+  fulfilled_at?: string | null
 }
 
 export type TournamentAdmin = {
@@ -137,6 +139,16 @@ export type TournamentAdmin = {
   email: string
   role: string
   is_owner: boolean
+  created_at?: string | null
+}
+
+export type FreeEntry = {
+  id: string
+  tournament_id: string
+  email: string
+  note?: string | null
+  used: boolean
+  used_by_registration_id?: string | null
   created_at?: string | null
 }
 
@@ -159,6 +171,17 @@ export type TournamentSponsor = {
   has_logo?: boolean
 }
 
+export type TournamentTeamPlayer = {
+  user_id: string
+  slot: number
+  full_name: string
+  email?: string | null
+  phone?: string | null
+  student_number?: string | null
+  must_set_password?: boolean
+  invitation_accepted?: boolean
+}
+
 /** Team row returned by admin team list / check-in / withdraw */
 export type TournamentTeam = {
   id: string
@@ -170,6 +193,8 @@ export type TournamentTeam = {
   checked_in: boolean
   withdrawn: boolean
   player_names: string[]
+  players?: TournamentTeamPlayer[]
+  needs_partner?: boolean
   payment_status?: string | null
   payment_via?: string | null
   created_at?: string | null
@@ -395,6 +420,10 @@ export type RegistrationConfirm = {
 export const authApi = {
   register: (data: Record<string, unknown>) => api.post('/api/auth/register', data),
   login: (data: { email: string; password: string }) => api.post('/api/auth/login', data),
+  forgotPassword: (email: string) =>
+    api.post<{ ok: boolean; message: string }>('/api/auth/forgot-password', { email }),
+  resetPassword: (data: { token: string; password: string }) =>
+    api.post<{ access_token: string; user: User }>('/api/auth/reset-password', data),
   me: () => api.get<User>('/api/auth/me'),
   deleteAccount: (password: string) => api.delete('/api/auth/me', { data: { password } }),
 }
@@ -494,6 +523,14 @@ export const tournamentApi = {
     api.post<TournamentAdmin>(`/api/tournaments/${tournamentId}/admins`, data),
   removeAdmin: (tournamentId: string, adminUserId: string) =>
     api.delete(`/api/tournaments/${tournamentId}/admins/${adminUserId}`),
+  freeEntries: (tournamentId: string) =>
+    api.get<FreeEntry[]>(`/api/tournaments/${tournamentId}/free-entries`),
+  addFreeEntries: (
+    tournamentId: string,
+    data: { emails: string[]; note?: string | null },
+  ) => api.post<FreeEntry[]>(`/api/tournaments/${tournamentId}/free-entries`, data),
+  removeFreeEntry: (tournamentId: string, entryId: string) =>
+    api.delete(`/api/tournaments/${tournamentId}/free-entries/${entryId}`),
   updateScore: (matchId: string, data: Record<string, unknown>) =>
     api.patch(`/api/matches/${matchId}/score`, data),
   playerSubmitScore: (
@@ -515,8 +552,43 @@ export const tournamentApi = {
     api.patch(`/api/matches/${matchId}`, data),
   checkIn: (tournamentId: string, teamId: string, data: Record<string, unknown>) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/check-in`, data),
+  setAnswerFulfillment: (
+    tournamentId: string,
+    teamId: string,
+    data: { field_id: string; slot?: number | null; fulfilled: boolean },
+  ) =>
+    api.post<TournamentTeam>(
+      `/api/tournaments/${tournamentId}/teams/${teamId}/answer-fulfillment`,
+      data,
+    ),
   markFeeCollected: (tournamentId: string, teamId: string) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/mark-fee-collected`),
+  updateTeam: (tournamentId: string, teamId: string, data: { name: string }) =>
+    api.patch<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}`, data),
+  updateTeamPlayer: (
+    tournamentId: string,
+    teamId: string,
+    playerUserId: string,
+    data: {
+      full_name?: string
+      email?: string
+      phone?: string | null
+      student_number?: string | null
+    },
+  ) =>
+    api.patch<TournamentTeam>(
+      `/api/tournaments/${tournamentId}/teams/${teamId}/players/${playerUserId}`,
+      data,
+    ),
+  addTeamPartner: (
+    tournamentId: string,
+    teamId: string,
+    data: { partner_email: string; partner_name?: string; partner_user_id?: string },
+  ) =>
+    api.post<TournamentTeam>(
+      `/api/tournaments/${tournamentId}/teams/${teamId}/add-partner`,
+      data,
+    ),
   withdrawTeam: (tournamentId: string, teamId: string) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
   leaveTournament: (tournamentId: string) =>

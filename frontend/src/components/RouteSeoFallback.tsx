@@ -13,6 +13,8 @@ function hasOwnSeo(pathname: string): boolean {
     pathname === '/terms' ||
     pathname === '/login' ||
     pathname === '/signup' ||
+    pathname === '/forgot-password' ||
+    pathname === '/reset-password' ||
     pathname === '/tournaments' ||
     pathname === '/rankings' ||
     pathname === '/community' ||

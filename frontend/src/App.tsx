@@ -33,6 +33,12 @@ import NativeWelcomePage from './pages/NativeWelcomePage'
 
 const LoginPage = lazy(() => import('./pages/Auth').then((m) => ({ default: m.LoginPage })))
 const SignupPage = lazy(() => import('./pages/Auth').then((m) => ({ default: m.SignupPage })))
+const ForgotPasswordPage = lazy(() =>
+  import('./pages/Auth').then((m) => ({ default: m.ForgotPasswordPage })),
+)
+const ResetPasswordPage = lazy(() =>
+  import('./pages/Auth').then((m) => ({ default: m.ResetPasswordPage })),
+)
 const TournamentsPage = lazy(() => import('./pages/TournamentsPage'))
 const TournamentDetailPage = lazy(() => import('./pages/TournamentDetailPage'))
 const JoinTournamentPage = lazy(() => import('./pages/JoinTournamentPage'))
@@ -245,6 +251,8 @@ export default function App() {
                 />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/tournaments" element={<TournamentsPage />} />
                 <Route path="/join" element={<JoinByCodePage />} />
                 <Route path="/join/:code" element={<JoinByCodePage />} />

@@ -494,7 +494,7 @@ export default function JoinTournamentPage() {
   )
   const [friendSearch, setFriendSearch] = useState('')
   const [friendFindOpen, setFriendFindOpen] = useState(false)
-  const [partnerMode, setPartnerMode] = useState<'friend' | 'email'>('email')
+  const [partnerMode, setPartnerMode] = useState<'friend' | 'email' | 'later'>('email')
   useKeyboardInset(!isConfirmRoute)
 
   useEffect(() => {
@@ -1178,6 +1178,13 @@ export default function JoinTournamentPage() {
     setCustomAnswers((prev) => ({ ...prev, [key]: value }))
   }
 
+  const hasPartnerForAnswers =
+    singles ||
+    (partnerMode === 'friend' && !!form.partner_user_id) ||
+    (partnerMode === 'email' &&
+      form.partner_email.trim().length > 0 &&
+      form.partner_name.trim().length >= 2)
+
   const buildCustomAnswersPayload = () => {
     const out: Array<{ field_id: string; value: string; slot?: number }> = []
     for (const field of signupFields) {
@@ -1192,7 +1199,7 @@ export default function JoinTournamentPage() {
         }
         continue
       }
-      const slots = singles ? [1] : [1, 2]
+      const slots = singles ? [1] : hasPartnerForAnswers ? [1, 2] : [1]
       for (const slot of slots) {
         const key = answerKey(field.id, slot)
         const raw = customAnswers[key]
@@ -1220,7 +1227,7 @@ export default function JoinTournamentPage() {
         }
         continue
       }
-      const slots = singles ? [1] : [1, 2]
+      const slots = singles ? [1] : hasPartnerForAnswers ? [1, 2] : [1]
       for (const slot of slots) {
         const key = answerKey(field.id, slot)
         const who = slot === 2 ? ' for your partner' : ''
@@ -1244,21 +1251,31 @@ export default function JoinTournamentPage() {
 
     if (!singles) {
       if (partnerMode === 'friend' && !form.partner_user_id) {
-        setError('Pick a partner, or switch to email')
+        setError('Pick a partner, switch to email, or choose “Add later”')
         setLoading(false)
         return
       }
 
-      if (partnerMode === 'email') {
-        if (!form.partner_email.trim() || form.partner_name.trim().length < 2) {
-          setError('Enter your partner’s name and email')
-          setLoading(false)
-          return
-        }
-        if (form.partner_email.trim().toLowerCase() === user.email.toLowerCase()) {
-          setError('Partner email must be different from yours')
-          setLoading(false)
-          return
+      const emailPartnerMode =
+        partnerMode === 'email' || (needsPartner && partnerMode === 'later')
+      if (emailPartnerMode) {
+        const email = form.partner_email.trim()
+        const name = form.partner_name.trim()
+        if (needsPartner || email || name) {
+          if (!email || name.length < 2) {
+            setError(
+              needsPartner
+                ? 'Enter your partner’s name and email'
+                : 'Enter your partner’s name and email, or leave both blank / use Add later',
+            )
+            setLoading(false)
+            return
+          }
+          if (email.toLowerCase() === user.email.toLowerCase()) {
+            setError('Partner email must be different from yours')
+            setLoading(false)
+            return
+          }
         }
       }
     }
@@ -1297,9 +1314,18 @@ export default function JoinTournamentPage() {
           payload.partner_user_id = form.partner_user_id
           payload.partner_name = fromFriends?.full_name || form.partner_name || null
           payload.partner_email = null
+        } else if (
+          (partnerMode === 'email' || needsPartner) &&
+          form.partner_email.trim() &&
+          form.partner_name.trim().length >= 2
+        ) {
+          payload.partner_name = form.partner_name.trim()
+          payload.partner_email = form.partner_email.trim()
         } else {
-          payload.partner_name = form.partner_name
-          payload.partner_email = form.partner_email
+          // Enter alone - partner can be added later by captain or organiser
+          payload.partner_name = ''
+          payload.partner_email = null
+          payload.partner_user_id = null
         }
       }
 
@@ -1429,14 +1455,15 @@ export default function JoinTournamentPage() {
                 Your partner
               </label>
               <p className="form-hint join-partner-hint">
-                Add your friend here. You’ll pay for both of you - they get an invite and don’t pay.
+                Add your partner now, or enter alone and add them later. You’ll pay for the team -
+                they get an invite and don’t pay.
               </p>
               <div className="partner-mode-row" role="tablist" aria-label="How to add partner">
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={partnerMode === 'email'}
-                  className={`filter-chip ${partnerMode === 'email' ? 'on' : ''}`}
+                  aria-selected={partnerMode === 'email' || (needsPartner && partnerMode === 'later')}
+                  className={`filter-chip ${partnerMode === 'email' || (needsPartner && partnerMode === 'later') ? 'on' : ''}`}
                   onClick={() => {
                     setPartnerMode('email')
                     setForm((f) => ({ ...f, partner_user_id: '' }))
@@ -1458,7 +1485,33 @@ export default function JoinTournamentPage() {
                 >
                   Find player
                 </button>
+                {!needsPartner && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={partnerMode === 'later'}
+                    className={`filter-chip ${partnerMode === 'later' ? 'on' : ''}`}
+                    onClick={() => {
+                      setPartnerMode('later')
+                      setForm((f) => ({
+                        ...f,
+                        partner_user_id: '',
+                        partner_name: '',
+                        partner_email: '',
+                      }))
+                      setFriendFindOpen(false)
+                    }}
+                  >
+                    Add later
+                  </button>
+                )}
               </div>
+              {partnerMode === 'later' && !needsPartner && (
+                <p className="form-hint">
+                  You’re in as captain only. Add a partner from your event page later, or ask the
+                  organiser to add their email.
+                </p>
+              )}
               {partnerMode === 'friend' ? (
                 <>
                   {form.partner_user_id && (
@@ -1630,7 +1683,7 @@ export default function JoinTournamentPage() {
                     )}
                   </div>
                 </>
-              ) : (
+              ) : partnerMode === 'email' || needsPartner ? (
                 <>
                   <input
                     id="join-partner-name"
@@ -1640,8 +1693,6 @@ export default function JoinTournamentPage() {
                     value={form.partner_name}
                     onChange={(e) => setForm({ ...form, partner_name: e.target.value })}
                     placeholder="Partner’s full name"
-                    required
-                    minLength={2}
                     autoComplete="name"
                     autoCapitalize="words"
                     enterKeyHint="next"
@@ -1656,7 +1707,6 @@ export default function JoinTournamentPage() {
                     value={form.partner_email}
                     onChange={(e) => setForm({ ...form, partner_email: e.target.value })}
                     placeholder="Partner’s email"
-                    required
                     autoComplete="email"
                     inputMode="email"
                     autoCapitalize="none"
@@ -1669,7 +1719,7 @@ export default function JoinTournamentPage() {
                     address. They won’t be charged - you pay for both.
                   </p>
                 </>
-              )}
+              ) : null}
             </div>
           )}
           {signupFields.length > 0 && (
@@ -1677,7 +1727,7 @@ export default function JoinTournamentPage() {
               {(() => {
                 const teamFields = signupFields.filter((f) => f.scope === 'team')
                 const playerFields = signupFields.filter((f) => f.scope !== 'team')
-                const splitByPerson = !singles && playerFields.length > 0
+                const splitByPerson = !singles && hasPartnerForAnswers && playerFields.length > 0
                 const partnerLabel =
                   (form.partner_name || '').trim() ||
                   (partnerMode === 'friend'
@@ -1784,7 +1834,7 @@ export default function JoinTournamentPage() {
                     )}
                     {teamFields.map((field) => renderControl(field))}
                     {playerFields.length > 0 &&
-                      (singles ? (
+                      (singles || !hasPartnerForAnswers ? (
                         playerFields.map((field) => renderControl(field, 1))
                       ) : (
                         <div className="join-custom-people">

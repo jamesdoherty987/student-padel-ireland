@@ -17,8 +17,11 @@ export function NativeDeepLinkRouter() {
 
     onNativeDeepLink((pathWithSearch) => {
       const path = nativeSafePath(pathWithSearch)
-      // Payment return should replace stack so Back doesn't go to a stale join sheet
-      const replace = /\/confirmed(\?|$)/.test(path) || /\/join\?cancelled=/.test(path)
+      // Payment return / password reset should replace stack so Back doesn't go stale
+      const replace =
+        /\/confirmed(\?|$)/.test(path) ||
+        /\/join\?cancelled=/.test(path) ||
+        /\/reset-password(\?|$)/.test(path)
       navigate(path, { replace })
     })
     void hideNativeSplash()
