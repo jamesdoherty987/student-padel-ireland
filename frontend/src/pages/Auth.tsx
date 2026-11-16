@@ -614,38 +614,40 @@ export function ForgotPasswordPage() {
             <p className="auth-lead auth-lead--tight">
               Open the link on this phone or computer - it works in the app and in the browser.
             </p>
-            <button
-              type="button"
-              className="btn btn-primary btn-block auth-submit"
-              disabled={loading}
-              onClick={() => {
-                void (async () => {
+            <div className="auth-actions-stack">
+              <button
+                type="button"
+                className="btn btn-primary btn-block auth-submit"
+                disabled={loading}
+                onClick={() => {
+                  void (async () => {
+                    setError('')
+                    setLoading(true)
+                    try {
+                      await authApi.forgotPassword(email.trim())
+                      setSent(true)
+                    } catch (err) {
+                      setError(apiErrorMessage(err, 'Could not resend. Try again shortly.'))
+                    } finally {
+                      setLoading(false)
+                    }
+                  })()
+                }}
+              >
+                {loading ? 'Sending…' : 'Resend link'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-block auth-submit"
+                disabled={loading}
+                onClick={() => {
+                  setSent(false)
                   setError('')
-                  setLoading(true)
-                  try {
-                    await authApi.forgotPassword(email.trim())
-                    setSent(true)
-                  } catch (err) {
-                    setError(apiErrorMessage(err, 'Could not resend. Try again shortly.'))
-                  } finally {
-                    setLoading(false)
-                  }
-                })()
-              }}
-            >
-              {loading ? 'Sending…' : 'Resend link'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-block auth-submit"
-              disabled={loading}
-              onClick={() => {
-                setSent(false)
-                setError('')
-              }}
-            >
-              Use a different email
-            </button>
+                }}
+              >
+                Use a different email
+              </button>
+            </div>
             {error && (
               <p className="auth-error" role="alert">
                 {error}

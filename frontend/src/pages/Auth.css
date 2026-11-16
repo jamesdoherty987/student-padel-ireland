@@ -302,6 +302,12 @@
   accent-color: var(--court-deep);
 }
 
+.auth-actions-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .auth-submit {
   min-height: 3rem;
   font-size: 1rem;
