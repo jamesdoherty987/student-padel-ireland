@@ -133,6 +133,8 @@ def render_simple_email(
     detail_lines: list[tuple[str, str]] | None = None,
     schedule_lines: list[str] | None = None,
     schedule_heading: str = "Your schedule",
+    resource_links: list[tuple[str, str]] | None = None,
+    resource_heading: str = "Useful links",
     cta_label: str,
     cta_url: str,
     secondary_cta_label: str | None = None,
@@ -160,6 +162,11 @@ def render_simple_email(
         text_parts.append(schedule_heading)
         for line in schedule_lines:
             text_parts.append(f"· {line}")
+        text_parts.append("")
+    if resource_links:
+        text_parts.append(resource_heading)
+        for label, url in resource_links:
+            text_parts.append(f"· {label}: {url}")
         text_parts.append("")
     text_parts.append(f"{cta_label}: {cta_url}")
     if secondary_cta_label and secondary_cta_url:
@@ -223,6 +230,25 @@ def render_simple_email(
             f'border-radius:12px;overflow:hidden;">{"".join(rows_html)}</table>'
         )
 
+    resource_html = ""
+    if resource_links:
+        rows = "".join(
+            (
+                "<tr>"
+                f'<td style="padding:9px 0;font-size:14px;color:{_INK};vertical-align:top;">'
+                f'<a href="{html.escape(url, quote=True)}" style="color:{_BRAND};font-weight:700;'
+                f'text-decoration:underline;">{html.escape(label)}</a></td>'
+                "</tr>"
+            )
+            for label, url in resource_links
+        )
+        resource_html = (
+            f'<p style="margin:4px 0 8px;font-size:12px;font-weight:700;letter-spacing:0.06em;'
+            f'color:{_MUTED};text-transform:uppercase;">{html.escape(resource_heading)}</p>'
+            f'<table role="presentation" cellpadding="0" cellspacing="0" width="100%" '
+            f'style="width:100%;margin:0 0 22px;">{rows}</table>'
+        )
+
     primary_cta = _cta_button(label=cta_label, url=cta_url, primary=True)
     secondary_cta = ""
     if secondary_cta_label and secondary_cta_url:
@@ -275,6 +301,7 @@ def render_simple_email(
               {para_html}
               {detail_html}
               {schedule_html}
+              {resource_html}
               {primary_cta}
               {secondary_cta}
               <p style="margin:4px 0 0;font-size:12px;line-height:1.45;color:{_MUTED};">

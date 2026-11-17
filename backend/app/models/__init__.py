@@ -199,6 +199,8 @@ class Tournament(Base, TimestampMixin):
     plate_size: Mapped[int] = mapped_column(Integer, default=16)
     # SIMPLE (default) = pick winner + optional points; BEST_OF_3 = set scoring
     scoring_mode: Mapped[str] = mapped_column(String(20), default=ScoringMode.SIMPLE.value)
+    # SIMPLE: first to this many points (win by 2 near the end). Ignored for BEST_OF_3.
+    points_to_win: Mapped[int] = mapped_column(Integer, default=21)
     # JSON-ish comma list of tie-break keys
     tie_break_order: Mapped[str] = mapped_column(
         String(200),

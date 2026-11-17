@@ -210,6 +210,7 @@ class TournamentCreate(BaseModel):
     championship_size: int = Field(default=16, ge=2, le=64)
     plate_size: int = Field(default=16, ge=2, le=64)
     scoring_mode: ScoringMode = ScoringMode.SIMPLE
+    points_to_win: int = Field(default=21, ge=5, le=99)
     tie_break_order: Optional[str] = None
     # Official listing is opt-in (admins only). Player hosts always force False.
     is_official: bool = False
@@ -263,6 +264,7 @@ class TournamentUpdate(BaseModel):
     championship_size: Optional[int] = Field(default=None, ge=2, le=64)
     plate_size: Optional[int] = Field(default=None, ge=2, le=64)
     scoring_mode: Optional[ScoringMode] = None
+    points_to_win: Optional[int] = Field(default=None, ge=5, le=99)
     tie_break_order: Optional[str] = None
     # Platform ADMIN only - list on landing / public browse
     is_official: Optional[bool] = None
@@ -327,6 +329,7 @@ class TournamentOut(BaseModel):
     championship_size: int = 16
     plate_size: int = 16
     scoring_mode: str = ScoringMode.SIMPLE.value
+    points_to_win: int = 21
     registered_teams: int = 0
     invite_code: Optional[str] = None
     is_official: bool = False

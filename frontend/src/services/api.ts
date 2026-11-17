@@ -97,6 +97,8 @@ export type Tournament = {
   plate_size?: number
   /** SIMPLE = winner + optional points (default); BEST_OF_3 = set scoring */
   scoring_mode?: 'SIMPLE' | 'BEST_OF_3' | string
+  /** SIMPLE: first to this many points (default 21) */
+  points_to_win?: number
   registered_teams: number
   invite_code?: string | null
   /** Listed on landing / public browse - admin-created events only */

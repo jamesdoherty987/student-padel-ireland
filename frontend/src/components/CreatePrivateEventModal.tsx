@@ -5,7 +5,7 @@ import { confirmDialog } from './ConfirmDialog'
 import ModalShell from './ModalShell'
 import NumberInput from './NumberInput'
 import { apiErrorMessage, tournamentApi } from '../services/api'
-import { defaultMatchRulesText } from '../utils/matchRules'
+import { clampPointsToWin, defaultMatchRulesText } from '../utils/matchRules'
 import './TournamentForm.css'
 
 type Props = {
@@ -30,6 +30,7 @@ type FormState = {
   championship_size: number
   plate_size: number
   scoring_mode: 'SIMPLE' | 'BEST_OF_3'
+  points_to_win: number
   rules: string
 }
 
@@ -51,6 +52,7 @@ function defaultForm(): FormState {
     championship_size: 8,
     plate_size: 8,
     scoring_mode: 'SIMPLE',
+    points_to_win: 21,
     rules: 'Friendly private event. Agree scoring with your group on the day.',
   }
 }
@@ -144,6 +146,7 @@ export default function CreatePrivateEventModal({ onClose, onCreated }: Props) {
         championship_size: powerOfTwoBracket(form.championship_size),
         plate_size: powerOfTwoBracket(form.plate_size),
         scoring_mode: form.scoring_mode,
+        points_to_win: form.points_to_win,
         is_official: false,
         registration_deadline: null,
         description: null,
@@ -463,7 +466,9 @@ export default function CreatePrivateEventModal({ onClose, onCreated }: Props) {
                       patch({ scoring_mode: e.target.value as 'SIMPLE' | 'BEST_OF_3' })
                     }
                   >
-                    <option value="SIMPLE">Simple (winner + score)</option>
+                    <option value="SIMPLE">
+                      First to {clampPointsToWin(form.points_to_win)}
+                    </option>
                     <option value="BEST_OF_3">Best of 3 sets</option>
                   </select>
                 </div>
@@ -482,6 +487,23 @@ export default function CreatePrivateEventModal({ onClose, onCreated }: Props) {
                 </div>
               </div>
 
+              {form.scoring_mode !== 'BEST_OF_3' ? (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="pe-points">
+                    First to (points)
+                  </label>
+                  <NumberInput
+                    id="pe-points"
+                    className="form-input"
+                    min={5}
+                    max={99}
+                    emptyValue={21}
+                    value={clampPointsToWin(form.points_to_win)}
+                    onValueChange={(n) => patch({ points_to_win: clampPointsToWin(n) })}
+                  />
+                </div>
+              ) : null}
+
               <div className="form-group">
                 <div className="tf-rules-label-row">
                   <label className="form-label" htmlFor="pe-rules">
@@ -493,7 +515,10 @@ export default function CreatePrivateEventModal({ onClose, onCreated }: Props) {
                     onClick={() =>
                       patch({
                         scoring_mode: 'SIMPLE',
-                        rules: defaultMatchRulesText(form.match_duration_minutes),
+                        rules: defaultMatchRulesText(
+                          form.match_duration_minutes,
+                          form.points_to_win,
+                        ),
                       })
                     }
                   >

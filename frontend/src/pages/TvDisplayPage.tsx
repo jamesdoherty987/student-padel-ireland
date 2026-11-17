@@ -254,9 +254,9 @@ export default function TvDisplayPage() {
   const slots = Array.from({ length: Math.max(1, total) }, (_, i) => i + 1)
   const onCourtCount =
     slots.reduce(
-      (n, c) => n + (courts[String(c)] || []).filter((m) => isOnCourt(m.status)).length,
+      (n, c) => n + (courts[String(c)] || []).filter((m) => isActiveOnCourt(m.status)).length,
       0,
-    ) + unassigned.filter((m) => isOnCourt(m.status)).length
+    ) + unassigned.filter((m) => isActiveOnCourt(m.status)).length
 
   const { cols, rows } = gridDims(slots.length)
 

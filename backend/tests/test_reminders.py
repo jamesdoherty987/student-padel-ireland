@@ -127,6 +127,11 @@ def test_run_day_before_sends_once_and_is_idempotent():
         assert "apps.apple.com" in kwargs["text"]
         assert "Your matches:" in kwargs["text"]
         assert "playing tomorrow" in kwargs["html_body"]
+        assert "/padel-rules" in kwargs["text"]
+        assert "#tour-rules" in kwargs["text"]
+        assert "/fixtures" in kwargs["text"]
+        assert "Match format:" in kwargs["text"]
+        assert "Common padel rules:" in kwargs["text"]
 
         second = run_day_before_reminders(db)
         assert second["totals"]["sent"] == 0
@@ -278,6 +283,7 @@ def test_custom_message_and_schedule_in_email():
     _, t = _seed_tournament(db, event_date=tomorrow)
     t.reminder_subject = "See you · {event}"
     t.reminder_body = "Hi {name} — park at the side gate.\nBring water."
+    t.is_official = True
     player = _add_paid_player(db, t, email="sched@ul.ie", name="Aoife Murphy")
     opp = User(
         id=uuid4(),
@@ -318,6 +324,12 @@ def test_custom_message_and_schedule_in_email():
         assert "vs Opp Pair" in kwargs["text"]
         assert "Court 2" in kwargs["text"]
         assert "Your schedule" in kwargs["html_body"]
+        # Custom body without link placeholders still gets Useful links appended
+        assert "Useful links" in kwargs["text"]
+        assert "/fixtures" in kwargs["text"]
+        assert "/padel-rules" in kwargs["text"]
+        assert "#tour-rules" in kwargs["text"]
+        assert "Useful links" in kwargs["html_body"]
 
 
 def test_schedule_and_time_placeholders_inline_per_player():

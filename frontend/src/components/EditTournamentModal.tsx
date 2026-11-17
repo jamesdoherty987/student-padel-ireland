@@ -47,6 +47,7 @@ function toForm(tournament: Tournament): TournamentFormState {
     championship_size: tournament.championship_size || 16,
     plate_size: tournament.plate_size || 16,
     scoring_mode: tournament.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
+    points_to_win: tournament.points_to_win ?? 21,
   }
 }
 
@@ -150,6 +151,7 @@ export default function EditTournamentModal({
         championship_size: form.championship_size,
         plate_size: form.plate_size,
         scoring_mode: form.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
+        points_to_win: form.points_to_win,
         registration_deadline: form.registration_deadline
           ? new Date(form.registration_deadline).toISOString()
           : null,

@@ -1,11 +1,23 @@
+/** Clamp SIMPLE “first to N” target used in forms and labels. */
+export function clampPointsToWin(raw?: number | null) {
+  const n = Math.round(Number(raw))
+  if (!Number.isFinite(n)) return 21
+  return Math.max(5, Math.min(99, n))
+}
+
 /** Default event scoring copy for social/student padel (SIMPLE mode). */
-export function defaultMatchRulesText(matchDurationMinutes = 20): string {
+export function defaultMatchRulesText(
+  matchDurationMinutes = 20,
+  pointsToWin = 21,
+): string {
   const mins = Math.max(5, Math.min(120, Math.round(Number(matchDurationMinutes)) || 20))
+  const pts = clampPointsToWin(pointsToWin)
+  const deuce = Math.max(0, pts - 1)
   return [
     'Scoring',
-    '• First to 21 points (every rally = 1 point). At 20–20, play until one side leads by 2.',
+    `• First to ${pts} points (every rally = 1 point). At ${deuce}–${deuce}, play until one side leads by 2.`,
     `• Or: when the ${mins}-minute slot ends, the team ahead wins.`,
-    '• Enter the final score in the app (e.g. 21–15).',
+    `• Enter the final score in the app (e.g. ${pts}–${Math.max(0, pts - 6)}).`,
     '',
     'Time',
     `• Matches are timed to about ${mins} minutes so courts stay on schedule.`,
@@ -25,8 +37,8 @@ export function defaultBestOf3RulesText(): string {
   ].join('\n')
 }
 
-export function scoringModeLabel(mode?: string | null): string {
-  return (mode || '').toUpperCase() === 'BEST_OF_3'
-    ? 'Best of 3 sets'
-    : 'First to points (e.g. 21–15)'
+export function scoringModeLabel(mode?: string | null, pointsToWin?: number | null) {
+  if ((mode || '').toUpperCase() === 'BEST_OF_3') return 'Best of 3 sets'
+  const pts = clampPointsToWin(pointsToWin)
+  return `First to ${pts}`
 }

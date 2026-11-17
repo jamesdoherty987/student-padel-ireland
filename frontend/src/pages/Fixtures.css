@@ -27,6 +27,17 @@
   gap: 0.45rem;
 }
 
+.fixtures-pdf-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  max-width: 36rem;
+}
+
+.fixtures-pdf-error {
+  margin: 0.55rem 0 0;
+}
+
 .fixtures-sheet {
   display: flex;
   flex-direction: column;

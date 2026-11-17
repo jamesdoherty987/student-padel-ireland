@@ -44,6 +44,11 @@ DEFAULT_REMINDER_BODY = (
     "Your matches:\n"
     "{schedule}\n"
     "\n"
+    "Before you play, check:\n"
+    "Match format: {format}\n"
+    "Fixtures: {fixtures}\n"
+    "Common padel rules: {rules}\n"
+    "\n"
     "You'll need the Student Padel Ireland app on the day for courts and scores.\n"
     "Download free: {app}"
 )
@@ -261,14 +266,34 @@ def _apply_template(template: str, *, mapping: dict[str, str]) -> str:
     return out
 
 
+def _frontend_base() -> str:
+    front = (get_settings().frontend_url or "").rstrip("/")
+    if not front or "localhost" in front or "127.0.0.1" in front:
+        return "https://www.studentpadel.ie"
+    return front
+
+
+def _tournament_page_url(tournament: Tournament, path: str = "", *, fragment: str = "") -> str:
+    """Public event URL; private events include invite code so email links open cleanly."""
+    base = _frontend_base()
+    url = f"{base}/t/{tournament.slug}{path}"
+    code = (getattr(tournament, "invite_code", None) or "").strip()
+    private = not bool(getattr(tournament, "is_official", False))
+    if private and code:
+        url = f"{url}?code={quote(code, safe='')}"
+    if fragment:
+        frag = fragment if fragment.startswith("#") else f"#{fragment}"
+        url = f"{url}{frag}"
+    return url
+
+
 def _build_reminder(
     db: Session,
     tournament: Tournament,
     user: User,
 ) -> tuple[str, str, str]:
-    settings = get_settings()
     next_path = quote(f"/t/{tournament.slug}/live", safe="")
-    login_url = f"{settings.frontend_url}/login?next={next_path}"
+    login_url = f"{_frontend_base()}/login?next={next_path}"
     when = format_event_when(tournament.event_date, tournament.start_time)
     venue_line = f"{tournament.venue}, {tournament.location}"
     first = (user.full_name or "there").strip().split()[0] or "there"
@@ -286,6 +311,10 @@ def _build_reminder(
         else:
             first_time = "TBC"
 
+    rules_url = f"{_frontend_base()}/padel-rules"
+    format_url = _tournament_page_url(tournament, fragment="tour-rules")
+    fixtures_url = _tournament_page_url(tournament, "/fixtures")
+
     mapping = {
         "name": first,
         "event": tournament.name,
@@ -294,6 +323,9 @@ def _build_reminder(
         "schedule": schedule_text,
         "time": first_time,
         "app": APP_STORE_URL,
+        "rules": rules_url,
+        "format": format_url,
+        "fixtures": fixtures_url,
     }
 
     subject_template = (getattr(tournament, "reminder_subject", None) or "").strip() or (
@@ -304,6 +336,10 @@ def _build_reminder(
     )
     body_uses_schedule = "{schedule}" in body_template
     body_uses_when_or_venue = "{when}" in body_template or "{venue}" in body_template
+    # If the organiser already pasted these placeholders, don't also append the links block
+    body_has_resource_links = any(
+        token in body_template for token in ("{format}", "{fixtures}", "{rules}")
+    )
 
     subject = _apply_template(subject_template, mapping=mapping)[:120]
 
@@ -316,7 +352,7 @@ def _build_reminder(
         _apply_template(p.strip(), mapping=mapping)
         for p in body_template.replace("\r\n", "\n").split("\n")
         if p.strip()
-    ][:20]
+    ][:24]
 
     # Avoid duplicating info the organiser already put in the editable template
     show_schedule_block = bool(schedule) and not body_uses_schedule
@@ -324,6 +360,13 @@ def _build_reminder(
         ("When", when),
         ("Where", venue_line),
     ]
+    resource_links = None
+    if not body_has_resource_links:
+        resource_links = [
+            ("Match format & scoring", format_url),
+            ("Fixtures", fixtures_url),
+            ("Common padel rules", rules_url),
+        ]
 
     text, html_body = render_simple_email(
         title=title,
@@ -332,6 +375,8 @@ def _build_reminder(
         detail_lines=detail_lines,
         schedule_lines=schedule if show_schedule_block else None,
         schedule_heading="Your schedule",
+        resource_links=resource_links,
+        resource_heading="Useful links",
         cta_label="Download the app",
         cta_url=APP_STORE_URL,
         secondary_cta_label="Open live board",

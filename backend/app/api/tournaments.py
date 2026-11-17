@@ -906,6 +906,7 @@ def _tournament_out(
         championship_size=int(getattr(t, "championship_size", 16) or 16),
         plate_size=int(getattr(t, "plate_size", 16) or 16),
         scoring_mode=getattr(t, "scoring_mode", None) or ScoringMode.SIMPLE.value,
+        points_to_win=int(getattr(t, "points_to_win", None) or 21),
         registered_teams=_team_count(db, t.id),
         invite_code=t.invite_code if show_invite else None,
         is_official=bool(getattr(t, "is_official", False)),
@@ -1556,6 +1557,7 @@ def create_tournament(
             if getattr(body, "scoring_mode", None) is not None
             else ScoringMode.SIMPLE.value
         ),
+        points_to_win=int(getattr(body, "points_to_win", None) or 21),
         invite_code=_unique_invite_code(db),
         is_official=is_official,
         tie_break_order=body.tie_break_order

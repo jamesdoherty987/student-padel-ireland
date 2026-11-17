@@ -38,11 +38,12 @@ function defaultForm(): TournamentFormState {
     pay_on_arrival: true,
     refunds_on_withdrawal: true,
     description: '',
-    rules: defaultMatchRulesText(20),
+    rules: defaultMatchRulesText(20, 21),
     group_size: 4,
     teams_advance_per_group: 2,
     enable_plate: true,
     scoring_mode: 'SIMPLE',
+    points_to_win: 21,
     championship_size: 16,
     plate_size: 16,
   }
@@ -154,6 +155,7 @@ export default function CreateTournamentModal({ onClose, onCreated, onToast }: P
         championship_size: form.championship_size,
         plate_size: form.plate_size,
         scoring_mode: form.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
+        points_to_win: form.points_to_win,
         is_official: true,
         registration_deadline: form.registration_deadline
           ? new Date(form.registration_deadline).toISOString()

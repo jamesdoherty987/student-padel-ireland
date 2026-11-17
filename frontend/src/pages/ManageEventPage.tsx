@@ -50,7 +50,6 @@ import { mediaUrl } from '../utils/media'
 import {
   isActiveOnCourt,
   isCourtsideRelevant,
-  isImminentScheduled,
   sortByScheduledStart,
 } from '../utils/matchTiming'
 import {
@@ -76,6 +75,11 @@ const DEFAULT_REMINDER_BODY = [
   'Your matches:',
   '{schedule}',
   '',
+  'Before you play, check:',
+  'Match format: {format}',
+  'Fixtures: {fixtures}',
+  'Common padel rules: {rules}',
+  '',
   "You'll need the Student Padel Ireland app on the day for courts and scores.",
   'Download free: {app}',
 ].join('\n')
@@ -87,6 +91,9 @@ const REMINDER_PLACEHOLDERS = [
   '{venue}',
   '{time}',
   '{schedule}',
+  '{format}',
+  '{fixtures}',
+  '{rules}',
   '{app}',
 ] as const
 
@@ -217,6 +224,13 @@ export default function ManageEventPage() {
     force: false,
   })
   const [scoreError, setScoreError] = useState('')
+  /** Keeps courtside / Now filter fresh as tip-off windows open and close. */
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 30_000)
+    return () => window.clearInterval(id)
+  }, [])
 
   useKeyboardInset(!!scoreMatch || !!editTeam || showAddTeam)
   useEffect(() => {
@@ -1369,12 +1383,11 @@ export default function ManageEventPage() {
   /** One card per court for live/called, or SCHEDULED within 15 mins of tip-off. */
   const courtsideNow = useMemo(() => {
     type Slot = { courtKey: string; label: string; match: Match; kind: 'live' | 'called' | 'next' }
-    const now = Date.now()
     const byCourt = new Map<number, Match[]>()
     const unassigned: Match[] = []
     for (const m of matches) {
       if (!m.team_a_id || !m.team_b_id) continue
-      if (!isCourtsideRelevant(m, now)) continue
+      if (!isCourtsideRelevant(m, nowMs)) continue
       if (m.court_number == null) {
         if (isActiveOnCourt(m.status)) unassigned.push(m)
         continue
@@ -1383,10 +1396,11 @@ export default function ManageEventPage() {
       list.push(m)
       byCourt.set(m.court_number, list)
     }
+    // Same order as TV: live play → called → confirm → imminent scheduled
     const pick = (list: Match[]): Match | null =>
       list.find((m) => m.status === 'LIVE') ||
-      list.find((m) => m.status === 'AWAITING_CONFIRM') ||
       list.find((m) => m.status === 'CALLED') ||
+      list.find((m) => m.status === 'AWAITING_CONFIRM') ||
       list.filter((m) => m.status === 'SCHEDULED').sort(sortByScheduledStart)[0] ||
       null
 
@@ -1416,7 +1430,7 @@ export default function ManageEventPage() {
       })
     }
     return slots
-  }, [matches])
+  }, [matches, nowMs])
 
   const courtsideTitle = useMemo(() => {
     if (courtsideNow.some((s) => s.kind === 'live' || s.kind === 'called')) return 'Courts now'
@@ -1510,6 +1524,7 @@ export default function ManageEventPage() {
   const reminderPreviewSchedule = fixturesExist
     ? '· 10:00 · Court 1 · vs Example Team (Group A)'
     : 'Schedule TBC — check the app for updates.'
+  const reminderPreviewSlug = active?.tournament.slug || 'your-event'
   const reminderPreviewMap = {
     name: 'Aoife',
     event: active?.tournament.name || 'Event',
@@ -1518,6 +1533,9 @@ export default function ManageEventPage() {
     schedule: reminderPreviewSchedule,
     time: fixturesExist ? '10:00' : formatTime(active?.tournament.start_time),
     app: 'https://apps.apple.com/ie/app/student-padel-ireland/id6818780104',
+    format: `https://www.studentpadel.ie/t/${reminderPreviewSlug}#tour-rules`,
+    fixtures: `https://www.studentpadel.ie/t/${reminderPreviewSlug}/fixtures`,
+    rules: 'https://www.studentpadel.ie/padel-rules',
   }
   const applyReminderPreview = (raw: string) =>
     raw
@@ -1527,6 +1545,9 @@ export default function ManageEventPage() {
       .replaceAll('{venue}', reminderPreviewMap.venue)
       .replaceAll('{schedule}', reminderPreviewMap.schedule)
       .replaceAll('{time}', reminderPreviewMap.time)
+      .replaceAll('{format}', reminderPreviewMap.format)
+      .replaceAll('{fixtures}', reminderPreviewMap.fixtures)
+      .replaceAll('{rules}', reminderPreviewMap.rules)
       .replaceAll('{app}', reminderPreviewMap.app)
   const reminderSubjectForPreview =
     reminderDraft.subject.trim() || DEFAULT_REMINDER_SUBJECT
@@ -1553,7 +1574,6 @@ export default function ManageEventPage() {
   const courtNumbers = useMemo(() => courtColumns.map((c) => c.number), [courtColumns])
 
   const filteredMatches = useMemo(() => {
-    const now = Date.now()
     const stageRank = (stage: string) =>
       stage === 'KNOCKOUT' ? 0 : stage === 'PLATE' ? 1 : stage === 'GROUP' ? 2 : 3
     const sorted = [...matches].sort((a, b) => {
@@ -1566,7 +1586,7 @@ export default function ManageEventPage() {
       if (courtFilter !== 'all' && String(m.court_number) !== courtFilter) return false
       if (matchFilter === 'now') {
         if (!bothTeams(m)) return false
-        return isCourtsideRelevant(m, now)
+        return isCourtsideRelevant(m, nowMs)
       }
       if (matchFilter === 'upcoming') {
         return m.status === 'SCHEDULED' && bothTeams(m)
@@ -1586,7 +1606,7 @@ export default function ManageEventPage() {
       }
       return true
     })
-  }, [matches, courtFilter, matchFilter])
+  }, [matches, courtFilter, matchFilter, nowMs])
 
   const hasKnockoutMatches = matches.some((m) => m.stage === 'KNOCKOUT' || m.stage === 'PLATE')
   const championshipMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
@@ -2491,7 +2511,9 @@ export default function ManageEventPage() {
                         ))}
                       </div>
                       <p className="muted-note org-reminder-hint">
-                        Placeholders fill per player when the email sends. Edit freely, then Save.
+                        Placeholders fill per player when the email sends. {'{format}'},{' '}
+                        {'{fixtures}'}, and {'{rules}'} become links. If you remove them, the email
+                        still adds those links automatically. Edit freely, then Save.
                       </p>
                     </div>
 

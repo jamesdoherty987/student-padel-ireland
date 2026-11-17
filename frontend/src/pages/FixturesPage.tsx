@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
@@ -14,6 +14,7 @@ import {
   knockoutRoundOrder,
   statusLabel,
 } from '../utils/format'
+import { downloadGroupFixturesPdf } from '../utils/fixturesPdf'
 import { cleanInviteCode } from '../utils/inviteCode'
 import { getRememberedPrivateInvite } from '../utils/privateEventAccess'
 import './Fixtures.css'
@@ -47,6 +48,7 @@ type SheetSection = {
 export default function FixturesPage() {
   const { slug = '' } = useParams()
   const [params] = useSearchParams()
+  const [pdfError, setPdfError] = useState('')
   const inviteFromUrl = cleanInviteCode(params.get('code') || '')
   const inviteCode =
     inviteFromUrl.length >= 6 ? inviteFromUrl : getRememberedPrivateInvite(slug) || ''
@@ -148,6 +150,30 @@ export default function FixturesPage() {
     ? `/t/${slug}?code=${encodeURIComponent(inviteCode)}`
     : `/t/${slug}`
 
+  const groupMatchCount = useMemo(
+    () => matches.filter((m) => m.stage === 'GROUP').length,
+    [matches],
+  )
+
+  const whenLabel = tournament
+    ? `${formatDate(tournament.event_date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatTime(tournament.start_time)}`
+    : ''
+
+  const onDownloadGroups = () => {
+    if (!tournament) return
+    setPdfError('')
+    try {
+      downloadGroupFixturesPdf({
+        tournamentName: tournament.name,
+        venue: tournament.venue,
+        whenLabel,
+        matches,
+      })
+    } catch (err) {
+      setPdfError(err instanceof Error ? err.message : 'Couldn’t create the PDF.')
+    }
+  }
+
   if (tLoading || mLoading) {
     return (
       <div className="app-shell">
@@ -199,10 +225,30 @@ export default function FixturesPage() {
             <Link to={eventPath} className="btn btn-ghost btn-sm">
               Event page
             </Link>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={onDownloadGroups}
+              disabled={groupMatchCount === 0}
+              title={
+                groupMatchCount === 0
+                  ? 'No group fixtures yet'
+                  : 'Download group-stage fixtures as A4 PDF'
+              }
+            >
+              Download groups PDF
+            </button>
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => window.print()}>
-              Print
+              Print all
             </button>
           </div>
+          {pdfError ? <p className="form-error fixtures-pdf-error">{pdfError}</p> : null}
+          {groupMatchCount > 0 ? (
+            <p className="fixtures-pdf-hint">
+              PDF includes group games only (saves space). Large draws use a compact multi-page A4
+              layout.
+            </p>
+          ) : null}
         </header>
 
         {matches.length === 0 ? (

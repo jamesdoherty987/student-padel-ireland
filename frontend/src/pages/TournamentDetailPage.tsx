@@ -32,6 +32,7 @@ import {
 } from '../utils/format'
 import { scoringModeLabel } from '../utils/matchRules'
 import { sortByScheduledStart } from '../utils/matchTiming'
+import { downloadEventRulesPdf } from '../utils/rulesPdf'
 import './Tournament.css'
 
 export default function TournamentDetailPage() {
@@ -699,13 +700,38 @@ export default function TournamentDetailPage() {
         )}
 
         <section className="block tour-rules-block" id="tour-rules">
-          <h2>Match format & rules</h2>
+          <div className="tour-rules-head">
+            <h2>Match format & rules</h2>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() =>
+                downloadEventRulesPdf({
+                  name: tournament.name,
+                  venue: tournament.venue,
+                  eventDateLabel: `${formatDate(tournament.event_date, {
+                    weekday: 'short',
+                    day: 'numeric',
+                    month: 'short',
+                  })} · ${formatTime(tournament.start_time)}`,
+                  matchDurationMinutes: tournament.match_duration_minutes,
+                  scoringMode: tournament.scoring_mode,
+                  pointsToWin: tournament.points_to_win,
+                  rules: tournament.rules,
+                })
+              }
+            >
+              Download A4 PDF
+            </button>
+          </div>
           <ul className="tour-rules-meta">
             <li>
               About <strong>{tournament.match_duration_minutes} minutes</strong> per match
             </li>
             <li>
-              <strong>{scoringModeLabel(tournament.scoring_mode)}</strong>
+              <strong>
+                {scoringModeLabel(tournament.scoring_mode, tournament.points_to_win)}
+              </strong>
             </li>
           </ul>
           {tournament.rules ? (

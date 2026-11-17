@@ -1415,6 +1415,19 @@
   margin: 0.65rem 0 0;
 }
 
+.tour-rules-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.tour-rules-head h2 {
+  margin: 0;
+}
+
 .tour-rules-meta {
   list-style: none;
   margin: 0;

@@ -5,7 +5,11 @@ import RegistrationFieldsEditor, {
   type RegistrationFieldDraft,
 } from './RegistrationFieldsEditor'
 import { tournamentFormatSummary } from '../utils/format'
-import { defaultBestOf3RulesText, defaultMatchRulesText } from '../utils/matchRules'
+import {
+  clampPointsToWin,
+  defaultBestOf3RulesText,
+  defaultMatchRulesText,
+} from '../utils/matchRules'
 import './TournamentForm.css'
 
 export type { RegistrationFieldDraft }
@@ -35,6 +39,8 @@ export type TournamentFormState = {
   plate_size: number
   /** SIMPLE (default) or BEST_OF_3 */
   scoring_mode: string
+  /** SIMPLE: first team to this many points (default 21) */
+  points_to_win: number
 }
 
 export type TournamentFormSection =
@@ -209,12 +215,57 @@ export default function TournamentFormFields({
                 className="form-select"
                 value={form.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE'}
                 disabled={formatLocked}
-                onChange={(e) => onChange({ scoring_mode: e.target.value })}
+                onChange={(e) => {
+                  const mode = e.target.value
+                  const pts = clampPointsToWin(form.points_to_win)
+                  if (mode === 'BEST_OF_3') {
+                    onChange({ scoring_mode: mode })
+                    return
+                  }
+                  onChange({
+                    scoring_mode: 'SIMPLE',
+                    points_to_win: pts,
+                    rules: defaultMatchRulesText(form.match_duration_minutes, pts),
+                  })
+                }}
               >
-                <option value="SIMPLE">Winner + optional score (e.g. 21–15)</option>
+                <option value="SIMPLE">
+                  First to {clampPointsToWin(form.points_to_win)} points
+                </option>
                 <option value="BEST_OF_3">Best of 3 sets</option>
               </select>
             </div>
+
+            {form.scoring_mode !== 'BEST_OF_3' ? (
+              <div className="form-group" style={{ marginTop: '0.65rem' }}>
+                <label className="form-label" htmlFor="tf-points-to-win">
+                  First to (points)
+                </label>
+                <NumberInput
+                  id="tf-points-to-win"
+                  className="form-input"
+                  min={5}
+                  max={99}
+                  emptyValue={21}
+                  value={clampPointsToWin(form.points_to_win)}
+                  onValueChange={(n) => {
+                    const pts = clampPointsToWin(n)
+                    const mins = form.match_duration_minutes || 20
+                    const prevDefault = defaultMatchRulesText(mins, form.points_to_win)
+                    const patch: Partial<TournamentFormState> = { points_to_win: pts }
+                    // Keep rules in sync when still using the generated default text
+                    if (!form.rules.trim() || form.rules.trim() === prevDefault.trim()) {
+                      patch.rules = defaultMatchRulesText(mins, pts)
+                    }
+                    onChange(patch)
+                  }}
+                  disabled={formatLocked}
+                />
+                <p className="form-hint">
+                  Players play to this score (win by 2 near the end). Common: 21 or 15.
+                </p>
+              </div>
+            ) : null}
 
             <label className="tf-check" style={{ marginTop: '0.5rem' }}>
               <input
@@ -452,7 +503,11 @@ export default function TournamentFormFields({
               onClick={() =>
                 onChange({
                   scoring_mode: 'SIMPLE',
-                  rules: defaultMatchRulesText(form.match_duration_minutes),
+                  points_to_win: clampPointsToWin(form.points_to_win),
+                  rules: defaultMatchRulesText(
+                    form.match_duration_minutes,
+                    form.points_to_win,
+                  ),
                 })
               }
             >
@@ -468,9 +523,9 @@ export default function TournamentFormFields({
             onChange={(e) => onChange({ rules: e.target.value })}
           />
           <p className="form-hint">
-            Shown on the event page. Default = first to 21, or ahead after{' '}
-            {form.match_duration_minutes || 20} mins (match length above). Change match length, then
-            press Use default again if needed.
+            Shown on the event page. Default = first to {clampPointsToWin(form.points_to_win)}, or
+            ahead after {form.match_duration_minutes || 20} mins (match length above). Change first
+            to / match length, then press Use default again if needed.
           </p>
           <div className="tf-rules-examples" role="group" aria-label="Scoring presets">
             <button
@@ -492,6 +547,7 @@ export default function TournamentFormFields({
                 const mins = form.match_duration_minutes || 20
                 onChange({
                   scoring_mode: 'SIMPLE',
+                  points_to_win: clampPointsToWin(form.points_to_win),
                   rules: [
                     'Scoring',
                     `• Timed matches: ${mins} minutes.`,
