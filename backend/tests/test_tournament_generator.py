@@ -440,6 +440,43 @@ def test_gender_groups_merges_singleton_into_mixed():
     assert mixed == 1
 
 
+def test_gender_groups_prefers_size_four_without_extra_groups():
+    """43 men + 5 women → 12 groups of 4 (not 13 with tiny women groups)."""
+    teams = [TeamRef(id=f"m{i}", name=f"M{i:02d}", gender="M") for i in range(1, 44)] + [
+        TeamRef(id=f"f{i}", name=f"F{i:02d}", gender="F") for i in range(1, 6)
+    ]
+    cfg = GeneratorConfig(
+        teams=teams,
+        courts=6,
+        match_duration_minutes=20,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        group_size=4,
+        teams_advance_per_group=2,
+        format="GROUP_KNOCKOUT",
+        seeding_mode="gender_groups",
+        enable_plate=True,
+        championship_size=16,
+        plate_size=16,
+    )
+    result = generate_tournament(cfg)
+    validate_generated(result, {t.id for t in teams})
+    assert result.group_sizes == [4] * 12
+    assert len(result.groups) == 12
+    pure_women = 0
+    mixed = 0
+    for g in result.groups:
+        gset = {next(t.gender for t in teams if t.id == tid) for tid in g.team_ids}
+        if gset == {"F"}:
+            pure_women += 1
+            assert len(g.team_ids) == 4
+        elif len(gset) > 1:
+            mixed += 1
+            assert "F" in gset and "M" in gset
+            assert len(g.team_ids) == 4
+    assert pure_women == 1
+    assert mixed == 1
+
+
 def test_prefer_early_keeps_groups_and_schedules_sooner():
     cfg = _config(12, courts=2, group_size=4)
     cfg.seeding_mode = "alphabetical"

@@ -522,12 +522,14 @@ def _normalize_team_gender(raw: str | None) -> str:
 
 def _gender_groups(teams: Sequence[TeamRef], group_size: int) -> list[list[TeamRef]]:
     """
-    Prefer same-gender groups (men together, women together).
+    Prefer same-gender groups of the configured size (usually 4).
 
-    Unset / mixed teams, and any singleton leftover that cannot form a group of
-    2+, go into mixed leftover groups. A single leftover team is merged into the
-    smallest existing group.
+    Carve as many full preferred-size men/women groups as possible, then pack
+    remainders (and unset/mixed) into leftover groups near that size — typically
+    one mixed group — so the total group count stays close to a normal draw
+    (avoids extra tiny women-only groups that lengthen the day).
     """
+    preferred = max(2, group_size)
     buckets: dict[str, list[TeamRef]] = {"M": [], "F": [], "X": []}
     for team in teams:
         buckets[_normalize_team_gender(team.gender)].append(team)
@@ -545,30 +547,33 @@ def _gender_groups(teams: Sequence[TeamRef], group_size: int) -> list[list[TeamR
     leftovers: list[TeamRef] = list(buckets["X"])
 
     for key in ("M", "F"):
-        pool = buckets[key]
-        if not pool:
-            continue
-        if len(pool) == 1:
-            leftovers.extend(pool)
-            continue
-        sizes = _balanced_group_sizes(len(pool), group_size)
-        if not sizes:
-            leftovers.extend(pool)
-            continue
-        result.extend(_snake_fill(pool, sizes))
+        pool = list(buckets[key])
+        while len(pool) >= preferred:
+            result.append(pool[:preferred])
+            pool = pool[preferred:]
+        leftovers.extend(pool)
 
     if leftovers:
         if len(leftovers) == 1 and result:
             idx = min(range(len(result)), key=lambda i: (len(result[i]), i))
             result[idx] = list(result[idx]) + leftovers
         elif len(leftovers) >= 2:
-            sizes = _balanced_group_sizes(len(leftovers), group_size)
+            sizes = _balanced_group_sizes(len(leftovers), preferred)
             if sizes:
                 result.extend(_snake_fill(leftovers, sizes))
             elif result:
                 idx = min(range(len(result)), key=lambda i: (len(result[i]), i))
                 result[idx] = list(result[idx]) + leftovers
-        # lone leftover with no other groups: leave as one group of 1 (validate later)
+
+    # If leftovers somehow produced a singleton beside other groups, fold it in.
+    if len(result) >= 2:
+        singles = [g for g in result if len(g) == 1]
+        others = [g for g in result if len(g) != 1]
+        if singles and others:
+            for solo in singles:
+                idx = min(range(len(others)), key=lambda i: (len(others[i]), i))
+                others[idx] = list(others[idx]) + list(solo)
+            result = others
 
     return [grp for grp in result if grp]
 

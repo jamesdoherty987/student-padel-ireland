@@ -36,7 +36,7 @@ export const SEEDING_MODE_OPTIONS: { value: SeedingMode; label: string; hint: st
   {
     value: 'gender_groups',
     label: 'Group by gender',
-    hint: 'Men together, women together when possible. Odd leftovers share a mixed group.',
+    hint: 'Full groups of 4 by gender when possible. Leftovers share one mixed group so the day stays the same length.',
   },
   {
     value: 'manual',
@@ -177,8 +177,12 @@ function sortByName(a: SeedableTeam, b: SeedableTeam) {
   return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
 }
 
-/** Same-gender groups when possible; leftovers / unset → mixed. */
+/**
+ * Prefer full same-gender groups of `groupSize` (usually 4).
+ * Remainders + unset → leftover mixed groups, so we don't add tiny extra groups.
+ */
 function genderGroups(teams: SeedableTeam[], groupSize: number): SeedableTeam[][] {
+  const preferred = Math.max(2, groupSize)
   const buckets: Record<'M' | 'F' | 'X', SeedableTeam[]> = { M: [], F: [], X: [] }
   for (const team of teams) buckets[genderKey(team)].push(team)
   for (const key of ['M', 'F', 'X'] as const) buckets[key].sort(sortByName)
@@ -187,18 +191,11 @@ function genderGroups(teams: SeedableTeam[], groupSize: number): SeedableTeam[][
   const leftovers: SeedableTeam[] = [...buckets.X]
 
   for (const key of ['M', 'F'] as const) {
-    const pool = buckets[key]
-    if (!pool.length) continue
-    if (pool.length === 1) {
-      leftovers.push(pool[0])
-      continue
+    const pool = [...buckets[key]]
+    while (pool.length >= preferred) {
+      result.push(pool.splice(0, preferred))
     }
-    const sizes = balancedGroupSizes(pool.length, groupSize)
-    if (!sizes.length) {
-      leftovers.push(...pool)
-      continue
-    }
-    result.push(...snakeFill(pool, sizes))
+    leftovers.push(...pool)
   }
 
   if (leftovers.length === 1 && result.length) {
@@ -208,7 +205,7 @@ function genderGroups(teams: SeedableTeam[], groupSize: number): SeedableTeam[][
     }
     result[best] = [...result[best], leftovers[0]]
   } else if (leftovers.length >= 2) {
-    const sizes = balancedGroupSizes(leftovers.length, groupSize)
+    const sizes = balancedGroupSizes(leftovers.length, preferred)
     if (sizes.length) result.push(...snakeFill(leftovers, sizes))
     else if (result.length) {
       let best = 0
@@ -216,6 +213,22 @@ function genderGroups(teams: SeedableTeam[], groupSize: number): SeedableTeam[][
         if (result[i].length < result[best].length) best = i
       }
       result[best] = [...result[best], ...leftovers]
+    }
+  }
+
+  // Fold any accidental singleton into the smallest other group.
+  if (result.length >= 2) {
+    const singles = result.filter((g) => g.length === 1)
+    const others = result.filter((g) => g.length !== 1)
+    if (singles.length && others.length) {
+      for (const solo of singles) {
+        let best = 0
+        for (let i = 1; i < others.length; i += 1) {
+          if (others[i].length < others[best].length) best = i
+        }
+        others[best] = [...others[best], ...solo]
+      }
+      return others.filter((grp) => grp.length > 0)
     }
   }
 

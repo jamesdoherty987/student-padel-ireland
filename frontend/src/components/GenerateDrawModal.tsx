@@ -484,8 +484,8 @@ export default function GenerateDrawModal({
             <p className="org-draw-seed-hint org-draw-gender-note">
               <span className="org-draw-gender-counts">{genderSummary}</span>
               {genderCounts.unset > 0
-                ? ' — unset entries join mixed leftover groups. Set Men/Women on Entries for cleaner groups.'
-                : ' — same-gender groups when possible.'}
+                ? ' — unset entries join the mixed leftover group. Set Men/Women on Entries for cleaner groups.'
+                : ' — full groups of 4 by gender; leftovers share one mixed group.'}
             </p>
           ) : null}
         </div>
