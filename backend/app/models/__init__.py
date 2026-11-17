@@ -356,6 +356,7 @@ class Team(Base, TimestampMixin):
     player1_present: Mapped[bool] = mapped_column(Boolean, default=False)
     player2_present: Mapped[bool] = mapped_column(Boolean, default=False)
     withdrawn: Mapped[bool] = mapped_column(Boolean, default=False)
+    withdrawn_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     tournament: Mapped[Tournament] = relationship(back_populates="teams")
     university: Mapped[Optional[University]] = relationship()

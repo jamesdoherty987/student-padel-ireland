@@ -190,6 +190,8 @@ def init_db() -> None:
     )
     _sqlite_add_column_if_missing("tournament_registration_answers", "fulfilled_at", "DATETIME")
     _pg_add_column_if_missing("tournament_registration_answers", "fulfilled_at", "TIMESTAMPTZ")
+    _sqlite_add_column_if_missing("teams", "withdrawn_at", "DATETIME")
+    _pg_add_column_if_missing("teams", "withdrawn_at", "TIMESTAMPTZ")
     _backfill_tournament_is_official()
     _sqlite_ensure_ranking_history_nullable_tournament()
     _pg_ensure_ranking_history_nullable_tournament()

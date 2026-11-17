@@ -196,6 +196,7 @@ export type TournamentTeam = {
   seed?: number | null
   checked_in: boolean
   withdrawn: boolean
+  withdrawn_at?: string | null
   player_names: string[]
   players?: TournamentTeamPlayer[]
   needs_partner?: boolean

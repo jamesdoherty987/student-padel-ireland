@@ -275,6 +275,7 @@ def list_tournament_entries(
                 payment_status=team.registration.status if team.registration else None,
                 payment_via=_payment_via(team.registration),
                 withdrawn=bool(team.withdrawn),
+                withdrawn_at=getattr(team, "withdrawn_at", None),
                 checked_in=bool(team.checked_in),
                 created_at=getattr(team, "created_at", None),
                 players=players,

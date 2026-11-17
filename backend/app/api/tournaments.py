@@ -300,6 +300,7 @@ def _team_out(
         seed=team.seed,
         checked_in=team.checked_in,
         withdrawn=team.withdrawn,
+        withdrawn_at=getattr(team, "withdrawn_at", None),
         player_names=names,
         players=players,
         needs_partner=not singles and member_count < 2,
@@ -2946,6 +2947,7 @@ def _apply_team_withdraw(
             raise HTTPException(400, "You can no longer leave this tournament")
 
     team.withdrawn = True
+    team.withdrawn_at = datetime.now(timezone.utc)
     team.checked_in = False
     old_session_id = team.registration.stripe_session_id if team.registration else None
     if team.registration and team.registration.status in (

@@ -1153,6 +1153,20 @@ export default function ManageEventPage() {
     })
 
     list.sort((a, b) => {
+      if (paymentFilter === 'withdrawn') {
+        const aTs = a.withdrawn_at
+          ? new Date(a.withdrawn_at).getTime()
+          : a.created_at
+            ? new Date(a.created_at).getTime()
+            : 0
+        const bTs = b.withdrawn_at
+          ? new Date(b.withdrawn_at).getTime()
+          : b.created_at
+            ? new Date(b.created_at).getTime()
+            : 0
+        if (aTs !== bTs) return bTs - aTs
+        return a.name.localeCompare(b.name)
+      }
       if (entriesSort === 'name') {
         const byName = a.name.localeCompare(b.name)
         if (byName !== 0) return byName
@@ -2637,6 +2651,7 @@ export default function ManageEventPage() {
                     const owing = !team.withdrawn && paymentBucket(team) === 'owing'
                     const canCollect = !team.withdrawn && team.payment_via === 'pay_on_arrival'
                     const signedUp = formatDateTime(team.created_at)
+                    const leftAt = team.withdrawn_at ? formatDateTime(team.withdrawn_at) : null
                     const unpaidEntry =
                       !team.withdrawn &&
                       (team.payment_status === 'PENDING' ||
@@ -2666,7 +2681,13 @@ export default function ManageEventPage() {
                         <div>
                           <div className="org-entry-title-row">
                             <strong>{team.name}</strong>
-                            {signedUp && <span className="org-entry-signed-up">{signedUp}</span>}
+                            {team.withdrawn
+                              ? leftAt && (
+                                  <span className="org-entry-signed-up">Left {leftAt}</span>
+                                )
+                              : signedUp && (
+                                  <span className="org-entry-signed-up">{signedUp}</span>
+                                )}
                           </div>
                           <span>
                             {team.players?.length
@@ -2676,6 +2697,9 @@ export default function ManageEventPage() {
                               : team.player_names?.join(' / ')}
                           </span>
                           {team.withdrawn && <span className="badge badge-draft">Withdrawn</span>}
+                          {team.withdrawn && signedUp && (
+                            <span className="muted org-entry-signed-up">Signed up {signedUp}</span>
+                          )}
                           {!team.withdrawn && team.needs_partner && (
                             <span className="badge badge-warn">Needs partner</span>
                           )}
@@ -2737,7 +2761,9 @@ export default function ManageEventPage() {
                         </div>
                         <div className="org-row-right org-pay-actions">
                           {team.withdrawn ? (
-                            <span className="muted">Left the event</span>
+                            <span className="muted">
+                              {leftAt ? `Left ${leftAt}` : 'Left the event'}
+                            </span>
                           ) : (
                             <>
                               <button

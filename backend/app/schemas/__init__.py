@@ -364,6 +364,7 @@ class TeamOut(BaseModel):
     seed: Optional[int] = None
     checked_in: bool
     withdrawn: bool
+    withdrawn_at: Optional[datetime] = None
     player_names: list[str] = []
     players: list[TeamPlayerOut] = Field(default_factory=list)
     needs_partner: bool = False
@@ -871,6 +872,7 @@ class AdminTournamentTeamOut(BaseModel):
     payment_status: Optional[str] = None
     payment_via: Optional[str] = None
     withdrawn: bool = False
+    withdrawn_at: Optional[datetime] = None
     checked_in: bool = False
     created_at: Optional[datetime] = None
     players: list[AdminTournamentEntryPlayer] = Field(default_factory=list)
