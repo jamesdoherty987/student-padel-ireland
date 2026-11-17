@@ -106,6 +106,10 @@ export type Tournament = {
   can_manage?: boolean
   /** True when the logged-in viewer is on a team for this tournament */
   viewer_entered?: boolean
+  /** Auto day-before / late-joiner reminders (manual Send now still works when false) */
+  reminders_enabled?: boolean
+  reminder_subject?: string | null
+  reminder_body?: string | null
 }
 
 export type TournamentRegistrationField = {
@@ -603,7 +607,7 @@ export const tournamentApi = {
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/withdraw`),
   leaveTournament: (tournamentId: string) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/leave`),
-  sendReminders: (tournamentId: string, dryRun = false) =>
+  sendReminders: (tournamentId: string, opts?: { dryRun?: boolean; resend?: boolean }) =>
     api.post<{
       ok: boolean
       tournament_id: string
@@ -612,8 +616,12 @@ export const tournamentApi = {
       skipped: number
       failed: number
       dry_run: number
+      disabled?: number
     }>(`/api/tournaments/${tournamentId}/reminders`, {}, {
-      params: dryRun ? { dry_run: true } : undefined,
+      params: {
+        ...(opts?.dryRun ? { dry_run: true } : {}),
+        ...(opts?.resend ? { resend: true } : {}),
+      },
     }),
   emailEntrants: (
     tournamentId: string,

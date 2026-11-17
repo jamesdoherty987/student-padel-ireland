@@ -8,6 +8,8 @@ from sqlalchemy.pool import StaticPool
 
 from app.models import (
     Base,
+    Match,
+    MatchStatus,
     PaymentStatus,
     Registration,
     Team,
@@ -24,6 +26,7 @@ from app.services.reminders import (
     recipients_for_tournament,
     run_day_before_reminders,
     send_reminder_to_user,
+    send_reminders_for_tournament,
 )
 
 
@@ -116,7 +119,7 @@ def test_run_day_before_sends_once_and_is_idempotent():
         kwargs = mock_send.call_args.kwargs
         assert kwargs["to"] == "james@ul.ie"
         assert "Tomorrow" in kwargs["subject"]
-        assert kwargs["html_body"] and "Log in" in kwargs["html_body"]
+        assert kwargs["html_body"] and "Open live board" in kwargs["html_body"]
         assert "/login?next=" in kwargs["text"]
 
         second = run_day_before_reminders(db)
@@ -240,3 +243,102 @@ def test_today_copy_uses_today_not_tomorrow():
         assert status == "sent"
         assert "Today" in mock_send.call_args.kwargs["subject"]
         assert "playing today" in mock_send.call_args.kwargs["html_body"]
+
+
+def test_auto_reminders_disabled_skips_cron_but_force_sends():
+    db = _session()
+    tomorrow = ireland_today() + timedelta(days=1)
+    _, t = _seed_tournament(db, event_date=tomorrow)
+    t.reminders_enabled = False
+    player = _add_paid_player(db, t, email="off@ul.ie", name="Off Auto")
+    db.commit()
+
+    with patch("app.services.reminders.send_email", return_value=True) as mock_send:
+        auto = run_day_before_reminders(db)
+        assert auto["totals"]["sent"] == 0
+        assert auto["totals"]["tournaments"] == 0
+        mock_send.assert_not_called()
+
+        forced = send_reminders_for_tournament(db, t, force=True)
+        assert forced["sent"] == 1
+        assert mock_send.call_count == 1
+        assert player.email == mock_send.call_args.kwargs["to"]
+
+
+def test_custom_message_and_schedule_in_email():
+    db = _session()
+    tomorrow = ireland_today() + timedelta(days=1)
+    _, t = _seed_tournament(db, event_date=tomorrow)
+    t.reminder_subject = "See you · {event}"
+    t.reminder_body = "Hi {name} — park at the side gate.\nBring water."
+    player = _add_paid_player(db, t, email="sched@ul.ie", name="Aoife Murphy")
+    opp = User(
+        id=uuid4(),
+        email="opp@ul.ie",
+        password_hash="x",
+        full_name="Opponent",
+        role=UserRole.PLAYER.value,
+    )
+    db.add(opp)
+    opp_team = Team(id=uuid4(), tournament_id=t.id, name="Opp Pair")
+    db.add(opp_team)
+    db.flush()
+    my_team = db.query(Team).filter(Team.tournament_id == t.id, Team.name == "Aoife Murphy").one()
+    db.add(
+        Match(
+            id=uuid4(),
+            tournament_id=t.id,
+            round="GROUP_A",
+            stage="GROUP",
+            court_number=2,
+            scheduled_start=datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc),
+            team_a_id=my_team.id,
+            team_b_id=opp_team.id,
+            status=MatchStatus.SCHEDULED.value,
+            sort_order=1,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.reminders.send_email", return_value=True) as mock_send:
+        status = send_reminder_to_user(db, t, player)
+        assert status == "sent"
+        kwargs = mock_send.call_args.kwargs
+        assert kwargs["subject"] == "See you · UL Open"
+        assert "park at the side gate" in kwargs["text"]
+        assert "Your schedule" in kwargs["text"]
+        assert "vs Opp Pair" in kwargs["text"]
+        assert "Court 2" in kwargs["text"]
+        assert "Your schedule" in kwargs["html_body"]
+
+
+def test_schedule_sort_handles_naive_datetimes():
+    db = _session()
+    tomorrow = ireland_today() + timedelta(days=1)
+    _, t = _seed_tournament(db, event_date=tomorrow)
+    player = _add_paid_player(db, t, email="naive@ul.ie", name="Naive Time")
+    my_team = db.query(Team).filter(Team.tournament_id == t.id, Team.name == "Naive Time").one()
+    opp_team = Team(id=uuid4(), tournament_id=t.id, name="Other")
+    db.add(opp_team)
+    db.flush()
+    db.add(
+        Match(
+            id=uuid4(),
+            tournament_id=t.id,
+            round="GROUP_A",
+            stage="GROUP",
+            court_number=1,
+            # Naive timestamp (as some DBs may return)
+            scheduled_start=datetime(2026, 11, 18, 9, 30),
+            team_a_id=my_team.id,
+            team_b_id=opp_team.id,
+            status=MatchStatus.SCHEDULED.value,
+            sort_order=0,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.reminders.send_email", return_value=True) as mock_send:
+        assert send_reminder_to_user(db, t, player) == "sent"
+        assert "vs Other" in mock_send.call_args.kwargs["text"]
+        assert "09:30" in mock_send.call_args.kwargs["text"] or "9:30" in mock_send.call_args.kwargs["text"]

@@ -270,6 +270,9 @@ class TournamentUpdate(BaseModel):
     organiser_id: Optional[UUID] = None
     # When set, replaces the tournament's custom signup fields (pass [] to clear)
     registration_fields: Optional[list[RegistrationFieldIn]] = None
+    reminders_enabled: Optional[bool] = None
+    reminder_subject: Optional[str] = Field(default=None, max_length=120)
+    reminder_body: Optional[str] = Field(default=None, max_length=2000)
 
     @field_validator("championship_size", "plate_size")
     @classmethod
@@ -332,6 +335,9 @@ class TournamentOut(BaseModel):
     can_manage: bool = False
     # Set when a logged-in viewer is on a non-withdrawn team for this event
     viewer_entered: bool = False
+    reminders_enabled: bool = True
+    reminder_subject: Optional[str] = None
+    reminder_body: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

@@ -208,6 +208,10 @@ class Tournament(Base, TimestampMixin):
     invite_code: Mapped[Optional[str]] = mapped_column(String(12), unique=True, index=True)
     # True = listed on landing / public browse. False = private (invite / direct link only).
     is_official: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Day-before / day-of reminder emails (cron + late-joiner). Manual Send now still works when off.
+    reminders_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    reminder_subject: Mapped[Optional[str]] = mapped_column(String(120))
+    reminder_body: Mapped[Optional[str]] = mapped_column(Text)
 
     organiser: Mapped[User] = relationship()
     teams: Mapped[list["Team"]] = relationship(back_populates="tournament")

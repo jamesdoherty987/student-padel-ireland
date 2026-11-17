@@ -35,6 +35,7 @@ import {
 import {
   calendarDaysFromToday,
   courtLabel,
+  formatDate,
   formatDateTime,
   formatMatchScore,
   formatMoney,
@@ -121,6 +122,12 @@ export default function ManageEventPage() {
   const [codeCopied, setCodeCopied] = useState(false)
   const [announce, setAnnounce] = useState({ title: '', body: '' })
   const [bulkEmail, setBulkEmail] = useState({ subject: '', body: '', paidOnly: true })
+  const [reminderDraft, setReminderDraft] = useState({
+    enabled: true,
+    subject: '',
+    body: '',
+  })
+  const [reminderDirty, setReminderDirty] = useState(false)
   const [sponsorForm, setSponsorForm] = useState({
     name: '',
     website: '',
@@ -245,6 +252,7 @@ export default function ManageEventPage() {
     setAdminResults([])
     setAdminSearching(false)
     adminSearchSeq.current += 1
+    setReminderDirty(false)
   }, [tid])
 
   useEffect(() => {
@@ -882,8 +890,39 @@ export default function ManageEventPage() {
     },
   })
 
+  const reminderSettingsMut = useMutation({
+    mutationFn: (payload: {
+      reminders_enabled: boolean
+      reminder_subject: string | null
+      reminder_body: string | null
+      quiet?: boolean
+    }) => {
+      const { quiet: _quiet, ...data } = payload
+      return tournamentApi.update(tid!, data)
+    },
+    onSuccess: (_res, vars) => {
+      setReminderDirty(false)
+      qc.invalidateQueries({ queryKey: ['tournament', slug] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
+      if (!vars.quiet) showToast('Reminder settings saved')
+    },
+    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not save reminder settings')),
+  })
+
   const remindMut = useMutation({
-    mutationFn: () => tournamentApi.sendReminders(tid!),
+    mutationFn: async (opts?: { resend?: boolean }) => {
+      // Persist unsaved copy/toggle before sending so the email matches the form
+      if (reminderDirty && tid) {
+        await tournamentApi.update(tid, {
+          reminders_enabled: reminderDraft.enabled,
+          reminder_subject: reminderDraft.subject.trim() || null,
+          reminder_body: reminderDraft.body.trim() || null,
+        })
+        setReminderDirty(false)
+        qc.invalidateQueries({ queryKey: ['tournament', slug] })
+      }
+      return tournamentApi.sendReminders(tid!, { resend: !!opts?.resend })
+    },
     onSuccess: (res) => {
       const d = res.data
       if (d.sent > 0) {
@@ -896,6 +935,35 @@ export default function ManageEventPage() {
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not send reminders')),
   })
+
+  useEffect(() => {
+    if (!tournamentDetail || reminderDirty) return
+    setReminderDraft({
+      enabled: tournamentDetail.reminders_enabled !== false,
+      subject: tournamentDetail.reminder_subject || '',
+      body: tournamentDetail.reminder_body || '',
+    })
+  }, [
+    tournamentDetail?.id,
+    tournamentDetail?.reminders_enabled,
+    tournamentDetail?.reminder_subject,
+    tournamentDetail?.reminder_body,
+    reminderDirty,
+  ])
+
+  const saveReminderDraft = (next?: Partial<typeof reminderDraft>, quiet = false) => {
+    const draft = {
+      enabled: next?.enabled ?? reminderDraft.enabled,
+      subject: next?.subject ?? reminderDraft.subject,
+      body: next?.body ?? reminderDraft.body,
+    }
+    reminderSettingsMut.mutate({
+      reminders_enabled: draft.enabled,
+      reminder_subject: draft.subject.trim() || null,
+      reminder_body: draft.body.trim() || null,
+      quiet,
+    })
+  }
 
   const bulkEmailMut = useMutation({
     mutationFn: () =>
@@ -1295,10 +1363,32 @@ export default function ManageEventPage() {
     active.tournament.status !== 'CANCELLED' &&
     active.tournament.status !== 'COMPLETED' &&
     active.tournament.status !== 'DRAFT' &&
-    active.tournament.status !== 'LIVE' &&
     daysToEvent != null &&
     daysToEvent >= 0
   const canSendRemindersNow = showRemindersSection && daysToEvent != null && daysToEvent <= 1
+  const remindersEnabled = reminderDraft.enabled
+  const defaultReminderSubject =
+    daysToEvent === 0
+      ? `Today: ${active?.tournament.name || 'Event'}`
+      : `Tomorrow: ${active?.tournament.name || 'Event'}`
+  const reminderPreviewWhen = active
+    ? `${formatDate(active.tournament.event_date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatTime(active.tournament.start_time)}`
+    : ''
+  const reminderPreviewWhere = active
+    ? `${active.tournament.venue}, ${active.tournament.location}`
+    : ''
+  const reminderPreviewMap = {
+    name: 'there',
+    event: active?.tournament.name || 'Event',
+    when: reminderPreviewWhen,
+    venue: reminderPreviewWhere,
+  }
+  const applyReminderPreview = (raw: string) =>
+    raw
+      .replaceAll('{name}', reminderPreviewMap.name)
+      .replaceAll('{event}', reminderPreviewMap.event)
+      .replaceAll('{when}', reminderPreviewMap.when)
+      .replaceAll('{venue}', reminderPreviewMap.venue)
 
   const courtColumns = useMemo(() => {
     const fromConfig = (tournamentDetail?.courts || [])
@@ -2059,29 +2149,174 @@ export default function ManageEventPage() {
                   <div className="org-section-head">
                     <h2>Reminders</h2>
                     {canSendRemindersNow ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        disabled={remindMut.isPending || !tid}
-                        onClick={() => {
-                          void confirmDialog({
-                            title: 'Send reminder emails?',
-                            message: 'Email paid players who haven’t had a reminder yet.',
-                            confirmLabel: 'Send',
-                          }).then((ok) => {
-                            if (ok) remindMut.mutate()
-                          })
-                        }}
-                      >
-                        {remindMut.isPending ? 'Sending…' : 'Send now'}
-                      </button>
+                      <div className="org-reminder-actions">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={remindMut.isPending || !tid}
+                          onClick={() => {
+                            void confirmDialog({
+                              title: 'Send reminder emails?',
+                              message: remindersEnabled
+                                ? 'Email paid players who haven’t had a reminder yet. Match times are included if the draw exists.'
+                                : 'Auto reminders are off, but this still emails anyone who hasn’t had a reminder yet.',
+                              confirmLabel: 'Send',
+                            }).then((ok) => {
+                              if (ok) remindMut.mutate({})
+                            })
+                          }}
+                        >
+                          {remindMut.isPending ? 'Sending…' : 'Send now'}
+                        </button>
+                        {fixturesExist ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={remindMut.isPending || !tid}
+                            onClick={() => {
+                              void confirmDialog({
+                                title: 'Resend to everyone?',
+                                message:
+                                  'Emails all paid players again with the latest schedule (even if they already got a reminder).',
+                                confirmLabel: 'Resend all',
+                              }).then((ok) => {
+                                if (ok) remindMut.mutate({ resend: true })
+                              })
+                            }}
+                          >
+                            Resend all
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
+
+                  <label className="org-reminder-toggle">
+                    <input
+                      type="checkbox"
+                      checked={remindersEnabled}
+                      disabled={reminderSettingsMut.isPending || !tid}
+                      onChange={(e) => {
+                        const enabled = e.target.checked
+                        setReminderDraft((s) => ({ ...s, enabled }))
+                        // Toggle saves immediately so auto on/off can't be left unsaved
+                        saveReminderDraft({ enabled }, true)
+                        showToast(enabled ? 'Auto reminders on' : 'Auto reminders off')
+                      }}
+                    />
+                    <span>
+                      <strong>Auto reminders</strong>
+                      <span className="muted">
+                        {remindersEnabled
+                          ? ' On · day before (and late joiners)'
+                          : ' Off · use Send now only'}
+                      </span>
+                    </span>
+                  </label>
+
                   <p className="muted org-reminders-copy">
+                    {fixturesExist
+                      ? 'Each player’s email includes their match times from the draw.'
+                      : 'Once you generate the draw, each player’s match times are added automatically.'}
                     {canSendRemindersNow
-                      ? 'Automatic emails go out the day before with time, venue, and a Log in button. Use Send now if anyone still needs one.'
-                      : 'Paid players get an automatic email the day before with time, venue, and a Log in button. Late joiners are included.'}
+                      ? ' Use Send now if anyone still needs one.'
+                      : ' Automatic send is the day before.'}
                   </p>
+
+                  <div className="org-reminder-editor">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="reminder-subject">
+                        Subject <span className="muted">(optional)</span>
+                      </label>
+                      <input
+                        id="reminder-subject"
+                        className="form-input"
+                        value={reminderDraft.subject}
+                        placeholder={defaultReminderSubject}
+                        maxLength={120}
+                        enterKeyHint="next"
+                        autoCapitalize="sentences"
+                        onChange={(e) => {
+                          setReminderDirty(true)
+                          setReminderDraft((s) => ({ ...s, subject: e.target.value }))
+                        }}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="reminder-body">
+                        Extra message <span className="muted">(optional)</span>
+                      </label>
+                      <textarea
+                        id="reminder-body"
+                        className="form-input form-textarea"
+                        rows={3}
+                        value={reminderDraft.body}
+                        placeholder="e.g. Check in from 9:15. Bring water. Parking at the side gate."
+                        maxLength={2000}
+                        enterKeyHint="done"
+                        autoCapitalize="sentences"
+                        onChange={(e) => {
+                          setReminderDirty(true)
+                          setReminderDraft((s) => ({ ...s, body: e.target.value }))
+                        }}
+                      />
+                      <p className="muted-note org-reminder-hint">
+                        Tip: {'{name}'}, {'{event}'}, {'{when}'}, {'{venue}'} work in subject and
+                        message. Time, venue, and schedule are always included.
+                      </p>
+                    </div>
+
+                    <div className="org-reminder-preview" aria-label="Email preview">
+                      <p className="org-reminder-preview-label">Preview</p>
+                      <p className="org-reminder-preview-subject">
+                        {applyReminderPreview(
+                          reminderDraft.subject.trim() || defaultReminderSubject,
+                        )}
+                      </p>
+                      <p className="muted">Hi there,</p>
+                      <p className="org-reminder-preview-title">
+                        {daysToEvent === 0 ? "You're playing today" : "You're playing tomorrow"}
+                      </p>
+                      {(reminderDraft.body.trim()
+                        ? reminderDraft.body.trim().split(/\n+/).filter(Boolean)
+                        : [
+                            `Quick reminder - you're registered for ${active?.tournament.name || 'this event'}.`,
+                            fixturesExist
+                              ? 'Here’s your current schedule. Times can move - check Live for updates.'
+                              : 'Log in to check your entry, draw, and court updates.',
+                          ]
+                      ).map((line, i) => (
+                        <p key={i}>{applyReminderPreview(line)}</p>
+                      ))}
+                      <p className="org-reminder-preview-meta">
+                        When: {reminderPreviewWhen}
+                        <br />
+                        Where: {reminderPreviewWhere}
+                      </p>
+                      {fixturesExist ? (
+                        <p className="org-reminder-preview-schedule">
+                          Your schedule
+                          <br />
+                          <span className="muted">Each player gets their own match times</span>
+                        </p>
+                      ) : null}
+                    </div>
+
+                    <button
+                      type="button"
+                      className="btn btn-dark btn-sm"
+                      disabled={!tid || reminderSettingsMut.isPending || !reminderDirty}
+                      onClick={() =>
+                        reminderSettingsMut.mutate({
+                          reminders_enabled: reminderDraft.enabled,
+                          reminder_subject: reminderDraft.subject.trim() || null,
+                          reminder_body: reminderDraft.body.trim() || null,
+                        })
+                      }
+                    >
+                      {reminderSettingsMut.isPending ? 'Saving…' : 'Save reminder'}
+                    </button>
+                  </div>
                 </section>
               )}
 

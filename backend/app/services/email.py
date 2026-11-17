@@ -57,6 +57,8 @@ def render_simple_email(
     greeting: str,
     paragraphs: list[str],
     detail_lines: list[tuple[str, str]] | None = None,
+    schedule_lines: list[str] | None = None,
+    schedule_heading: str = "Your schedule",
     cta_label: str,
     cta_url: str,
     footer: str = "Student Padel Ireland",
@@ -75,6 +77,11 @@ def render_simple_email(
     if detail_lines:
         for label, value in detail_lines:
             text_parts.append(f"{label}: {value}")
+        text_parts.append("")
+    if schedule_lines:
+        text_parts.append(schedule_heading)
+        for line in schedule_lines:
+            text_parts.append(f"· {line}")
         text_parts.append("")
     text_parts.append(f"{cta_label}: {cta_url}")
     text_parts.append("")
@@ -106,6 +113,19 @@ def render_simple_email(
             f'border-bottom:1px solid {_LINE};">{rows}</table>'
         )
 
+    schedule_html = ""
+    if schedule_lines:
+        items = "".join(
+            f'<li style="margin:0 0 8px;font-size:15px;line-height:1.4;color:{_INK};">'
+            f"{html.escape(line)}</li>"
+            for line in schedule_lines
+        )
+        schedule_html = (
+            f'<p style="margin:4px 0 8px;font-size:13px;font-weight:700;letter-spacing:0.02em;'
+            f'color:{_MUTED};text-transform:uppercase;">{html.escape(schedule_heading)}</p>'
+            f'<ul style="margin:0 0 20px;padding:0 0 0 18px;">{items}</ul>'
+        )
+
     html_body = f"""<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width"></head>
@@ -130,6 +150,7 @@ def render_simple_email(
               </h1>
               {para_html}
               {detail_html}
+              {schedule_html}
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 24px;">
                 <tr>
                   <td style="border-radius:10px;background:{_BRAND};">

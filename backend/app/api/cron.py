@@ -62,8 +62,10 @@ def send_tournament_reminders(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
     dry_run: bool = Query(False),
+    resend: bool = Query(False),
 ):
     """Admin: manual send for day-before / day-of only (avoids burning the real reminder early)."""
+    from app.models import TournamentReminderLog
     from app.services.reminders import ireland_today
 
     t = db.get(Tournament, tournament_id)
@@ -82,5 +84,11 @@ def send_tournament_reminders(
         )
     if days < 0:
         raise HTTPException(400, "This event date has already passed")
-    row = send_reminders_for_tournament(db, t, dry_run=dry_run)
+    if resend and not dry_run:
+        db.query(TournamentReminderLog).filter(
+            TournamentReminderLog.tournament_id == t.id
+        ).delete(synchronize_session=False)
+        db.commit()
+    # Manual Send now always allowed (even when auto reminders are off)
+    row = send_reminders_for_tournament(db, t, dry_run=dry_run, force=True)
     return {"ok": True, **row}

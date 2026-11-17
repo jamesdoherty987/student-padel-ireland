@@ -176,6 +176,12 @@ def init_db() -> None:
     _pg_add_column_if_missing("tournaments", "refunds_on_withdrawal", "BOOLEAN DEFAULT TRUE")
     _sqlite_add_column_if_missing("tournaments", "scoring_mode", "VARCHAR(20) DEFAULT 'SIMPLE'")
     _pg_add_column_if_missing("tournaments", "scoring_mode", "VARCHAR(20) DEFAULT 'SIMPLE'")
+    _sqlite_add_column_if_missing("tournaments", "reminders_enabled", "BOOLEAN DEFAULT 1")
+    _pg_add_column_if_missing("tournaments", "reminders_enabled", "BOOLEAN DEFAULT TRUE")
+    _sqlite_add_column_if_missing("tournaments", "reminder_subject", "VARCHAR(120)")
+    _pg_add_column_if_missing("tournaments", "reminder_subject", "VARCHAR(120)")
+    _sqlite_add_column_if_missing("tournaments", "reminder_body", "TEXT")
+    _pg_add_column_if_missing("tournaments", "reminder_body", "TEXT")
     _sqlite_add_column_if_missing(
         "tournament_registration_answers", "fulfilled", "BOOLEAN DEFAULT 0"
     )

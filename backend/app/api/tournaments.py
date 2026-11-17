@@ -913,6 +913,9 @@ def _tournament_out(
         registration_fields=reg_fields,
         can_manage=can_manage,
         viewer_entered=entered,
+        reminders_enabled=getattr(t, "reminders_enabled", True) is not False,
+        reminder_subject=(getattr(t, "reminder_subject", None) or None),
+        reminder_body=(getattr(t, "reminder_body", None) or None),
     )
 
 
@@ -1591,6 +1594,15 @@ def update_tournament(
             data.pop("is_official", None)
         else:
             data["is_official"] = bool(data["is_official"])
+
+    if "reminder_subject" in data:
+        subj = (data["reminder_subject"] or "").strip()
+        data["reminder_subject"] = subj[:120] or None
+    if "reminder_body" in data:
+        body_txt = (data["reminder_body"] or "").strip()
+        data["reminder_body"] = body_txt[:2000] or None
+    if "reminders_enabled" in data:
+        data["reminders_enabled"] = bool(data["reminders_enabled"])
 
     # Player-hosted private events stay free (no Stripe Connect payouts to hosts)
     if user.role != Role.ADMIN.value and not bool(getattr(t, "is_official", False)):
