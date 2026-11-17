@@ -118,13 +118,15 @@ def test_run_day_before_sends_once_and_is_idempotent():
         assert mock_send.call_count == 1
         kwargs = mock_send.call_args.kwargs
         assert kwargs["to"] == "james@ul.ie"
-        assert "Tomorrow" in kwargs["subject"]
+        assert kwargs["subject"] == "Reminder: UL Open"
         assert kwargs["html_body"] and "Open live board" in kwargs["html_body"]
         assert "Download the app" in kwargs["html_body"]
         assert "spi-logo.png" in kwargs["html_body"]
         assert "/login?next=" in kwargs["text"]
         assert "Student Padel Ireland app" in kwargs["text"]
         assert "apps.apple.com" in kwargs["text"]
+        assert "Your matches:" in kwargs["text"]
+        assert "playing tomorrow" in kwargs["html_body"]
 
         second = run_day_before_reminders(db)
         assert second["totals"]["sent"] == 0
@@ -245,7 +247,8 @@ def test_today_copy_uses_today_not_tomorrow():
     with patch("app.services.reminders.send_email", return_value=True) as mock_send:
         status = send_reminder_to_user(db, t, player)
         assert status == "sent"
-        assert "Today" in mock_send.call_args.kwargs["subject"]
+        # Subject uses editable template; title still says today
+        assert "UL Open" in mock_send.call_args.kwargs["subject"]
         assert "playing today" in mock_send.call_args.kwargs["html_body"]
 
 
@@ -310,6 +313,7 @@ def test_custom_message_and_schedule_in_email():
         kwargs = mock_send.call_args.kwargs
         assert kwargs["subject"] == "See you · UL Open"
         assert "park at the side gate" in kwargs["text"]
+        # Custom body has no {schedule}, so the auto schedule block is still appended
         assert "Your schedule" in kwargs["text"]
         assert "vs Opp Pair" in kwargs["text"]
         assert "Court 2" in kwargs["text"]

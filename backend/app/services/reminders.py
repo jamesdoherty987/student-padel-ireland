@@ -32,6 +32,22 @@ IRELAND_TZ = ZoneInfo("Europe/Dublin")
 # Public App Store listing — players need the app on match day
 APP_STORE_URL = "https://apps.apple.com/ie/app/student-padel-ireland/id6818780104"
 
+# Editable organiser defaults (placeholders filled per player at send time)
+DEFAULT_REMINDER_SUBJECT = "Reminder: {event}"
+DEFAULT_REMINDER_BODY = (
+    "Quick reminder - you're registered for {event}.\n"
+    "\n"
+    "When: {when}\n"
+    "Where: {venue}\n"
+    "First match: {time}\n"
+    "\n"
+    "Your matches:\n"
+    "{schedule}\n"
+    "\n"
+    "You'll need the Student Padel Ireland app on the day for courts and scores.\n"
+    "Download free: {app}"
+)
+
 _SKIP_STATUSES = {
     TournamentStatus.DRAFT.value,
     TournamentStatus.CANCELLED.value,
@@ -280,51 +296,40 @@ def _build_reminder(
         "app": APP_STORE_URL,
     }
 
-    custom_subject = (getattr(tournament, "reminder_subject", None) or "").strip()
-    custom_body = (getattr(tournament, "reminder_body", None) or "").strip()
-    body_uses_schedule = "{schedule}" in custom_body
+    subject_template = (getattr(tournament, "reminder_subject", None) or "").strip() or (
+        DEFAULT_REMINDER_SUBJECT
+    )
+    body_template = (getattr(tournament, "reminder_body", None) or "").strip() or (
+        DEFAULT_REMINDER_BODY
+    )
+    body_uses_schedule = "{schedule}" in body_template
+    body_uses_when_or_venue = "{when}" in body_template or "{venue}" in body_template
 
-    if custom_subject:
-        subject = _apply_template(custom_subject, mapping=mapping)[:120]
-    elif is_today:
-        subject = f"Today: {tournament.name}"
-    else:
-        subject = f"Tomorrow: {tournament.name}"
+    subject = _apply_template(subject_template, mapping=mapping)[:120]
 
     if is_today:
         title = "You're playing today"
     else:
         title = "You're playing tomorrow"
 
-    if custom_body:
-        paragraphs = [
-            _apply_template(p.strip(), mapping=mapping)
-            for p in custom_body.replace("\r\n", "\n").split("\n")
-            if p.strip()
-        ][:10]
-    elif schedule:
-        paragraphs = [
-            f"Quick reminder - you're registered for {tournament.name}.",
-            "Here’s your current schedule. Times can move - use the app for live updates.",
-            "You'll need the Student Padel Ireland app on the day for courts and scores.",
-        ]
-    else:
-        paragraphs = [
-            f"Quick reminder - you're registered for {tournament.name}.",
-            "You'll need the Student Padel Ireland app on the day for your schedule, courts, and scores.",
-        ]
+    paragraphs = [
+        _apply_template(p.strip(), mapping=mapping)
+        for p in body_template.replace("\r\n", "\n").split("\n")
+        if p.strip()
+    ][:20]
 
-    # If the organiser already inlined {schedule}, don't repeat the block below
+    # Avoid duplicating info the organiser already put in the editable template
     show_schedule_block = bool(schedule) and not body_uses_schedule
+    detail_lines = None if body_uses_when_or_venue else [
+        ("When", when),
+        ("Where", venue_line),
+    ]
 
     text, html_body = render_simple_email(
         title=title,
         greeting=f"Hi {first},",
         paragraphs=paragraphs,
-        detail_lines=[
-            ("When", when),
-            ("Where", venue_line),
-        ],
+        detail_lines=detail_lines,
         schedule_lines=schedule if show_schedule_block else None,
         schedule_heading="Your schedule",
         cta_label="Download the app",

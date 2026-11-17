@@ -1600,7 +1600,7 @@ def update_tournament(
         data["reminder_subject"] = subj[:120] or None
     if "reminder_body" in data:
         body_txt = (data["reminder_body"] or "").strip()
-        data["reminder_body"] = body_txt[:2000] or None
+        data["reminder_body"] = body_txt[:4000] or None
     if "reminders_enabled" in data:
         data["reminders_enabled"] = bool(data["reminders_enabled"])
 

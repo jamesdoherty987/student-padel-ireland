@@ -329,6 +329,52 @@ html.native-app.has-native-tabs .org-toast {
   margin: 0;
 }
 
+.org-reminder-body-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.org-reminder-body-head .form-label {
+  margin: 0;
+}
+
+.org-reminder-body {
+  min-height: 12rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.org-reminder-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.org-reminder-token {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: color-mix(in srgb, var(--court) 8%, var(--surface, #fff));
+  color: var(--court-deep, #0b3d2e);
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.org-reminder-token:hover {
+  border-color: color-mix(in srgb, var(--court-deep, #0b3d2e) 35%, transparent);
+  background: color-mix(in srgb, var(--court) 14%, var(--surface, #fff));
+}
+
 .org-reminder-hint {
   margin: 0.35rem 0 0;
 }

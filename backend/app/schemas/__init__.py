@@ -272,7 +272,7 @@ class TournamentUpdate(BaseModel):
     registration_fields: Optional[list[RegistrationFieldIn]] = None
     reminders_enabled: Optional[bool] = None
     reminder_subject: Optional[str] = Field(default=None, max_length=120)
-    reminder_body: Optional[str] = Field(default=None, max_length=2000)
+    reminder_body: Optional[str] = Field(default=None, max_length=4000)
 
     @field_validator("championship_size", "plate_size")
     @classmethod

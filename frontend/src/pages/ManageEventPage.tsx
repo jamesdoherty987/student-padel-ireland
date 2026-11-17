@@ -51,6 +51,32 @@ import './ManageEvent.css'
 
 type OrgPanel = 'registration' | 'day-of' | 'settings'
 
+/** Matches backend DEFAULT_REMINDER_* — placeholders filled per player on send. */
+const DEFAULT_REMINDER_SUBJECT = 'Reminder: {event}'
+const DEFAULT_REMINDER_BODY = [
+  "Quick reminder - you're registered for {event}.",
+  '',
+  'When: {when}',
+  'Where: {venue}',
+  'First match: {time}',
+  '',
+  'Your matches:',
+  '{schedule}',
+  '',
+  "You'll need the Student Padel Ireland app on the day for courts and scores.",
+  'Download free: {app}',
+].join('\n')
+
+const REMINDER_PLACEHOLDERS = [
+  '{name}',
+  '{event}',
+  '{when}',
+  '{venue}',
+  '{time}',
+  '{schedule}',
+  '{app}',
+] as const
+
 function defaultOrgPanel(status: string, hasFixtures: boolean): OrgPanel {
   if (status === 'LIVE' || hasFixtures) return 'day-of'
   if (status === 'COMPLETED' || status === 'CANCELLED') return 'day-of'
@@ -902,6 +928,12 @@ export default function ManageEventPage() {
       return tournamentApi.update(tid!, data)
     },
     onSuccess: (_res, vars) => {
+      // Keep the editor on what we just saved — don't wait for refetch (avoids wipe)
+      setReminderDraft({
+        enabled: vars.reminders_enabled,
+        subject: vars.reminder_subject || DEFAULT_REMINDER_SUBJECT,
+        body: vars.reminder_body || DEFAULT_REMINDER_BODY,
+      })
       setReminderDirty(false)
       qc.invalidateQueries({ queryKey: ['tournament', slug] })
       qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
@@ -914,11 +946,14 @@ export default function ManageEventPage() {
     mutationFn: async (opts?: { resend?: boolean }) => {
       // Persist unsaved copy/toggle before sending so the email matches the form
       if (reminderDirty && tid) {
+        const subject = reminderDraft.subject.trim() || DEFAULT_REMINDER_SUBJECT
+        const body = reminderDraft.body.trim() || DEFAULT_REMINDER_BODY
         await tournamentApi.update(tid, {
           reminders_enabled: reminderDraft.enabled,
-          reminder_subject: reminderDraft.subject.trim() || null,
-          reminder_body: reminderDraft.body.trim() || null,
+          reminder_subject: subject,
+          reminder_body: body,
         })
+        setReminderDraft((s) => ({ ...s, subject, body }))
         setReminderDirty(false)
         qc.invalidateQueries({ queryKey: ['tournament', slug] })
       }
@@ -941,8 +976,8 @@ export default function ManageEventPage() {
     if (!tournamentDetail || reminderDirty) return
     setReminderDraft({
       enabled: tournamentDetail.reminders_enabled !== false,
-      subject: tournamentDetail.reminder_subject || '',
-      body: tournamentDetail.reminder_body || '',
+      subject: tournamentDetail.reminder_subject || DEFAULT_REMINDER_SUBJECT,
+      body: tournamentDetail.reminder_body || DEFAULT_REMINDER_BODY,
     })
   }, [
     tournamentDetail?.id,
@@ -958,12 +993,36 @@ export default function ManageEventPage() {
       subject: next?.subject ?? reminderDraft.subject,
       body: next?.body ?? reminderDraft.body,
     }
+    const subject = draft.subject.trim() || DEFAULT_REMINDER_SUBJECT
+    const body = draft.body.trim() || DEFAULT_REMINDER_BODY
     reminderSettingsMut.mutate({
       reminders_enabled: draft.enabled,
-      reminder_subject: draft.subject.trim() || null,
-      reminder_body: draft.body.trim() || null,
+      reminder_subject: subject,
+      reminder_body: body,
       quiet,
     })
+  }
+
+  const insertReminderToken = (token: string, field: 'subject' | 'body') => {
+    setReminderDirty(true)
+    setReminderDraft((s) => {
+      const current = field === 'subject' ? s.subject : s.body
+      const sep = !current || current.endsWith(' ') || current.endsWith('\n') ? '' : ' '
+      const nextVal = `${current}${sep}${token}`
+      if (field === 'subject') {
+        return { ...s, subject: nextVal.slice(0, 120) }
+      }
+      return { ...s, body: nextVal.slice(0, 4000) }
+    })
+  }
+
+  const restoreReminderDefaults = () => {
+    setReminderDirty(true)
+    setReminderDraft((s) => ({
+      ...s,
+      subject: DEFAULT_REMINDER_SUBJECT,
+      body: DEFAULT_REMINDER_BODY,
+    }))
   }
 
   const bulkEmailMut = useMutation({
@@ -1387,10 +1446,6 @@ export default function ManageEventPage() {
     daysToEvent >= 0
   const canSendRemindersNow = showRemindersSection && daysToEvent != null && daysToEvent <= 1
   const remindersEnabled = reminderDraft.enabled
-  const defaultReminderSubject =
-    daysToEvent === 0
-      ? `Today: ${active?.tournament.name || 'Event'}`
-      : `Tomorrow: ${active?.tournament.name || 'Event'}`
   const reminderPreviewWhen = active
     ? `${formatDate(active.tournament.event_date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatTime(active.tournament.start_time)}`
     : ''
@@ -1401,7 +1456,7 @@ export default function ManageEventPage() {
     ? '· 10:00 · Court 1 · vs Example Team (Group A)'
     : 'Schedule TBC — check the app for updates.'
   const reminderPreviewMap = {
-    name: 'there',
+    name: 'Aoife',
     event: active?.tournament.name || 'Event',
     when: reminderPreviewWhen,
     venue: reminderPreviewWhere,
@@ -1418,6 +1473,12 @@ export default function ManageEventPage() {
       .replaceAll('{schedule}', reminderPreviewMap.schedule)
       .replaceAll('{time}', reminderPreviewMap.time)
       .replaceAll('{app}', reminderPreviewMap.app)
+  const reminderSubjectForPreview =
+    reminderDraft.subject.trim() || DEFAULT_REMINDER_SUBJECT
+  const reminderBodyForPreview = reminderDraft.body.trim() || DEFAULT_REMINDER_BODY
+  const reminderIsDefault =
+    reminderSubjectForPreview === DEFAULT_REMINDER_SUBJECT &&
+    reminderBodyForPreview === DEFAULT_REMINDER_BODY
 
   const courtColumns = useMemo(() => {
     const fromConfig = (tournamentDetail?.courts || [])
@@ -2319,16 +2380,18 @@ export default function ManageEventPage() {
                   <div className="org-reminder-editor">
                     <div className="form-group">
                       <label className="form-label" htmlFor="reminder-subject">
-                        Subject <span className="muted">(optional)</span>
+                        Email subject
                       </label>
                       <input
                         id="reminder-subject"
                         className="form-input"
                         value={reminderDraft.subject}
-                        placeholder={defaultReminderSubject}
+                        placeholder={DEFAULT_REMINDER_SUBJECT}
                         maxLength={120}
                         enterKeyHint="next"
                         autoCapitalize="sentences"
+                        autoComplete="off"
+                        spellCheck
                         onChange={(e) => {
                           setReminderDirty(true)
                           setReminderDraft((s) => ({ ...s, subject: e.target.value }))
@@ -2336,30 +2399,49 @@ export default function ManageEventPage() {
                       />
                     </div>
                     <div className="form-group">
-                      <label className="form-label" htmlFor="reminder-body">
-                        Extra message <span className="muted">(optional)</span>
-                      </label>
+                      <div className="org-reminder-body-head">
+                        <label className="form-label" htmlFor="reminder-body">
+                          Email message
+                        </label>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={reminderIsDefault && !reminderDirty}
+                          onClick={restoreReminderDefaults}
+                        >
+                          Reset to default
+                        </button>
+                      </div>
                       <textarea
                         id="reminder-body"
-                        className="form-input form-textarea"
-                        rows={3}
+                        className="form-input form-textarea org-reminder-body"
+                        rows={12}
                         value={reminderDraft.body}
-                        placeholder={
-                          'e.g. Check in from 9:15. Your matches:\n{schedule}\nBring water.'
-                        }
-                        maxLength={2000}
+                        placeholder={DEFAULT_REMINDER_BODY}
+                        maxLength={4000}
                         enterKeyHint="done"
                         autoCapitalize="sentences"
+                        spellCheck
                         onChange={(e) => {
                           setReminderDirty(true)
                           setReminderDraft((s) => ({ ...s, body: e.target.value }))
                         }}
                       />
+                      <div className="org-reminder-tokens" role="group" aria-label="Insert placeholder">
+                        {REMINDER_PLACEHOLDERS.map((token) => (
+                          <button
+                            key={token}
+                            type="button"
+                            className="org-reminder-token"
+                            title={`Insert ${token}`}
+                            onClick={() => insertReminderToken(token, 'body')}
+                          >
+                            {token}
+                          </button>
+                        ))}
+                      </div>
                       <p className="muted-note org-reminder-hint">
-                        Tip: {'{name}'}, {'{event}'}, {'{when}'}, {'{venue}'}, {'{time}'},{' '}
-                        {'{schedule}'}, {'{app}'} work in subject and message. {'{schedule}'} and{' '}
-                        {'{time}'} fill per player when the draw exists. App download is included by
-                        default.
+                        Placeholders fill per player when the email sends. Edit freely, then Save.
                       </p>
                     </div>
 
@@ -2378,49 +2460,22 @@ export default function ManageEventPage() {
                         </div>
                         <div className="org-reminder-preview-body">
                           <p className="org-reminder-preview-subject">
-                            {applyReminderPreview(
-                              reminderDraft.subject.trim() || defaultReminderSubject,
-                            )}
+                            {applyReminderPreview(reminderSubjectForPreview)}
                           </p>
-                          <p className="muted">Hi there,</p>
+                          <p className="muted">Hi {reminderPreviewMap.name},</p>
                           <p className="org-reminder-preview-title">
                             {daysToEvent === 0
                               ? "You're playing today"
                               : "You're playing tomorrow"}
                           </p>
-                          {(reminderDraft.body.trim()
-                            ? reminderDraft.body.trim().split(/\n+/).filter(Boolean)
-                            : [
-                                `Quick reminder - you're registered for ${active?.tournament.name || 'this event'}.`,
-                                fixturesExist
-                                  ? 'Here’s your current schedule. Times can move - use the app for live updates.'
-                                  : "You'll need the Student Padel Ireland app on the day for your schedule, courts, and scores.",
-                                fixturesExist
-                                  ? "You'll need the Student Padel Ireland app on the day for courts and scores."
-                                  : null,
-                              ].filter(Boolean) as string[]
-                          ).map((line, i) => (
-                            <p key={i} style={{ whiteSpace: 'pre-line' }}>
-                              {applyReminderPreview(line)}
-                            </p>
-                          ))}
-                          <div className="org-reminder-preview-details">
-                            <div>
-                              <span>When</span>
-                              {reminderPreviewWhen}
-                            </div>
-                            <div>
-                              <span>Where</span>
-                              {reminderPreviewWhere}
-                            </div>
-                          </div>
-                          {fixturesExist && !reminderDraft.body.includes('{schedule}') ? (
-                            <p className="org-reminder-preview-schedule">
-                              Your schedule
-                              <br />
-                              <span className="muted">Each player gets their own match times</span>
-                            </p>
-                          ) : null}
+                          {reminderBodyForPreview
+                            .split(/\n/)
+                            .filter((line) => line.trim())
+                            .map((line, i) => (
+                              <p key={i} style={{ whiteSpace: 'pre-line' }}>
+                                {applyReminderPreview(line)}
+                              </p>
+                            ))}
                           <div className="org-reminder-preview-ctas">
                             <span className="org-reminder-preview-cta org-reminder-preview-cta--primary">
                               Download the app
@@ -2438,8 +2493,9 @@ export default function ManageEventPage() {
                       onClick={() =>
                         reminderSettingsMut.mutate({
                           reminders_enabled: reminderDraft.enabled,
-                          reminder_subject: reminderDraft.subject.trim() || null,
-                          reminder_body: reminderDraft.body.trim() || null,
+                          reminder_subject:
+                            reminderDraft.subject.trim() || DEFAULT_REMINDER_SUBJECT,
+                          reminder_body: reminderDraft.body.trim() || DEFAULT_REMINDER_BODY,
                         })
                       }
                     >
