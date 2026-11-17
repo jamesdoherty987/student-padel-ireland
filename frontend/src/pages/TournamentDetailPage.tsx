@@ -522,7 +522,14 @@ export default function TournamentDetailPage() {
               />
             )}
             {isOps && tournament.status === 'LIVE' && (
-              <Link to={`/tournament/${tournament.slug}/display`} className="btn btn-ghost btn-sm">
+              <Link
+                to={`/tournament/${tournament.slug}/display${
+                  inviteCode && tournament.is_official === false
+                    ? `?code=${encodeURIComponent(inviteCode)}`
+                    : ''
+                }`}
+                className="btn btn-ghost btn-sm"
+              >
                 TV display
               </Link>
             )}

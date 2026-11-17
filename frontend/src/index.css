@@ -584,6 +584,9 @@ html.native-app .btn-xs {
 }
 
 .section-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 1 1 auto;
   min-width: max-content;
   min-height: 44px;

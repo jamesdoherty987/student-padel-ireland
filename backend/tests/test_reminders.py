@@ -120,7 +120,11 @@ def test_run_day_before_sends_once_and_is_idempotent():
         assert kwargs["to"] == "james@ul.ie"
         assert "Tomorrow" in kwargs["subject"]
         assert kwargs["html_body"] and "Open live board" in kwargs["html_body"]
+        assert "Download the app" in kwargs["html_body"]
+        assert "spi-logo.png" in kwargs["html_body"]
         assert "/login?next=" in kwargs["text"]
+        assert "Student Padel Ireland app" in kwargs["text"]
+        assert "apps.apple.com" in kwargs["text"]
 
         second = run_day_before_reminders(db)
         assert second["totals"]["sent"] == 0
@@ -310,6 +314,49 @@ def test_custom_message_and_schedule_in_email():
         assert "vs Opp Pair" in kwargs["text"]
         assert "Court 2" in kwargs["text"]
         assert "Your schedule" in kwargs["html_body"]
+
+
+def test_schedule_and_time_placeholders_inline_per_player():
+    db = _session()
+    tomorrow = ireland_today() + timedelta(days=1)
+    _, t = _seed_tournament(db, event_date=tomorrow)
+    t.reminder_body = (
+        "Hi {name}, first match at {time}.\n"
+        "Your matches:\n"
+        "{schedule}\n"
+        "Get the app: {app}"
+    )
+    player = _add_paid_player(db, t, email="ph@ul.ie", name="Place Holder")
+    opp_team = Team(id=uuid4(), tournament_id=t.id, name="Rivals")
+    db.add(opp_team)
+    db.flush()
+    my_team = db.query(Team).filter(Team.tournament_id == t.id, Team.name == "Place Holder").one()
+    db.add(
+        Match(
+            id=uuid4(),
+            tournament_id=t.id,
+            round="GROUP_A",
+            stage="GROUP",
+            court_number=3,
+            scheduled_start=datetime(2026, 11, 18, 11, 0, tzinfo=timezone.utc),
+            team_a_id=my_team.id,
+            team_b_id=opp_team.id,
+            status=MatchStatus.SCHEDULED.value,
+            sort_order=1,
+        )
+    )
+    db.commit()
+
+    with patch("app.services.reminders.send_email", return_value=True) as mock_send:
+        assert send_reminder_to_user(db, t, player) == "sent"
+        text = mock_send.call_args.kwargs["text"]
+        assert "Hi Place," in text or "Hi Place" in text
+        assert "first match at 11:00" in text
+        assert "vs Rivals" in text
+        assert "Court 3" in text
+        assert "apps.apple.com" in text
+        # Inline {schedule} should not also append the automatic "Your schedule" block
+        assert text.count("vs Rivals") == 1
 
 
 def test_schedule_sort_handles_naive_datetimes():

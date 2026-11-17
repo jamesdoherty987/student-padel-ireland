@@ -4931,7 +4931,14 @@ def tv_display(
         .options(joinedload(Match.score))
         .filter(
             Match.tournament_id == t.id,
-            Match.status.in_([MatchStatus.LIVE.value, MatchStatus.CALLED.value, MatchStatus.SCHEDULED.value]),
+            Match.status.in_(
+                [
+                    MatchStatus.LIVE.value,
+                    MatchStatus.CALLED.value,
+                    MatchStatus.AWAITING_CONFIRM.value,
+                    MatchStatus.SCHEDULED.value,
+                ]
+            ),
         )
         .order_by(Match.court_number, Match.scheduled_start)
         .all()
@@ -4941,7 +4948,11 @@ def tv_display(
     for m in matches:
         if m.court_number is None:
             # Only surface active matches without a court - don't clutter with scheduled TBCs
-            if m.status in (MatchStatus.LIVE.value, MatchStatus.CALLED.value):
+            if m.status in (
+                MatchStatus.LIVE.value,
+                MatchStatus.CALLED.value,
+                MatchStatus.AWAITING_CONFIRM.value,
+            ):
                 unassigned.append(_match_out(db, m, court_names))
             continue
         by_court.setdefault(m.court_number, []).append(_match_out(db, m, court_names))

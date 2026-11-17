@@ -334,10 +334,9 @@ html.native-app.has-native-tabs .org-toast {
 }
 
 .org-reminder-preview {
-  padding: 0.85rem 0.95rem;
-  border-radius: 12px;
-  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
-  background: color-mix(in srgb, var(--court) 6%, var(--surface, #fff));
+  padding: 0;
+  background: transparent;
+  border: none;
 }
 
 .org-reminder-preview-label {
@@ -347,6 +346,39 @@ html.native-app.has-native-tabs .org-toast {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.org-reminder-preview-card {
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  background: var(--surface, #fff);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--court-deep, #0b3d2e) 8%, transparent);
+}
+
+.org-reminder-preview-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+  background: var(--court-deep, #0b3d2e);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.org-reminder-preview-logo {
+  display: block;
+  width: 28px;
+  height: auto;
+  object-fit: contain;
+}
+
+.org-reminder-preview-body {
+  padding: 1rem 1rem 1.1rem;
 }
 
 .org-reminder-preview-subject {
@@ -361,10 +393,32 @@ html.native-app.has-native-tabs .org-toast {
   color: var(--court-deep, #0b3d2e);
 }
 
-.org-reminder-preview p {
+.org-reminder-preview-body p {
   margin: 0 0 0.45rem;
   font-size: 0.92rem;
   line-height: 1.4;
+}
+
+.org-reminder-preview-details {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.75rem 0;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--court) 10%, var(--surface, #fff));
+  font-size: 0.88rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+.org-reminder-preview-details span {
+  display: block;
+  margin-bottom: 0.1rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
 }
 
 .org-reminder-preview-meta,
@@ -372,6 +426,31 @@ html.native-app.has-native-tabs .org-toast {
   margin-top: 0.65rem;
   font-size: 0.88rem;
   line-height: 1.45;
+}
+
+.org-reminder-preview-ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.org-reminder-preview-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0.35rem 0.8rem;
+  border-radius: 9px;
+  border: 1.5px solid var(--court-deep, #0b3d2e);
+  color: var(--court-deep, #0b3d2e);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.org-reminder-preview-cta--primary {
+  background: var(--court-deep, #0b3d2e);
+  color: #fff;
+  border-color: transparent;
 }
 
 .org-reminder-editor .btn {
@@ -1337,7 +1416,12 @@ html.native-app.has-native-tabs .org-toast {
 }
 
 .org-pulse {
+  position: sticky;
+  top: 0;
+  z-index: 6;
   padding: 0.75rem 0.9rem;
+  background: var(--white);
+  box-shadow: 0 1px 0 rgba(11, 61, 46, 0.08);
 }
 
 .org-pulse-row {
@@ -1387,6 +1471,11 @@ html.native-app.has-native-tabs .org-toast {
   background: rgba(234, 88, 12, 0.06);
 }
 
+.org-attention li > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .org-attention li strong {
   display: block;
   font-size: 0.88rem;
@@ -1400,7 +1489,6 @@ html.native-app.has-native-tabs .org-toast {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 16rem;
 }
 
 .org-now-kicker {
@@ -2224,4 +2312,36 @@ html.native-app.has-native-tabs .org-toast {
   .modal-actions .btn {
     flex: 1 1 auto;
   }
+}
+
+
+.org-attention-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  flex: 0 0 auto;
+}
+
+.org-attention-more {
+  margin: 0.55rem 0 0;
+  font-size: 0.8rem;
+}
+
+.section-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  margin-left: 0.35rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: #c2410c;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  vertical-align: middle;
 }

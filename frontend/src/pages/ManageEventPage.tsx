@@ -639,13 +639,13 @@ export default function ManageEventPage() {
         force: form.force || !!match.ratings_applied,
       })
     },
-    onMutate: ({ match }) => {
+    onMutate: ({ match, form }) => {
       void hapticSuccess()
       // Close sheet immediately — match + form are in the mutation vars
       setScoreMatch(null)
       setScoreError('')
       showToast('Saving…')
-      return { closed: match }
+      return { closed: match, form }
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['org-matches'] })
@@ -662,6 +662,7 @@ export default function ManageEventPage() {
       const msg = apiErrorMessage(e, 'Could not save score')
       if (ctx?.closed) {
         setScoreMatch(ctx.closed)
+        if (ctx.form) setScoreForm(ctx.form)
         setScoreError(msg)
       }
       showToast(msg)
@@ -1032,6 +1033,14 @@ export default function ManageEventPage() {
     setOrgPanel(defaultOrgPanel(active.tournament.status, fixturesExist))
   }, [active?.tournament.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Busy day: open matches first when switching into a live / drawn event
+  useEffect(() => {
+    if (!active) return
+    setMatchFilter(
+      active.tournament.status === 'LIVE' || fixturesExist ? 'active' : 'all',
+    )
+  }, [active?.tournament.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const paymentBucket = (team: TournamentTeam): 'paid' | 'owing' | 'other' => {
     if (team.payment_status === 'PENDING' || team.payment_status === 'FAILED') return 'owing'
     if (team.payment_status === 'PAID' && team.payment_via === 'pay_on_arrival') return 'owing'
@@ -1170,10 +1179,13 @@ export default function ManageEventPage() {
     }> = []
 
     for (const m of pendingConfirm) {
+      const scoreBit = m.score ? formatMatchScore(m.score) : ''
       attention.push({
         id: `confirm-${m.id}`,
         label: 'Confirm score',
-        detail: `${m.team_a_name || 'TBD'} vs ${m.team_b_name || 'TBD'}`,
+        detail: `${m.team_a_name || 'TBD'} vs ${m.team_b_name || 'TBD'}${
+          scoreBit && scoreBit !== '-' ? ` · ${scoreBit}` : ''
+        }`,
         kind: 'fix',
         match: m,
       })
@@ -1216,8 +1228,10 @@ export default function ManageEventPage() {
     return {
       done,
       open,
+      pendingConfirm: pendingConfirm.length,
       total: matches.length,
-      attention: attention.slice(0, 6),
+      attention: attention.slice(0, 8),
+      attentionTotal: attention.length,
       allClear: attention.length === 0 && matches.length > 0,
     }
   }, [
@@ -1228,7 +1242,7 @@ export default function ManageEventPage() {
     fixturesExist,
   ])
 
-  /** One card per court: LIVE beats CALLED beats next SCHEDULED. */
+  /** One card per court: LIVE / confirm beat CALLED, then next SCHEDULED. */
   const courtsideNow = useMemo(() => {
     type Slot = { courtKey: string; label: string; match: Match; kind: 'live' | 'called' | 'next' }
     const byCourt = new Map<number, Match[]>()
@@ -1244,7 +1258,13 @@ export default function ManageEventPage() {
         continue
       }
       if (m.court_number == null) {
-        if (m.status === 'LIVE' || m.status === 'CALLED') unassigned.push(m)
+        if (
+          m.status === 'LIVE' ||
+          m.status === 'CALLED' ||
+          m.status === 'AWAITING_CONFIRM'
+        ) {
+          unassigned.push(m)
+        }
         continue
       }
       const list = byCourt.get(m.court_number) || []
@@ -1253,8 +1273,8 @@ export default function ManageEventPage() {
     }
     const pick = (list: Match[]): Match | null =>
       list.find((m) => m.status === 'LIVE') ||
-      list.find((m) => m.status === 'CALLED') ||
       list.find((m) => m.status === 'AWAITING_CONFIRM') ||
+      list.find((m) => m.status === 'CALLED') ||
       list
         .filter((m) => m.status === 'SCHEDULED')
         .sort((a, b) => {
@@ -1377,11 +1397,17 @@ export default function ManageEventPage() {
   const reminderPreviewWhere = active
     ? `${active.tournament.venue}, ${active.tournament.location}`
     : ''
+  const reminderPreviewSchedule = fixturesExist
+    ? '· 10:00 · Court 1 · vs Example Team (Group A)'
+    : 'Schedule TBC — check the app for updates.'
   const reminderPreviewMap = {
     name: 'there',
     event: active?.tournament.name || 'Event',
     when: reminderPreviewWhen,
     venue: reminderPreviewWhere,
+    schedule: reminderPreviewSchedule,
+    time: fixturesExist ? '10:00' : formatTime(active?.tournament.start_time),
+    app: 'https://apps.apple.com/ie/app/student-padel-ireland/id6818780104',
   }
   const applyReminderPreview = (raw: string) =>
     raw
@@ -1389,6 +1415,9 @@ export default function ManageEventPage() {
       .replaceAll('{event}', reminderPreviewMap.event)
       .replaceAll('{when}', reminderPreviewMap.when)
       .replaceAll('{venue}', reminderPreviewMap.venue)
+      .replaceAll('{schedule}', reminderPreviewMap.schedule)
+      .replaceAll('{time}', reminderPreviewMap.time)
+      .replaceAll('{app}', reminderPreviewMap.app)
 
   const courtColumns = useMemo(() => {
     const fromConfig = (tournamentDetail?.courts || [])
@@ -1512,6 +1541,54 @@ export default function ManageEventPage() {
     openScore(m)
   }
 
+  /** One-tap: finalise a player-submitted score waiting on the other team. */
+  const confirmPendingScore = (m: Match) => {
+    if (m.status !== 'AWAITING_CONFIRM' || !m.team_a_id || !m.team_b_id) {
+      openScore(m)
+      return
+    }
+    const score = m.score
+    const hasSets = !!(
+      score &&
+      (score.set1_a ||
+        score.set1_b ||
+        score.set2_a ||
+        score.set2_b ||
+        score.set3_a ||
+        score.set3_b)
+    )
+    let winner_id = m.winner_id || ''
+    if (!winner_id && scoringMode === 'SIMPLE' && score) {
+      if (score.set1_a > score.set1_b) winner_id = m.team_a_id
+      else if (score.set1_b > score.set1_a) winner_id = m.team_b_id
+    }
+    // Nothing useful to confirm — open the sheet instead of a failing save
+    if (!winner_id && !hasSets) {
+      openScore(m)
+      return
+    }
+    if (scoringMode === 'SIMPLE' && !winner_id) {
+      openScore(m)
+      return
+    }
+    scoreMut.mutate({
+      match: m,
+      form: {
+        set1_a: score?.set1_a ?? 0,
+        set1_b: score?.set1_b ?? 0,
+        set2_a: score?.set2_a ?? 0,
+        set2_b: score?.set2_b ?? 0,
+        set3_a: score?.set3_a ?? 0,
+        set3_b: score?.set3_b ?? 0,
+        current_set: score?.current_set ?? 1,
+        status: 'COMPLETED',
+        winner_id,
+        force: false,
+      },
+      toastOk: 'Score confirmed',
+    })
+  }
+
   const renderBulkEmailSection = (idPrefix: string) => (
     <section className="org-section org-bulk-email">
       <div className="org-section-head">
@@ -1618,7 +1695,7 @@ export default function ManageEventPage() {
                 : m.status.replace(/_/g, ' ')}
           </span>
         )}
-        {canNotify && (
+        {canNotify && !compact && !pending && (
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -1635,11 +1712,22 @@ export default function ManageEventPage() {
           <button
             type="button"
             className="btn btn-primary btn-sm"
-            disabled={moveMut.isPending}
-            onClick={() => scoreMatchQuick(m)}
-            title={pending ? 'Confirm or correct' : 'Log who won'}
+            onClick={() => (pending ? confirmPendingScore(m) : scoreMatchQuick(m))}
+            title={pending ? 'Confirm the submitted score' : 'Log who won'}
+            disabled={moveMut.isPending || scoreMut.isPending}
           >
-            {pending ? 'Fix' : 'Score'}
+            {pending ? 'Confirm' : 'Score'}
+          </button>
+        )}
+        {pending && !compact && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={moveMut.isPending || scoreMut.isPending}
+            onClick={() => openScore(m)}
+            title="Change the score before confirming"
+          >
+            Edit
           </button>
         )}
         {done && (
@@ -2077,6 +2165,11 @@ export default function ManageEventPage() {
                     onClick={() => setOrgPanel(tab.id)}
                   >
                     {tab.label}
+                    {tab.id === 'day-of' && dayOps.attentionTotal > 0 ? (
+                      <span className="section-tab-badge" aria-label={`${dayOps.attentionTotal} need attention`}>
+                        {dayOps.attentionTotal}
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -2251,7 +2344,9 @@ export default function ManageEventPage() {
                         className="form-input form-textarea"
                         rows={3}
                         value={reminderDraft.body}
-                        placeholder="e.g. Check in from 9:15. Bring water. Parking at the side gate."
+                        placeholder={
+                          'e.g. Check in from 9:15. Your matches:\n{schedule}\nBring water.'
+                        }
                         maxLength={2000}
                         enterKeyHint="done"
                         autoCapitalize="sentences"
@@ -2261,45 +2356,79 @@ export default function ManageEventPage() {
                         }}
                       />
                       <p className="muted-note org-reminder-hint">
-                        Tip: {'{name}'}, {'{event}'}, {'{when}'}, {'{venue}'} work in subject and
-                        message. Time, venue, and schedule are always included.
+                        Tip: {'{name}'}, {'{event}'}, {'{when}'}, {'{venue}'}, {'{time}'},{' '}
+                        {'{schedule}'}, {'{app}'} work in subject and message. {'{schedule}'} and{' '}
+                        {'{time}'} fill per player when the draw exists. App download is included by
+                        default.
                       </p>
                     </div>
 
                     <div className="org-reminder-preview" aria-label="Email preview">
                       <p className="org-reminder-preview-label">Preview</p>
-                      <p className="org-reminder-preview-subject">
-                        {applyReminderPreview(
-                          reminderDraft.subject.trim() || defaultReminderSubject,
-                        )}
-                      </p>
-                      <p className="muted">Hi there,</p>
-                      <p className="org-reminder-preview-title">
-                        {daysToEvent === 0 ? "You're playing today" : "You're playing tomorrow"}
-                      </p>
-                      {(reminderDraft.body.trim()
-                        ? reminderDraft.body.trim().split(/\n+/).filter(Boolean)
-                        : [
-                            `Quick reminder - you're registered for ${active?.tournament.name || 'this event'}.`,
-                            fixturesExist
-                              ? 'Here’s your current schedule. Times can move - check Live for updates.'
-                              : 'Log in to check your entry, draw, and court updates.',
-                          ]
-                      ).map((line, i) => (
-                        <p key={i}>{applyReminderPreview(line)}</p>
-                      ))}
-                      <p className="org-reminder-preview-meta">
-                        When: {reminderPreviewWhen}
-                        <br />
-                        Where: {reminderPreviewWhere}
-                      </p>
-                      {fixturesExist ? (
-                        <p className="org-reminder-preview-schedule">
-                          Your schedule
-                          <br />
-                          <span className="muted">Each player gets their own match times</span>
-                        </p>
-                      ) : null}
+                      <div className="org-reminder-preview-card">
+                        <div className="org-reminder-preview-brand">
+                          <img
+                            src="/images/spi-logo.png"
+                            alt=""
+                            width={28}
+                            height={26}
+                            className="org-reminder-preview-logo"
+                          />
+                          <span>Student Padel Ireland</span>
+                        </div>
+                        <div className="org-reminder-preview-body">
+                          <p className="org-reminder-preview-subject">
+                            {applyReminderPreview(
+                              reminderDraft.subject.trim() || defaultReminderSubject,
+                            )}
+                          </p>
+                          <p className="muted">Hi there,</p>
+                          <p className="org-reminder-preview-title">
+                            {daysToEvent === 0
+                              ? "You're playing today"
+                              : "You're playing tomorrow"}
+                          </p>
+                          {(reminderDraft.body.trim()
+                            ? reminderDraft.body.trim().split(/\n+/).filter(Boolean)
+                            : [
+                                `Quick reminder - you're registered for ${active?.tournament.name || 'this event'}.`,
+                                fixturesExist
+                                  ? 'Here’s your current schedule. Times can move - use the app for live updates.'
+                                  : "You'll need the Student Padel Ireland app on the day for your schedule, courts, and scores.",
+                                fixturesExist
+                                  ? "You'll need the Student Padel Ireland app on the day for courts and scores."
+                                  : null,
+                              ].filter(Boolean) as string[]
+                          ).map((line, i) => (
+                            <p key={i} style={{ whiteSpace: 'pre-line' }}>
+                              {applyReminderPreview(line)}
+                            </p>
+                          ))}
+                          <div className="org-reminder-preview-details">
+                            <div>
+                              <span>When</span>
+                              {reminderPreviewWhen}
+                            </div>
+                            <div>
+                              <span>Where</span>
+                              {reminderPreviewWhere}
+                            </div>
+                          </div>
+                          {fixturesExist && !reminderDraft.body.includes('{schedule}') ? (
+                            <p className="org-reminder-preview-schedule">
+                              Your schedule
+                              <br />
+                              <span className="muted">Each player gets their own match times</span>
+                            </p>
+                          ) : null}
+                          <div className="org-reminder-preview-ctas">
+                            <span className="org-reminder-preview-cta org-reminder-preview-cta--primary">
+                              Download the app
+                            </span>
+                            <span className="org-reminder-preview-cta">Open live board</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
                     <button
@@ -3019,10 +3148,15 @@ export default function ManageEventPage() {
                     <span>
                       <strong>{dayOps.open}</strong> to play
                     </span>
+                    {dayOps.pendingConfirm > 0 ? (
+                      <span>
+                        <strong>{dayOps.pendingConfirm}</strong> to confirm
+                      </span>
+                    ) : null}
                     {dayOps.allClear ? (
                       <span className="org-pulse-ok">All clear</span>
-                    ) : dayOps.attention.length > 0 ? (
-                      <span className="org-pulse-warn">{dayOps.attention.length} need you</span>
+                    ) : dayOps.attentionTotal > 0 ? (
+                      <span className="org-pulse-warn">{dayOps.attentionTotal} need you</span>
                     ) : null}
                   </div>
                   {dayOps.attention.length > 0 && (
@@ -3034,13 +3168,23 @@ export default function ManageEventPage() {
                             <span>{item.detail}</span>
                           </div>
                           {item.kind === 'fix' && item.match ? (
-                            <button
-                              type="button"
-                              className="btn btn-primary btn-sm"
-                              onClick={() => openScore(item.match!)}
-                            >
-                              Fix
-                            </button>
+                            <div className="org-attention-actions">
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                disabled={scoreMut.isPending}
+                                onClick={() => confirmPendingScore(item.match!)}
+                              >
+                                Confirm
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => openScore(item.match!)}
+                              >
+                                Edit
+                              </button>
+                            </div>
                           ) : null}
                           {item.kind === 'move' && item.match ? (
                             <button
@@ -3082,6 +3226,11 @@ export default function ManageEventPage() {
                       ))}
                     </ul>
                   )}
+                  {dayOps.attentionTotal > dayOps.attention.length ? (
+                    <p className="muted org-attention-more">
+                      +{dayOps.attentionTotal - dayOps.attention.length} more in the lists below
+                    </p>
+                  ) : null}
                 </section>
               )}
 
@@ -3132,10 +3281,12 @@ export default function ManageEventPage() {
                             <strong>{slot.label}</strong>
                             <span className="org-now-kicker">
                               {m.status === 'AWAITING_CONFIRM'
-                                ? 'Fix score'
+                                ? 'Pending'
                                 : slot.kind === 'live'
                                   ? 'Live'
-                                  : 'Next'}
+                                  : slot.kind === 'called'
+                                    ? 'Go now'
+                                    : 'Next'}
                             </span>
                           </div>
                           <p className="org-now-round">{knockoutRoundLabel(m.round, m.stage)}</p>
@@ -3979,11 +4130,13 @@ export default function ManageEventPage() {
               scoreMatch.status === 'COMPLETED' ||
               scoreMatch.status === 'WALKOVER'
                 ? 'Correct result'
-                : 'Who won?'}
+                : scoreMatch.status === 'AWAITING_CONFIRM'
+                  ? 'Confirm score'
+                  : 'Who won?'}
             </h2>
             {scoreMatch.status === 'AWAITING_CONFIRM' && (
               <p className="muted-note" style={{ marginTop: 0 }}>
-                Fix and save to finalise.
+                Players submitted this. Confirm as-is, or change it then save.
               </p>
             )}
             {scoringMode === 'SIMPLE' ? (
@@ -4186,7 +4339,9 @@ export default function ManageEventPage() {
                       scoreMatch.status === 'COMPLETED' ||
                       scoreMatch.status === 'WALKOVER'
                     ? 'Save correction'
-                    : 'Save result'}
+                    : scoreMatch.status === 'AWAITING_CONFIRM'
+                      ? 'Confirm result'
+                      : 'Save result'}
               </button>
               {(scoreMatch.status === 'COMPLETED' ||
                 scoreMatch.status === 'WALKOVER' ||

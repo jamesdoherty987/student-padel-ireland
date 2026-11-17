@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 IRELAND_TZ = ZoneInfo("Europe/Dublin")
 
+# Public App Store listing — players need the app on match day
+APP_STORE_URL = "https://apps.apple.com/ie/app/student-padel-ireland/id6818780104"
+
 _SKIP_STATUSES = {
     TournamentStatus.DRAFT.value,
     TournamentStatus.CANCELLED.value,
@@ -256,15 +259,30 @@ def _build_reminder(
     today = ireland_today()
     is_today = tournament.event_date == today
 
+    schedule = schedule_lines_for_user(db, tournament, user)
+    if schedule:
+        schedule_text = "\n".join(f"· {line}" for line in schedule)
+        first_time = schedule[0].split(" · ", 1)[0]
+    else:
+        schedule_text = "Schedule TBC — check the app for updates."
+        if tournament.start_time:
+            first_time = tournament.start_time.strftime("%H:%M")
+        else:
+            first_time = "TBC"
+
     mapping = {
         "name": first,
         "event": tournament.name,
         "when": when,
         "venue": venue_line,
+        "schedule": schedule_text,
+        "time": first_time,
+        "app": APP_STORE_URL,
     }
 
     custom_subject = (getattr(tournament, "reminder_subject", None) or "").strip()
     custom_body = (getattr(tournament, "reminder_body", None) or "").strip()
+    body_uses_schedule = "{schedule}" in custom_body
 
     if custom_subject:
         subject = _apply_template(custom_subject, mapping=mapping)[:120]
@@ -284,20 +302,20 @@ def _build_reminder(
             for p in custom_body.replace("\r\n", "\n").split("\n")
             if p.strip()
         ][:10]
+    elif schedule:
+        paragraphs = [
+            f"Quick reminder - you're registered for {tournament.name}.",
+            "Here’s your current schedule. Times can move - use the app for live updates.",
+            "You'll need the Student Padel Ireland app on the day for courts and scores.",
+        ]
     else:
         paragraphs = [
             f"Quick reminder - you're registered for {tournament.name}.",
-            "Log in to check your entry, draw, and court updates.",
+            "You'll need the Student Padel Ireland app on the day for your schedule, courts, and scores.",
         ]
 
-    schedule = schedule_lines_for_user(db, tournament, user)
-    if schedule:
-        # Point players at live board for updates once they have times
-        if not custom_body:
-            paragraphs = [
-                f"Quick reminder - you're registered for {tournament.name}.",
-                "Here’s your current schedule. Times can move - check Live for updates.",
-            ]
+    # If the organiser already inlined {schedule}, don't repeat the block below
+    show_schedule_block = bool(schedule) and not body_uses_schedule
 
     text, html_body = render_simple_email(
         title=title,
@@ -307,10 +325,13 @@ def _build_reminder(
             ("When", when),
             ("Where", venue_line),
         ],
-        schedule_lines=schedule or None,
+        schedule_lines=schedule if show_schedule_block else None,
         schedule_heading="Your schedule",
-        cta_label="Open live board",
-        cta_url=login_url,
+        cta_label="Download the app",
+        cta_url=APP_STORE_URL,
+        secondary_cta_label="Open live board",
+        secondary_cta_url=login_url,
+        preheader=f"{title} · {tournament.name}",
     )
     return subject, text, html_body
 
