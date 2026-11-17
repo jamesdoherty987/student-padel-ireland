@@ -105,10 +105,10 @@ function defaultOrgPanel(status: string, hasFixtures: boolean): OrgPanel {
 }
 
 /** Short label for one-tap “X wins” buttons on the desk. */
-function shortTeamLabel(name: string | null | undefined, fallback: string) {
+function shortTeamLabel(name: string | null | undefined, fallback: string, max = 14) {
   const n = (name || fallback).trim()
-  if (n.length <= 16) return n
-  return `${n.slice(0, 15)}…`
+  if (n.length <= max) return n
+  return `${n.slice(0, Math.max(1, max - 1))}…`
 }
 
 /** Best-of-3 set tallies for admin score validation. */
@@ -329,6 +329,7 @@ export default function ManageEventPage() {
     queryKey: ['org-teams', tid],
     queryFn: async () => (await tournamentApi.teams(tid!)).data,
     enabled: !!tid && canOrganise,
+    refetchInterval: orgPanel === 'day-of' ? 8000 : false,
   })
 
   const { data: matches = [] } = useQuery({
@@ -1339,22 +1340,11 @@ export default function ManageEventPage() {
       id: string
       label: string
       detail: string
-      kind: 'fix' | 'move' | 'checkin' | 'entries'
+      kind: 'move' | 'checkin' | 'entries'
       match?: Match
     }> = []
 
-    for (const m of pendingConfirm) {
-      const scoreBit = m.score ? formatMatchScore(m.score) : ''
-      attention.push({
-        id: `confirm-${m.id}`,
-        label: 'Confirm score',
-        detail: `${m.team_a_name || 'TBD'} vs ${m.team_b_name || 'TBD'}${
-          scoreBit && scoreBit !== '-' ? ` · ${scoreBit}` : ''
-        }`,
-        kind: 'fix',
-        match: m,
-      })
-    }
+    // Player-submitted scores get their own Control board — don't repeat them here.
     for (const m of needsCourt) {
       attention.push({
         id: `court-${m.id}`,
@@ -1390,14 +1380,16 @@ export default function ManageEventPage() {
       })
     }
 
+    const attentionTotal = attention.length + pendingConfirm.length
     return {
       done,
       open,
       pendingConfirm: pendingConfirm.length,
+      pendingMatches: pendingConfirm,
       total: matches.length,
-      attention: attention.slice(0, 8),
-      attentionTotal: attention.length,
-      allClear: attention.length === 0 && matches.length > 0,
+      attention: attention.slice(0, 6),
+      attentionTotal,
+      allClear: attentionTotal === 0 && matches.length > 0,
     }
   }, [
     matches,
@@ -1406,6 +1398,28 @@ export default function ManageEventPage() {
     active?.tournament.status,
     fixturesExist,
   ])
+
+  const prevPendingConfirm = useRef<number | null>(null)
+  useEffect(() => {
+    const n = dayOps.pendingConfirm
+    if (orgPanel !== 'day-of') {
+      prevPendingConfirm.current = n
+      return
+    }
+    if (prevPendingConfirm.current == null) {
+      prevPendingConfirm.current = n
+      return
+    }
+    if (n > prevPendingConfirm.current) {
+      const added = n - prevPendingConfirm.current
+      showToast(
+        added === 1
+          ? 'Player submitted a score — confirm it above'
+          : `${added} player scores waiting — confirm above`,
+      )
+    }
+    prevPendingConfirm.current = n
+  }, [dayOps.pendingConfirm, orgPanel])
 
   /** One card per court for live/called, or SCHEDULED within 15 mins of tip-off. */
   const courtsideNow = useMemo(() => {
@@ -1791,10 +1805,11 @@ export default function ManageEventPage() {
   }
 
   const renderBulkEmailSection = (idPrefix: string) => (
-    <section className="org-section org-bulk-email">
-      <div className="org-section-head">
-        <h2>Email entrants</h2>
-      </div>
+    <details className="org-section org-email-panel org-bulk-email">
+      <summary className="org-email-panel-summary">
+        <span className="org-email-panel-title">Email entrants</span>
+        <span className="muted org-email-panel-meta">Message everyone</span>
+      </summary>
       <p className="muted org-bulk-email-copy">
         Message every player on the list. Replies go to your account email.
       </p>
@@ -1861,7 +1876,7 @@ export default function ManageEventPage() {
           {bulkEmailMut.isPending ? 'Sending…' : 'Send to entrants'}
         </button>
       </div>
-    </section>
+    </details>
   )
 
   const renderMatchActions = (m: Match, compact = false) => {
@@ -1893,7 +1908,7 @@ export default function ManageEventPage() {
         {!compact && (
           <span className={`badge ${statusBadgeClass(m.status)}`}>
             {m.status === 'AWAITING_CONFIRM'
-              ? 'Confirm'
+              ? 'Player score'
               : m.status === 'CALLED'
                 ? 'Queued'
                 : m.status.replace(/_/g, ' ')}
@@ -1911,7 +1926,10 @@ export default function ManageEventPage() {
                 declareWinner(m, m.team_a_id!)
               }}
             >
-              {shortTeamLabel(m.team_a_name, 'A')} wins
+              <span className="org-quick-win-text">
+                {shortTeamLabel(m.team_a_name, 'A', compact ? 10 : 14)}
+              </span>
+              <span className="org-quick-win-suffix">wins</span>
             </button>
             <button
               type="button"
@@ -1923,20 +1941,23 @@ export default function ManageEventPage() {
                 declareWinner(m, m.team_b_id!)
               }}
             >
-              {shortTeamLabel(m.team_b_name, 'B')} wins
+              <span className="org-quick-win-text">
+                {shortTeamLabel(m.team_b_name, 'B', compact ? 10 : 14)}
+              </span>
+              <span className="org-quick-win-suffix">wins</span>
             </button>
           </div>
         )}
         {!done && (pending || !compact) && (
           <button
             type="button"
-            className={`btn btn-sm ${pending ? 'btn-primary' : 'btn-ghost'}`}
+            className={`btn btn-sm org-action-btn ${pending ? 'btn-primary' : 'btn-ghost'}`}
             onClick={(e) => {
               e.stopPropagation()
               if (pending) confirmPendingScore(m)
               else scoreMatchQuick(m)
             }}
-            title={pending ? 'Confirm the submitted score' : 'Add or edit score'}
+            title={pending ? 'Confirm the player-submitted score' : 'Add or edit score'}
             disabled={busy}
           >
             {pending ? 'Confirm' : 'Score'}
@@ -1945,7 +1966,7 @@ export default function ManageEventPage() {
         {pending && !compact && (
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm org-action-btn"
             disabled={busy}
             onClick={(e) => {
               e.stopPropagation()
@@ -1959,7 +1980,7 @@ export default function ManageEventPage() {
         {done && (
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm org-action-btn"
             title={locked ? 'Correct result' : 'Edit score'}
             onClick={(e) => {
               e.stopPropagation()
@@ -1971,7 +1992,7 @@ export default function ManageEventPage() {
         )}
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-sm org-action-btn"
           title="Change court or time"
           onClick={(e) => {
             e.stopPropagation()
@@ -1983,7 +2004,7 @@ export default function ManageEventPage() {
         {!compact && !done && !pending && (
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm org-action-btn"
             disabled={busy}
             title="Email players that their match is ready"
             onClick={(e) => {
@@ -2155,6 +2176,15 @@ export default function ManageEventPage() {
                   </p>
                 </div>
                 <div className="org-header-actions">
+                  {fixturesExist && active.tournament.slug ? (
+                    <Link
+                      to={`/t/${active.tournament.slug}/fixtures`}
+                      className="btn btn-dark"
+                      title="Open the full fixture list — tap any match to score"
+                    >
+                      Master sheet
+                    </Link>
+                  ) : null}
                   {tournamentDetail && (
                     <button type="button" className="btn btn-ghost" onClick={() => setShowEdit(true)}>
                       Edit
@@ -2498,52 +2528,61 @@ export default function ManageEventPage() {
                 )}
               </section>
 
+              {(showRemindersSection ||
+                orgTeams.length > 0 ||
+                active.tournament.entry_fee_cents > 0 ||
+                freeEntries.length > 0) && (
+              <div className="org-email-pair">
               {showRemindersSection && (
-                <section className="org-section org-reminders">
-                  <div className="org-section-head">
-                    <h2>Reminders</h2>
-                    {canSendRemindersNow ? (
-                      <div className="org-reminder-actions">
+                <details className="org-section org-email-panel org-reminders">
+                  <summary className="org-email-panel-summary">
+                    <span className="org-email-panel-title">Reminders</span>
+                    <span className="muted org-email-panel-meta">
+                      {remindersEnabled ? 'Auto on' : 'Auto off'}
+                    </span>
+                  </summary>
+
+                  {canSendRemindersNow ? (
+                    <div className="org-reminder-actions">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={remindMut.isPending || !tid}
+                        onClick={() => {
+                          void confirmDialog({
+                            title: 'Send reminder emails?',
+                            message: remindersEnabled
+                              ? 'Email paid players who haven’t had a reminder yet. Match times are included if the draw exists.'
+                              : 'Auto reminders are off, but this still emails anyone who hasn’t had a reminder yet.',
+                            confirmLabel: 'Send',
+                          }).then((ok) => {
+                            if (ok) remindMut.mutate({})
+                          })
+                        }}
+                      >
+                        {remindMut.isPending ? 'Sending…' : 'Send now'}
+                      </button>
+                      {fixturesExist ? (
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
                           disabled={remindMut.isPending || !tid}
                           onClick={() => {
                             void confirmDialog({
-                              title: 'Send reminder emails?',
-                              message: remindersEnabled
-                                ? 'Email paid players who haven’t had a reminder yet. Match times are included if the draw exists.'
-                                : 'Auto reminders are off, but this still emails anyone who hasn’t had a reminder yet.',
-                              confirmLabel: 'Send',
+                              title: 'Resend to everyone?',
+                              message:
+                                'Emails all paid players again with the latest schedule (even if they already got a reminder).',
+                              confirmLabel: 'Resend all',
                             }).then((ok) => {
-                              if (ok) remindMut.mutate({})
+                              if (ok) remindMut.mutate({ resend: true })
                             })
                           }}
                         >
-                          {remindMut.isPending ? 'Sending…' : 'Send now'}
+                          Resend all
                         </button>
-                        {fixturesExist ? (
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            disabled={remindMut.isPending || !tid}
-                            onClick={() => {
-                              void confirmDialog({
-                                title: 'Resend to everyone?',
-                                message:
-                                  'Emails all paid players again with the latest schedule (even if they already got a reminder).',
-                                confirmLabel: 'Resend all',
-                              }).then((ok) => {
-                                if (ok) remindMut.mutate({ resend: true })
-                              })
-                            }}
-                          >
-                            Resend all
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <label className="org-reminder-toggle">
                     <input
@@ -2704,7 +2743,402 @@ export default function ManageEventPage() {
                       {reminderSettingsMut.isPending ? 'Saving…' : 'Save reminder'}
                     </button>
                   </div>
-                </section>
+                </details>
+              )}
+
+              {orgTeams.length > 0 && renderBulkEmailSection('bulk-email-reg')}
+
+              {(active.tournament.entry_fee_cents > 0 || freeEntries.length > 0) && (
+                <details className="org-section org-email-panel org-free-entries">
+                  <summary className="org-email-panel-summary">
+                    <span className="org-email-panel-title">Free entry</span>
+                    <span className="muted org-email-panel-meta">
+                      {(() => {
+                        const pending = freeEntries.filter((e) => !e.used).length
+                        return pending > 0
+                          ? `${pending} waiting`
+                          : isSingles
+                            ? 'Add player'
+                            : 'Add team'
+                      })()}
+                    </span>
+                  </summary>
+                  <p className="muted org-free-entries-copy">
+                    {isSingles
+                      ? 'Add a player for free — they’re entered and marked paid.'
+                      : 'Add a doubles pair for free — they’re entered and marked paid. Both get an email.'}
+                  </p>
+                  {freeEntries.filter((e) => !e.used).length > 0 && (
+                    <ul className="org-admin-list org-free-entry-list">
+                      {freeEntries
+                        .filter((e) => !e.used)
+                        .map((entry: FreeEntry) => (
+                          <li key={entry.id}>
+                            <div>
+                              <strong>{entry.email}</strong>
+                              <span className="muted">
+                                Waiting to sign up
+                                {entry.note ? ` · ${entry.note}` : ''}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              disabled={removeFreeEntryMut.isPending}
+                              onClick={() => {
+                                void confirmDialog({
+                                  title: 'Remove free entry?',
+                                  message: `Remove ${entry.email} from the free-entry list?`,
+                                  confirmLabel: 'Remove',
+                                  danger: true,
+                                }).then((ok) => {
+                                  if (ok) removeFreeEntryMut.mutate(entry.id)
+                                })
+                              }}
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+                  {(() => {
+                    const signupFields = (active.tournament.registration_fields ||
+                      []) as TournamentRegistrationField[]
+                    const teamFields = signupFields.filter((f) => f.scope === 'team')
+                    const playerFields = signupFields.filter((f) => f.scope !== 'team')
+                    const answerKey = (fieldId: string, slot?: number) =>
+                      slot != null ? `${fieldId}:${slot}` : fieldId
+                    const setAnswer = (fieldId: string, value: string, slot?: number) => {
+                      const key = answerKey(fieldId, slot)
+                      setFreeAnswers((prev) => ({ ...prev, [key]: value }))
+                    }
+                    const renderField = (
+                      field: TournamentRegistrationField,
+                      slot?: number,
+                      who?: string,
+                    ) => {
+                      const key = answerKey(field.id, slot)
+                      const id = `free-cf-${field.id}${slot != null ? `-${slot}` : ''}`
+                      const label = who ? `${who} · ${field.label}` : field.label
+                      if (field.field_type === 'boolean') {
+                        return (
+                          <div className="form-group" key={key}>
+                            <span className="form-label" id={`${id}-label`}>
+                              {label}
+                              {!field.required ? <span className="muted"> (optional)</span> : null}
+                            </span>
+                            <div className="join-yesno" role="group" aria-labelledby={`${id}-label`}>
+                              {(
+                                [
+                                  ['yes', 'Yes'],
+                                  ['no', 'No'],
+                                ] as const
+                              ).map(([val, lab]) => (
+                                <button
+                                  key={val}
+                                  type="button"
+                                  className={`filter-chip join-yesno-btn ${
+                                    freeAnswers[key] === val ? 'on' : ''
+                                  }`}
+                                  aria-pressed={freeAnswers[key] === val}
+                                  onClick={() => setAnswer(field.id, val, slot)}
+                                >
+                                  {lab}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      }
+                      if (field.field_type === 'select') {
+                        return (
+                          <div className="form-group" key={key}>
+                            <label className="form-label" htmlFor={id}>
+                              {label}
+                              {!field.required ? <span className="muted"> (optional)</span> : null}
+                            </label>
+                            <select
+                              id={id}
+                              className="form-input"
+                              value={freeAnswers[key] || ''}
+                              required={field.required}
+                              onChange={(e) => setAnswer(field.id, e.target.value, slot)}
+                            >
+                              <option value="">Select…</option>
+                              {(field.options || []).map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="form-group" key={key}>
+                          <label className="form-label" htmlFor={id}>
+                            {label}
+                            {!field.required ? <span className="muted"> (optional)</span> : null}
+                          </label>
+                          <input
+                            id={id}
+                            className="form-input"
+                            value={freeAnswers[key] || ''}
+                            required={field.required}
+                            maxLength={500}
+                            enterKeyHint="next"
+                            autoCapitalize="sentences"
+                            onChange={(e) => setAnswer(field.id, e.target.value, slot)}
+                            placeholder={field.required ? undefined : 'Optional'}
+                          />
+                        </div>
+                      )
+                    }
+                    const emailOk = (raw: string) =>
+                      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim().toLowerCase())
+                    const p1Email = freeForm.p1Email.trim().toLowerCase()
+                    const p2Email = freeForm.p2Email.trim().toLowerCase()
+                    const canSubmit =
+                      emailOk(p1Email) &&
+                      freeForm.p1Name.trim().length >= 2 &&
+                      (isSingles ||
+                        (emailOk(p2Email) &&
+                          freeForm.p2Name.trim().length >= 2 &&
+                          p1Email !== p2Email))
+                    return (
+                      <form
+                        className="org-free-entry-add"
+                        onSubmit={(e: FormEvent) => {
+                          e.preventDefault()
+                          if (addFreeTeamMut.isPending) return
+                          if (!canSubmit) {
+                            if (!isSingles && p1Email && p1Email === p2Email) {
+                              showToast('Player 1 and player 2 need different emails')
+                              return
+                            }
+                            showToast(
+                              isSingles
+                                ? 'Enter a valid player email and name'
+                                : 'Enter a valid email and name for both players',
+                            )
+                            return
+                          }
+                          const missingRequired = signupFields.some((field) => {
+                            if (!field.required) return false
+                            if (field.scope === 'team') {
+                              return !(freeAnswers[answerKey(field.id)] || '').trim()
+                            }
+                            const slots = isSingles ? [1] : [1, 2]
+                            return slots.some(
+                              (slot) => !(freeAnswers[answerKey(field.id, slot)] || '').trim(),
+                            )
+                          })
+                          if (missingRequired) {
+                            showToast('Fill required signup questions')
+                            return
+                          }
+                          const custom_answers: Array<{
+                            field_id: string
+                            value: string
+                            slot?: number | null
+                          }> = []
+                          for (const field of teamFields) {
+                            const value = (freeAnswers[answerKey(field.id)] || '').trim()
+                            if (value) custom_answers.push({ field_id: field.id, value })
+                          }
+                          for (const field of playerFields) {
+                            const slots = isSingles ? [1] : [1, 2]
+                            for (const slot of slots) {
+                              const value = (freeAnswers[answerKey(field.id, slot)] || '').trim()
+                              if (value) {
+                                custom_answers.push({
+                                  field_id: field.id,
+                                  value,
+                                  slot,
+                                })
+                              }
+                            }
+                          }
+                          const payload = {
+                            player1: {
+                              email: p1Email,
+                              full_name: freeForm.p1Name.trim(),
+                            },
+                            player2: isSingles
+                              ? null
+                              : {
+                                  email: p2Email,
+                                  full_name: freeForm.p2Name.trim(),
+                                },
+                            team_name: freeForm.teamName.trim() || undefined,
+                            note: freeForm.note.trim() || undefined,
+                            custom_answers,
+                          }
+                          void confirmDialog({
+                            title: isSingles ? 'Add free player?' : 'Add free team?',
+                            message: isSingles
+                              ? `Enter ${payload.player1.full_name} for free and email them.`
+                              : `Enter ${payload.player1.full_name} & ${payload.player2?.full_name} for free and email both.`,
+                            confirmLabel: isSingles ? 'Add player' : 'Add team',
+                          }).then((ok) => {
+                            if (ok) addFreeTeamMut.mutate(payload)
+                          })
+                        }}
+                      >
+                        {!isSingles && (
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="free-team-name">
+                              Team name <span className="muted">(optional)</span>
+                            </label>
+                            <input
+                              id="free-team-name"
+                              className="form-input"
+                              value={freeForm.teamName}
+                              onChange={(e) =>
+                                setFreeForm((s) => ({ ...s, teamName: e.target.value }))
+                              }
+                              placeholder="Auto from first names if blank"
+                              maxLength={120}
+                              enterKeyHint="next"
+                              autoCapitalize="words"
+                            />
+                          </div>
+                        )}
+
+                        <div className="org-free-player-card">
+                          <h3>{isSingles ? 'Player' : 'Player 1'}</h3>
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="free-p1-name">
+                              Full name
+                            </label>
+                            <input
+                              id="free-p1-name"
+                              className="form-input"
+                              value={freeForm.p1Name}
+                              onChange={(e) =>
+                                setFreeForm((s) => ({ ...s, p1Name: e.target.value }))
+                              }
+                              required
+                              minLength={2}
+                              placeholder="e.g. Aoife Murphy"
+                              autoComplete="name"
+                              enterKeyHint="next"
+                              autoCapitalize="words"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="free-p1-email">
+                              Email
+                            </label>
+                            <input
+                              id="free-p1-email"
+                              className="form-input"
+                              type="email"
+                              inputMode="email"
+                              value={freeForm.p1Email}
+                              onChange={(e) =>
+                                setFreeForm((s) => ({ ...s, p1Email: e.target.value }))
+                              }
+                              required
+                              placeholder="player@college.ie"
+                              autoCapitalize="none"
+                              autoCorrect="off"
+                              spellCheck={false}
+                              enterKeyHint="next"
+                            />
+                          </div>
+                          {playerFields.map((field) =>
+                            renderField(field, 1, isSingles ? undefined : 'Player 1'),
+                          )}
+                        </div>
+
+                        {!isSingles && (
+                          <div className="org-free-player-card">
+                            <h3>Player 2</h3>
+                            <div className="form-group">
+                              <label className="form-label" htmlFor="free-p2-name">
+                                Full name
+                              </label>
+                              <input
+                                id="free-p2-name"
+                                className="form-input"
+                                value={freeForm.p2Name}
+                                onChange={(e) =>
+                                  setFreeForm((s) => ({ ...s, p2Name: e.target.value }))
+                                }
+                                required
+                                minLength={2}
+                                placeholder="e.g. Ciara Byrne"
+                                autoComplete="name"
+                                enterKeyHint="next"
+                                autoCapitalize="words"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label" htmlFor="free-p2-email">
+                                Email
+                              </label>
+                              <input
+                                id="free-p2-email"
+                                className="form-input"
+                                type="email"
+                                inputMode="email"
+                                value={freeForm.p2Email}
+                                onChange={(e) =>
+                                  setFreeForm((s) => ({ ...s, p2Email: e.target.value }))
+                                }
+                                required
+                                placeholder="partner@college.ie"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellCheck={false}
+                                enterKeyHint="next"
+                              />
+                            </div>
+                            {playerFields.map((field) => renderField(field, 2, 'Player 2'))}
+                          </div>
+                        )}
+
+                        {teamFields.length > 0 && (
+                          <div className="org-free-player-card">
+                            <h3>Team details</h3>
+                            {teamFields.map((field) => renderField(field))}
+                          </div>
+                        )}
+
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="free-entry-note">
+                            Note <span className="muted">(optional)</span>
+                          </label>
+                          <input
+                            id="free-entry-note"
+                            className="form-input"
+                            placeholder="e.g. Sponsor guest / volunteer"
+                            value={freeForm.note}
+                            onChange={(e) => setFreeForm((s) => ({ ...s, note: e.target.value }))}
+                            maxLength={200}
+                            enterKeyHint="done"
+                            autoCapitalize="sentences"
+                          />
+                        </div>
+                        <button
+                          type="submit"
+                          className="btn btn-dark"
+                          disabled={addFreeTeamMut.isPending || !canSubmit}
+                        >
+                          {addFreeTeamMut.isPending
+                            ? 'Adding…'
+                            : isSingles
+                              ? 'Add free player'
+                              : 'Add free team'}
+                        </button>
+                      </form>
+                    )
+                  })()}
+                </details>
+              )}
+              </div>
               )}
 
               <section className="org-section">
@@ -3089,418 +3523,33 @@ export default function ManageEventPage() {
                 </div>
               </section>
 
-              {(active.tournament.entry_fee_cents > 0 || freeEntries.length > 0) && (
-                <section className="org-section org-free-entries">
-                  <div className="org-section-head">
-                    <h2>Free entry</h2>
-                  </div>
-                  <p className="muted org-free-entries-copy">
-                    {isSingles
-                      ? 'Add a player for free — they’re entered and marked paid.'
-                      : 'Add a doubles pair for free — they’re entered and marked paid. Both get an email.'}
-                  </p>
-                  {freeEntries.filter((e) => !e.used).length > 0 && (
-                    <ul className="org-admin-list org-free-entry-list">
-                      {freeEntries
-                        .filter((e) => !e.used)
-                        .map((entry: FreeEntry) => (
-                          <li key={entry.id}>
-                            <div>
-                              <strong>{entry.email}</strong>
-                              <span className="muted">
-                                Waiting to sign up
-                                {entry.note ? ` · ${entry.note}` : ''}
-                              </span>
-                            </div>
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              disabled={removeFreeEntryMut.isPending}
-                              onClick={() => {
-                                void confirmDialog({
-                                  title: 'Remove free entry?',
-                                  message: `Remove ${entry.email} from the free-entry list?`,
-                                  confirmLabel: 'Remove',
-                                  danger: true,
-                                }).then((ok) => {
-                                  if (ok) removeFreeEntryMut.mutate(entry.id)
-                                })
-                              }}
-                            >
-                              Remove
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
-                  )}
-                  {(() => {
-                    const signupFields = (active.tournament.registration_fields ||
-                      []) as TournamentRegistrationField[]
-                    const teamFields = signupFields.filter((f) => f.scope === 'team')
-                    const playerFields = signupFields.filter((f) => f.scope !== 'team')
-                    const answerKey = (fieldId: string, slot?: number) =>
-                      slot != null ? `${fieldId}:${slot}` : fieldId
-                    const setAnswer = (fieldId: string, value: string, slot?: number) => {
-                      const key = answerKey(fieldId, slot)
-                      setFreeAnswers((prev) => ({ ...prev, [key]: value }))
-                    }
-                    const renderField = (
-                      field: TournamentRegistrationField,
-                      slot?: number,
-                      who?: string,
-                    ) => {
-                      const key = answerKey(field.id, slot)
-                      const id = `free-cf-${field.id}${slot != null ? `-${slot}` : ''}`
-                      const label = who ? `${who} · ${field.label}` : field.label
-                      if (field.field_type === 'boolean') {
-                        return (
-                          <div className="form-group" key={key}>
-                            <span className="form-label" id={`${id}-label`}>
-                              {label}
-                              {!field.required ? <span className="muted"> (optional)</span> : null}
-                            </span>
-                            <div className="join-yesno" role="group" aria-labelledby={`${id}-label`}>
-                              {(
-                                [
-                                  ['yes', 'Yes'],
-                                  ['no', 'No'],
-                                ] as const
-                              ).map(([val, lab]) => (
-                                <button
-                                  key={val}
-                                  type="button"
-                                  className={`filter-chip join-yesno-btn ${
-                                    freeAnswers[key] === val ? 'on' : ''
-                                  }`}
-                                  aria-pressed={freeAnswers[key] === val}
-                                  onClick={() => setAnswer(field.id, val, slot)}
-                                >
-                                  {lab}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )
-                      }
-                      if (field.field_type === 'select') {
-                        return (
-                          <div className="form-group" key={key}>
-                            <label className="form-label" htmlFor={id}>
-                              {label}
-                              {!field.required ? <span className="muted"> (optional)</span> : null}
-                            </label>
-                            <select
-                              id={id}
-                              className="form-input"
-                              value={freeAnswers[key] || ''}
-                              required={field.required}
-                              onChange={(e) => setAnswer(field.id, e.target.value, slot)}
-                            >
-                              <option value="">Select…</option>
-                              {(field.options || []).map((opt) => (
-                                <option key={opt} value={opt}>
-                                  {opt}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )
-                      }
-                      return (
-                        <div className="form-group" key={key}>
-                          <label className="form-label" htmlFor={id}>
-                            {label}
-                            {!field.required ? <span className="muted"> (optional)</span> : null}
-                          </label>
-                          <input
-                            id={id}
-                            className="form-input"
-                            value={freeAnswers[key] || ''}
-                            required={field.required}
-                            maxLength={500}
-                            enterKeyHint="next"
-                            autoCapitalize="sentences"
-                            onChange={(e) => setAnswer(field.id, e.target.value, slot)}
-                            placeholder={field.required ? undefined : 'Optional'}
-                          />
-                        </div>
-                      )
-                    }
-                    const emailOk = (raw: string) =>
-                      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw.trim().toLowerCase())
-                    const p1Email = freeForm.p1Email.trim().toLowerCase()
-                    const p2Email = freeForm.p2Email.trim().toLowerCase()
-                    const canSubmit =
-                      emailOk(p1Email) &&
-                      freeForm.p1Name.trim().length >= 2 &&
-                      (isSingles ||
-                        (emailOk(p2Email) &&
-                          freeForm.p2Name.trim().length >= 2 &&
-                          p1Email !== p2Email))
-                    return (
-                      <form
-                        className="org-free-entry-add"
-                        onSubmit={(e: FormEvent) => {
-                          e.preventDefault()
-                          if (addFreeTeamMut.isPending) return
-                          if (!canSubmit) {
-                            if (!isSingles && p1Email && p1Email === p2Email) {
-                              showToast('Player 1 and player 2 need different emails')
-                              return
-                            }
-                            showToast(
-                              isSingles
-                                ? 'Enter a valid player email and name'
-                                : 'Enter a valid email and name for both players',
-                            )
-                            return
-                          }
-                          const missingRequired = signupFields.some((field) => {
-                            if (!field.required) return false
-                            if (field.scope === 'team') {
-                              return !(freeAnswers[answerKey(field.id)] || '').trim()
-                            }
-                            const slots = isSingles ? [1] : [1, 2]
-                            return slots.some(
-                              (slot) => !(freeAnswers[answerKey(field.id, slot)] || '').trim(),
-                            )
-                          })
-                          if (missingRequired) {
-                            showToast('Fill required signup questions')
-                            return
-                          }
-                          const custom_answers: Array<{
-                            field_id: string
-                            value: string
-                            slot?: number | null
-                          }> = []
-                          for (const field of teamFields) {
-                            const value = (freeAnswers[answerKey(field.id)] || '').trim()
-                            if (value) custom_answers.push({ field_id: field.id, value })
-                          }
-                          for (const field of playerFields) {
-                            const slots = isSingles ? [1] : [1, 2]
-                            for (const slot of slots) {
-                              const value = (freeAnswers[answerKey(field.id, slot)] || '').trim()
-                              if (value) {
-                                custom_answers.push({
-                                  field_id: field.id,
-                                  value,
-                                  slot,
-                                })
-                              }
-                            }
-                          }
-                          const payload = {
-                            player1: {
-                              email: p1Email,
-                              full_name: freeForm.p1Name.trim(),
-                            },
-                            player2: isSingles
-                              ? null
-                              : {
-                                  email: p2Email,
-                                  full_name: freeForm.p2Name.trim(),
-                                },
-                            team_name: freeForm.teamName.trim() || undefined,
-                            note: freeForm.note.trim() || undefined,
-                            custom_answers,
-                          }
-                          void confirmDialog({
-                            title: isSingles ? 'Add free player?' : 'Add free team?',
-                            message: isSingles
-                              ? `Enter ${payload.player1.full_name} for free and email them.`
-                              : `Enter ${payload.player1.full_name} & ${payload.player2?.full_name} for free and email both.`,
-                            confirmLabel: isSingles ? 'Add player' : 'Add team',
-                          }).then((ok) => {
-                            if (ok) addFreeTeamMut.mutate(payload)
-                          })
-                        }}
-                      >
-                        {!isSingles && (
-                          <div className="form-group">
-                            <label className="form-label" htmlFor="free-team-name">
-                              Team name <span className="muted">(optional)</span>
-                            </label>
-                            <input
-                              id="free-team-name"
-                              className="form-input"
-                              value={freeForm.teamName}
-                              onChange={(e) =>
-                                setFreeForm((s) => ({ ...s, teamName: e.target.value }))
-                              }
-                              placeholder="Auto from first names if blank"
-                              maxLength={120}
-                              enterKeyHint="next"
-                              autoCapitalize="words"
-                            />
-                          </div>
-                        )}
 
-                        <div className="org-free-player-card">
-                          <h3>{isSingles ? 'Player' : 'Player 1'}</h3>
-                          <div className="form-group">
-                            <label className="form-label" htmlFor="free-p1-name">
-                              Full name
-                            </label>
-                            <input
-                              id="free-p1-name"
-                              className="form-input"
-                              value={freeForm.p1Name}
-                              onChange={(e) =>
-                                setFreeForm((s) => ({ ...s, p1Name: e.target.value }))
-                              }
-                              required
-                              minLength={2}
-                              placeholder="e.g. Aoife Murphy"
-                              autoComplete="name"
-                              enterKeyHint="next"
-                              autoCapitalize="words"
-                            />
-                          </div>
-                          <div className="form-group">
-                            <label className="form-label" htmlFor="free-p1-email">
-                              Email
-                            </label>
-                            <input
-                              id="free-p1-email"
-                              className="form-input"
-                              type="email"
-                              inputMode="email"
-                              value={freeForm.p1Email}
-                              onChange={(e) =>
-                                setFreeForm((s) => ({ ...s, p1Email: e.target.value }))
-                              }
-                              required
-                              placeholder="player@college.ie"
-                              autoCapitalize="none"
-                              autoCorrect="off"
-                              spellCheck={false}
-                              enterKeyHint="next"
-                            />
-                          </div>
-                          {playerFields.map((field) =>
-                            renderField(field, 1, isSingles ? undefined : 'Player 1'),
-                          )}
-                        </div>
-
-                        {!isSingles && (
-                          <div className="org-free-player-card">
-                            <h3>Player 2</h3>
-                            <div className="form-group">
-                              <label className="form-label" htmlFor="free-p2-name">
-                                Full name
-                              </label>
-                              <input
-                                id="free-p2-name"
-                                className="form-input"
-                                value={freeForm.p2Name}
-                                onChange={(e) =>
-                                  setFreeForm((s) => ({ ...s, p2Name: e.target.value }))
-                                }
-                                required
-                                minLength={2}
-                                placeholder="e.g. Ciara Byrne"
-                                autoComplete="name"
-                                enterKeyHint="next"
-                                autoCapitalize="words"
-                              />
-                            </div>
-                            <div className="form-group">
-                              <label className="form-label" htmlFor="free-p2-email">
-                                Email
-                              </label>
-                              <input
-                                id="free-p2-email"
-                                className="form-input"
-                                type="email"
-                                inputMode="email"
-                                value={freeForm.p2Email}
-                                onChange={(e) =>
-                                  setFreeForm((s) => ({ ...s, p2Email: e.target.value }))
-                                }
-                                required
-                                placeholder="partner@college.ie"
-                                autoCapitalize="none"
-                                autoCorrect="off"
-                                spellCheck={false}
-                                enterKeyHint="next"
-                              />
-                            </div>
-                            {playerFields.map((field) => renderField(field, 2, 'Player 2'))}
-                          </div>
-                        )}
-
-                        {teamFields.length > 0 && (
-                          <div className="org-free-player-card">
-                            <h3>Team details</h3>
-                            {teamFields.map((field) => renderField(field))}
-                          </div>
-                        )}
-
-                        <div className="form-group">
-                          <label className="form-label" htmlFor="free-entry-note">
-                            Note <span className="muted">(optional)</span>
-                          </label>
-                          <input
-                            id="free-entry-note"
-                            className="form-input"
-                            placeholder="e.g. Sponsor guest / volunteer"
-                            value={freeForm.note}
-                            onChange={(e) => setFreeForm((s) => ({ ...s, note: e.target.value }))}
-                            maxLength={200}
-                            enterKeyHint="done"
-                            autoCapitalize="sentences"
-                          />
-                        </div>
-                        <button
-                          type="submit"
-                          className="btn btn-dark"
-                          disabled={addFreeTeamMut.isPending || !canSubmit}
-                        >
-                          {addFreeTeamMut.isPending
-                            ? 'Adding…'
-                            : isSingles
-                              ? 'Add free player'
-                              : 'Add free team'}
-                        </button>
-                      </form>
-                    )
-                  })()}
-                </section>
-              )}
-
-              {orgTeams.length > 0 && renderBulkEmailSection('bulk-email-reg')}
               </>
               )}
 
               {orgPanel === 'day-of' && (
               <>
-              <div
-                className={`org-control-banner${fixturesExist ? '' : ' is-prep'}`}
-                role="status"
-              >
-                <strong>{fixturesExist ? 'Score matches here' : 'Before play'}</strong>
-                <p>
-                  {fixturesExist
-                    ? 'Tap who won — score optional. The draw keeps moving.'
-                    : generateBlockedReason
+              {!fixturesExist ? (
+                <div className="org-control-banner is-prep" role="status">
+                  <strong>Before play</strong>
+                  <p>
+                    {generateBlockedReason
                       ? `Can’t generate yet: ${generateBlockedReason}`
-                      : 'Generate the draw, then score every match on this tab.'}
-                </p>
-                {!fixturesExist &&
-                (active.tournament.status === 'REGISTRATION_OPEN' ||
-                  active.tournament.status === 'REGISTRATION_CLOSED') ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => setConfirmGenerate(true)}
-                    disabled={generateMut.isPending || !canOpenGenerate}
-                  >
-                    Generate draw
-                  </button>
-                ) : null}
-              </div>
+                      : 'Generate the draw, then score matches here.'}
+                  </p>
+                  {(active.tournament.status === 'REGISTRATION_OPEN' ||
+                    active.tournament.status === 'REGISTRATION_CLOSED') && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => setConfirmGenerate(true)}
+                      disabled={generateMut.isPending || !canOpenGenerate}
+                    >
+                      Generate draw
+                    </button>
+                  )}
+                </div>
+              ) : null}
 
               {matches.length > 0 && (
                 <section className="org-section org-pulse" aria-label="Day progress">
@@ -3509,17 +3558,16 @@ export default function ManageEventPage() {
                       <strong>{dayOps.done}</strong> done
                     </span>
                     <span>
-                      <strong>{dayOps.open}</strong> to play
+                      <strong>{dayOps.open}</strong> open
                     </span>
                     {dayOps.pendingConfirm > 0 ? (
-                      <span>
-                        <strong>{dayOps.pendingConfirm}</strong> to confirm
+                      <span className="org-pulse-warn">
+                        <strong>{dayOps.pendingConfirm}</strong> player score
+                        {dayOps.pendingConfirm === 1 ? '' : 's'}
                       </span>
                     ) : null}
                     {dayOps.allClear ? (
                       <span className="org-pulse-ok">All clear</span>
-                    ) : dayOps.attentionTotal > 0 ? (
-                      <span className="org-pulse-warn">{dayOps.attentionTotal} need you</span>
                     ) : null}
                   </div>
                   {dayOps.attention.length > 0 && (
@@ -3530,29 +3578,10 @@ export default function ManageEventPage() {
                             <strong>{item.label}</strong>
                             <span>{item.detail}</span>
                           </div>
-                          {item.kind === 'fix' && item.match ? (
-                            <div className="org-attention-actions">
-                              <button
-                                type="button"
-                                className="btn btn-primary btn-sm"
-                                disabled={scoreMut.isPending}
-                                onClick={() => confirmPendingScore(item.match!)}
-                              >
-                                Confirm
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => openScore(item.match!)}
-                              >
-                                Edit
-                              </button>
-                            </div>
-                          ) : null}
                           {item.kind === 'move' && item.match ? (
                             <button
                               type="button"
-                              className="btn btn-ghost btn-sm"
+                              className="btn btn-ghost btn-sm org-action-btn"
                               onClick={() => openMove(item.match!)}
                             >
                               Move
@@ -3561,7 +3590,7 @@ export default function ManageEventPage() {
                           {item.kind === 'checkin' ? (
                             <button
                               type="button"
-                              className="btn btn-ghost btn-sm"
+                              className="btn btn-ghost btn-sm org-action-btn"
                               onClick={() => {
                                 setCheckInFilter('out')
                                 document.getElementById('org-checkin')?.scrollIntoView({
@@ -3576,7 +3605,7 @@ export default function ManageEventPage() {
                           {item.kind === 'entries' ? (
                             <button
                               type="button"
-                              className="btn btn-ghost btn-sm"
+                              className="btn btn-ghost btn-sm org-action-btn"
                               onClick={() => {
                                 setPaymentFilter('owing')
                                 setOrgPanel('registration')
@@ -3589,12 +3618,182 @@ export default function ManageEventPage() {
                       ))}
                     </ul>
                   )}
-                  {dayOps.attentionTotal > dayOps.attention.length ? (
-                    <p className="muted org-attention-more">
-                      +{dayOps.attentionTotal - dayOps.attention.length} more in the lists below
-                    </p>
-                  ) : null}
                 </section>
+              )}
+
+              {dayOps.pendingMatches.length > 0 && (
+                <section className="org-section org-player-scores" aria-label="Player submitted scores">
+                  <div className="org-section-head">
+                    <h2>Player scores</h2>
+                    <span className="org-player-scores-badge">{dayOps.pendingMatches.length}</span>
+                  </div>
+                  <p className="muted org-section-lead" style={{ marginTop: 0 }}>
+                    Players logged these — confirm to lock them in, or edit first.
+                  </p>
+                  <ul className="org-player-score-list">
+                    {dayOps.pendingMatches.map((m) => {
+                      const scoreText = m.score ? formatMatchScore(m.score) : ''
+                      return (
+                        <li key={m.id} className="org-player-score-card">
+                          <div className="org-player-score-main">
+                            <strong className="org-player-score-vs">
+                              {m.team_a_name || 'TBD'} vs {m.team_b_name || 'TBD'}
+                            </strong>
+                            <span className="org-player-score-meta">
+                              {knockoutRoundLabel(m.round, m.stage)}
+                              {' · '}
+                              {courtLabel(m.court_name, m.court_number)}
+                            </span>
+                            {scoreText ? (
+                              <span className="org-player-score-result">{scoreText}</span>
+                            ) : (
+                              <span className="org-player-score-result is-empty">Winner set</span>
+                            )}
+                          </div>
+                          <div className="org-player-score-actions">
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm org-action-btn"
+                              disabled={scoreMut.isPending}
+                              onClick={() => confirmPendingScore(m)}
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm org-action-btn"
+                              onClick={() => openScore(m)}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </section>
+              )}
+
+              {checkInPool.length > 0 && (
+                <details
+                  id="org-checkin"
+                  className={`org-section org-checkin${awaitingCheckInCount > 0 ? ' needs-you' : ''}`}
+                  open={awaitingCheckInCount > 0}
+                >
+                  <summary className="org-section-head org-checkin-summary">
+                    <h2>Check-in</h2>
+                    <span className="org-checkin-count">
+                      {checkedInCount}/{checkInPool.length}
+                      {awaitingCheckInCount > 0 ? ` · ${awaitingCheckInCount} out` : ' · all in'}
+                    </span>
+                  </summary>
+                  <div className="org-checkin-toolbar">
+                    <input
+                      id="checkin-search"
+                      className="form-input org-checkin-search"
+                      type="search"
+                      placeholder="Search…"
+                      value={checkInQuery}
+                      onChange={(e) => setCheckInQuery(e.target.value)}
+                      autoComplete="off"
+                      aria-label="Search check-in"
+                    />
+                    <div
+                      className="org-view-toggle org-pay-filters"
+                      role="group"
+                      aria-label="Check-in filter"
+                    >
+                      <button
+                        type="button"
+                        className={`btn btn-sm org-action-btn ${checkInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setCheckInFilter('out')}
+                      >
+                        Out ({awaitingCheckInCount})
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm org-action-btn ${checkInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setCheckInFilter('in')}
+                      >
+                        In ({checkedInCount})
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm org-action-btn ${checkInFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setCheckInFilter('all')}
+                      >
+                        All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="org-table org-checkin-table">
+                    {checkInRows.map((team) => {
+                      const owesOnArrival = team.payment_via === 'pay_on_arrival'
+                      return (
+                        <div
+                          key={team.id}
+                          className={`org-row org-checkin-row${team.checked_in ? ' is-in' : ''}`}
+                        >
+                          <div>
+                            <strong>{team.name}</strong>
+                            <span>{team.player_names?.join(' / ')}</span>
+                            {owesOnArrival ? (
+                              <span className="badge badge-warn">Pay</span>
+                            ) : null}
+                          </div>
+                          <div className="org-row-right org-pay-actions">
+                            {team.checked_in ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm org-action-btn"
+                                disabled={checkInMut.isPending}
+                                title="Undo check-in"
+                                onClick={() =>
+                                  checkInMut.mutate({ teamId: team.id, present: false })
+                                }
+                              >
+                                Undo
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-dark btn-sm org-action-btn"
+                                disabled={checkInMut.isPending}
+                                onClick={() => {
+                                  if (owesOnArrival) {
+                                    void confirmDialog({
+                                      title: 'Still owes?',
+                                      message: `${team.name} hasn’t paid at the venue. Check in anyway?`,
+                                      confirmLabel: 'Check in',
+                                    }).then((ok) => {
+                                      if (ok)
+                                        checkInMut.mutate({ teamId: team.id, present: true })
+                                    })
+                                    return
+                                  }
+                                  checkInMut.mutate({ teamId: team.id, present: true })
+                                }}
+                              >
+                                In
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {checkInRows.length === 0 && (
+                      <p className="muted">
+                        {checkInQuery.trim()
+                          ? 'No match.'
+                          : checkInFilter === 'out'
+                            ? 'All in.'
+                            : checkInFilter === 'in'
+                              ? 'Nobody yet.'
+                              : 'No entries.'}
+                      </p>
+                    )}
+                  </div>
+                </details>
               )}
 
               {courtsideNow.length > 0 && (
@@ -3644,7 +3843,7 @@ export default function ManageEventPage() {
                             <strong>{slot.label}</strong>
                             <span className="org-now-kicker">
                               {m.status === 'AWAITING_CONFIRM'
-                                ? 'Pending'
+                                ? 'Player score'
                                 : slot.kind === 'live'
                                   ? 'Live'
                                   : slot.kind === 'called'
@@ -3869,7 +4068,7 @@ export default function ManageEventPage() {
                             </p>
                           ) : null}
                           <div
-                            className={`org-row ${m.status === 'CALLED' ? 'is-called' : ''} ${m.status === 'LIVE' ? 'is-live' : ''} ${m.stage === 'PLATE' ? 'is-plate' : ''} ${m.stage === 'KNOCKOUT' ? 'is-champ' : ''}${canScore ? ' is-tap' : ''}`}
+                            className={`org-row ${m.status === 'CALLED' ? 'is-called' : ''} ${m.status === 'LIVE' ? 'is-live' : ''} ${m.status === 'AWAITING_CONFIRM' ? 'is-awaiting' : ''} ${m.stage === 'PLATE' ? 'is-plate' : ''} ${m.stage === 'KNOCKOUT' ? 'is-champ' : ''}${canScore ? ' is-tap' : ''}`}
                             role={canScore ? 'button' : undefined}
                             tabIndex={canScore ? 0 : undefined}
                             onClick={
@@ -3901,6 +4100,7 @@ export default function ManageEventPage() {
                                 {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
                                 {m.team_b_name || m.team_b_placeholder || 'TBD'}
                                 {m.score ? ` · ${formatMatchScore(m.score)}` : ''}
+                                {m.status === 'AWAITING_CONFIRM' ? ' · Player score' : ''}
                               </span>
                             </div>
                             <div className="org-row-right">
@@ -3927,130 +4127,6 @@ export default function ManageEventPage() {
                   </div>
                 )}
               </section>
-
-              {checkInPool.length > 0 && (
-                <details
-                  id="org-checkin"
-                  className="org-section org-checkin"
-                  open={awaitingCheckInCount > 0}
-                >
-                  <summary className="org-section-head org-checkin-summary">
-                    <h2>Check-in</h2>
-                    <span className="org-checkin-count">
-                      {checkedInCount}/{checkInPool.length}
-                    </span>
-                  </summary>
-                  <div className="org-entries-search" style={{ marginBottom: '0.75rem' }}>
-                    <label className="visually-hidden" htmlFor="checkin-search">
-                      Search teams
-                    </label>
-                    <input
-                      id="checkin-search"
-                      className="form-input"
-                      type="search"
-                      placeholder="Search…"
-                      value={checkInQuery}
-                      onChange={(e) => setCheckInQuery(e.target.value)}
-                      autoComplete="off"
-                    />
-                  </div>
-                  <div
-                    className="org-view-toggle org-pay-filters"
-                    role="group"
-                    aria-label="Check-in filter"
-                  >
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${checkInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
-                      onClick={() => setCheckInFilter('out')}
-                    >
-                      Out ({awaitingCheckInCount})
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${checkInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
-                      onClick={() => setCheckInFilter('in')}
-                    >
-                      In ({checkedInCount})
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${checkInFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
-                      onClick={() => setCheckInFilter('all')}
-                    >
-                      All
-                    </button>
-                  </div>
-                  <div className="org-table org-checkin-table">
-                    {checkInRows.map((team) => {
-                      const owesOnArrival = team.payment_via === 'pay_on_arrival'
-                      return (
-                        <div
-                          key={team.id}
-                          className={`org-row org-checkin-row${team.checked_in ? ' is-in' : ''}`}
-                        >
-                          <div>
-                            <strong>{team.name}</strong>
-                            <span>{team.player_names?.join(' / ')}</span>
-                            {owesOnArrival ? (
-                              <span className="badge badge-warn">Pay</span>
-                            ) : null}
-                          </div>
-                          <div className="org-row-right org-pay-actions">
-                            {team.checked_in ? (
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-sm"
-                                disabled={checkInMut.isPending}
-                                title="Undo check-in"
-                                onClick={() =>
-                                  checkInMut.mutate({ teamId: team.id, present: false })
-                                }
-                              >
-                                Undo
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn btn-dark btn-sm"
-                                disabled={checkInMut.isPending}
-                                onClick={() => {
-                                  if (owesOnArrival) {
-                                    void confirmDialog({
-                                      title: 'Still owes?',
-                                      message: `${team.name} hasn’t paid at the venue. Check in anyway?`,
-                                      confirmLabel: 'Check in',
-                                    }).then((ok) => {
-                                      if (ok) checkInMut.mutate({ teamId: team.id, present: true })
-                                    })
-                                    return
-                                  }
-                                  checkInMut.mutate({ teamId: team.id, present: true })
-                                }}
-                              >
-                                In
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                    {checkInRows.length === 0 && (
-                      <p className="muted">
-                        {checkInQuery.trim()
-                          ? 'No match.'
-                          : checkInFilter === 'out'
-                            ? 'All in.'
-                            : checkInFilter === 'in'
-                              ? 'Nobody yet.'
-                              : 'No entries.'}
-                      </p>
-                    )}
-                  </div>
-                </details>
-              )}
-
-              {orgTeams.length > 0 && renderBulkEmailSection('bulk-email-day')}
 
               <details className="org-section org-announce-block">
                 <summary className="org-section-head">

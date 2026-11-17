@@ -411,6 +411,72 @@ html.native-app.has-native-tabs .org-control-tabs.section-tabs {
   max-width: 52ch;
 }
 
+.org-email-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  align-items: start;
+}
+
+.org-email-pair .org-free-entries .org-free-entry-add {
+  margin-top: 0.35rem;
+}
+
+.org-email-pair .org-free-player-card {
+  padding: 0.7rem 0.75rem;
+}
+
+.org-email-panel.org-section {
+  margin-bottom: 0;
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+
+.org-email-panel-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+  cursor: pointer;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  min-height: 2.5rem;
+}
+
+.org-email-panel-summary::-webkit-details-marker {
+  display: none;
+}
+
+.org-email-panel-title {
+  font-size: 1rem;
+  font-weight: 750;
+  color: var(--court-deep);
+}
+
+.org-email-panel-title::after {
+  content: ' ▾';
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.org-email-panel[open] .org-email-panel-title::after {
+  content: ' ▴';
+}
+
+.org-email-panel-meta {
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.org-email-panel[open] .org-email-panel-summary {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid rgba(11, 61, 46, 0.1);
+}
+
 .org-reminders-copy {
   margin: 0 0 0.85rem;
   line-height: 1.45;
@@ -421,7 +487,8 @@ html.native-app.has-native-tabs .org-control-tabs.section-tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  margin-bottom: 0.75rem;
 }
 
 .org-reminder-actions .btn {
@@ -793,9 +860,11 @@ html.native-app.has-native-tabs .org-control-tabs.section-tabs {
 .org-row-right {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
-  flex-shrink: 0;
+  gap: 0.4rem;
+  flex-shrink: 1;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .org-match-filters {
@@ -830,9 +899,33 @@ html.native-app.has-native-tabs .org-control-tabs.section-tabs {
 }
 
 .org-quick-win {
-  flex: 1 1 7.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  flex: 1 1 7rem;
   min-width: 0;
+  max-width: 100%;
   font-weight: 750;
+  touch-action: manipulation;
+  overflow: hidden;
+}
+
+.org-quick-win-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-quick-win-suffix {
+  flex-shrink: 0;
+}
+
+.org-action-btn {
+  min-height: 44px !important;
+  min-width: 4.5rem;
+  flex: 0 0 auto;
   touch-action: manipulation;
 }
 
@@ -840,8 +933,115 @@ html.native-app.has-native-tabs .org-control-tabs.section-tabs {
   order: -1;
 }
 
-.org-match-actions.is-compact .btn-ghost {
-  min-height: 40px;
+.org-match-actions.is-compact .org-action-btn {
+  min-width: 4rem;
+}
+
+.org-row > div:first-child,
+.org-now-vs,
+.org-player-score-vs {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.org-row.is-awaiting {
+  border-left: 3px solid #c2410c;
+  background: rgba(194, 65, 12, 0.06);
+}
+
+.org-player-scores {
+  border: 1.5px solid rgba(194, 65, 12, 0.35);
+  background: linear-gradient(180deg, rgba(194, 65, 12, 0.07), var(--white));
+}
+
+.org-player-scores-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #c2410c;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.org-player-score-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.org-player-score-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(194, 65, 12, 0.2);
+  background: var(--white);
+}
+
+.org-player-score-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.org-player-score-vs {
+  font-size: 0.95rem;
+  color: var(--court-deep);
+}
+
+.org-player-score-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.org-player-score-result {
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  color: var(--court-deep);
+  font-size: 1.05rem;
+}
+
+.org-player-score-result.is-empty {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.org-player-score-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.org-checkin-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.org-checkin-search {
+  width: 100%;
+  max-width: 20rem;
+}
+
+.org-checkin.needs-you {
+  border-color: rgba(11, 61, 46, 0.28);
+  box-shadow: 0 0 0 1px rgba(11, 61, 46, 0.06);
 }
 
 .org-pay-toolbar {
