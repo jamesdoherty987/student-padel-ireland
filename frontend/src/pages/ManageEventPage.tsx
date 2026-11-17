@@ -184,7 +184,7 @@ export default function ManageEventPage() {
     'all',
   )
   const bracketPreferred = useRef(false)
-  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'owing'>('all')
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'owing' | 'withdrawn'>('all')
   const [entriesCheckInFilter, setEntriesCheckInFilter] = useState<'all' | 'in' | 'out'>('all')
   const [entriesQuery, setEntriesQuery] = useState('')
   const [entriesSort, setEntriesSort] = useState<'newest' | 'oldest' | 'name'>('newest')
@@ -1112,7 +1112,12 @@ export default function ManageEventPage() {
     let owing = 0
     let collect = 0
     let incomplete = 0
+    let withdrawn = 0
     for (const t of orgTeams) {
+      if (t.withdrawn) {
+        withdrawn += 1
+        continue
+      }
       if (t.payment_status === 'PENDING' || t.payment_status === 'FAILED') {
         owing += 1
         incomplete += 1
@@ -1123,7 +1128,8 @@ export default function ManageEventPage() {
         paid += 1
       }
     }
-    return { paid, owing, collect, incomplete, total: orgTeams.length }
+    const active = orgTeams.length - withdrawn
+    return { paid, owing, collect, incomplete, withdrawn, total: active }
   }, [orgTeams])
 
   const unpaidCount = paymentCounts.incomplete
@@ -1131,7 +1137,12 @@ export default function ManageEventPage() {
   const filteredTeams = useMemo(() => {
     const needle = entriesQuery.trim().toLowerCase()
     const list = orgTeams.filter((t) => {
-      if (paymentFilter !== 'all' && paymentBucket(t) !== paymentFilter) return false
+      if (paymentFilter === 'withdrawn') {
+        if (!t.withdrawn) return false
+      } else {
+        if (t.withdrawn) return false
+        if (paymentFilter !== 'all' && paymentBucket(t) !== paymentFilter) return false
+      }
       if (entriesCheckInFilter === 'in' && !t.checked_in) return false
       if (entriesCheckInFilter === 'out' && t.checked_in) return false
       if (!needle) return true
@@ -1165,7 +1176,7 @@ export default function ManageEventPage() {
   }, [orgTeams, paymentFilter, entriesCheckInFilter, entriesQuery, entriesSort])
 
   const checkInPool = useMemo(
-    () => orgTeams.filter((t) => t.payment_status === 'PAID'),
+    () => orgTeams.filter((t) => t.payment_status === 'PAID' && !t.withdrawn),
     [orgTeams],
   )
   /** Paid entries that will actually enter the draw (complete doubles only). */
@@ -2514,7 +2525,7 @@ export default function ManageEventPage() {
                     </button>
                   )}
                 </div>
-                {orgTeams.length > 0 && (
+                {(orgTeams.length > 0 || paymentCounts.withdrawn > 0) && (
                   <div className="org-pay-toolbar">
                     <input
                       type="search"
@@ -2546,6 +2557,13 @@ export default function ManageEventPage() {
                       >
                         Not paid ({paymentCounts.owing})
                       </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${paymentFilter === 'withdrawn' ? 'btn-dark' : 'btn-ghost'}`}
+                        onClick={() => setPaymentFilter('withdrawn')}
+                      >
+                        Withdrawn ({paymentCounts.withdrawn})
+                      </button>
                     </div>
                     <div className="org-view-toggle org-pay-filters" role="group" aria-label="Check-in filter">
                       <button
@@ -2560,14 +2578,14 @@ export default function ManageEventPage() {
                         className={`btn btn-sm ${entriesCheckInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
                         onClick={() => setEntriesCheckInFilter('in')}
                       >
-                        Checked in ({orgTeams.filter((t) => t.checked_in).length})
+                        Checked in ({orgTeams.filter((t) => !t.withdrawn && t.checked_in).length})
                       </button>
                       <button
                         type="button"
                         className={`btn btn-sm ${entriesCheckInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
                         onClick={() => setEntriesCheckInFilter('out')}
                       >
-                        Not checked in ({orgTeams.filter((t) => !t.checked_in).length})
+                        Not checked in ({orgTeams.filter((t) => !t.withdrawn && !t.checked_in).length})
                       </button>
                     </div>
                     <div className="org-entries-meta-row">
@@ -2585,7 +2603,11 @@ export default function ManageEventPage() {
                         </select>
                       </label>
                     </div>
-                    {paymentCounts.owing > 0 ? (
+                    {paymentFilter === 'withdrawn' ? (
+                      <p className="org-pay-hint">
+                        Teams that left or were withdrawn. They no longer hold a spot.
+                      </p>
+                    ) : paymentCounts.owing > 0 ? (
                       <p className="org-pay-hint">
                         {paymentCounts.collect > 0 && (
                           <>
@@ -2612,26 +2634,29 @@ export default function ManageEventPage() {
                 </p>
                 <div className="org-table">
                   {filteredTeams.map((team) => {
-                    const owing = paymentBucket(team) === 'owing'
-                    const canCollect = team.payment_via === 'pay_on_arrival'
+                    const owing = !team.withdrawn && paymentBucket(team) === 'owing'
+                    const canCollect = !team.withdrawn && team.payment_via === 'pay_on_arrival'
                     const signedUp = formatDateTime(team.created_at)
                     const unpaidEntry =
-                      team.payment_status === 'PENDING' ||
-                      team.payment_status === 'CANCELLED' ||
-                      team.payment_status === 'FAILED' ||
-                      team.payment_status === 'REFUNDED'
+                      !team.withdrawn &&
+                      (team.payment_status === 'PENDING' ||
+                        team.payment_status === 'CANCELLED' ||
+                        team.payment_status === 'FAILED' ||
+                        team.payment_status === 'REFUNDED')
                     return (
                       <div
                         key={team.id}
-                        className={`org-row org-pay-row is-tap${owing ? ' is-owing' : ''}`}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Edit ${team.name}`}
+                        className={`org-row org-pay-row${team.withdrawn ? '' : ' is-tap'}${owing ? ' is-owing' : ''}${team.withdrawn ? ' is-withdrawn' : ''}`}
+                        role={team.withdrawn ? undefined : 'button'}
+                        tabIndex={team.withdrawn ? undefined : 0}
+                        aria-label={team.withdrawn ? `${team.name} withdrawn` : `Edit ${team.name}`}
                         onClick={(e) => {
+                          if (team.withdrawn) return
                           if ((e.target as HTMLElement).closest('button, a, label, input')) return
                           setEditTeam(team)
                         }}
                         onKeyDown={(e) => {
+                          if (team.withdrawn) return
                           if (e.key !== 'Enter' && e.key !== ' ') return
                           if ((e.target as HTMLElement).closest('button, a, label, input')) return
                           e.preventDefault()
@@ -2650,10 +2675,13 @@ export default function ManageEventPage() {
                                   .join(' / ')
                               : team.player_names?.join(' / ')}
                           </span>
-                          {team.needs_partner && (
+                          {team.withdrawn && <span className="badge badge-draft">Withdrawn</span>}
+                          {!team.withdrawn && team.needs_partner && (
                             <span className="badge badge-warn">Needs partner</span>
                           )}
-                          <span className={paymentBadgeClass(team)}>{paymentLabel(team)}</span>
+                          {!team.withdrawn && (
+                            <span className={paymentBadgeClass(team)}>{paymentLabel(team)}</span>
+                          )}
                           {!!team.custom_answers?.length && (
                             <ul className="org-custom-answers">
                               {team.custom_answers.map((a, i) => {
@@ -2708,81 +2736,87 @@ export default function ManageEventPage() {
                           )}
                         </div>
                         <div className="org-row-right org-pay-actions">
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => setEditTeam(team)}
-                          >
-                            Edit
-                          </button>
-                          {canCollect && (
-                            <button
-                              type="button"
-                              className="btn btn-dark btn-sm"
-                              disabled={collectFeeMut.isPending}
-                              onClick={() => {
-                                void confirmDialog({
-                                  title: 'Mark as paid?',
-                                  message: `Mark ${team.name} as paid after collecting ${formatMoney(active.tournament.entry_fee_cents, active.tournament.currency)} in person.`,
-                                  confirmLabel: 'Mark paid',
-                                }).then((ok) => {
-                                  if (ok) collectFeeMut.mutate(team.id)
-                                })
-                              }}
-                            >
-                              Mark paid
-                            </button>
-                          )}
-                          {team.checked_in ? <span className="checked">✓ Checked in</span> : null}
-                          {unpaidEntry && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              disabled={withdrawMut.isPending}
-                              onClick={() => {
-                                void confirmDialog({
-                                  title: 'Remove entry?',
-                                  message: `Remove unpaid entry ${team.name}?`,
-                                  confirmLabel: 'Remove',
-                                  danger: true,
-                                }).then((ok) => {
-                                  if (ok) withdrawMut.mutate(team.id)
-                                })
-                              }}
-                            >
-                              Remove
-                            </button>
-                          )}
-                          {team.payment_status === 'PAID' &&
-                            active.tournament.status !== 'LIVE' &&
-                            active.tournament.status !== 'COMPLETED' && (
+                          {team.withdrawn ? (
+                            <span className="muted">Left the event</span>
+                          ) : (
+                            <>
                               <button
                                 type="button"
                                 className="btn btn-ghost btn-sm"
-                                disabled={withdrawMut.isPending}
-                                onClick={() => {
-                                  const base = fixturesExist
-                                    ? `Withdraw ${team.name}? Regenerate the draw afterwards so fixtures stay correct.`
-                                    : `Withdraw ${team.name}?`
-                                  const feeNote =
-                                    team.payment_via === 'pay_on_arrival'
-                                      ? ' They haven’t paid online - this just frees the spot.'
-                                      : active.tournament.refunds_on_withdrawal === false
-                                        ? ' Refunds are off for this event - players are told it’s too close for a refund.'
-                                        : ' Entry fees are not refunded automatically.'
-                                  void confirmDialog({
-                                    title: isSingles ? 'Withdraw player?' : 'Withdraw team?',
-                                    message: `${base}${feeNote}`,
-                                    confirmLabel: 'Withdraw',
-                                    danger: true,
-                                  }).then((ok) => {
-                                    if (ok) withdrawMut.mutate(team.id)
-                                  })
-                                }}
+                                onClick={() => setEditTeam(team)}
                               >
-                                Withdraw
+                                Edit
                               </button>
-                            )}
+                              {canCollect && (
+                                <button
+                                  type="button"
+                                  className="btn btn-dark btn-sm"
+                                  disabled={collectFeeMut.isPending}
+                                  onClick={() => {
+                                    void confirmDialog({
+                                      title: 'Mark as paid?',
+                                      message: `Mark ${team.name} as paid after collecting ${formatMoney(active.tournament.entry_fee_cents, active.tournament.currency)} in person.`,
+                                      confirmLabel: 'Mark paid',
+                                    }).then((ok) => {
+                                      if (ok) collectFeeMut.mutate(team.id)
+                                    })
+                                  }}
+                                >
+                                  Mark paid
+                                </button>
+                              )}
+                              {team.checked_in ? <span className="checked">✓ Checked in</span> : null}
+                              {unpaidEntry && (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm"
+                                  disabled={withdrawMut.isPending}
+                                  onClick={() => {
+                                    void confirmDialog({
+                                      title: 'Remove entry?',
+                                      message: `Remove unpaid entry ${team.name}?`,
+                                      confirmLabel: 'Remove',
+                                      danger: true,
+                                    }).then((ok) => {
+                                      if (ok) withdrawMut.mutate(team.id)
+                                    })
+                                  }}
+                                >
+                                  Remove
+                                </button>
+                              )}
+                              {team.payment_status === 'PAID' &&
+                                active.tournament.status !== 'LIVE' &&
+                                active.tournament.status !== 'COMPLETED' && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-sm"
+                                    disabled={withdrawMut.isPending}
+                                    onClick={() => {
+                                      const base = fixturesExist
+                                        ? `Withdraw ${team.name}? Regenerate the draw afterwards so fixtures stay correct.`
+                                        : `Withdraw ${team.name}?`
+                                      const feeNote =
+                                        team.payment_via === 'pay_on_arrival'
+                                          ? ' They haven’t paid online - this just frees the spot.'
+                                          : active.tournament.refunds_on_withdrawal === false
+                                            ? ' Refunds are off for this event - players are told it’s too close for a refund.'
+                                            : ' Entry fees are not refunded automatically.'
+                                      void confirmDialog({
+                                        title: isSingles ? 'Withdraw player?' : 'Withdraw team?',
+                                        message: `${base}${feeNote}`,
+                                        confirmLabel: 'Withdraw',
+                                        danger: true,
+                                      }).then((ok) => {
+                                        if (ok) withdrawMut.mutate(team.id)
+                                      })
+                                    }}
+                                  >
+                                    Withdraw
+                                  </button>
+                                )}
+                            </>
+                          )}
                         </div>
                       </div>
                     )
@@ -2802,7 +2836,9 @@ export default function ManageEventPage() {
                           ? 'Nobody marked paid yet.'
                           : paymentFilter === 'owing'
                             ? 'Everyone here is paid.'
-                            : 'No entries to show.'}
+                            : paymentFilter === 'withdrawn'
+                              ? 'Nobody has withdrawn yet.'
+                              : 'No entries to show.'}
                     </p>
                   )}
                 </div>

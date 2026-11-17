@@ -770,6 +770,10 @@ html.native-app.has-native-tabs .org-toast {
   font-weight: 700;
 }
 
+.org-row.is-withdrawn {
+  opacity: 0.72;
+}
+
 .org-row.is-owing {
   background: rgba(217, 119, 6, 0.06);
   margin: 0 -0.5rem;

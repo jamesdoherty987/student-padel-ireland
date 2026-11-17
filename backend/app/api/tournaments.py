@@ -2482,17 +2482,19 @@ def list_teams(
         raise HTTPException(404, "Tournament not found")
     include_details = bool(user and user_can_manage_tournament(user, t, db))
     singles = _is_singles(t)
-    teams = (
+    q = (
         db.query(Team)
         .options(
             joinedload(Team.members).joinedload(TeamPlayer.user),
             joinedload(Team.registration),
             joinedload(Team.university),
         )
-        .filter(Team.tournament_id == tournament_id, Team.withdrawn.is_(False))
-        .order_by(Team.name)
-        .all()
+        .filter(Team.tournament_id == tournament_id)
     )
+    # Organisers see withdrawn entries so they can filter them; public lists stay active-only
+    if not include_details:
+        q = q.filter(Team.withdrawn.is_(False))
+    teams = q.order_by(Team.withdrawn.asc(), Team.name).all()
     return [
         _team_out(team, db, include_player_details=include_details, singles=singles)
         for team in teams
