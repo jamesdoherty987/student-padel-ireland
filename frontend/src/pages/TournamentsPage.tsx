@@ -9,7 +9,12 @@ import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { tournamentApi } from '../services/api'
 import { looksLikeInviteCode, cleanInviteCode } from '../utils/inviteCode'
-import { formatDate, formatPerPlayerFee, statusLabel } from '../utils/format'
+import {
+  formatDate,
+  formatPerPlayerFee,
+  isTournamentSoldOut,
+  listingStatusLabel,
+} from '../utils/format'
 import './Tournament.css'
 
 const FILTERS = [
@@ -129,18 +134,24 @@ export default function TournamentsPage() {
         if (t.status !== 'DRAFT') return true
         return !!user && (t.organiser_id === user.id || !!t.can_manage)
       })
-      .map((t) => ({
-        key: t.id,
-        name: t.name,
-        href: `/t/${t.slug}`,
-        status: t.status,
-        official: !!t.is_official,
-        entered: !!t.viewer_entered,
-        owned: !!user && (t.organiser_id === user.id || !!t.can_manage),
-        line: `${t.location} · ${t.venue}`,
-        meta: `${formatDate(t.event_date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatPerPlayerFee(t.entry_fee_cents, t.currency, t.play_format)}`,
-        sortDate: t.event_date,
-      }))
+      .map((t) => {
+        const soldOut =
+          t.status === 'REGISTRATION_OPEN' &&
+          isTournamentSoldOut(t.registered_teams, t.max_teams)
+        return {
+          key: t.id,
+          name: t.name,
+          href: `/t/${t.slug}`,
+          status: t.status,
+          soldOut,
+          official: !!t.is_official,
+          entered: !!t.viewer_entered,
+          owned: !!user && (t.organiser_id === user.id || !!t.can_manage),
+          line: `${t.location} · ${t.venue}`,
+          meta: `${formatDate(t.event_date, { weekday: 'short', day: 'numeric', month: 'short' })} · ${formatPerPlayerFee(t.entry_fee_cents, t.currency, t.play_format)}`,
+          sortDate: t.event_date,
+        }
+      })
 
     const statusRank = (status: string) => {
       if (status === 'LIVE') return 0
@@ -164,7 +175,7 @@ export default function TournamentsPage() {
     return events.filter((e) => {
       if (filter === 'official' && !e.official) return false
       if (filter === 'mine' && !e.owned) return false
-      if (filter === 'open' && e.status !== 'REGISTRATION_OPEN') return false
+      if (filter === 'open' && (e.status !== 'REGISTRATION_OPEN' || e.soldOut)) return false
       if (filter === 'live' && e.status !== 'LIVE') return false
       if (filter === 'upcoming' && e.status !== 'REGISTRATION_OPEN' && e.status !== 'REGISTRATION_CLOSED') {
         return false
@@ -287,7 +298,9 @@ export default function TournamentsPage() {
                       {e.official ? 'Official' : 'Private'}
                     </span>
                     <span aria-hidden> · </span>
-                    <span>{statusLabel(e.status)}</span>
+                    <span className={e.soldOut ? 'tour-card-sold-out' : undefined}>
+                      {listingStatusLabel(e.status, { soldOut: e.soldOut })}
+                    </span>
                   </p>
                   <p className="tour-card-line">{e.line}</p>
                   <p className="tour-card-meta">{e.meta}</p>

@@ -339,6 +339,29 @@ export function statusLabel(status: string) {
     .replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
+/** True when paid entries have filled max capacity. */
+export function isTournamentSoldOut(
+  registeredTeams: number | null | undefined,
+  maxTeams: number | null | undefined,
+) {
+  const registered = Number(registeredTeams) || 0
+  const max = Number(maxTeams) || 0
+  return max > 0 && registered >= max
+}
+
+/** Public listing label — Sold out when registration is open but full. */
+export function listingStatusLabel(
+  status: string,
+  opts?: { registeredTeams?: number | null; maxTeams?: number | null; soldOut?: boolean },
+) {
+  const soldOut =
+    opts?.soldOut ??
+    (status === 'REGISTRATION_OPEN' &&
+      isTournamentSoldOut(opts?.registeredTeams, opts?.maxTeams))
+  if (soldOut && status === 'REGISTRATION_OPEN') return 'Sold out'
+  return statusLabel(status)
+}
+
 export function statusBadgeClass(status: string) {
   if (status === 'LIVE' || status === 'CALLED' || status === 'AWAITING_CONFIRM') return 'badge-live'
   if (status === 'COMPLETED') return 'badge-past'
@@ -347,6 +370,19 @@ export function statusBadgeClass(status: string) {
   }
   if (status === 'CANCELLED') return 'badge-draft'
   return 'badge-draft'
+}
+
+/** Badge class for public listings (Sold out uses warn). */
+export function listingStatusBadgeClass(
+  status: string,
+  opts?: { registeredTeams?: number | null; maxTeams?: number | null; soldOut?: boolean },
+) {
+  const soldOut =
+    opts?.soldOut ??
+    (status === 'REGISTRATION_OPEN' &&
+      isTournamentSoldOut(opts?.registeredTeams, opts?.maxTeams))
+  if (soldOut && status === 'REGISTRATION_OPEN') return 'badge-warn'
+  return statusBadgeClass(status)
 }
 
 export function currentSetScores(score: {

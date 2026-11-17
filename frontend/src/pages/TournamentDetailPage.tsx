@@ -26,8 +26,8 @@ import {
   isKnockoutActive,
   isPastCalendarDate,
   knockoutRoundLabel,
+  listingStatusLabel,
   reminderPromiseCopy,
-  statusLabel,
   tournamentFormatSummary,
 } from '../utils/format'
 import './Tournament.css'
@@ -289,7 +289,10 @@ export default function TournamentDetailPage() {
             {tournament.is_official ? 'Official' : 'Private'}
           </span>
           <span aria-hidden> · </span>
-          {statusLabel(tournament.status)}
+          {listingStatusLabel(tournament.status, {
+            registeredTeams: tournament.registered_teams,
+            maxTeams: tournament.max_teams,
+          })}
           <span aria-hidden> · </span>
           {tournament.location}
         </p>
@@ -466,13 +469,25 @@ export default function TournamentDetailPage() {
           !hasPaidEntry &&
           !isListedPartner &&
           !hasPendingCaptain &&
-          (!hasSpot || isPastCalendarDate(tournament.registration_deadline)) && (
-            <div className="tour-entry-notes">
-              <p className="muted-note">
-                {isPastCalendarDate(tournament.registration_deadline)
-                  ? 'Registration closed'
-                  : `Tournament is full. Check back if a ${singles ? 'player' : 'team'} withdraws.`}
+          !hasSpot &&
+          !isPastCalendarDate(tournament.registration_deadline) && (
+            <div className="tour-entry-banner tour-entry-banner--alert" role="status">
+              <p className="tour-entry-badge">Sold out</p>
+              <h2 className="tour-entry-title">No spots left</h2>
+              <p className="page-sub page-sub-tight">
+                All {tournament.max_teams} {singles ? 'players' : 'teams'} are taken. Check back if
+                someone withdraws.
               </p>
+            </div>
+          )}
+
+        {tournament.status === 'REGISTRATION_OPEN' &&
+          !hasPaidEntry &&
+          !isListedPartner &&
+          !hasPendingCaptain &&
+          isPastCalendarDate(tournament.registration_deadline) && (
+            <div className="tour-entry-notes">
+              <p className="muted-note">Registration closed</p>
             </div>
           )}
 
@@ -490,6 +505,16 @@ export default function TournamentDetailPage() {
                   : 'Register for private event'}
             </Link>
           )}
+          {!canJoin &&
+            !hasPaidEntry &&
+            !canResumePayment &&
+            !isListedPartner &&
+            tournament.status === 'REGISTRATION_OPEN' &&
+            !hasSpot && (
+              <button type="button" className="btn btn-ghost" disabled>
+                Sold out
+              </button>
+            )}
           {!hasPaidEntry && !canJoin && !canResumePayment && !isListedPartner && tournament.status === 'LIVE' && (
             <Link to={livePath} className="btn btn-ghost">
               Live scores

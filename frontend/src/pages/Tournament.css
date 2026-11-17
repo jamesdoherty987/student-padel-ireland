@@ -95,6 +95,11 @@
   font-weight: 750;
 }
 
+.tour-card-sold-out {
+  color: #b45309;
+  font-weight: 750;
+}
+
 .tour-card-private-label {
   color: var(--ink-soft);
   font-weight: 650;

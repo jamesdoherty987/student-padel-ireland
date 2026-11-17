@@ -821,32 +821,7 @@ export default function JoinTournamentPage() {
     )
   }
 
-  if (!user) {
-    const next = encodeURIComponent(joinPathWithCode)
-    return (
-      <div className="app-shell">
-        <NavBar />
-        <main className="page empty-state">
-          <h1 className="page-title">Join event</h1>
-          <p className="page-sub">
-            {inviteCode
-              ? 'Create an account or log in to join this private event.'
-              : 'Create an account or log in to register.'}
-          </p>
-          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
-            <Link to={`/signup?next=${next}`} className="btn btn-primary">
-              Sign up
-            </Link>
-            <Link to={`/login?next=${next}`} className="btn btn-ghost">
-              Log in
-            </Link>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  if (tLoading || pvLoading) {
+  if (tLoading) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -874,6 +849,118 @@ export default function JoinTournamentPage() {
               Browse tournaments
             </Link>
           </div>
+        </main>
+      </div>
+    )
+  }
+
+  const guestSingles = tournament.play_format === 'SINGLES'
+  const guestEntryNoun = guestSingles ? 'players' : 'doubles teams'
+  const guestDeadlineGone = isPastCalendarDate(tournament.registration_deadline)
+  const guestIsFull =
+    tournament.max_teams > 0 && tournament.registered_teams >= tournament.max_teams
+
+  // Show sold out / closed before asking anyone to log in
+  if (!user && tournament.status !== 'REGISTRATION_OPEN') {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page">
+          <BackButton fallbackTo={`/t/${tournament.slug}`} />
+          <div className="tour-entry-banner tour-entry-banner--alert" role="status">
+            <p className="tour-entry-badge">Closed</p>
+            <h1 className="tour-entry-title">{tournament.name}</h1>
+            <p className="page-sub">Registration is not open for this tournament.</p>
+            <div className="tour-entry-actions">
+              <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+                View tournament
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (!user && guestDeadlineGone) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page">
+          <BackButton fallbackTo={`/t/${tournament.slug}`} />
+          <div className="tour-entry-banner tour-entry-banner--alert" role="status">
+            <p className="tour-entry-badge">Closed</p>
+            <h1 className="tour-entry-title">{tournament.name}</h1>
+            <p className="page-sub">The registration deadline has passed.</p>
+            <div className="tour-entry-actions">
+              <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+                View tournament
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (!user && guestIsFull) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page">
+          <BackButton fallbackTo={`/t/${tournament.slug}`} />
+          <div className="tour-entry-banner tour-entry-banner--alert" role="status">
+            <p className="tour-entry-badge">Sold out</p>
+            <h1 className="tour-entry-title">{tournament.name}</h1>
+            <p className="page-sub">
+              All {tournament.max_teams} {guestEntryNoun} are taken. Check the event page in case a
+              spot opens.
+            </p>
+            <div className="tour-entry-actions">
+              <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+                View tournament
+              </Link>
+              <Link to="/tournaments" className="btn btn-ghost tour-entry-btn-ghost">
+                Browse tournaments
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (!user) {
+    const next = encodeURIComponent(joinPathWithCode)
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page empty-state">
+          <h1 className="page-title">Join event</h1>
+          <p className="page-sub">
+            {inviteCode
+              ? 'Create an account or log in to join this private event.'
+              : 'Create an account or log in to register.'}
+          </p>
+          <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
+            <Link to={`/signup?next=${next}`} className="btn btn-primary">
+              Sign up
+            </Link>
+            <Link to={`/login?next=${next}`} className="btn btn-ghost">
+              Log in
+            </Link>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  if (pvLoading) {
+    return (
+      <div className="app-shell">
+        <NavBar />
+        <main className="page">
+          <div className="skeleton" style={{ height: 28, width: '60%' }} />
         </main>
       </div>
     )
@@ -1038,12 +1125,18 @@ export default function JoinTournamentPage() {
     return (
       <div className="app-shell">
         <NavBar />
-        <main className="page empty-state">
-          <h1 className="page-title">{tournament.name}</h1>
-          <p className="page-sub">Registration is not open for this tournament.</p>
-          <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
-            View tournament
-          </Link>
+        <main className="page">
+          <BackButton fallbackTo={`/t/${tournament.slug}`} />
+          <div className="tour-entry-banner tour-entry-banner--alert" role="status">
+            <p className="tour-entry-badge">Closed</p>
+            <h1 className="tour-entry-title">{tournament.name}</h1>
+            <p className="page-sub">Registration is not open for this tournament.</p>
+            <div className="tour-entry-actions">
+              <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+                View tournament
+              </Link>
+            </div>
+          </div>
         </main>
       </div>
     )
@@ -1053,12 +1146,18 @@ export default function JoinTournamentPage() {
     return (
       <div className="app-shell">
         <NavBar />
-        <main className="page empty-state">
-          <h1 className="page-title">{tournament.name}</h1>
-          <p className="page-sub">The registration deadline has passed.</p>
-          <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
-            View tournament
-          </Link>
+        <main className="page">
+          <BackButton fallbackTo={`/t/${tournament.slug}`} />
+          <div className="tour-entry-banner tour-entry-banner--alert" role="status">
+            <p className="tour-entry-badge">Closed</p>
+            <h1 className="tour-entry-title">{tournament.name}</h1>
+            <p className="page-sub">The registration deadline has passed.</p>
+            <div className="tour-entry-actions">
+              <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+                View tournament
+              </Link>
+            </div>
+          </div>
         </main>
       </div>
     )
@@ -1068,14 +1167,24 @@ export default function JoinTournamentPage() {
     return (
       <div className="app-shell">
         <NavBar />
-        <main className="page empty-state">
-          <h1 className="page-title">{tournament.name}</h1>
-          <p className="page-sub">
-            This tournament is full ({tournament.max_teams} {entryNoun}). Check the event page in case a spot opens.
-          </p>
-          <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
-            View tournament
-          </Link>
+        <main className="page">
+          <BackButton fallbackTo={`/t/${tournament.slug}`} />
+          <div className="tour-entry-banner tour-entry-banner--alert" role="status">
+            <p className="tour-entry-badge">Sold out</p>
+            <h1 className="tour-entry-title">{tournament.name}</h1>
+            <p className="page-sub">
+              All {tournament.max_teams} {entryNoun} are taken. Check the event page in case a spot
+              opens.
+            </p>
+            <div className="tour-entry-actions">
+              <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
+                View tournament
+              </Link>
+              <Link to="/tournaments" className="btn btn-ghost tour-entry-btn-ghost">
+                Browse tournaments
+              </Link>
+            </div>
+          </div>
         </main>
       </div>
     )
@@ -1347,7 +1456,12 @@ export default function JoinTournamentPage() {
       }
       navigate(`/t/${slug}/confirmed?registration_id=${data.registration_id}`, { replace: true })
     } catch (err: unknown) {
-      setError(apiErrorMessage(err, needsPartner ? 'Could not update partner' : 'Registration failed'))
+      const msg = apiErrorMessage(err, needsPartner ? 'Could not update partner' : 'Registration failed')
+      setError(
+        /full|sold out/i.test(msg)
+          ? `Sold out — all ${tournament.max_teams} ${entryNoun} are taken.`
+          : msg,
+      )
     } finally {
       if (!holdLoadingForCheckout) setLoading(false)
     }

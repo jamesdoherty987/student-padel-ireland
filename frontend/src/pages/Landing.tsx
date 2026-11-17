@@ -5,7 +5,12 @@ import BrandLogo from '../components/BrandLogo'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { isNativeApp } from '../native/platform'
 import { tournamentApi, type Tournament } from '../services/api'
-import { formatPerPlayerFee, parseCalendarDate, statusBadgeClass, statusLabel } from '../utils/format'
+import {
+  formatPerPlayerFee,
+  listingStatusBadgeClass,
+  listingStatusLabel,
+  parseCalendarDate,
+} from '../utils/format'
 import { FlipWords } from '../components/ui/FlipWords'
 import { InfiniteMovingCards } from '../components/ui/InfiniteMovingCards'
 import { LazyGlobe } from '../components/ui/LazyGlobe'
@@ -356,6 +361,10 @@ export default function Landing() {
             <ul className="lp-stack">
               {upcoming.map((t: Tournament) => {
                 const { day, month } = eventDay(t.event_date)
+                const capacity = {
+                  registeredTeams: t.registered_teams,
+                  maxTeams: t.max_teams,
+                }
                 return (
                   <li key={t.id}>
                     <Link to={`/t/${t.slug}`} className="lp-event">
@@ -370,7 +379,9 @@ export default function Landing() {
                         </p>
                       </div>
                       <div className="lp-event-side">
-                        <span className={`badge ${statusBadgeClass(t.status)}`}>{statusLabel(t.status)}</span>
+                        <span className={`badge ${listingStatusBadgeClass(t.status, capacity)}`}>
+                          {listingStatusLabel(t.status, capacity)}
+                        </span>
                         <span className="lp-event-fee">
                           {formatPerPlayerFee(t.entry_fee_cents, t.currency, t.play_format)}
                         </span>
