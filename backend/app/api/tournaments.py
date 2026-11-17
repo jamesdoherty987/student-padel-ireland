@@ -301,6 +301,7 @@ def _team_out(
         checked_in=team.checked_in,
         withdrawn=team.withdrawn,
         withdrawn_at=getattr(team, "withdrawn_at", None),
+        gender=getattr(team, "gender", None) or None,
         player_names=names,
         players=players,
         needs_partner=not singles and member_count < 2,
@@ -2607,7 +2608,7 @@ def organiser_update_team(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Organiser renames a team / entry."""
+    """Organiser updates team / entry name or gender."""
     t = db.get(Tournament, tournament_id)
     if not t:
         raise HTTPException(404, "Tournament not found")
@@ -2620,6 +2621,9 @@ def organiser_update_team(
         if len(name) < 2:
             raise HTTPException(400, "Team name is too short")
         team.name = name
+    if "gender" in data:
+        raw = data["gender"]
+        team.gender = raw if raw in ("M", "F", "X") else None
     db.commit()
     team = _load_manage_team(db, tournament_id, team_id)
     return _team_out(team, db, include_player_details=True, singles=_is_singles(t))
@@ -3273,7 +3277,13 @@ def generate(
     plate_size = int(getattr(t, "plate_size", 16) or 16)
     seeding_mode = (body.seeding_mode or "alphabetical").strip().lower()
     manual_groups_raw = body.manual_groups
-    if seeding_mode not in ("alphabetical", "random", "university_spread", "manual"):
+    if seeding_mode not in (
+        "alphabetical",
+        "random",
+        "university_spread",
+        "gender_groups",
+        "manual",
+    ):
         raise HTTPException(400, f"Unknown seeding mode: {seeding_mode}")
     if seeding_mode == "manual" and not manual_groups_raw:
         raise HTTPException(400, "Manual seeding requires group assignments")
@@ -3297,6 +3307,7 @@ def generate(
             id=str(tm.id),
             name=tm.name,
             university=tm.university.short_name if tm.university else None,
+            gender=(getattr(tm, "gender", None) or None),
         )
         for tm in paid_teams
     ]
@@ -3326,6 +3337,7 @@ def generate(
             name=ref.name,
             seed=seed_by_id.get(ref.id),
             university=ref.university,
+            gender=ref.gender,
         )
 
     paid_id_set = {str(tm.id) for tm in paid_teams}

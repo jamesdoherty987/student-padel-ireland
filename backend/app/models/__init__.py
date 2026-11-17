@@ -357,6 +357,8 @@ class Team(Base, TimestampMixin):
     player2_present: Mapped[bool] = mapped_column(Boolean, default=False)
     withdrawn: Mapped[bool] = mapped_column(Boolean, default=False)
     withdrawn_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Organiser-set for draws: M = men, F = women, X = mixed / open. Null = unset.
+    gender: Mapped[Optional[str]] = mapped_column(String(1))
 
     tournament: Mapped[Tournament] = relationship(back_populates="teams")
     university: Mapped[Optional[University]] = relationship()

@@ -2,13 +2,19 @@
 
 import { balancedGroupSizes } from './drawPreview'
 
-export type SeedingMode = 'alphabetical' | 'random' | 'university_spread' | 'manual'
+export type SeedingMode =
+  | 'alphabetical'
+  | 'random'
+  | 'university_spread'
+  | 'gender_groups'
+  | 'manual'
 
 export type SeedableTeam = {
   id: string
   name: string
   university_id?: string | null
   university_short?: string | null
+  gender?: string | null
 }
 
 export const SEEDING_MODE_OPTIONS: { value: SeedingMode; label: string; hint: string }[] = [
@@ -26,6 +32,11 @@ export const SEEDING_MODE_OPTIONS: { value: SeedingMode; label: string; hint: st
     value: 'university_spread',
     label: 'Spread universities',
     hint: 'Keep same-university teams apart when possible',
+  },
+  {
+    value: 'gender_groups',
+    label: 'Group by gender',
+    hint: 'Men together, women together when possible. Odd leftovers share a mixed group.',
   },
   {
     value: 'manual',
@@ -156,6 +167,61 @@ function universitySpread(teams: SeedableTeam[], groupSize: number): SeedableTea
   return groups.filter((grp) => grp.length > 0)
 }
 
+function genderKey(team: SeedableTeam): 'M' | 'F' | 'X' {
+  const g = (team.gender || '').trim().toUpperCase()
+  if (g === 'M' || g === 'F') return g
+  return 'X'
+}
+
+function sortByName(a: SeedableTeam, b: SeedableTeam) {
+  return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+}
+
+/** Same-gender groups when possible; leftovers / unset → mixed. */
+function genderGroups(teams: SeedableTeam[], groupSize: number): SeedableTeam[][] {
+  const buckets: Record<'M' | 'F' | 'X', SeedableTeam[]> = { M: [], F: [], X: [] }
+  for (const team of teams) buckets[genderKey(team)].push(team)
+  for (const key of ['M', 'F', 'X'] as const) buckets[key].sort(sortByName)
+
+  const result: SeedableTeam[][] = []
+  const leftovers: SeedableTeam[] = [...buckets.X]
+
+  for (const key of ['M', 'F'] as const) {
+    const pool = buckets[key]
+    if (!pool.length) continue
+    if (pool.length === 1) {
+      leftovers.push(pool[0])
+      continue
+    }
+    const sizes = balancedGroupSizes(pool.length, groupSize)
+    if (!sizes.length) {
+      leftovers.push(...pool)
+      continue
+    }
+    result.push(...snakeFill(pool, sizes))
+  }
+
+  if (leftovers.length === 1 && result.length) {
+    let best = 0
+    for (let i = 1; i < result.length; i += 1) {
+      if (result[i].length < result[best].length) best = i
+    }
+    result[best] = [...result[best], leftovers[0]]
+  } else if (leftovers.length >= 2) {
+    const sizes = balancedGroupSizes(leftovers.length, groupSize)
+    if (sizes.length) result.push(...snakeFill(leftovers, sizes))
+    else if (result.length) {
+      let best = 0
+      for (let i = 1; i < result.length; i += 1) {
+        if (result[i].length < result[best].length) best = i
+      }
+      result[best] = [...result[best], ...leftovers]
+    }
+  }
+
+  return result.filter((grp) => grp.length > 0)
+}
+
 /** Build group id lists for a seeding mode. Manual returns empty groups + all unassigned. */
 export function buildGroupAssignment(
   teams: SeedableTeam[],
@@ -176,6 +242,12 @@ export function buildGroupAssignment(
   if (mode === 'university_spread') {
     return {
       groups: universitySpread(teams, groupSize).map((g) => g.map((t) => t.id)),
+      unassigned: [],
+    }
+  }
+  if (mode === 'gender_groups') {
+    return {
+      groups: genderGroups(teams, groupSize).map((g) => g.map((t) => t.id)),
       unassigned: [],
     }
   }

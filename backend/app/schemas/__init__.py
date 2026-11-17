@@ -365,6 +365,8 @@ class TeamOut(BaseModel):
     checked_in: bool
     withdrawn: bool
     withdrawn_at: Optional[datetime] = None
+    # M | F | X | null (organiser-set for gender-aware draws)
+    gender: Optional[str] = None
     player_names: list[str] = []
     players: list[TeamPlayerOut] = Field(default_factory=list)
     needs_partner: bool = False
@@ -379,6 +381,24 @@ class TeamOut(BaseModel):
 
 class OrganiserUpdateTeamRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    # M | F | X, or empty string / null to clear
+    gender: Optional[str] = Field(default=None, max_length=1)
+
+    @field_validator("gender")
+    @classmethod
+    def _clean_team_gender(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        raw = str(v).strip().upper()
+        if raw in ("", "-", "NONE", "NULL"):
+            return ""
+        if raw in ("M", "MALE", "MEN", "MAN"):
+            return "M"
+        if raw in ("F", "FEMALE", "WOMEN", "WOMAN", "W"):
+            return "F"
+        if raw in ("X", "MIXED", "OPEN", "ANY"):
+            return "X"
+        raise ValueError("Gender must be M, F, X, or empty")
 
 
 class OrganiserUpdatePlayerRequest(BaseModel):

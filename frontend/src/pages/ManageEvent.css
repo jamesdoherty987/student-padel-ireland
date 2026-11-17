@@ -846,6 +846,43 @@ html.native-app.has-native-tabs .org-toast {
 .org-pay-actions {
   width: 100%;
   justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.org-entries-gender-tip {
+  margin: -0.15rem 0 0.85rem;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.org-entries-gender-counts {
+  color: var(--court-deep, #0b3d2e);
+  font-weight: 700;
+}
+
+.org-gender-select-wrap {
+  margin: 0;
+  display: inline-flex;
+}
+
+.org-gender-select {
+  min-height: 36px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+  width: auto;
+  min-width: 5.5rem;
+  max-width: 7rem;
+  color: var(--muted);
+}
+
+.org-gender-select-wrap.is-set .org-gender-select {
+  color: var(--court-deep, #0b3d2e);
+  border-color: color-mix(in srgb, var(--court-deep, #0b3d2e) 28%, var(--line));
+  background: color-mix(in srgb, var(--court, #1f7a5c) 8%, #fff);
 }
 
 @media (min-width: 640px) {

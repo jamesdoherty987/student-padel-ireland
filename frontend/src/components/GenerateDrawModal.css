@@ -227,10 +227,42 @@
 }
 
 .org-draw-chip-uni,
-.org-draw-chip-players {
+.org-draw-chip-players,
+.org-draw-chip-gender {
   font-size: 0.78rem;
   color: var(--muted);
   line-height: 1.3;
+}
+
+.org-draw-chip-gender {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  color: var(--court-deep, #0b3d2e);
+  background: color-mix(in srgb, var(--court, #1f7a5c) 12%, #fff);
+}
+
+.org-draw-gender-note {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.org-draw-gender-counts {
+  color: var(--court-deep, #0b3d2e);
+  font-weight: 750;
+}
+
+.org-draw-early-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.45rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .org-draw-chip-move {

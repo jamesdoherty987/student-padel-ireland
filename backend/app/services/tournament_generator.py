@@ -14,7 +14,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol, Sequence
 
-SEEDING_MODES = ("alphabetical", "random", "university_spread", "manual")
+SEEDING_MODES = (
+    "alphabetical",
+    "random",
+    "university_spread",
+    "gender_groups",
+    "manual",
+)
 
 
 @dataclass(frozen=True)
@@ -23,6 +29,8 @@ class TeamRef:
     name: str
     seed: int | None = None
     university: str | None = None
+    # M | F | X | None — used by gender_groups seeding
+    gender: str | None = None
 
 
 @dataclass
@@ -417,6 +425,17 @@ def _order_teams_for_seeding(
                 t.name.lower(),
             ),
         )
+    if mode_norm == "gender_groups":
+        rank = {"M": 0, "F": 1, "X": 2}
+        return sorted(
+            items,
+            key=lambda t: (
+                rank.get(_normalize_team_gender(t.gender), 2),
+                t.seed is None,
+                t.seed if t.seed is not None else 10_000,
+                t.name.lower(),
+            ),
+        )
     # alphabetical (default) — honour explicit seeds when present
     return sorted(
         items,
@@ -491,6 +510,69 @@ def _university_spread_groups(teams: Sequence[TeamRef], group_size: int) -> list
     return [grp for grp in groups if grp]
 
 
+def _normalize_team_gender(raw: str | None) -> str:
+    """Return M, F, or X (mixed / unset)."""
+    g = (raw or "").strip().upper()
+    if g in ("M", "MALE", "MEN", "MAN"):
+        return "M"
+    if g in ("F", "FEMALE", "WOMEN", "WOMAN", "W"):
+        return "F"
+    return "X"
+
+
+def _gender_groups(teams: Sequence[TeamRef], group_size: int) -> list[list[TeamRef]]:
+    """
+    Prefer same-gender groups (men together, women together).
+
+    Unset / mixed teams, and any singleton leftover that cannot form a group of
+    2+, go into mixed leftover groups. A single leftover team is merged into the
+    smallest existing group.
+    """
+    buckets: dict[str, list[TeamRef]] = {"M": [], "F": [], "X": []}
+    for team in teams:
+        buckets[_normalize_team_gender(team.gender)].append(team)
+
+    for key in buckets:
+        buckets[key].sort(
+            key=lambda t: (
+                t.seed is None,
+                t.seed if t.seed is not None else 10_000,
+                t.name.lower(),
+            )
+        )
+
+    result: list[list[TeamRef]] = []
+    leftovers: list[TeamRef] = list(buckets["X"])
+
+    for key in ("M", "F"):
+        pool = buckets[key]
+        if not pool:
+            continue
+        if len(pool) == 1:
+            leftovers.extend(pool)
+            continue
+        sizes = _balanced_group_sizes(len(pool), group_size)
+        if not sizes:
+            leftovers.extend(pool)
+            continue
+        result.extend(_snake_fill(pool, sizes))
+
+    if leftovers:
+        if len(leftovers) == 1 and result:
+            idx = min(range(len(result)), key=lambda i: (len(result[i]), i))
+            result[idx] = list(result[idx]) + leftovers
+        elif len(leftovers) >= 2:
+            sizes = _balanced_group_sizes(len(leftovers), group_size)
+            if sizes:
+                result.extend(_snake_fill(leftovers, sizes))
+            elif result:
+                idx = min(range(len(result)), key=lambda i: (len(result[i]), i))
+                result[idx] = list(result[idx]) + leftovers
+        # lone leftover with no other groups: leave as one group of 1 (validate later)
+
+    return [grp for grp in result if grp]
+
+
 def _resolve_manual_groups(
     teams: Sequence[TeamRef],
     manual_groups: Sequence[Sequence[str]],
@@ -553,6 +635,8 @@ def _seed_into_groups(
 
     if mode == "university_spread":
         return _university_spread_groups(teams, group_size)
+    if mode == "gender_groups":
+        return _gender_groups(teams, group_size)
 
     ordered = _order_teams_for_seeding(teams, mode, random_seed=random_seed)
     sizes = _balanced_group_sizes(len(ordered), group_size)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { TournamentTeam } from '../services/api'
 import ModalShell from './ModalShell'
 import {
@@ -15,6 +15,11 @@ import {
   type SeedingMode,
 } from '../utils/groupSeeding'
 import { bracketFormatHint, tournamentFormatSummary } from '../utils/format'
+import {
+  countTeamGenders,
+  formatGenderCounts,
+  teamGenderShort,
+} from '../utils/teamGender'
 import './GenerateDrawModal.css'
 
 type Props = {
@@ -96,6 +101,8 @@ export default function GenerateDrawModal({
   }
 
   const paidIdsKey = paidTeams.map((t) => t.id).join('|')
+  const paidGenderKey = paidTeams.map((t) => `${t.id}:${t.gender || ''}`).join('|')
+  const drawModalWasOpen = useRef(false)
   useEffect(() => {
     if (!open) return
     setSeedingMode('alphabetical')
@@ -105,6 +112,20 @@ export default function GenerateDrawModal({
     applySeeding('alphabetical')
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when modal opens / field changes
   }, [open, paidIdsKey, preferredGroupSize])
+
+  // If genders change while "Group by gender" is already selected, rebuild preview.
+  // Skip the open transition so we don't race the alphabetical reset above.
+  useEffect(() => {
+    if (!open) {
+      drawModalWasOpen.current = false
+      return
+    }
+    const justOpened = !drawModalWasOpen.current
+    drawModalWasOpen.current = true
+    if (justOpened || seedingMode !== 'gender_groups') return
+    applySeeding('gender_groups', randomSeed)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rebuild only on gender tag changes
+  }, [paidGenderKey, open, seedingMode])
 
   // Drop stale picks if the paid field changes while the modal stays open.
   useEffect(() => {
@@ -134,10 +155,13 @@ export default function GenerateDrawModal({
     const q = earlyQuery.trim().toLowerCase()
     if (!q) return paidTeamsSorted
     return paidTeamsSorted.filter((t) => {
-      const hay = `${t.name} ${t.university_short || ''} ${(t.player_names || []).join(' ')}`.toLowerCase()
+      const hay = `${t.name} ${t.university_short || ''} ${(t.player_names || []).join(' ')} ${teamGenderShort(t.gender)}`.toLowerCase()
       return hay.includes(q)
     })
   }, [paidTeamsSorted, earlyQuery])
+
+  const genderCounts = useMemo(() => countTeamGenders(paidTeams), [paidTeams])
+  const genderSummary = useMemo(() => formatGenderCounts(genderCounts), [genderCounts])
 
   const filledGroups = useMemo(() => groups.filter((g) => g.length > 0), [groups])
   const liveSizes = useMemo(() => filledGroups.map((g) => g.length), [filledGroups])
@@ -287,6 +311,9 @@ export default function GenerateDrawModal({
       >
         <div className="org-draw-chip-main">
           <strong>{team.name}</strong>
+          {teamGenderShort(team.gender) ? (
+            <span className="org-draw-chip-gender">{teamGenderShort(team.gender)}</span>
+          ) : null}
           {team.university_short ? <span className="org-draw-chip-uni">{team.university_short}</span> : null}
           {showPlayers ? <span className="org-draw-chip-players">{team.player_names.join(' / ')}</span> : null}
         </div>
@@ -453,6 +480,14 @@ export default function GenerateDrawModal({
             {seedingHint}
             {selectedTeamId ? ' Selected team ready — tap a group to place it.' : ''}
           </p>
+          {seedingMode === 'gender_groups' && genderSummary ? (
+            <p className="org-draw-seed-hint org-draw-gender-note">
+              <span className="org-draw-gender-counts">{genderSummary}</span>
+              {genderCounts.unset > 0
+                ? ' — unset entries join mixed leftover groups. Set Men/Women on Entries for cleaner groups.'
+                : ' — same-gender groups when possible.'}
+            </p>
+          ) : null}
         </div>
       )}
 
@@ -557,8 +592,8 @@ export default function GenerateDrawModal({
           {earlyOpen ? (
             <div className="org-draw-early-body">
               <p className="org-draw-early-hint">
-                Tick {entryLabelPlural} that asked for early games. Their group matches get earlier
-                court times — opponents, groups, and knockout stay the same.
+                Optional. Tick who asked for early games — their group matches get earlier times.
+                Groups and opponents stay the same.
               </p>
               <div className="org-draw-early-tools">
                 {paidTeamsSorted.length > 8 ? (
@@ -593,6 +628,7 @@ export default function GenerateDrawModal({
                 ) : (
                   earlyFiltered.map((team) => {
                     const checked = earlyTeamIds.includes(team.id)
+                    const gender = teamGenderShort(team.gender)
                     return (
                       <label
                         key={team.id}
@@ -606,9 +642,10 @@ export default function GenerateDrawModal({
                         />
                         <span className="org-draw-early-name">
                           <strong>{team.name}</strong>
-                          {team.university_short ? (
-                            <span className="org-draw-early-uni">{team.university_short}</span>
-                          ) : null}
+                          <span className="org-draw-early-meta">
+                            {gender ? <span>{gender}</span> : null}
+                            {team.university_short ? <span>{team.university_short}</span> : null}
+                          </span>
                         </span>
                       </label>
                     )

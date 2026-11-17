@@ -47,6 +47,13 @@ import {
   statusLabel,
 } from '../utils/format'
 import { mediaUrl } from '../utils/media'
+import {
+  TEAM_GENDER_OPTIONS,
+  TEAM_GENDER_ROW_OPTIONS,
+  countTeamGenders,
+  formatGenderCounts,
+  normalizeTeamGender,
+} from '../utils/teamGender'
 import './ManageEvent.css'
 
 type OrgPanel = 'registration' | 'day-of' | 'settings'
@@ -1061,6 +1068,26 @@ export default function ManageEventPage() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not mark as paid')),
   })
 
+  const teamGenderMut = useMutation({
+    mutationFn: ({ teamId, gender }: { teamId: string; gender: string | null }) =>
+      tournamentApi.updateTeam(tid!, teamId, { gender }),
+    onMutate: async ({ teamId, gender }) => {
+      await qc.cancelQueries({ queryKey: ['org-teams', tid] })
+      const prev = qc.getQueryData<TournamentTeam[]>(['org-teams', tid])
+      qc.setQueryData<TournamentTeam[]>(['org-teams', tid], (old) =>
+        (old || []).map((t) => (t.id === teamId ? { ...t, gender } : t)),
+      )
+      return { prev }
+    },
+    onError: (e: unknown, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['org-teams', tid], ctx.prev)
+      showToast(apiErrorMessage(e, 'Could not update gender'))
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['org-teams'] })
+    },
+  })
+
   const withdrawMut = useMutation({
     mutationFn: (teamId: string) => tournamentApi.withdrawTeam(tid!, teamId),
     onSuccess: () => {
@@ -1204,6 +1231,12 @@ export default function ManageEventPage() {
       }),
     [orgTeams, isSingles],
   )
+  const entryGenderSummary = useMemo(() => {
+    const counts = countTeamGenders(orgTeams.filter((t) => !t.withdrawn))
+    const labeled = counts.men + counts.women + counts.mixed
+    if (labeled === 0 && counts.unset === 0) return null
+    return formatGenderCounts(counts)
+  }, [orgTeams])
   const checkedInCount = checkInPool.filter((t) => t.checked_in).length
   const awaitingCheckInCount = checkInPool.length - checkedInCount
   const checkInRows = useMemo(() => {
@@ -2546,6 +2579,18 @@ export default function ManageEventPage() {
                     </button>
                   )}
                 </div>
+                {orgTeams.some((t) => !t.withdrawn) && (
+                  <p className="org-entries-gender-tip">
+                    Set <strong>Men / Women</strong> on each entry (dropdown on the right) before
+                    generate if you want same-gender groups.
+                    {entryGenderSummary ? (
+                      <>
+                        {' '}
+                        <span className="org-entries-gender-counts">{entryGenderSummary}</span>
+                      </>
+                    ) : null}
+                  </p>
+                )}
                 {(orgTeams.length > 0 || paymentCounts.withdrawn > 0) && (
                   <div className="org-pay-toolbar">
                     <input
@@ -2674,13 +2719,15 @@ export default function ManageEventPage() {
                         aria-label={team.withdrawn ? `${team.name} withdrawn` : `Edit ${team.name}`}
                         onClick={(e) => {
                           if (team.withdrawn) return
-                          if ((e.target as HTMLElement).closest('button, a, label, input')) return
+                          if ((e.target as HTMLElement).closest('button, a, label, input, select'))
+                            return
                           setEditTeam(team)
                         }}
                         onKeyDown={(e) => {
                           if (team.withdrawn) return
                           if (e.key !== 'Enter' && e.key !== ' ') return
-                          if ((e.target as HTMLElement).closest('button, a, label, input')) return
+                          if ((e.target as HTMLElement).closest('button, a, label, input, select'))
+                            return
                           e.preventDefault()
                           setEditTeam(team)
                         }}
@@ -2773,6 +2820,34 @@ export default function ManageEventPage() {
                             </span>
                           ) : (
                             <>
+                              <label
+                                className={`org-gender-select-wrap${
+                                  normalizeTeamGender(team.gender) ? ' is-set' : ''
+                                }`}
+                                onClick={(e) => e.stopPropagation()}
+                                onMouseDown={(e) => e.stopPropagation()}
+                              >
+                                <select
+                                  className="form-select org-gender-select"
+                                  value={normalizeTeamGender(team.gender)}
+                                  disabled={teamGenderMut.isPending}
+                                  aria-label={`Gender for ${team.name}`}
+                                  title="Gender for group draw"
+                                  onChange={(e) => {
+                                    const v = e.target.value
+                                    teamGenderMut.mutate({
+                                      teamId: team.id,
+                                      gender: v === 'M' || v === 'F' || v === 'X' ? v : null,
+                                    })
+                                  }}
+                                >
+                                  {TEAM_GENDER_ROW_OPTIONS.map((opt) => (
+                                    <option key={opt.label} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
                               <button
                                 type="button"
                                 className="btn btn-ghost btn-sm"
@@ -4606,6 +4681,7 @@ function EditEntryModal({
 }) {
   const players = team.players || []
   const [teamName, setTeamName] = useState(team.name)
+  const [teamGender, setTeamGender] = useState(() => normalizeTeamGender(team.gender))
   const [playerForms, setPlayerForms] = useState(
     () =>
       players.map((p) => ({
@@ -4689,8 +4765,15 @@ function EditEntryModal({
 
     setSaving(true)
     try {
-      if (teamName.trim() !== team.name) {
-        await tournamentApi.updateTeam(tournamentId, team.id, { name: teamName.trim() })
+      const nextGender = teamGender || null
+      const prevGender = normalizeTeamGender(team.gender) || null
+      const nameChanged = teamName.trim() !== team.name
+      const genderChanged = nextGender !== prevGender
+      if (nameChanged || genderChanged) {
+        await tournamentApi.updateTeam(tournamentId, team.id, {
+          ...(nameChanged ? { name: teamName.trim() } : {}),
+          ...(genderChanged ? { gender: nextGender } : {}),
+        })
       }
       const failures: string[] = []
       for (const p of playerForms) {
@@ -4777,6 +4860,25 @@ function EditEntryModal({
               autoCapitalize="words"
               enterKeyHint="next"
             />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="edit-team-gender">
+              Gender (for draw)
+            </label>
+            <select
+              id="edit-team-gender"
+              className="form-select"
+              value={teamGender}
+              onChange={(e) => setTeamGender(normalizeTeamGender(e.target.value))}
+            >
+              {TEAM_GENDER_OPTIONS.map((opt) => (
+                <option key={opt.label} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="form-hint">For “Group by gender” on generate. Not set / mixed can share a group.</p>
           </div>
 
           {playerForms.length === 0 && (

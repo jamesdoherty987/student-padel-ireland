@@ -378,6 +378,68 @@ def test_manual_groups_require_all_teams():
         generate_tournament(cfg)
 
 
+def test_gender_groups_keeps_same_gender_together():
+    teams = [
+        TeamRef(id="m1", name="M1", gender="M"),
+        TeamRef(id="m2", name="M2", gender="M"),
+        TeamRef(id="m3", name="M3", gender="M"),
+        TeamRef(id="m4", name="M4", gender="M"),
+        TeamRef(id="f1", name="F1", gender="F"),
+        TeamRef(id="f2", name="F2", gender="F"),
+        TeamRef(id="f3", name="F3", gender="F"),
+        TeamRef(id="f4", name="F4", gender="F"),
+    ]
+    cfg = GeneratorConfig(
+        teams=teams,
+        courts=4,
+        match_duration_minutes=20,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        group_size=4,
+        teams_advance_per_group=2,
+        format="GROUP_KNOCKOUT",
+        seeding_mode="gender_groups",
+    )
+    result = generate_tournament(cfg)
+    assert len(result.groups) == 2
+    genders = []
+    for g in result.groups:
+        gset = {next(t.gender for t in teams if t.id == tid) for tid in g.team_ids}
+        genders.append(gset)
+        assert len(gset) == 1
+    assert {"M"} in genders
+    assert {"F"} in genders
+
+
+def test_gender_groups_merges_singleton_into_mixed():
+    teams = [
+        TeamRef(id="m1", name="M1", gender="M"),
+        TeamRef(id="m2", name="M2", gender="M"),
+        TeamRef(id="m3", name="M3", gender="M"),
+        TeamRef(id="m4", name="M4", gender="M"),
+        TeamRef(id="f1", name="F1", gender="F"),
+    ]
+    cfg = GeneratorConfig(
+        teams=teams,
+        courts=3,
+        match_duration_minutes=20,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        group_size=4,
+        teams_advance_per_group=2,
+        format="GROUP_KNOCKOUT",
+        seeding_mode="gender_groups",
+    )
+    result = generate_tournament(cfg)
+    validate_generated(result, {t.id for t in teams})
+    # Lone woman merges into a men's group → exactly one mixed group
+    mixed = 0
+    for g in result.groups:
+        gset = {next(t.gender for t in teams if t.id == tid) for tid in g.team_ids}
+        if len(gset) > 1:
+            mixed += 1
+            assert "F" in gset and "M" in gset
+    assert mixed == 1
+
+
 def test_prefer_early_keeps_groups_and_schedules_sooner():
     cfg = _config(12, courts=2, group_size=4)
     cfg.seeding_mode = "alphabetical"
@@ -407,3 +469,63 @@ def test_prefer_early_keeps_groups_and_schedules_sooner():
         m.scheduled_start for m in prioritized.matches if m.stage == "GROUP" and m.scheduled_start
     )
     assert earliest_for(prioritized, early_id) == first_wave
+
+
+def test_gender_groups_with_prefer_early_combined():
+    """Gender placement and early scheduling must not fight each other."""
+    teams = [
+        TeamRef(id=f"m{i}", name=f"M{i}", gender="M") for i in range(1, 5)
+    ] + [
+        TeamRef(id=f"f{i}", name=f"F{i}", gender="F") for i in range(1, 5)
+    ]
+    cfg = GeneratorConfig(
+        teams=teams,
+        courts=2,
+        match_duration_minutes=20,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        group_size=4,
+        teams_advance_per_group=2,
+        format="GROUP_KNOCKOUT",
+        seeding_mode="gender_groups",
+        prefer_early_team_ids=["f1", "f2"],
+    )
+    result = generate_tournament(cfg)
+    validate_generated(result, {t.id for t in teams})
+    assert len(result.groups) == 2
+    # Groups stay gender-pure
+    for g in result.groups:
+        gset = {next(t.gender for t in teams if t.id == tid) for tid in g.team_ids}
+        assert len(gset) == 1
+    first_wave = min(
+        m.scheduled_start for m in result.matches if m.stage == "GROUP" and m.scheduled_start
+    )
+    early_starts = [
+        m.scheduled_start
+        for m in result.matches
+        if m.stage == "GROUP"
+        and m.scheduled_start
+        and ({m.team_a_id, m.team_b_id} & {"f1", "f2"})
+    ]
+    assert early_starts
+    assert min(early_starts) == first_wave
+
+
+def test_gender_groups_two_singletons_make_one_mixed_group():
+    teams = [
+        TeamRef(id="m1", name="M1", gender="M"),
+        TeamRef(id="f1", name="F1", gender="F"),
+    ]
+    cfg = GeneratorConfig(
+        teams=teams,
+        courts=1,
+        match_duration_minutes=20,
+        start_time=datetime(2026, 6, 15, 10, 0),
+        group_size=4,
+        teams_advance_per_group=1,
+        format="GROUP_KNOCKOUT",
+        seeding_mode="gender_groups",
+    )
+    result = generate_tournament(cfg)
+    validate_generated(result, {t.id for t in teams})
+    assert len(result.groups) == 1
+    assert set(result.groups[0].team_ids) == {"m1", "f1"}

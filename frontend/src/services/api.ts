@@ -197,6 +197,8 @@ export type TournamentTeam = {
   checked_in: boolean
   withdrawn: boolean
   withdrawn_at?: string | null
+  /** M | F | X — organiser-set for gender-aware draws */
+  gender?: string | null
   player_names: string[]
   players?: TournamentTeamPlayer[]
   needs_partner?: boolean
@@ -578,8 +580,11 @@ export const tournamentApi = {
     ),
   markFeeCollected: (tournamentId: string, teamId: string) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/mark-fee-collected`),
-  updateTeam: (tournamentId: string, teamId: string, data: { name: string }) =>
-    api.patch<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}`, data),
+  updateTeam: (
+    tournamentId: string,
+    teamId: string,
+    data: { name?: string; gender?: string | null },
+  ) => api.patch<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}`, data),
   updateTeamPlayer: (
     tournamentId: string,
     teamId: string,
