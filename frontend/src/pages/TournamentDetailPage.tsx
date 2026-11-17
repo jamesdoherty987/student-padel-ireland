@@ -30,6 +30,7 @@ import {
   reminderPromiseCopy,
   tournamentFormatSummary,
 } from '../utils/format'
+import { scoringModeLabel } from '../utils/matchRules'
 import './Tournament.css'
 
 export default function TournamentDetailPage() {
@@ -592,6 +593,17 @@ export default function TournamentDetailPage() {
           </div>
         )}
 
+        {matches.length > 0 && (
+          <div className="tour-jump">
+            <Link to={`/t/${tournament.slug}/fixtures`} className="tour-jump-link">
+              All fixtures
+            </Link>
+            <Link to={livePath} className="tour-jump-link">
+              Live board
+            </Link>
+          </div>
+        )}
+
         {knockoutActive && knockoutMatches.length > 0 && (
           <section className="block tour-bracket-block" id="tour-draw">
             {championshipMatches.length > 0 && (
@@ -651,9 +663,14 @@ export default function TournamentDetailPage() {
                 </li>
               ))}
             </ul>
-            <Link to={`/t/${tournament.slug}/live`} className="tour-inline-link">
-              Open live board
-            </Link>
+            <div className="tour-inline-links">
+              <Link to={`/t/${tournament.slug}/fixtures`} className="tour-inline-link">
+                All fixtures
+              </Link>
+              <Link to={`/t/${tournament.slug}/live`} className="tour-inline-link">
+                Open live board
+              </Link>
+            </div>
           </section>
         )}
 
@@ -676,12 +693,26 @@ export default function TournamentDetailPage() {
           </section>
         )}
 
-        {tournament.rules && (
-          <section className="block">
-            <h2>Rules</h2>
+        <section className="block tour-rules-block" id="tour-rules">
+          <h2>Match format & rules</h2>
+          <ul className="tour-rules-meta">
+            <li>
+              About <strong>{tournament.match_duration_minutes} minutes</strong> per match
+            </li>
+            <li>
+              <strong>{scoringModeLabel(tournament.scoring_mode)}</strong>
+            </li>
+          </ul>
+          {tournament.rules ? (
             <p className="rules">{tournament.rules}</p>
-          </section>
-        )}
+          ) : (
+            <p className="tour-rules-empty">Scoring details will be confirmed on the day.</p>
+          )}
+          <p className="tour-rules-common">
+            <Link to="/padel-rules">Common padel rules</Link>
+            <span> — serve, glass, mesh</span>
+          </p>
+        </section>
 
         <section className="block qr-block">
           <h2>Share</h2>

@@ -144,11 +144,37 @@
   line-height: 1.4;
 }
 
+.tf-rules-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.tf-rules-label-row .form-label {
+  margin-bottom: 0;
+}
+
 .tf-rules-examples {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
   margin-top: 0.55rem;
+}
+
+.tf-rules-common-link {
+  margin: 0.65rem 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.tf-rules-common-link a {
+  color: var(--court-deep, #0b3d2e);
+  font-weight: 650;
+  text-underline-offset: 2px;
 }
 
 .tf-rules-examples .btn {

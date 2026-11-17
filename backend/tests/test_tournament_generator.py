@@ -376,3 +376,34 @@ def test_manual_groups_require_all_teams():
     cfg.manual_groups = [["t1", "t2"]]
     with pytest.raises(ValueError, match="Missing"):
         generate_tournament(cfg)
+
+
+def test_prefer_early_keeps_groups_and_schedules_sooner():
+    cfg = _config(12, courts=2, group_size=4)
+    cfg.seeding_mode = "alphabetical"
+    baseline = generate_tournament(cfg)
+
+    early_id = baseline.groups[-1].team_ids[0]
+    cfg.prefer_early_team_ids = [early_id]
+    prioritized = generate_tournament(cfg)
+
+    assert [g.team_ids for g in baseline.groups] == [g.team_ids for g in prioritized.groups]
+
+    def earliest_for(result, team_id: str) -> datetime:
+        starts = [
+            m.scheduled_start
+            for m in result.matches
+            if m.stage == "GROUP"
+            and m.scheduled_start
+            and team_id in (m.team_a_id, m.team_b_id)
+        ]
+        assert starts
+        return min(starts)
+
+    assert earliest_for(prioritized, early_id) <= earliest_for(baseline, early_id)
+
+    # Preferred team's first group match should be in the opening wave
+    first_wave = min(
+        m.scheduled_start for m in prioritized.matches if m.stage == "GROUP" and m.scheduled_start
+    )
+    assert earliest_for(prioritized, early_id) == first_wave

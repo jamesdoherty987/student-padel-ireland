@@ -1,0 +1,326 @@
+.fixtures-page {
+  max-width: 1040px;
+}
+
+.fixtures-head {
+  margin-bottom: 1.25rem;
+}
+
+.fixtures-kicker {
+  margin: 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fixtures-meta {
+  margin: 0.35rem 0 0.85rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.fixtures-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.fixtures-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.fixtures-section h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: var(--court-deep, #0b3d2e);
+}
+
+.fixtures-table-wrap {
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  overflow: hidden;
+}
+
+.fixtures-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 0.9rem;
+}
+
+.fixtures-table th,
+.fixtures-table td {
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.fixtures-table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--court) 7%, var(--surface, #fff));
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.fixtures-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.fixtures-table tr.is-done {
+  opacity: 0.72;
+}
+
+.fixtures-time {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.fixtures-court {
+  white-space: nowrap;
+  width: 1%;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.fixtures-match {
+  min-width: 0;
+}
+
+.fixtures-sides {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.35rem;
+}
+
+.fixtures-side {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.fixtures-vs {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.fixtures-status {
+  white-space: nowrap;
+  width: 1%;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.fixtures-score {
+  white-space: nowrap;
+  width: 1%;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+/* Mobile: stacked rows, no sideways scroll */
+@media (max-width: 720px) {
+  .fixtures-page {
+    max-width: none;
+  }
+
+  .fixtures-section h2 {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin: 0 0 0.5rem;
+    padding: 0.4rem 0;
+    background: color-mix(in srgb, var(--bg-primary, #fff) 92%, transparent);
+    backdrop-filter: blur(6px);
+  }
+
+  .fixtures-table-wrap {
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .fixtures-table,
+  .fixtures-table tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .fixtures-table thead {
+    display: none;
+  }
+
+  .fixtures-table tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'time court status'
+      'match match match'
+      'score score score';
+    column-gap: 0.55rem;
+    row-gap: 0.2rem;
+    align-items: baseline;
+    margin: 0 0 0.55rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+    border-radius: 12px;
+    background: var(--surface, #fff);
+  }
+
+  .fixtures-table tbody tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .fixtures-table th,
+  .fixtures-table td {
+    display: block;
+    width: auto;
+    padding: 0;
+    border: none;
+  }
+
+  .fixtures-time {
+    grid-area: time;
+    font-size: 0.95rem;
+  }
+
+  .fixtures-court {
+    grid-area: court;
+    font-size: 0.82rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .fixtures-match {
+    grid-area: match;
+    margin-top: 0.2rem;
+  }
+
+  .fixtures-sides {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.1rem;
+  }
+
+  .fixtures-vs {
+    display: none;
+  }
+
+  .fixtures-status {
+    grid-area: status;
+    justify-self: end;
+    font-size: 0.78rem;
+    font-weight: 650;
+  }
+
+  .fixtures-score {
+    grid-area: score;
+    margin-top: 0.15rem;
+    font-size: 0.95rem;
+  }
+
+  .fixtures-score[data-empty='true'] {
+    display: none;
+  }
+}
+
+@media print {
+  .app-shell > nav,
+  .fixtures-actions,
+  .back-btn,
+  .native-tab-bar {
+    display: none !important;
+  }
+
+  .fixtures-shell,
+  .fixtures-page {
+    background: #fff !important;
+    max-width: none;
+    padding: 0 !important;
+  }
+
+  .fixtures-section h2 {
+    position: static;
+    background: none;
+    backdrop-filter: none;
+    padding: 0;
+    margin-top: 0.75rem;
+  }
+
+  .fixtures-table-wrap {
+    border: 1px solid #ccc;
+    border-radius: 0;
+    overflow: visible;
+    background: #fff;
+  }
+
+  .fixtures-table,
+  .fixtures-table thead,
+  .fixtures-table tbody,
+  .fixtures-table tr,
+  .fixtures-table th,
+  .fixtures-table td {
+    display: revert;
+    width: auto;
+  }
+
+  .fixtures-table {
+    min-width: 0;
+    font-size: 11pt;
+  }
+
+  .fixtures-table thead {
+    display: table-header-group;
+  }
+
+  .fixtures-sides {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .fixtures-vs {
+    display: inline;
+  }
+
+  .fixtures-score[data-empty='true'] {
+    display: table-cell;
+  }
+
+  .fixtures-table tr {
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    gap: 0;
+  }
+
+  .fixtures-table th,
+  .fixtures-table td {
+    padding: 0.4rem 0.5rem;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .fixtures-court {
+    white-space: nowrap;
+  }
+
+  .fixtures-section {
+    break-inside: avoid;
+  }
+}

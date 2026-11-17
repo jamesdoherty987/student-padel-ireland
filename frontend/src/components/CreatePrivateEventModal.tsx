@@ -1,9 +1,11 @@
 import { useRef, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { confirmDialog } from './ConfirmDialog'
 import ModalShell from './ModalShell'
 import NumberInput from './NumberInput'
 import { apiErrorMessage, tournamentApi } from '../services/api'
+import { defaultMatchRulesText } from '../utils/matchRules'
 import './TournamentForm.css'
 
 type Props = {
@@ -481,17 +483,34 @@ export default function CreatePrivateEventModal({ onClose, onCreated }: Props) {
               </div>
 
               <div className="form-group">
-                <label className="form-label" htmlFor="pe-rules">
-                  Rules note
-                </label>
+                <div className="tf-rules-label-row">
+                  <label className="form-label" htmlFor="pe-rules">
+                    Rules note
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() =>
+                      patch({
+                        scoring_mode: 'SIMPLE',
+                        rules: defaultMatchRulesText(form.match_duration_minutes),
+                      })
+                    }
+                  >
+                    Use default
+                  </button>
+                </div>
                 <textarea
                   id="pe-rules"
                   className="form-input"
-                  rows={3}
+                  rows={4}
                   value={form.rules}
                   onChange={(e) => patch({ rules: e.target.value })}
                   placeholder="Optional rules for your group"
                 />
+                <p className="tf-rules-common-link">
+                  <Link to="/padel-rules">Common padel rules</Link>
+                </p>
               </div>
               <p className="form-hint">
                 You can change these later in Manage → Edit before the draw is generated.

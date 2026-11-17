@@ -40,6 +40,7 @@ type Props = {
     seeding_mode: SeedingMode
     manual_groups: string[][]
     random_seed?: number
+    prefer_early_team_ids?: string[]
   }) => void
 }
 
@@ -75,6 +76,9 @@ export default function GenerateDrawModal({
   const [activeGroup, setActiveGroup] = useState<number | null>(0)
   const [randomSeed, setRandomSeed] = useState(() => Date.now())
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
+  const [earlyTeamIds, setEarlyTeamIds] = useState<string[]>([])
+  const [earlyOpen, setEarlyOpen] = useState(false)
+  const [earlyQuery, setEarlyQuery] = useState('')
 
   const teamById = useMemo(() => {
     const map = new Map<string, TournamentTeam>()
@@ -95,9 +99,45 @@ export default function GenerateDrawModal({
   useEffect(() => {
     if (!open) return
     setSeedingMode('alphabetical')
+    setEarlyTeamIds([])
+    setEarlyOpen(false)
+    setEarlyQuery('')
     applySeeding('alphabetical')
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when modal opens / field changes
   }, [open, paidIdsKey, preferredGroupSize])
+
+  // Drop stale picks if the paid field changes while the modal stays open.
+  useEffect(() => {
+    const valid = new Set(paidTeams.map((t) => t.id))
+    setEarlyTeamIds((prev) => {
+      const next = prev.filter((id) => valid.has(id))
+      return next.length === prev.length ? prev : next
+    })
+  }, [paidIdsKey, paidTeams])
+
+  const toggleEarlyTeam = (teamId: string) => {
+    setEarlyTeamIds((prev) =>
+      prev.includes(teamId) ? prev.filter((id) => id !== teamId) : [...prev, teamId],
+    )
+    setEarlyOpen(true)
+  }
+
+  const paidTeamsSorted = useMemo(
+    () =>
+      [...paidTeams].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }),
+      ),
+    [paidTeams],
+  )
+
+  const earlyFiltered = useMemo(() => {
+    const q = earlyQuery.trim().toLowerCase()
+    if (!q) return paidTeamsSorted
+    return paidTeamsSorted.filter((t) => {
+      const hay = `${t.name} ${t.university_short || ''} ${(t.player_names || []).join(' ')}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [paidTeamsSorted, earlyQuery])
 
   const filledGroups = useMemo(() => groups.filter((g) => g.length > 0), [groups])
   const liveSizes = useMemo(() => filledGroups.map((g) => g.length), [filledGroups])
@@ -305,10 +345,13 @@ export default function GenerateDrawModal({
             disabled={!canSubmit}
             onClick={() => {
               const nonEmpty = groups.filter((g) => g.length > 0)
+              const paidSet = new Set(paidTeams.map((t) => t.id))
+              const earlyIds = earlyTeamIds.filter((id) => paidSet.has(id))
               onGenerate({
                 seeding_mode: isRoundRobin ? 'alphabetical' : seedingMode,
                 manual_groups: isRoundRobin ? [paidTeams.map((t) => t.id)] : nonEmpty,
                 random_seed: seedingMode === 'random' ? randomSeed : undefined,
+                prefer_early_team_ids: earlyIds.length ? earlyIds : undefined,
               })
             }}
           >
@@ -486,6 +529,95 @@ export default function GenerateDrawModal({
             </button>
           </div>
         </div>
+      )}
+
+      {paidTeamsSorted.length > 0 && (
+        <section
+          className={`org-draw-early${earlyOpen ? ' is-open' : ''}${earlyTeamIds.length ? ' has-picks' : ''}`}
+          aria-labelledby="org-draw-early-title"
+        >
+          <button
+            type="button"
+            className="org-draw-early-toggle"
+            id="org-draw-early-title"
+            aria-expanded={earlyOpen}
+            disabled={isPending}
+            onClick={() => setEarlyOpen((v) => !v)}
+          >
+            <span>
+              Play early
+              <span className="org-draw-early-optional">optional</span>
+              {earlyTeamIds.length > 0 ? (
+                <span className="org-draw-early-count">{earlyTeamIds.length} selected</span>
+              ) : null}
+            </span>
+            <span className="org-draw-early-toggle-meta">{earlyOpen ? 'Hide' : 'Choose'}</span>
+          </button>
+
+          {earlyOpen ? (
+            <div className="org-draw-early-body">
+              <p className="org-draw-early-hint">
+                Tick {entryLabelPlural} that asked for early games. Their group matches get earlier
+                court times — opponents, groups, and knockout stay the same.
+              </p>
+              <div className="org-draw-early-tools">
+                {paidTeamsSorted.length > 8 ? (
+                  <input
+                    type="search"
+                    className="form-input org-draw-early-search"
+                    placeholder={`Search ${entryLabelPlural}…`}
+                    value={earlyQuery}
+                    disabled={isPending}
+                    onChange={(e) => setEarlyQuery(e.target.value)}
+                    aria-label={`Search ${entryLabelPlural}`}
+                  />
+                ) : null}
+                {earlyTeamIds.length > 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={isPending}
+                    onClick={() => setEarlyTeamIds([])}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+              <div
+                className="org-draw-early-list"
+                role="group"
+                aria-label={`${entryLabelPlural} to play early`}
+              >
+                {earlyFiltered.length === 0 ? (
+                  <p className="org-draw-early-empty">No matches for “{earlyQuery.trim()}”.</p>
+                ) : (
+                  earlyFiltered.map((team) => {
+                    const checked = earlyTeamIds.includes(team.id)
+                    return (
+                      <label
+                        key={team.id}
+                        className={`org-draw-early-item${checked ? ' is-on' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={isPending}
+                          onChange={() => toggleEarlyTeam(team.id)}
+                        />
+                        <span className="org-draw-early-name">
+                          <strong>{team.name}</strong>
+                          {team.university_short ? (
+                            <span className="org-draw-early-uni">{team.university_short}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          ) : null}
+        </section>
       )}
 
       {liveStats?.ok && !isRoundRobin && (

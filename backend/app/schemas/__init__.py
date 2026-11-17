@@ -451,6 +451,8 @@ class GenerateRequest(BaseModel):
     # Explicit group lists (team UUIDs). When set, becomes the draw groups.
     manual_groups: Optional[list[list[UUID]]] = None
     random_seed: Optional[int] = None
+    # Optional: schedule these teams' group matches earlier (does not change groups/format).
+    prefer_early_team_ids: Optional[list[UUID]] = None
 
 
 class ScoreUpdate(BaseModel):

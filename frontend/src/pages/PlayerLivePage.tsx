@@ -1068,6 +1068,11 @@ export default function PlayerLivePage() {
               <span className="badge badge-official">Called</span>
             ) : null}
           </div>
+          {drawReady ? (
+            <p className="pl-fixtures-link">
+              <Link to={`/t/${slug}/fixtures`}>All fixtures</Link>
+            </p>
+          ) : null}
           {!myOnCourt && waitingOnDraw && (
             <p className="pl-lead">
               {reminderNote
@@ -1264,6 +1269,11 @@ export default function PlayerLivePage() {
               <Link to={`/t/${slug}`} className="pl-details-link">
                 Full tournament page
               </Link>
+              {allMatches.length > 0 ? (
+                <Link to={`/t/${slug}/fixtures`} className="pl-details-link">
+                  All fixtures
+                </Link>
+              ) : null}
             </div>
           )}
         </section>

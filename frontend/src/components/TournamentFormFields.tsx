@@ -1,9 +1,11 @@
+import { Link } from 'react-router-dom'
 import FormatDrawPreview from './FormatDrawPreview'
 import NumberInput from './NumberInput'
 import RegistrationFieldsEditor, {
   type RegistrationFieldDraft,
 } from './RegistrationFieldsEditor'
 import { tournamentFormatSummary } from '../utils/format'
+import { defaultBestOf3RulesText, defaultMatchRulesText } from '../utils/matchRules'
 import './TournamentForm.css'
 
 export type { RegistrationFieldDraft }
@@ -440,56 +442,72 @@ export default function TournamentFormFields({
         </div>
 
         <div className="form-group">
-          <label className="form-label" htmlFor="tf-rules">
-            Rules & scoring <span className="tf-optional">(optional)</span>
-          </label>
+          <div className="tf-rules-label-row">
+            <label className="form-label" htmlFor="tf-rules">
+              Rules & scoring <span className="tf-optional">(optional)</span>
+            </label>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() =>
+                onChange({
+                  scoring_mode: 'SIMPLE',
+                  rules: defaultMatchRulesText(form.match_duration_minutes),
+                })
+              }
+            >
+              Use default
+            </button>
+          </div>
           <textarea
             id="tf-rules"
             className="form-textarea"
-            rows={5}
-            placeholder={
-              'How scoring works, check-in, and house rules.\n\nExamples:\n• Best of 3 sets to 6, golden point on deuce\n• No-ad scoring - sudden death at deuce\n• Timed matches - 15 min, leading team wins'
-            }
+            rows={7}
+            placeholder="How matches are scored, time limits, and house rules"
             value={form.rules}
             onChange={(e) => onChange({ rules: e.target.value })}
           />
           <p className="form-hint">
-            Tell players how sets are won (e.g. best of 3, golden point). They see this on the event page.
+            Shown on the event page. Default = first to 21, or ahead after{' '}
+            {form.match_duration_minutes || 20} mins (match length above). Change match length, then
+            press Use default again if needed.
           </p>
-          <div className="tf-rules-examples" role="group" aria-label="Insert scoring example">
-            {(
-              [
-                {
-                  label: 'Best of 3 · golden point',
-                  text: 'Best of 3 sets to 6. Golden point on deuce.',
-                },
-                {
-                  label: 'Best of 3 · no-ad',
-                  text: 'Best of 3 sets. No-ad scoring - sudden death at deuce.',
-                },
-                {
-                  label: 'Timed 15 min',
-                  text: 'Timed matches: 15 minutes. Leading team wins when time is up.',
-                },
-              ] as const
-            ).map((example) => (
-              <button
-                key={example.label}
-                type="button"
-                className="btn btn-ghost btn-sm"
-                title={example.text}
-                onClick={() =>
-                  onChange({
-                    rules: form.rules.trim()
-                      ? `${form.rules.trim()}\n${example.text}`
-                      : example.text,
-                  })
-                }
-              >
-                {example.label}
-              </button>
-            ))}
+          <div className="tf-rules-examples" role="group" aria-label="Scoring presets">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() =>
+                onChange({
+                  scoring_mode: 'BEST_OF_3',
+                  rules: defaultBestOf3RulesText(),
+                })
+              }
+            >
+              Best of 3 sets
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                const mins = form.match_duration_minutes || 20
+                onChange({
+                  scoring_mode: 'SIMPLE',
+                  rules: [
+                    'Scoring',
+                    `• Timed matches: ${mins} minutes.`,
+                    '• Leading team wins when time is up.',
+                    '• Enter the score in the app.',
+                  ].join('\n'),
+                })
+              }}
+            >
+              Timed only
+            </button>
           </div>
+          <p className="tf-rules-common-link">
+            <Link to="/padel-rules">Common padel rules</Link>
+            <span> — serve, glass, mesh</span>
+          </p>
         </div>
       </section>
       )}

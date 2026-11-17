@@ -13,6 +13,7 @@ import {
   type RegistrationFieldDraft,
 } from './RegistrationFieldsEditor'
 import { apiErrorMessage, tournamentApi } from '../services/api'
+import { defaultMatchRulesText } from '../utils/matchRules'
 
 type Props = {
   onClose: () => void
@@ -37,7 +38,7 @@ function defaultForm(): TournamentFormState {
     pay_on_arrival: true,
     refunds_on_withdrawal: true,
     description: '',
-    rules: 'Best of 3 sets. Golden point on deuce. Student ID required on the day.',
+    rules: defaultMatchRulesText(20),
     group_size: 4,
     teams_advance_per_group: 2,
     enable_plate: true,

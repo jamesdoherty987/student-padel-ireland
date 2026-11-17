@@ -399,6 +399,7 @@ export default function ManageEventPage() {
       seeding_mode?: string
       manual_groups?: string[][]
       random_seed?: number
+      prefer_early_team_ids?: string[]
     }) => tournamentApi.generate(tid!, payload),
     onSuccess: (res) => {
       setConfirmGenerate(false)
@@ -1996,6 +1997,12 @@ export default function ManageEventPage() {
                       <>
                         {' · '}
                         <Link to={`/t/${active.tournament.slug}/live`}>Live</Link>
+                        {fixturesExist ? (
+                          <>
+                            {' · '}
+                            <Link to={`/t/${active.tournament.slug}/fixtures`}>All fixtures</Link>
+                          </>
+                        ) : null}
                         {displayPath ? (
                           <>
                             {' · '}
@@ -3429,6 +3436,14 @@ export default function ManageEventPage() {
               <section className="org-section">
                 <div className="org-section-head">
                   <h2>{hasKnockoutMatches && isKnockoutActive(matches) ? 'Knockout' : 'Matches'}</h2>
+                  {fixturesExist && active.tournament.slug ? (
+                    <Link
+                      to={`/t/${active.tournament.slug}/fixtures`}
+                      className="btn btn-ghost btn-sm"
+                    >
+                      All fixtures
+                    </Link>
+                  ) : null}
                 </div>
                 {matches.length > 0 && (
                   <div className="org-match-filters">

@@ -45,6 +45,7 @@ const JoinTournamentPage = lazy(() => import('./pages/JoinTournamentPage'))
 const JoinTournamentByCodePage = lazy(() => import('./pages/JoinTournamentByCodePage'))
 const JoinByCodePage = lazy(() => import('./pages/JoinByCodePage'))
 const PlayerLivePage = lazy(() => import('./pages/PlayerLivePage'))
+const FixturesPage = lazy(() => import('./pages/FixturesPage'))
 const TvDisplayPage = lazy(() => import('./pages/TvDisplayPage'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const ManageEventPage = lazy(() => import('./pages/ManageEventPage'))
@@ -56,6 +57,7 @@ const JoinCompetitionPage = lazy(() => import('./pages/JoinCompetitionPage'))
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 const PrivacyPage = lazy(() => import('./pages/PrivacyPage'))
 const TermsPage = lazy(() => import('./pages/TermsPage'))
+const PadelRulesPage = lazy(() => import('./pages/PadelRulesPage'))
 const AboutPage = lazy(() => import('./pages/AboutPage'))
 const BlogPage = lazy(() => import('./pages/BlogPage'))
 const BlogPostPage = lazy(() => import('./pages/BlogPostPage'))
@@ -225,6 +227,7 @@ export default function App() {
                 <Route path="/welcome" element={<NativeWelcomePage />} />
                 <Route path="/privacy" element={<PrivacyPage />} />
                 <Route path="/terms" element={<TermsPage />} />
+                <Route path="/padel-rules" element={<PadelRulesPage />} />
                 <Route
                   path="/about"
                   element={
@@ -260,6 +263,7 @@ export default function App() {
                 <Route path="/t/:slug" element={<TournamentDetailPage />} />
                 <Route path="/t/:slug/join" element={<JoinTournamentPage />} />
                 <Route path="/t/:slug/live" element={<PlayerLivePage />} />
+                <Route path="/t/:slug/fixtures" element={<FixturesPage />} />
                 <Route path="/t/:slug/confirmed" element={<JoinTournamentPage />} />
                 <Route path="/tournament/:id/display" element={<TvDisplayPage />} />
                 <Route

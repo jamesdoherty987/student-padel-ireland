@@ -109,6 +109,18 @@ html.native-app .pl-page {
   margin-bottom: 0.35rem;
 }
 
+.pl-fixtures-link {
+  margin: 0 0 0.45rem;
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.pl-fixtures-link a {
+  color: var(--court-deep, #0b3d2e);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .pl-header h1 {
   font-family: var(--font-display);
   font-size: clamp(1.45rem, 3vw, 2.2rem);

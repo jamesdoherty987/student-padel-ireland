@@ -68,6 +68,8 @@ class GeneratorConfig:
     # Explicit group assignment (list of team-id lists). When set, overrides auto seeding.
     manual_groups: list[list[str]] | None = None
     random_seed: int | None = None
+    # Team IDs whose group-stage matches should be scheduled earlier (format unchanged).
+    prefer_early_team_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -672,6 +674,45 @@ def _knockout_first_round_placeholders(
     return pairs
 
 
+def _prefer_early_score(match: GeneratedMatch, prefer_ids: set[str]) -> int:
+    """Higher = schedule sooner. Prefer matches with more requested early teams."""
+    if not prefer_ids:
+        return 0
+    score = 0
+    if match.team_a_id and match.team_a_id in prefer_ids:
+        score += 1
+    if match.team_b_id and match.team_b_id in prefer_ids:
+        score += 1
+    return score
+
+
+def _prioritize_early_matches(
+    matches: list[GeneratedMatch],
+    prefer_early_team_ids: Sequence[str] | None,
+) -> list[GeneratedMatch]:
+    """
+    Stable-reorder group fixtures so preferred teams play earlier.
+
+    Does not change who plays whom or group composition — only schedule order
+    before court packing. Knockout placeholders are unaffected (callers pass
+    group matches only).
+    """
+    if not matches or not prefer_early_team_ids:
+        return matches
+    prefer = {tid for tid in prefer_early_team_ids if tid}
+    if not prefer:
+        return matches
+    # Stable: keep relative order within the same priority band.
+    ranked = sorted(
+        enumerate(matches),
+        key=lambda item: (-_prefer_early_score(item[1], prefer), item[0]),
+    )
+    ordered = [m for _, m in ranked]
+    for i, m in enumerate(ordered):
+        m.sort_order = i
+    return ordered
+
+
 def _schedule_on_courts(
     matches: list[GeneratedMatch],
     courts: int,
@@ -830,6 +871,9 @@ class GroupKnockoutGenerator:
                 )
                 sort += 1
 
+        group_matches = _prioritize_early_matches(
+            group_matches, config.prefer_early_team_ids
+        )
         _schedule_on_courts(
             group_matches,
             config.courts,
@@ -1006,6 +1050,7 @@ class RoundRobinGenerator:
                     sort_order=i,
                 )
             )
+        matches = _prioritize_early_matches(matches, config.prefer_early_team_ids)
         _schedule_on_courts(
             matches, config.courts, config.start_time, config.match_duration_minutes, config.court_buffer_minutes
         )

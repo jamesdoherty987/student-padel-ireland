@@ -3328,6 +3328,20 @@ def generate(
             university=ref.university,
         )
 
+    paid_id_set = {str(tm.id) for tm in paid_teams}
+    prefer_early_raw = body.prefer_early_team_ids or []
+    prefer_early_team_ids = [
+        str(tid) for tid in prefer_early_raw if str(tid) in paid_id_set
+    ]
+    unknown_early = [
+        str(tid) for tid in prefer_early_raw if str(tid) not in paid_id_set
+    ]
+    if unknown_early:
+        raise HTTPException(
+            400,
+            "Play-early list includes teams that are not paid entries in this event",
+        )
+
     start_dt = datetime.combine(t.event_date, t.start_time, tzinfo=DUBLIN_TZ).astimezone(timezone.utc)
     config = GeneratorConfig(
         teams=team_refs,
@@ -3343,6 +3357,7 @@ def generate(
         seeding_mode=seeding_mode,
         manual_groups=manual_groups,
         random_seed=body.random_seed,
+        prefer_early_team_ids=prefer_early_team_ids,
     )
     try:
         generated = generate_tournament(config)
