@@ -894,6 +894,41 @@
   font-size: 0.92rem;
 }
 
+.match-preview-list li.is-interactive {
+  cursor: pointer;
+  border: 1px solid rgba(11, 61, 46, 0.18);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.match-preview-list li.is-interactive:hover,
+.match-preview-list li.is-interactive:focus-visible {
+  background: rgba(11, 61, 46, 0.06);
+  outline: none;
+}
+
+.tour-ops-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.88rem;
+}
+
+.tour-ops-toast {
+  position: fixed;
+  bottom: max(1.25rem, calc(1rem + env(safe-area-inset-bottom)));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: var(--court-deep);
+  color: #fff;
+  padding: 0.85rem 1.35rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: var(--shadow-lg);
+  max-width: min(28rem, calc(100% - 2rem));
+  text-align: center;
+}
+
 .match-preview-list li > span:nth-child(2) {
   min-width: 0;
   overflow-wrap: anywhere;

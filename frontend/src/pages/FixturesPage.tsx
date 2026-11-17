@@ -3,6 +3,8 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
 import NavBar from '../components/NavBar'
+import OrganiserScoreModal from '../components/OrganiserScoreModal'
+import { useAuth } from '../context/AuthContext'
 import { usePageSeo } from '../hooks/usePageSeo'
 import { tournamentApi, type Match } from '../services/api'
 import {
@@ -48,13 +50,16 @@ type SheetSection = {
 export default function FixturesPage() {
   const { slug = '' } = useParams()
   const [params] = useSearchParams()
+  const { user } = useAuth()
   const [pdfError, setPdfError] = useState('')
+  const [toast, setToast] = useState('')
+  const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
   const inviteFromUrl = cleanInviteCode(params.get('code') || '')
   const inviteCode =
     inviteFromUrl.length >= 6 ? inviteFromUrl : getRememberedPrivateInvite(slug) || ''
 
   const { data: tournament, isLoading: tLoading, isError: tError } = useQuery({
-    queryKey: ['tournament', slug, inviteCode || ''],
+    queryKey: ['tournament', slug, user?.id, inviteCode || ''],
     queryFn: async () =>
       (await tournamentApi.get(slug, { code: inviteCode || undefined })).data,
     enabled: !!slug,
@@ -65,6 +70,7 @@ export default function FixturesPage() {
     queryFn: async () =>
       (await tournamentApi.matches(slug, { code: inviteCode || undefined })).data,
     enabled: !!slug && !!tournament,
+    refetchInterval: tournament?.can_manage ? 12000 : false,
   })
 
   usePageSeo({
@@ -74,6 +80,10 @@ export default function FixturesPage() {
       : 'Tournament fixtures',
     path: `/t/${slug}/fixtures`,
   })
+
+  const isOps = !!user && !!tournament?.can_manage
+  const scoringMode =
+    (tournament?.scoring_mode || 'SIMPLE').toUpperCase() === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE'
 
   const sections = useMemo(() => {
     const out: SheetSection[] = []
@@ -149,6 +159,7 @@ export default function FixturesPage() {
   const eventPath = inviteCode
     ? `/t/${slug}?code=${encodeURIComponent(inviteCode)}`
     : `/t/${slug}`
+  const managePath = tournament ? `/manage?t=${encodeURIComponent(tournament.id)}` : '/manage'
 
   const groupMatchCount = useMemo(
     () => matches.filter((m) => m.stage === 'GROUP').length,
@@ -172,6 +183,16 @@ export default function FixturesPage() {
     } catch (err) {
       setPdfError(err instanceof Error ? err.message : 'Couldn’t create the PDF.')
     }
+  }
+
+  const openMatch = (m: Match) => {
+    if (!isOps) return
+    setScoreMatch(m)
+  }
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    window.setTimeout(() => setToast(''), 2800)
   }
 
   if (tLoading || mLoading) {
@@ -204,6 +225,7 @@ export default function FixturesPage() {
   return (
     <div className="app-shell fixtures-shell">
       <NavBar />
+      {toast ? <div className="fixtures-toast">{toast}</div> : null}
       <main className="page fixtures-page">
         <BackButton fallbackTo={eventPath} />
         <header className="fixtures-head">
@@ -217,13 +239,19 @@ export default function FixturesPage() {
           <p className="fixtures-meta">
             {statusLabel(tournament.status)} · {matches.length} fixture
             {matches.length === 1 ? '' : 's'}
+            {isOps ? ' · Tap a match to score' : ''}
           </p>
           <div className="fixtures-actions">
+            {isOps ? (
+              <Link to={managePath} className="btn btn-dark btn-sm">
+                Manage
+              </Link>
+            ) : null}
             <Link to={livePath} className="btn btn-primary btn-sm">
               Live board
             </Link>
             <Link to={eventPath} className="btn btn-ghost btn-sm">
-              Event page
+              Event
             </Link>
             <button
               type="button"
@@ -243,10 +271,9 @@ export default function FixturesPage() {
             </button>
           </div>
           {pdfError ? <p className="form-error fixtures-pdf-error">{pdfError}</p> : null}
-          {groupMatchCount > 0 ? (
+          {!isOps && groupMatchCount > 0 ? (
             <p className="fixtures-pdf-hint">
-              PDF includes group games only (saves space). Large draws use a compact multi-page A4
-              layout.
+              Group PDF only — compact multi-page A4 for large draws.
             </p>
           ) : null}
         </header>
@@ -254,8 +281,8 @@ export default function FixturesPage() {
         {matches.length === 0 ? (
           <div className="empty-state">
             <p>No fixtures yet. Generate the draw to see the master sheet.</p>
-            <Link to={eventPath} className="btn btn-primary">
-              Back to event
+            <Link to={isOps ? managePath : eventPath} className="btn btn-primary">
+              {isOps ? 'Open Control' : 'Back to event'}
             </Link>
           </div>
         ) : (
@@ -272,6 +299,7 @@ export default function FixturesPage() {
                         <th scope="col">Match</th>
                         <th scope="col">Status</th>
                         <th scope="col">Score</th>
+                        {isOps ? <th scope="col">Action</th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -281,8 +309,37 @@ export default function FixturesPage() {
                           m.status === 'WALKOVER' ||
                           m.status === 'CANCELLED'
                         const scoreText = m.score ? formatMatchScore(m.score) : ''
+                        const canTap = isOps
+                        const actionLabel = !m.team_a_id || !m.team_b_id
+                          ? 'Move'
+                          : done
+                            ? 'Edit'
+                            : m.status === 'AWAITING_CONFIRM'
+                              ? 'Confirm'
+                              : 'Score'
                         return (
-                          <tr key={m.id} className={done ? 'is-done' : undefined}>
+                          <tr
+                            key={m.id}
+                            className={[
+                              done ? 'is-done' : '',
+                              canTap ? 'is-interactive' : '',
+                            ]
+                              .filter(Boolean)
+                              .join(' ')}
+                            role={canTap ? 'button' : undefined}
+                            tabIndex={canTap ? 0 : undefined}
+                            onClick={canTap ? () => openMatch(m) : undefined}
+                            onKeyDown={
+                              canTap
+                                ? (e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault()
+                                      openMatch(m)
+                                    }
+                                  }
+                                : undefined
+                            }
+                          >
                             <td className="fixtures-time">{formatTime(m.scheduled_start)}</td>
                             <td className="fixtures-court">
                               {courtLabel(m.court_name, m.court_number)}
@@ -301,6 +358,11 @@ export default function FixturesPage() {
                             >
                               {scoreText || '—'}
                             </td>
+                            {isOps ? (
+                              <td className="fixtures-action">
+                                <span className="fixtures-action-chip">{actionLabel}</span>
+                              </td>
+                            ) : null}
                           </tr>
                         )
                       })}
@@ -312,6 +374,22 @@ export default function FixturesPage() {
           </div>
         )}
       </main>
+
+      {scoreMatch && isOps ? (
+        <OrganiserScoreModal
+          match={scoreMatch}
+          scoringMode={scoringMode}
+          courtCount={tournament.number_of_courts || 8}
+          eventDateIso={
+            tournament.event_date
+              ? String(tournament.event_date).slice(0, 10)
+              : null
+          }
+          slug={slug}
+          onClose={() => setScoreMatch(null)}
+          onSaved={showToast}
+        />
+      ) : null}
     </div>
   )
 }

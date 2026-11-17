@@ -44,6 +44,8 @@ function defaultForm(): TournamentFormState {
     enable_plate: true,
     scoring_mode: 'SIMPLE',
     points_to_win: 21,
+    lunch_break_start: '',
+    lunch_break_minutes: 0,
     championship_size: 16,
     plate_size: 16,
   }
@@ -156,6 +158,13 @@ export default function CreateTournamentModal({ onClose, onCreated, onToast }: P
         plate_size: form.plate_size,
         scoring_mode: form.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
         points_to_win: form.points_to_win,
+        lunch_break_start:
+          form.lunch_break_minutes > 0 && form.lunch_break_start
+            ? form.lunch_break_start.length === 5
+              ? `${form.lunch_break_start}:00`
+              : form.lunch_break_start
+            : null,
+        lunch_break_minutes: form.lunch_break_minutes > 0 ? form.lunch_break_minutes : 0,
         is_official: true,
         registration_deadline: form.registration_deadline
           ? new Date(form.registration_deadline).toISOString()

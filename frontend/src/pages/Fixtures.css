@@ -27,15 +27,70 @@
   gap: 0.45rem;
 }
 
-.fixtures-pdf-hint {
+.fixtures-pdf-hint,
+.fixtures-ops-hint {
   margin: 0.55rem 0 0;
   font-size: 0.82rem;
   color: var(--muted);
   max-width: 36rem;
 }
 
+.fixtures-ops-hint {
+  color: var(--court-deep);
+  font-weight: 650;
+}
+
 .fixtures-pdf-error {
   margin: 0.55rem 0 0;
+}
+
+.fixtures-toast {
+  position: fixed;
+  bottom: max(1.25rem, calc(1rem + env(safe-area-inset-bottom)));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  background: var(--court-deep);
+  color: #fff;
+  padding: 0.85rem 1.35rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: var(--shadow-lg);
+  max-width: min(28rem, calc(100% - 2rem));
+  text-align: center;
+}
+
+.fixtures-table tbody tr.is-interactive {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.fixtures-table tbody tr.is-interactive:hover,
+.fixtures-table tbody tr.is-interactive:focus-visible {
+  background: rgba(11, 61, 46, 0.06);
+  outline: none;
+}
+
+.fixtures-action {
+  white-space: nowrap;
+  width: 1%;
+  vertical-align: middle;
+}
+
+.fixtures-action-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: var(--court-deep);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
 }
 
 .fixtures-sheet {
@@ -181,7 +236,7 @@
     grid-template-areas:
       'time court status'
       'match match match'
-      'score score score';
+      'score score action';
     column-gap: 0.55rem;
     row-gap: 0.2rem;
     align-items: baseline;
@@ -190,6 +245,11 @@
     border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
     border-radius: 12px;
     background: var(--surface, #fff);
+  }
+
+  .fixtures-table tr.is-interactive {
+    border-color: rgba(11, 61, 46, 0.28);
+    box-shadow: inset 0 0 0 1px rgba(11, 61, 46, 0.04);
   }
 
   .fixtures-table tbody tr:last-child {
@@ -248,13 +308,22 @@
   .fixtures-score[data-empty='true'] {
     display: none;
   }
+
+  .fixtures-action {
+    grid-area: action;
+    justify-self: end;
+    margin-top: 0.15rem;
+  }
 }
 
 @media print {
   .app-shell > nav,
   .fixtures-actions,
   .back-btn,
-  .native-tab-bar {
+  .native-tab-bar,
+  .fixtures-action,
+  .fixtures-ops-hint,
+  .fixtures-toast {
     display: none !important;
   }
 

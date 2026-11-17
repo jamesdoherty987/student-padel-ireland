@@ -158,6 +158,24 @@ html.native-app .pl-page {
   border: 1px solid rgba(11, 61, 46, 0.08);
 }
 
+.pl-live-list li.is-interactive {
+  cursor: pointer;
+  border-color: rgba(11, 61, 46, 0.28);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.pl-live-list li.is-interactive:hover,
+.pl-live-list li.is-interactive:focus-visible {
+  background: rgba(11, 61, 46, 0.06);
+  outline: none;
+}
+
+.pl-ops-hint {
+  margin: 0 0 0.7rem;
+  font-size: 0.88rem;
+}
+
 .pl-live-top {
   display: flex;
   flex-wrap: wrap;

@@ -78,6 +78,9 @@ class GeneratorConfig:
     random_seed: int | None = None
     # Team IDs whose group-stage matches should be scheduled earlier (format unchanged).
     prefer_early_team_ids: list[str] = field(default_factory=list)
+    # Absolute datetime (same tz as start_time). Matches that would overlap lunch are pushed after.
+    lunch_break_start: datetime | None = None
+    lunch_break_minutes: int = 0
 
 
 @dataclass
@@ -802,12 +805,36 @@ def _prioritize_early_matches(
     return ordered
 
 
+def _lunch_end(lunch_start: datetime | None, lunch_minutes: int) -> datetime | None:
+    if not lunch_start or lunch_minutes <= 0:
+        return None
+    return lunch_start + timedelta(minutes=lunch_minutes)
+
+
+def _avoid_lunch_window(
+    start: datetime,
+    slot: timedelta,
+    lunch_start: datetime | None,
+    lunch_minutes: int,
+) -> datetime:
+    """If [start, start+slot) overlaps lunch, push kickoff to lunch end."""
+    lunch_end = _lunch_end(lunch_start, lunch_minutes)
+    if not lunch_start or not lunch_end:
+        return start
+    end = start + slot
+    if end > lunch_start and start < lunch_end:
+        return lunch_end
+    return start
+
+
 def _schedule_on_courts(
     matches: list[GeneratedMatch],
     courts: int,
     start: datetime,
     duration_minutes: int,
     buffer_minutes: int = 0,
+    lunch_break_start: datetime | None = None,
+    lunch_break_minutes: int = 0,
 ) -> None:
     """Assign courts + times; avoid double-booking the same team when IDs are known."""
     if courts < 1:
@@ -830,6 +857,10 @@ def _schedule_on_courts(
                 best_time = candidate
                 best_court = i
 
+        best_time = _avoid_lunch_window(
+            best_time, slot, lunch_break_start, lunch_break_minutes
+        )
+
         m.court_number = best_court + 1
         m.scheduled_start = best_time
         court_free_at[best_court] = best_time + slot
@@ -844,6 +875,8 @@ def _schedule_knockout_rounds(
     start: datetime,
     duration_minutes: int,
     buffer_minutes: int = 0,
+    lunch_break_start: datetime | None = None,
+    lunch_break_minutes: int = 0,
 ) -> None:
     """Schedule KO round-by-round so later rounds cannot start before earlier ones finish."""
     if not matches:
@@ -865,7 +898,15 @@ def _schedule_knockout_rounds(
     cursor = start
     slot = timedelta(minutes=duration_minutes + buffer_minutes)
     for round_matches in rounds:
-        _schedule_on_courts(round_matches, courts, cursor, duration_minutes, buffer_minutes)
+        _schedule_on_courts(
+            round_matches,
+            courts,
+            cursor,
+            duration_minutes,
+            buffer_minutes,
+            lunch_break_start=lunch_break_start,
+            lunch_break_minutes=lunch_break_minutes,
+        )
         ends = [(m.scheduled_start or cursor) + slot for m in round_matches]
         cursor = max(ends) if ends else cursor + slot
 
@@ -969,6 +1010,8 @@ class GroupKnockoutGenerator:
             config.start_time,
             config.match_duration_minutes,
             config.court_buffer_minutes,
+            lunch_break_start=config.lunch_break_start,
+            lunch_break_minutes=config.lunch_break_minutes,
         )
         result.matches.extend(group_matches)
 
@@ -1021,6 +1064,8 @@ class GroupKnockoutGenerator:
                 last_group_end,
                 config.match_duration_minutes,
                 config.court_buffer_minutes,
+                lunch_break_start=config.lunch_break_start,
+                lunch_break_minutes=config.lunch_break_minutes,
             )
             result.matches.extend(champ_matches)
             result.matches.extend(plate_matches)
@@ -1101,6 +1146,8 @@ class GroupKnockoutGenerator:
             last_group_end,
             config.match_duration_minutes,
             config.court_buffer_minutes,
+            lunch_break_start=config.lunch_break_start,
+            lunch_break_minutes=config.lunch_break_minutes,
         )
         result.matches.extend(ko_matches)
         return result
@@ -1141,7 +1188,13 @@ class RoundRobinGenerator:
             )
         matches = _prioritize_early_matches(matches, config.prefer_early_team_ids)
         _schedule_on_courts(
-            matches, config.courts, config.start_time, config.match_duration_minutes, config.court_buffer_minutes
+            matches,
+            config.courts,
+            config.start_time,
+            config.match_duration_minutes,
+            config.court_buffer_minutes,
+            lunch_break_start=config.lunch_break_start,
+            lunch_break_minutes=config.lunch_break_minutes,
         )
         result.matches = matches
         return result

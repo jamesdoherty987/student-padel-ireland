@@ -211,6 +211,8 @@ class TournamentCreate(BaseModel):
     plate_size: int = Field(default=16, ge=2, le=64)
     scoring_mode: ScoringMode = ScoringMode.SIMPLE
     points_to_win: int = Field(default=21, ge=5, le=99)
+    lunch_break_start: Optional[time] = None
+    lunch_break_minutes: int = Field(default=0, ge=0, le=180)
     tie_break_order: Optional[str] = None
     # Official listing is opt-in (admins only). Player hosts always force False.
     is_official: bool = False
@@ -265,6 +267,8 @@ class TournamentUpdate(BaseModel):
     plate_size: Optional[int] = Field(default=None, ge=2, le=64)
     scoring_mode: Optional[ScoringMode] = None
     points_to_win: Optional[int] = Field(default=None, ge=5, le=99)
+    lunch_break_start: Optional[time] = None
+    lunch_break_minutes: Optional[int] = Field(default=None, ge=0, le=180)
     tie_break_order: Optional[str] = None
     # Platform ADMIN only - list on landing / public browse
     is_official: Optional[bool] = None
@@ -330,6 +334,8 @@ class TournamentOut(BaseModel):
     plate_size: int = 16
     scoring_mode: str = ScoringMode.SIMPLE.value
     points_to_win: int = 21
+    lunch_break_start: Optional[time] = None
+    lunch_break_minutes: int = 0
     registered_teams: int = 0
     invite_code: Optional[str] = None
     is_official: bool = False
@@ -549,6 +555,27 @@ class MatchMove(BaseModel):
     notify_players: Optional[bool] = None
     # Email players only — do not change match status (preferred day-of “Notify”).
     notify_only: Optional[bool] = None
+
+
+class ScheduleShiftRequest(BaseModel):
+    """Bulk push/pull match kickoff times from a local clock cutoff."""
+
+    after_time: time
+    shift_minutes: int = Field(ge=-12 * 60, le=12 * 60)
+    # None / empty = every stage. Common: ["KNOCKOUT", "PLATE"]
+    stages: Optional[list[str]] = None
+    dry_run: bool = False
+
+
+class ScheduleShiftOut(BaseModel):
+    ok: bool = True
+    updated: int
+    skipped_active: int = 0
+    shift_minutes: int
+    after_time: str
+    stages: Optional[list[str]] = None
+    dry_run: bool = False
+    samples: list[dict] = Field(default_factory=list)
 
 
 class AnnouncementCreate(BaseModel):

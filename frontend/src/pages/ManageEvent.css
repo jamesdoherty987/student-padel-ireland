@@ -214,6 +214,134 @@ html.native-app.has-native-tabs .org-toast {
   line-height: 1.4;
 }
 
+.org-control-tabs.section-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  margin-bottom: 0.75rem;
+  background: color-mix(in srgb, var(--surface) 92%, #fff);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+html.native-app.has-native-tabs .org-control-tabs.section-tabs {
+  top: env(safe-area-inset-top, 0px);
+}
+
+.org-control-tab {
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.5rem 0.7rem;
+  position: relative;
+}
+
+.org-control-tab .section-tab-badge {
+  position: absolute;
+  top: 0.28rem;
+  right: 0.35rem;
+  margin-left: 0;
+}
+
+.org-control-tab-label {
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+.org-control-tab-sub {
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.org-control-tab.is-active .org-control-tab-sub {
+  color: color-mix(in srgb, var(--court-deep) 70%, var(--muted));
+}
+
+.org-player-screens {
+  margin: 0 0 1rem;
+  padding: 0.45rem 0.7rem 0.55rem;
+  border-radius: 10px;
+  border: 1px dashed rgba(11, 61, 46, 0.22);
+  background: rgba(11, 61, 46, 0.03);
+}
+
+.org-player-screens > summary.org-player-screens-label {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0.2rem 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.org-player-screens > summary.org-player-screens-label::-webkit-details-marker {
+  display: none;
+}
+
+.org-player-screens > summary.org-player-screens-label::after {
+  content: ' ▾';
+  font-weight: 600;
+}
+
+.org-player-screens-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.org-player-screens-links .btn {
+  min-height: 36px;
+}
+
+.org-control-banner {
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  border: 1.5px solid rgba(11, 61, 46, 0.28);
+  background: linear-gradient(135deg, rgba(11, 61, 46, 0.08), rgba(200, 230, 0, 0.12));
+}
+
+.org-control-banner.is-prep {
+  border-color: rgba(180, 83, 9, 0.28);
+  background: rgba(180, 83, 9, 0.08);
+}
+
+.org-control-banner strong {
+  display: block;
+  font-size: 1rem;
+  color: var(--court-deep);
+  margin-bottom: 0.25rem;
+}
+
+.org-control-banner p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--ink-soft, #334);
+}
+
+.org-control-banner .btn {
+  margin-top: 0.7rem;
+}
+
+.org-score-desk {
+  border: 1.5px solid rgba(11, 61, 46, 0.18);
+  box-shadow: 0 1px 0 rgba(11, 61, 46, 0.04);
+}
+
+.org-setup-lead {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 .org-stats {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -263,6 +391,14 @@ html.native-app.has-native-tabs .org-toast {
   justify-content: space-between;
   gap: 0.75rem;
   margin-bottom: 1rem;
+}
+
+.org-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  justify-content: flex-end;
 }
 
 .org-section-head h2 {
@@ -684,6 +820,28 @@ html.native-app.has-native-tabs .org-toast {
 .org-match-actions .btn {
   min-height: 44px;
   touch-action: manipulation;
+}
+
+.org-quick-wins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.org-quick-win {
+  flex: 1 1 7.5rem;
+  min-width: 0;
+  font-weight: 750;
+  touch-action: manipulation;
+}
+
+.org-match-actions.is-compact .org-quick-wins {
+  order: -1;
+}
+
+.org-match-actions.is-compact .btn-ghost {
+  min-height: 40px;
 }
 
 .org-pay-toolbar {

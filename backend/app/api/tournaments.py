@@ -93,6 +93,8 @@ from app.schemas import (
     InviteResolveOut,
     MatchMove,
     MatchOut,
+    ScheduleShiftOut,
+    ScheduleShiftRequest,
     OrganiserAddTeamRequest,
     PartnerInviteRespond,
     PayOnlineNowRequest,
@@ -907,6 +909,8 @@ def _tournament_out(
         plate_size=int(getattr(t, "plate_size", 16) or 16),
         scoring_mode=getattr(t, "scoring_mode", None) or ScoringMode.SIMPLE.value,
         points_to_win=int(getattr(t, "points_to_win", None) or 21),
+        lunch_break_start=getattr(t, "lunch_break_start", None),
+        lunch_break_minutes=int(getattr(t, "lunch_break_minutes", None) or 0),
         registered_teams=_team_count(db, t.id),
         invite_code=t.invite_code if show_invite else None,
         is_official=bool(getattr(t, "is_official", False)),
@@ -1558,6 +1562,8 @@ def create_tournament(
             else ScoringMode.SIMPLE.value
         ),
         points_to_win=int(getattr(body, "points_to_win", None) or 21),
+        lunch_break_start=getattr(body, "lunch_break_start", None),
+        lunch_break_minutes=int(getattr(body, "lunch_break_minutes", None) or 0),
         invite_code=_unique_invite_code(db),
         is_official=is_official,
         tie_break_order=body.tie_break_order
@@ -3357,6 +3363,13 @@ def generate(
         )
 
     start_dt = datetime.combine(t.event_date, t.start_time, tzinfo=DUBLIN_TZ).astimezone(timezone.utc)
+    lunch_mins = int(getattr(t, "lunch_break_minutes", None) or 0)
+    lunch_start_t = getattr(t, "lunch_break_start", None)
+    lunch_start_dt = None
+    if lunch_mins > 0 and lunch_start_t:
+        lunch_start_dt = datetime.combine(t.event_date, lunch_start_t, tzinfo=DUBLIN_TZ).astimezone(
+            timezone.utc
+        )
     config = GeneratorConfig(
         teams=team_refs,
         courts=courts,
@@ -3372,6 +3385,8 @@ def generate(
         manual_groups=manual_groups,
         random_seed=body.random_seed,
         prefer_early_team_ids=prefer_early_team_ids,
+        lunch_break_start=lunch_start_dt,
+        lunch_break_minutes=lunch_mins if lunch_start_dt else 0,
     )
     try:
         generated = generate_tournament(config)
@@ -3879,6 +3894,57 @@ def move_match(
         except Exception:
             logging.getLogger(__name__).exception("Call-to-court email failed for match %s", m.id)
     return _match_out(db, m)
+
+
+@router.post(
+    "/tournaments/{tournament_id}/schedule/shift",
+    response_model=ScheduleShiftOut,
+)
+def shift_tournament_schedule(
+    tournament_id: UUID,
+    body: ScheduleShiftRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Bulk push/pull kickoff times for matches at/after a local clock time."""
+    from app.services.schedule_adjust import preview_shift_count, shift_matches_after
+
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+    if body.shift_minutes == 0:
+        raise HTTPException(400, "Shift minutes cannot be 0")
+
+    stages = None
+    if body.stages:
+        stages = [s.strip().upper() for s in body.stages if s and s.strip()]
+        allowed = {"GROUP", "KNOCKOUT", "PLATE"}
+        bad = [s for s in stages if s not in allowed]
+        if bad:
+            raise HTTPException(400, f"Unknown stages: {', '.join(bad)}")
+
+    if body.dry_run:
+        preview = preview_shift_count(
+            db, t, after_time=body.after_time, stages=stages
+        )
+        return ScheduleShiftOut(
+            updated=int(preview["updated"]),
+            skipped_active=int(preview["skipped_active"]),
+            shift_minutes=body.shift_minutes,
+            after_time=body.after_time.strftime("%H:%M"),
+            stages=stages,
+            dry_run=True,
+        )
+
+    result = shift_matches_after(
+        db,
+        t,
+        after_time=body.after_time,
+        shift_minutes=body.shift_minutes,
+        stages=stages,
+    )
+    return ScheduleShiftOut(ok=True, dry_run=False, **result)
 
 
 # ── Standings ─────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { ShareQr } from '../components/ShareQr'
 import { confirmDialog } from '../components/ConfirmDialog'
 import CreatePrivateEventModal from '../components/CreatePrivateEventModal'
 import CreateTournamentModal from '../components/CreateTournamentModal'
+import EditTimesModal from '../components/EditTimesModal'
 import EditTournamentModal from '../components/EditTournamentModal'
 import ScoreStep from '../components/ScoreStep'
 import SponsorStrip from '../components/SponsorStrip'
@@ -103,6 +104,13 @@ function defaultOrgPanel(status: string, hasFixtures: boolean): OrgPanel {
   return 'registration'
 }
 
+/** Short label for one-tap “X wins” buttons on the desk. */
+function shortTeamLabel(name: string | null | undefined, fallback: string) {
+  const n = (name || fallback).trim()
+  if (n.length <= 16) return n
+  return `${n.slice(0, 15)}…`
+}
+
 /** Best-of-3 set tallies for admin score validation. */
 function tallySets(form: {
   set1_a: number
@@ -161,6 +169,7 @@ export default function ManageEventPage() {
   const [selectedId, setSelectedId] = useState<string | null>(params.get('t'))
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [showEditTimes, setShowEditTimes] = useState(false)
   const isAdmin = user?.role === 'ADMIN'
   const [showAddTeam, setShowAddTeam] = useState(false)
   const [editTeam, setEditTeam] = useState<TournamentTeam | null>(null)
@@ -201,7 +210,7 @@ export default function ManageEventPage() {
   const [matchView, setMatchView] = useState<'list' | 'courts' | 'bracket'>('list')
   const [courtFilter, setCourtFilter] = useState<string>('all')
   const [matchFilter, setMatchFilter] = useState<'now' | 'upcoming' | 'active' | 'all' | 'done'>(
-    'all',
+    'active',
   )
   const bracketPreferred = useRef(false)
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'owing' | 'withdrawn'>('all')
@@ -826,6 +835,24 @@ export default function ManageEventPage() {
     scoreMut.mutate({ match: matchToSave, form: formToSave })
   }
 
+  /** Tap once to select; tap the same team again to save (desk-runner speed). */
+  const pickScoreWinner = (teamId: string) => {
+    if (!teamId) return
+    if (
+      scoreForm.winner_id === teamId &&
+      (scoreForm.status === 'COMPLETED' || scoreForm.status === 'WALKOVER')
+    ) {
+      saveScore()
+      return
+    }
+    setScoreForm({
+      ...scoreForm,
+      winner_id: teamId,
+      status: scoreForm.status === 'WALKOVER' ? 'WALKOVER' : 'COMPLETED',
+    })
+    setScoreError('')
+  }
+
   const moveMut = useMutation({
     mutationFn: ({
       matchId,
@@ -1433,9 +1460,9 @@ export default function ManageEventPage() {
   }, [matches, nowMs])
 
   const courtsideTitle = useMemo(() => {
-    if (courtsideNow.some((s) => s.kind === 'live' || s.kind === 'called')) return 'Courts now'
+    if (courtsideNow.some((s) => s.kind === 'live' || s.kind === 'called')) return 'On court'
     if (courtsideNow.length > 0) return 'Up next'
-    return 'Courts now'
+    return 'Courts'
   }, [courtsideNow])
 
   const paymentLabel = (team: TournamentTeam) => {
@@ -1666,6 +1693,55 @@ export default function ManageEventPage() {
     openScore(m)
   }
 
+  /**
+   * Desk-runner shortcut: mark a winner with whatever scores already exist
+   * (or 0–0). Bracket / standings advance the same as a full score save.
+   */
+  const declareWinner = (m: Match, winnerId: string) => {
+    if (!m.team_a_id || !m.team_b_id || !winnerId) return
+    if (winnerId !== m.team_a_id && winnerId !== m.team_b_id) return
+    const winnerName =
+      winnerId === m.team_a_id ? m.team_a_name || 'Team A' : m.team_b_name || 'Team B'
+    const score = m.score
+    const form = {
+      set1_a: score?.set1_a ?? 0,
+      set1_b: score?.set1_b ?? 0,
+      set2_a: score?.set2_a ?? 0,
+      set2_b: score?.set2_b ?? 0,
+      set3_a: score?.set3_a ?? 0,
+      set3_b: score?.set3_b ?? 0,
+      current_set: score?.current_set ?? 1,
+      status: 'COMPLETED' as string,
+      winner_id: winnerId,
+      force: !!m.ratings_applied,
+    }
+    const correcting =
+      m.status === 'COMPLETED' || m.status === 'WALKOVER' || !!m.ratings_applied
+    if (correcting) {
+      void confirmDialog({
+        title: `Mark ${winnerName} as winner?`,
+        message: m.ratings_applied
+          ? 'Standings and the bracket will update. Ireland ratings already applied stay as first recorded.'
+          : 'This replaces the saved result and advances the winner as usual.',
+        confirmLabel: `${shortTeamLabel(winnerName, 'Winner')} wins`,
+      }).then((ok) => {
+        if (ok) {
+          scoreMut.mutate({
+            match: m,
+            form,
+            toastOk: `${winnerName} wins — next round updated`,
+          })
+        }
+      })
+      return
+    }
+    scoreMut.mutate({
+      match: m,
+      form,
+      toastOk: `${winnerName} wins — next round updated`,
+    })
+  }
+
   /** One-tap: finalise a player-submitted score waiting on the other team. */
   const confirmPendingScore = (m: Match) => {
     if (m.status !== 'AWAITING_CONFIRM' || !m.team_a_id || !m.team_b_id) {
@@ -1792,13 +1868,16 @@ export default function ManageEventPage() {
     const canScore = !!(m.team_a_id && m.team_b_id)
     if (!canScore) {
       return (
-        <div className="org-match-actions">
-          <span className="badge badge-draft">After previous round</span>
+        <div className={`org-match-actions${compact ? ' is-compact' : ''}`}>
+          <span className="badge badge-draft">Waiting</span>
           <button
             type="button"
             className="btn btn-ghost btn-sm"
             title="Change court or time"
-            onClick={() => openMove(m)}
+            onClick={(e) => {
+              e.stopPropagation()
+              openMove(m)
+            }}
           >
             Move
           </button>
@@ -1808,9 +1887,9 @@ export default function ManageEventPage() {
     const locked = !!m.ratings_applied
     const done = m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED'
     const pending = m.status === 'AWAITING_CONFIRM'
-    const canNotify = !done && !!(m.team_a_id && m.team_b_id)
+    const busy = moveMut.isPending || scoreMut.isPending
     return (
-      <div className="org-match-actions">
+      <div className={`org-match-actions${compact ? ' is-compact' : ''}`}>
         {!compact && (
           <span className={`badge ${statusBadgeClass(m.status)}`}>
             {m.status === 'AWAITING_CONFIRM'
@@ -1820,26 +1899,45 @@ export default function ManageEventPage() {
                 : m.status.replace(/_/g, ' ')}
           </span>
         )}
-        {canNotify && !compact && !pending && (
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            disabled={moveMut.isPending}
-            title="Email players that their match is ready — does not change the match"
-            onClick={() =>
-              moveMut.mutate({ matchId: m.id, data: { notify_only: true } })
-            }
-          >
-            Notify
-          </button>
+        {!done && !pending && (
+          <div className="org-quick-wins" role="group" aria-label="Declare winner">
+            <button
+              type="button"
+              className="btn btn-dark btn-sm org-quick-win"
+              disabled={busy}
+              title={`${m.team_a_name || 'Team A'} wins`}
+              onClick={(e) => {
+                e.stopPropagation()
+                declareWinner(m, m.team_a_id!)
+              }}
+            >
+              {shortTeamLabel(m.team_a_name, 'A')} wins
+            </button>
+            <button
+              type="button"
+              className="btn btn-dark btn-sm org-quick-win"
+              disabled={busy}
+              title={`${m.team_b_name || 'Team B'} wins`}
+              onClick={(e) => {
+                e.stopPropagation()
+                declareWinner(m, m.team_b_id!)
+              }}
+            >
+              {shortTeamLabel(m.team_b_name, 'B')} wins
+            </button>
+          </div>
         )}
-        {!done && (
+        {!done && (pending || !compact) && (
           <button
             type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => (pending ? confirmPendingScore(m) : scoreMatchQuick(m))}
-            title={pending ? 'Confirm the submitted score' : 'Log who won'}
-            disabled={moveMut.isPending || scoreMut.isPending}
+            className={`btn btn-sm ${pending ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (pending) confirmPendingScore(m)
+              else scoreMatchQuick(m)
+            }}
+            title={pending ? 'Confirm the submitted score' : 'Add or edit score'}
+            disabled={busy}
           >
             {pending ? 'Confirm' : 'Score'}
           </button>
@@ -1848,9 +1946,12 @@ export default function ManageEventPage() {
           <button
             type="button"
             className="btn btn-ghost btn-sm"
-            disabled={moveMut.isPending || scoreMut.isPending}
-            onClick={() => openScore(m)}
-            title="Change the score before confirming"
+            disabled={busy}
+            onClick={(e) => {
+              e.stopPropagation()
+              openScore(m)
+            }}
+            title="Change before confirming"
           >
             Edit
           </button>
@@ -1860,7 +1961,10 @@ export default function ManageEventPage() {
             type="button"
             className="btn btn-ghost btn-sm"
             title={locked ? 'Correct result' : 'Edit score'}
-            onClick={() => openScore(m)}
+            onClick={(e) => {
+              e.stopPropagation()
+              openScore(m)
+            }}
           >
             {locked ? 'Fix' : 'Edit'}
           </button>
@@ -1869,10 +1973,27 @@ export default function ManageEventPage() {
           type="button"
           className="btn btn-ghost btn-sm"
           title="Change court or time"
-          onClick={() => openMove(m)}
+          onClick={(e) => {
+            e.stopPropagation()
+            openMove(m)
+          }}
         >
           Move
         </button>
+        {!compact && !done && !pending && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={busy}
+            title="Email players that their match is ready"
+            onClick={(e) => {
+              e.stopPropagation()
+              moveMut.mutate({ matchId: m.id, data: { notify_only: true } })
+            }}
+          >
+            Notify
+          </button>
+        )}
       </div>
     )
   }
@@ -1943,7 +2064,7 @@ export default function ManageEventPage() {
             <strong>{isAdmin ? 'Manage' : 'Private host'}</strong>
             <p>
               {isAdmin
-                ? 'Open registration, generate the draw, go live, and score from here.'
+                ? 'Entries, Control, Setup — score winners on Control.'
                 : 'Private events stay off the official list. Share the invite code with friends.'}
             </p>
           </div>
@@ -2031,24 +2152,6 @@ export default function ManageEventPage() {
                     {active.tournament.is_official ? 'Official' : 'Private'}
                     {' · '}
                     {statusLabel(active.tournament.status)}
-                    {active.tournament.slug ? (
-                      <>
-                        {' · '}
-                        <Link to={`/t/${active.tournament.slug}/live`}>Live</Link>
-                        {fixturesExist ? (
-                          <>
-                            {' · '}
-                            <Link to={`/t/${active.tournament.slug}/fixtures`}>All fixtures</Link>
-                          </>
-                        ) : null}
-                        {displayPath ? (
-                          <>
-                            {' · '}
-                            <Link to={displayPath}>TV</Link>
-                          </>
-                        ) : null}
-                      </>
-                    ) : null}
                   </p>
                 </div>
                 <div className="org-header-actions">
@@ -2246,45 +2349,47 @@ export default function ManageEventPage() {
                   </p>
                 )}
 
-              <div className="org-stats">
-                <div>
-                  <strong>{active.players}</strong>
-                  <span>Players</span>
-                </div>
-                {!isSingles && (
+              {orgPanel !== 'day-of' && (
+                <div className="org-stats">
                   <div>
-                    <strong>{active.teams}</strong>
-                    <span>Teams</span>
+                    <strong>{active.players}</strong>
+                    <span>Players</span>
                   </div>
-                )}
-                <div>
-                  <strong>{formatMoney(active.revenue_cents)}</strong>
-                  <span>Collected</span>
+                  {!isSingles && (
+                    <div>
+                      <strong>{active.teams}</strong>
+                      <span>Teams</span>
+                    </div>
+                  )}
+                  <div>
+                    <strong>{formatMoney(active.revenue_cents)}</strong>
+                    <span>Collected</span>
+                  </div>
+                  <div>
+                    <strong>
+                      {active.paid_registrations}/{active.tournament.max_teams}
+                    </strong>
+                    <span>Registered</span>
+                  </div>
+                  <div>
+                    <strong>{active.live_matches}</strong>
+                    <span>Live matches</span>
+                  </div>
+                  <div>
+                    <strong>
+                      {active.checked_in}/{active.teams}
+                    </strong>
+                    <span>Checked in</span>
+                  </div>
                 </div>
-                <div>
-                  <strong>
-                    {active.paid_registrations}/{active.tournament.max_teams}
-                  </strong>
-                  <span>Registered</span>
-                </div>
-                <div>
-                  <strong>{active.live_matches}</strong>
-                  <span>Live matches</span>
-                </div>
-                <div>
-                  <strong>
-                    {active.checked_in}/{active.teams}
-                  </strong>
-                  <span>Checked in</span>
-                </div>
-              </div>
+              )}
 
-              <div className="section-tabs" role="tablist" aria-label="Event sections">
+              <div className="section-tabs org-control-tabs" role="tablist" aria-label="Event sections">
                 {(
                   [
-                    { id: 'registration' as const, label: 'Entries' },
-                    { id: 'day-of' as const, label: 'Today' },
-                    { id: 'settings' as const, label: 'More' },
+                    { id: 'registration' as const, label: 'Entries', sub: 'Invite & pay' },
+                    { id: 'day-of' as const, label: 'Control', sub: 'Score & run' },
+                    { id: 'settings' as const, label: 'Setup', sub: 'Extras' },
                   ] as const
                 ).map((tab) => (
                   <button
@@ -2292,10 +2397,11 @@ export default function ManageEventPage() {
                     type="button"
                     role="tab"
                     aria-selected={orgPanel === tab.id}
-                    className={`section-tab${orgPanel === tab.id ? ' is-active' : ''}`}
+                    className={`section-tab org-control-tab${orgPanel === tab.id ? ' is-active' : ''}`}
                     onClick={() => setOrgPanel(tab.id)}
                   >
-                    {tab.label}
+                    <span className="org-control-tab-label">{tab.label}</span>
+                    <span className="org-control-tab-sub">{tab.sub}</span>
                     {tab.id === 'day-of' && dayOps.attentionTotal > 0 ? (
                       <span className="section-tab-badge" aria-label={`${dayOps.attentionTotal} need attention`}>
                         {dayOps.attentionTotal}
@@ -2304,6 +2410,33 @@ export default function ManageEventPage() {
                   </button>
                 ))}
               </div>
+
+              {orgPanel === 'day-of' && active.tournament.slug ? (
+                <details className="org-player-screens">
+                  <summary className="org-player-screens-label">Player screens</summary>
+                  <div className="org-player-screens-links">
+                    <Link to={`/t/${active.tournament.slug}/live`} className="btn btn-ghost btn-sm">
+                      Live board
+                    </Link>
+                    {fixturesExist ? (
+                      <Link
+                        to={`/t/${active.tournament.slug}/fixtures`}
+                        className="btn btn-ghost btn-sm"
+                      >
+                        Master sheet
+                      </Link>
+                    ) : null}
+                    {displayPath ? (
+                      <Link to={displayPath} className="btn btn-ghost btn-sm">
+                        TV
+                      </Link>
+                    ) : null}
+                    <Link to={`/t/${active.tournament.slug}`} className="btn btn-ghost btn-sm">
+                      Event page
+                    </Link>
+                  </div>
+                </details>
+              ) : null}
 
               {orgPanel === 'registration' && (
               <>
@@ -2343,10 +2476,7 @@ export default function ManageEventPage() {
                     ) : active.tournament.status === 'DRAFT' ? (
                       <p className="muted">Tap Open above so friends can join with this code.</p>
                     ) : fixturesExist ? (
-                      <p className="muted">
-                        Registration closed for the draw.{' '}
-                        <Link to={`/t/${active.tournament.slug}/live`}>Player live board</Link>
-                      </p>
+                      <p className="muted">Draw ready — score on the Control tab.</p>
                     ) : (
                       <p className="muted">Reopen registration if you still need late joiners.</p>
                     )}
@@ -3346,6 +3476,32 @@ export default function ManageEventPage() {
 
               {orgPanel === 'day-of' && (
               <>
+              <div
+                className={`org-control-banner${fixturesExist ? '' : ' is-prep'}`}
+                role="status"
+              >
+                <strong>{fixturesExist ? 'Score matches here' : 'Before play'}</strong>
+                <p>
+                  {fixturesExist
+                    ? 'Tap who won — score optional. The draw keeps moving.'
+                    : generateBlockedReason
+                      ? `Can’t generate yet: ${generateBlockedReason}`
+                      : 'Generate the draw, then score every match on this tab.'}
+                </p>
+                {!fixturesExist &&
+                (active.tournament.status === 'REGISTRATION_OPEN' ||
+                  active.tournament.status === 'REGISTRATION_CLOSED') ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => setConfirmGenerate(true)}
+                    disabled={generateMut.isPending || !canOpenGenerate}
+                  >
+                    Generate draw
+                  </button>
+                ) : null}
+              </div>
+
               {matches.length > 0 && (
                 <section className="org-section org-pulse" aria-label="Day progress">
                   <div className="org-pulse-row">
@@ -3515,17 +3671,24 @@ export default function ManageEventPage() {
                 </section>
               )}
 
-              <section className="org-section">
+              <section className="org-section org-score-desk">
                 <div className="org-section-head">
-                  <h2>{hasKnockoutMatches && isKnockoutActive(matches) ? 'Knockout' : 'Matches'}</h2>
-                  {fixturesExist && active.tournament.slug ? (
-                    <Link
-                      to={`/t/${active.tournament.slug}/fixtures`}
-                      className="btn btn-ghost btn-sm"
-                    >
-                      All fixtures
-                    </Link>
-                  ) : null}
+                  <h2>
+                    {hasKnockoutMatches && isKnockoutActive(matches)
+                      ? 'Knockout'
+                      : 'Score & winners'}
+                  </h2>
+                  <div className="org-section-actions">
+                    {fixturesExist ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setShowEditTimes(true)}
+                      >
+                        Edit times
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 {matches.length > 0 && (
                   <div className="org-match-filters">
@@ -3565,11 +3728,11 @@ export default function ManageEventPage() {
                         }
                         aria-label="Filter matches"
                       >
-                        <option value="all">All</option>
+                        <option value="active">Open</option>
                         <option value="now">Now</option>
                         <option value="upcoming">Next</option>
-                        <option value="active">Open</option>
                         <option value="done">Done</option>
+                        <option value="all">All</option>
                       </select>
                     )}
                     {matchView === 'list' && (
@@ -3592,7 +3755,7 @@ export default function ManageEventPage() {
                 {matchView === 'bracket' && hasKnockoutMatches && (
                   <div className="org-bracket">
                     <p className="muted org-section-lead" style={{ marginTop: 0 }}>
-                      Tap a match to score. Next round fills in automatically.
+                      Tap a match to set the winner.
                     </p>
                     {championshipMatches.length > 0 && (
                       <div className="org-bracket-block">
@@ -3757,7 +3920,9 @@ export default function ManageEventPage() {
                       <p className="muted">Generate the draw first.</p>
                     )}
                     {matches.length > 0 && filteredMatches.length === 0 && (
-                      <p className="muted">Nothing here.</p>
+                      <p className="muted">
+                        {matchFilter === 'active' ? 'No open matches — try All.' : 'Nothing here.'}
+                      </p>
                     )}
                   </div>
                 )}
@@ -3955,6 +4120,7 @@ export default function ManageEventPage() {
 
               {orgPanel === 'settings' && (
               <>
+              <p className="org-setup-lead muted">Optional extras — scoring stays on Control.</p>
               <section className="org-section">
                 <h2>Sponsors</h2>
                 <p className="muted-note" style={{ marginTop: 0 }}>
@@ -4259,6 +4425,14 @@ export default function ManageEventPage() {
         />
       )}
 
+      {showEditTimes && tournamentDetail && (
+        <EditTimesModal
+          tournament={tournamentDetail}
+          onClose={() => setShowEditTimes(false)}
+          onDone={(msg) => showToast(msg)}
+        />
+      )}
+
       {showAddTeam && tid && (
         <AddTeamModal
           tournamentId={tid}
@@ -4349,192 +4523,201 @@ export default function ManageEventPage() {
                   ? 'Confirm score'
                   : 'Who won?'}
             </h2>
-            {scoreMatch.status === 'AWAITING_CONFIRM' && (
+            {scoreMatch.status === 'AWAITING_CONFIRM' ? (
               <p className="muted-note" style={{ marginTop: 0 }}>
                 Players submitted this. Confirm as-is, or change it then save.
               </p>
-            )}
-            {scoringMode === 'SIMPLE' ? (
-              <>
-                <p className="muted-note" style={{ marginTop: 0 }}>
-                  Tap the winner. Score optional.
-                </p>
-                <div className="score-team-grid" role="group" aria-label="Winner and score">
-                  <div
-                    className={`score-team-card ${
-                      scoreForm.winner_id === scoreMatch.team_a_id ? 'is-winner' : ''
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className="score-team-win"
-                      onClick={() =>
-                        setScoreForm({
-                          ...scoreForm,
-                          winner_id: scoreMatch.team_a_id || '',
-                          status: scoreForm.status === 'WALKOVER' ? 'WALKOVER' : 'COMPLETED',
-                        })
-                      }
-                    >
-                      <span className="score-team-win-label">
-                        {scoreForm.winner_id === scoreMatch.team_a_id ? 'Winner' : 'Tap if won'}
-                      </span>
-                      <strong>{scoreMatch.team_a_name || 'Team A'}</strong>
-                    </button>
-                    <div className="score-team-points">
-                      <span className="score-team-points-label">Score</span>
-                      <ScoreStep
-                        label={`${scoreMatch.team_a_name || 'Team A'} score`}
-                        value={scoreForm.set1_a}
-                        max={99}
-                        onChange={(n) => {
-                          const next = { ...scoreForm, set1_a: n, status: 'COMPLETED' as string }
-                          if (n > scoreForm.set1_b) next.winner_id = scoreMatch.team_a_id || ''
-                          else if (n < scoreForm.set1_b) next.winner_id = scoreMatch.team_b_id || ''
-                          setScoreForm(next)
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div
-                    className={`score-team-card ${
-                      scoreForm.winner_id === scoreMatch.team_b_id ? 'is-winner' : ''
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      className="score-team-win"
-                      onClick={() =>
-                        setScoreForm({
-                          ...scoreForm,
-                          winner_id: scoreMatch.team_b_id || '',
-                          status: scoreForm.status === 'WALKOVER' ? 'WALKOVER' : 'COMPLETED',
-                        })
-                      }
-                    >
-                      <span className="score-team-win-label">
-                        {scoreForm.winner_id === scoreMatch.team_b_id ? 'Winner' : 'Tap if won'}
-                      </span>
-                      <strong>{scoreMatch.team_b_name || 'Team B'}</strong>
-                    </button>
-                    <div className="score-team-points">
-                      <span className="score-team-points-label">Score</span>
-                      <ScoreStep
-                        label={`${scoreMatch.team_b_name || 'Team B'} score`}
-                        value={scoreForm.set1_b}
-                        max={99}
-                        onChange={(n) => {
-                          const next = { ...scoreForm, set1_b: n, status: 'COMPLETED' as string }
-                          if (n > scoreForm.set1_a) next.winner_id = scoreMatch.team_b_id || ''
-                          else if (n < scoreForm.set1_a) next.winner_id = scoreMatch.team_a_id || ''
-                          setScoreForm(next)
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="org-score-meta">
-                  <button
-                    type="button"
-                    className={`btn btn-sm ${scoreForm.status === 'WALKOVER' ? 'btn-dark' : 'btn-ghost'}`}
-                    onClick={() =>
-                      setScoreForm({
-                        ...scoreForm,
-                        status: scoreForm.status === 'WALKOVER' ? 'COMPLETED' : 'WALKOVER',
-                      })
-                    }
-                  >
-                    Walkover
-                  </button>
-                </div>
-              </>
             ) : (
-              <>
-                <p className="muted-note" style={{ marginTop: 0 }}>
-                  Best of 3. Tap + / −, then save.
-                </p>
-                <div className="score-sides-label">
-                  <div>
-                    <span className="muted-note">A</span>
-                    <strong>{scoreMatch.team_a_name || 'Team A'}</strong>
-                  </div>
-                  <div>
-                    <span className="muted-note">B</span>
-                    <strong>{scoreMatch.team_b_name || 'Team B'}</strong>
-                  </div>
-                </div>
-                <div className="score-grid">
-                  {(
-                    [
-                      ['set1_a', 'set1_b', 'Set 1', 1] as const,
-                      ['set2_a', 'set2_b', 'Set 2', 2] as const,
-                      ...(scoreForm.set3_a > 0 ||
-                      scoreForm.set3_b > 0 ||
-                      scoreForm.current_set >= 3 ||
-                      (scoreForm.set1_a !== scoreForm.set1_b &&
-                        scoreForm.set2_a !== scoreForm.set2_b &&
-                        (scoreForm.set1_a > scoreForm.set1_b) !==
-                          (scoreForm.set2_a > scoreForm.set2_b))
-                        ? ([['set3_a', 'set3_b', 'Set 3', 3]] as const)
-                        : []),
-                    ] as const
-                  ).map(([ka, kb, label, setNum]) => {
-                    const isDecider = label === 'Set 3'
-                    const maxGames = isDecider ? 15 : 7
-                    return (
-                      <div key={label} className="form-group pl-score-row">
-                        <label>{isDecider ? 'Set 3 / TB' : label}</label>
-                        <div className="score-pair pl-score-pair">
+              <p className="muted-note" style={{ marginTop: 0 }}>
+                Tap who won. Score optional.
+              </p>
+            )}
+            {(() => {
+              const winnerName =
+                scoreForm.winner_id === scoreMatch.team_a_id
+                  ? scoreMatch.team_a_name || 'Team A'
+                  : scoreForm.winner_id === scoreMatch.team_b_id
+                    ? scoreMatch.team_b_name || 'Team B'
+                    : null
+              const hasAnyScore = !!(
+                scoreForm.set1_a ||
+                scoreForm.set1_b ||
+                scoreForm.set2_a ||
+                scoreForm.set2_b ||
+                scoreForm.set3_a ||
+                scoreForm.set3_b
+              )
+              return (
+                <>
+                  <div className="score-team-grid" role="group" aria-label="Who won">
+                    <div
+                      className={`score-team-card ${
+                        scoreForm.winner_id === scoreMatch.team_a_id ? 'is-winner' : ''
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        className="score-team-win"
+                        onClick={() => pickScoreWinner(scoreMatch.team_a_id || '')}
+                      >
+                        <span className="score-team-win-label">
+                          {scoreForm.winner_id === scoreMatch.team_a_id
+                            ? 'Winner · tap again'
+                            : 'Tap if won'}
+                        </span>
+                        <strong>{scoreMatch.team_a_name || 'Team A'}</strong>
+                      </button>
+                      {scoringMode === 'SIMPLE' && (
+                        <div className="score-team-points">
+                          <span className="score-team-points-label">Score</span>
                           <ScoreStep
-                            label={`${label} side A`}
-                            value={scoreForm[ka]}
-                            max={maxGames}
-                            onChange={(n) =>
-                              setScoreForm({
+                            label={`${scoreMatch.team_a_name || 'Team A'} score`}
+                            value={scoreForm.set1_a}
+                            max={99}
+                            onChange={(n) => {
+                              const next = {
                                 ...scoreForm,
-                                [ka]: n,
-                                current_set: Math.max(scoreForm.current_set, setNum),
-                              })
-                            }
-                          />
-                          <span className="pl-score-dash">–</span>
-                          <ScoreStep
-                            label={`${label} side B`}
-                            value={scoreForm[kb]}
-                            max={maxGames}
-                            onChange={(n) =>
-                              setScoreForm({
-                                ...scoreForm,
-                                [kb]: n,
-                                current_set: Math.max(scoreForm.current_set, setNum),
-                              })
-                            }
+                                set1_a: n,
+                                status: 'COMPLETED' as string,
+                              }
+                              if (n > scoreForm.set1_b) next.winner_id = scoreMatch.team_a_id || ''
+                              else if (n < scoreForm.set1_b)
+                                next.winner_id = scoreMatch.team_b_id || ''
+                              setScoreForm(next)
+                            }}
                           />
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="org-score-meta">
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">Winner</label>
-                    <select
-                      className="form-select"
-                      value={scoreForm.winner_id}
-                      onChange={(e) => setScoreForm({ ...scoreForm, winner_id: e.target.value })}
+                      )}
+                    </div>
+                    <div
+                      className={`score-team-card ${
+                        scoreForm.winner_id === scoreMatch.team_b_id ? 'is-winner' : ''
+                      }`}
                     >
-                      <option value="">Auto from sets</option>
-                      {scoreMatch.team_a_id && (
-                        <option value={scoreMatch.team_a_id}>{scoreMatch.team_a_name}</option>
+                      <button
+                        type="button"
+                        className="score-team-win"
+                        onClick={() => pickScoreWinner(scoreMatch.team_b_id || '')}
+                      >
+                        <span className="score-team-win-label">
+                          {scoreForm.winner_id === scoreMatch.team_b_id
+                            ? 'Winner · tap again'
+                            : 'Tap if won'}
+                        </span>
+                        <strong>{scoreMatch.team_b_name || 'Team B'}</strong>
+                      </button>
+                      {scoringMode === 'SIMPLE' && (
+                        <div className="score-team-points">
+                          <span className="score-team-points-label">Score</span>
+                          <ScoreStep
+                            label={`${scoreMatch.team_b_name || 'Team B'} score`}
+                            value={scoreForm.set1_b}
+                            max={99}
+                            onChange={(n) => {
+                              const next = {
+                                ...scoreForm,
+                                set1_b: n,
+                                status: 'COMPLETED' as string,
+                              }
+                              if (n > scoreForm.set1_a) next.winner_id = scoreMatch.team_b_id || ''
+                              else if (n < scoreForm.set1_a)
+                                next.winner_id = scoreMatch.team_a_id || ''
+                              setScoreForm(next)
+                            }}
+                          />
+                        </div>
                       )}
-                      {scoreMatch.team_b_id && (
-                        <option value={scoreMatch.team_b_id}>{scoreMatch.team_b_name}</option>
-                      )}
-                    </select>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                  <div className="org-score-meta">
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${scoreForm.status === 'WALKOVER' ? 'btn-dark' : 'btn-ghost'}`}
+                      onClick={() =>
+                        setScoreForm({
+                          ...scoreForm,
+                          status: scoreForm.status === 'WALKOVER' ? 'COMPLETED' : 'WALKOVER',
+                        })
+                      }
+                    >
+                      Walkover
+                    </button>
+                    {winnerName && !hasAnyScore ? (
+                      <span className="muted-note org-score-hint">
+                        No score — {winnerName} still advances.
+                      </span>
+                    ) : null}
+                  </div>
+                  {scoringMode !== 'SIMPLE' && (
+                    <details className="org-score-sets" open={hasAnyScore}>
+                      <summary>Set scores (optional)</summary>
+                      <div className="score-sides-label">
+                        <div>
+                          <span className="muted-note">A</span>
+                          <strong>{scoreMatch.team_a_name || 'Team A'}</strong>
+                        </div>
+                        <div>
+                          <span className="muted-note">B</span>
+                          <strong>{scoreMatch.team_b_name || 'Team B'}</strong>
+                        </div>
+                      </div>
+                      <div className="score-grid">
+                        {(
+                          [
+                            ['set1_a', 'set1_b', 'Set 1', 1] as const,
+                            ['set2_a', 'set2_b', 'Set 2', 2] as const,
+                            ...(scoreForm.set3_a > 0 ||
+                            scoreForm.set3_b > 0 ||
+                            scoreForm.current_set >= 3 ||
+                            (scoreForm.set1_a !== scoreForm.set1_b &&
+                              scoreForm.set2_a !== scoreForm.set2_b &&
+                              (scoreForm.set1_a > scoreForm.set1_b) !==
+                                (scoreForm.set2_a > scoreForm.set2_b))
+                              ? ([['set3_a', 'set3_b', 'Set 3', 3]] as const)
+                              : []),
+                          ] as const
+                        ).map(([ka, kb, label, setNum]) => {
+                          const isDecider = label === 'Set 3'
+                          const maxGames = isDecider ? 15 : 7
+                          return (
+                            <div key={label} className="form-group pl-score-row">
+                              <label>{isDecider ? 'Set 3 / TB' : label}</label>
+                              <div className="score-pair pl-score-pair">
+                                <ScoreStep
+                                  label={`${label} side A`}
+                                  value={scoreForm[ka]}
+                                  max={maxGames}
+                                  onChange={(n) =>
+                                    setScoreForm({
+                                      ...scoreForm,
+                                      [ka]: n,
+                                      current_set: Math.max(scoreForm.current_set, setNum),
+                                    })
+                                  }
+                                />
+                                <span className="pl-score-dash">–</span>
+                                <ScoreStep
+                                  label={`${label} side B`}
+                                  value={scoreForm[kb]}
+                                  max={maxGames}
+                                  onChange={(n) =>
+                                    setScoreForm({
+                                      ...scoreForm,
+                                      [kb]: n,
+                                      current_set: Math.max(scoreForm.current_set, setNum),
+                                    })
+                                  }
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </details>
+                  )}
+                </>
+              )
+            })()}
             {scoreMatch.ratings_applied && (
               <p className="muted-note" style={{ margin: '0.75rem 0 0' }}>
                 Ratings already applied - this corrects standings and the bracket only.
@@ -4546,17 +4729,47 @@ export default function ManageEventPage() {
                 type="button"
                 className="btn btn-primary"
                 onClick={saveScore}
-                disabled={scoreMut.isPending}
+                disabled={
+                  scoreMut.isPending ||
+                  ((scoreForm.status === 'COMPLETED' || scoreForm.status === 'WALKOVER') &&
+                    !scoreForm.winner_id &&
+                    scoringMode === 'SIMPLE')
+                }
               >
-                {scoreMut.isPending
-                  ? 'Saving…'
-                  : scoreMatch.ratings_applied ||
-                      scoreMatch.status === 'COMPLETED' ||
-                      scoreMatch.status === 'WALKOVER'
-                    ? 'Save correction'
-                    : scoreMatch.status === 'AWAITING_CONFIRM'
-                      ? 'Confirm result'
-                      : 'Save result'}
+                {(() => {
+                  if (scoreMut.isPending) return 'Saving…'
+                  const winnerName =
+                    scoreForm.winner_id === scoreMatch.team_a_id
+                      ? scoreMatch.team_a_name || 'Team A'
+                      : scoreForm.winner_id === scoreMatch.team_b_id
+                        ? scoreMatch.team_b_name || 'Team B'
+                        : null
+                  const hasAnyScore = !!(
+                    scoreForm.set1_a ||
+                    scoreForm.set1_b ||
+                    scoreForm.set2_a ||
+                    scoreForm.set2_b ||
+                    scoreForm.set3_a ||
+                    scoreForm.set3_b
+                  )
+                  if (
+                    scoreMatch.ratings_applied ||
+                    scoreMatch.status === 'COMPLETED' ||
+                    scoreMatch.status === 'WALKOVER'
+                  ) {
+                    return winnerName ? `Save · ${winnerName} wins` : 'Save correction'
+                  }
+                  if (scoreMatch.status === 'AWAITING_CONFIRM') {
+                    return winnerName ? `Confirm · ${winnerName} wins` : 'Confirm result'
+                  }
+                  if (!winnerName) {
+                    if (scoringMode !== 'SIMPLE' && hasAnyScore) return 'Save result'
+                    return 'Tap who won'
+                  }
+                  return hasAnyScore
+                    ? `Save · ${winnerName} wins`
+                    : `Save · ${winnerName} wins (no score)`
+                })()}
               </button>
               {(scoreMatch.status === 'COMPLETED' ||
                 scoreMatch.status === 'WALKOVER' ||

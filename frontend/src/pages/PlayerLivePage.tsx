@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import BackButton from '../components/BackButton'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
+import OrganiserScoreModal from '../components/OrganiserScoreModal'
 import ScoreStep from '../components/ScoreStep'
 import SponsorStrip from '../components/SponsorStrip'
 import TournamentBracket from '../components/TournamentBracket'
@@ -510,6 +511,8 @@ export default function PlayerLivePage() {
   const privateCode =
     (searchParams.get('code') || '').trim() || getRememberedPrivateInvite(slug) || undefined
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
+  const [opsMatch, setOpsMatch] = useState<Match | null>(null)
+  const [opsToast, setOpsToast] = useState('')
   const [scoreSheetMode, setScoreSheetMode] = useState<'log' | 'fix' | 'edit'>('log')
   const [payNote, setPayNote] = useState('')
   const [sets, setSets] = useState<ScoreSets>({
@@ -877,6 +880,17 @@ export default function PlayerLivePage() {
   }
 
   const t = data.tournament
+  const isOps = !!user && !!t.can_manage
+  const opsScoringMode =
+    (t.scoring_mode || 'SIMPLE').toUpperCase() === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE'
+  const openOpsMatch = (m: Match) => {
+    if (!isOps) return
+    setOpsMatch(m)
+  }
+  const showOpsToast = (msg: string) => {
+    setOpsToast(msg)
+    window.setTimeout(() => setOpsToast(''), 2800)
+  }
   const rawNext = data.next_match as Match | null
   // Keep waiting card stable while polls/refetch catch up after submit
   const next: Match | null = (() => {
@@ -1006,8 +1020,12 @@ export default function PlayerLivePage() {
     cancelling: cancelMut.isPending && cancelMut.variables?.matchId === next?.id,
   }
 
-  /** Tap own bracket card → score / confirm / edit pending. */
+  /** Tap own bracket card → score / confirm / edit pending. Organisers score any match. */
   const onBracketScore = (m: Match) => {
+    if (isOps) {
+      openOpsMatch(m)
+      return
+    }
     if (!myTeamId) return
     if (m.needs_my_confirm) {
       confirmMut.mutate(m.id)
@@ -1056,6 +1074,7 @@ export default function PlayerLivePage() {
   return (
     <div className="app-shell">
       <NavBar />
+      {opsToast ? <div className="tour-ops-toast">{opsToast}</div> : null}
       <main className="pl-page">
         <BackButton fallbackTo={slug ? `/t/${slug}` : '/tournaments'} />
         <header className="pl-header">
@@ -1370,8 +1389,8 @@ export default function PlayerLivePage() {
                 matches={championshipMatches}
                 myTeamId={myTeamId}
                 stage="KNOCKOUT"
-                onScoreMatch={hasPaidEntry ? onBracketScore : undefined}
-                scoreOwnMatchesOnly
+                onScoreMatch={isOps || hasPaidEntry ? onBracketScore : undefined}
+                scoreOwnMatchesOnly={!isOps}
               />
             )}
             {plateMatches.length > 0 && (
@@ -1379,8 +1398,8 @@ export default function PlayerLivePage() {
                 matches={plateMatches}
                 myTeamId={myTeamId}
                 stage="PLATE"
-                onScoreMatch={hasPaidEntry ? onBracketScore : undefined}
-                scoreOwnMatchesOnly
+                onScoreMatch={isOps || hasPaidEntry ? onBracketScore : undefined}
+                scoreOwnMatchesOnly={!isOps}
               />
             )}
           </section>
@@ -1395,7 +1414,27 @@ export default function PlayerLivePage() {
                   {liveMatches.map((m) => {
                     const board = formatLiveBoardScore(m.score)
                     return (
-                      <li key={m.id}>
+                      <li
+                        key={m.id}
+                        className={isOps && m.team_a_id && m.team_b_id ? 'is-interactive' : undefined}
+                        role={isOps && m.team_a_id && m.team_b_id ? 'button' : undefined}
+                        tabIndex={isOps && m.team_a_id && m.team_b_id ? 0 : undefined}
+                        onClick={
+                          isOps && m.team_a_id && m.team_b_id
+                            ? () => openOpsMatch(m)
+                            : undefined
+                        }
+                        onKeyDown={
+                          isOps && m.team_a_id && m.team_b_id
+                            ? (e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault()
+                                  openOpsMatch(m)
+                                }
+                              }
+                            : undefined
+                        }
+                      >
                         <div className="pl-live-top">
                           <strong>{courtLabel(m.court_name, m.court_number)}</strong>
                           <span className="pl-live-games">
@@ -1417,10 +1456,30 @@ export default function PlayerLivePage() {
                 <h2>Called to court</h2>
                 <ul className="pl-live-list pl-called-list">
                   {calledMatches.map((m) => (
-                    <li key={m.id}>
+                    <li
+                      key={m.id}
+                      className={isOps && m.team_a_id && m.team_b_id ? 'is-interactive' : undefined}
+                      role={isOps && m.team_a_id && m.team_b_id ? 'button' : undefined}
+                      tabIndex={isOps && m.team_a_id && m.team_b_id ? 0 : undefined}
+                      onClick={
+                        isOps && m.team_a_id && m.team_b_id
+                          ? () => openOpsMatch(m)
+                          : undefined
+                      }
+                      onKeyDown={
+                        isOps && m.team_a_id && m.team_b_id
+                          ? (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                openOpsMatch(m)
+                              }
+                            }
+                          : undefined
+                      }
+                    >
                       <div className="pl-live-top">
                         <strong>{courtLabel(m.court_name, m.court_number)}</strong>
-                        <span className="pl-called-tag">Go now</span>
+                        <span className="pl-called-tag">{isOps ? 'Score' : 'Go now'}</span>
                       </div>
                       <span className="pl-live-names">
                         <MatchNames m={m} />
@@ -1701,6 +1760,18 @@ export default function PlayerLivePage() {
           </form>
         </div>
       )}
+
+      {opsMatch && isOps ? (
+        <OrganiserScoreModal
+          match={opsMatch}
+          scoringMode={opsScoringMode}
+          courtCount={t.number_of_courts || 8}
+          eventDateIso={t.event_date ? String(t.event_date).slice(0, 10) : null}
+          slug={slug}
+          onClose={() => setOpsMatch(null)}
+          onSaved={showOpsToast}
+        />
+      ) : null}
     </div>
   )
 }

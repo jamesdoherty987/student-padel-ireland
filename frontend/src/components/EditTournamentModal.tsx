@@ -48,6 +48,8 @@ function toForm(tournament: Tournament): TournamentFormState {
     plate_size: tournament.plate_size || 16,
     scoring_mode: tournament.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
     points_to_win: tournament.points_to_win ?? 21,
+    lunch_break_start: (tournament.lunch_break_start || '').toString().slice(0, 5),
+    lunch_break_minutes: tournament.lunch_break_minutes || 0,
   }
 }
 
@@ -152,6 +154,13 @@ export default function EditTournamentModal({
         plate_size: form.plate_size,
         scoring_mode: form.scoring_mode === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE',
         points_to_win: form.points_to_win,
+        lunch_break_start:
+          form.lunch_break_minutes > 0 && form.lunch_break_start
+            ? form.lunch_break_start.length === 5
+              ? `${form.lunch_break_start}:00`
+              : form.lunch_break_start
+            : null,
+        lunch_break_minutes: form.lunch_break_minutes > 0 ? form.lunch_break_minutes : 0,
         registration_deadline: form.registration_deadline
           ? new Date(form.registration_deadline).toISOString()
           : null,

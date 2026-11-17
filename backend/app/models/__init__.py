@@ -201,6 +201,9 @@ class Tournament(Base, TimestampMixin):
     scoring_mode: Mapped[str] = mapped_column(String(20), default=ScoringMode.SIMPLE.value)
     # SIMPLE: first to this many points (win by 2 near the end). Ignored for BEST_OF_3.
     points_to_win: Mapped[int] = mapped_column(Integer, default=21)
+    # Optional lunch window used when generating (and shown in Manage Edit times).
+    lunch_break_start: Mapped[Optional[time]] = mapped_column(Time)
+    lunch_break_minutes: Mapped[int] = mapped_column(Integer, default=0)
     # JSON-ish comma list of tie-break keys
     tie_break_order: Mapped[str] = mapped_column(
         String(200),

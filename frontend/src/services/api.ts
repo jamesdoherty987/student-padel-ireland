@@ -99,6 +99,9 @@ export type Tournament = {
   scoring_mode?: 'SIMPLE' | 'BEST_OF_3' | string
   /** SIMPLE: first to this many points (default 21) */
   points_to_win?: number
+  /** Local HH:MM for lunch start when generating (null = none) */
+  lunch_break_start?: string | null
+  lunch_break_minutes?: number
   registered_teams: number
   invite_code?: string | null
   /** Listed on landing / public browse - admin-created events only */
@@ -569,6 +572,25 @@ export const tournamentApi = {
     api.post<Match>(`/api/matches/${matchId}/cancel-pending-score`),
   moveMatch: (matchId: string, data: Record<string, unknown>) =>
     api.patch(`/api/matches/${matchId}`, data),
+  shiftSchedule: (
+    tournamentId: string,
+    data: {
+      after_time: string
+      shift_minutes: number
+      stages?: string[]
+      dry_run?: boolean
+    },
+  ) =>
+    api.post<{
+      ok: boolean
+      updated: number
+      skipped_active?: number
+      shift_minutes: number
+      after_time: string
+      stages?: string[] | null
+      dry_run?: boolean
+      samples?: Array<Record<string, string>>
+    }>(`/api/tournaments/${tournamentId}/schedule/shift`, data),
   checkIn: (tournamentId: string, teamId: string, data: Record<string, unknown>) =>
     api.post<TournamentTeam>(`/api/tournaments/${tournamentId}/teams/${teamId}/check-in`, data),
   setAnswerFulfillment: (

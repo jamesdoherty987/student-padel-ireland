@@ -5,6 +5,7 @@ import BackButton from '../components/BackButton'
 import { HaveCodeButton } from '../components/JoinCodeModal'
 import LeaveTournamentButton from '../components/LeaveTournamentButton'
 import NavBar from '../components/NavBar'
+import OrganiserScoreModal from '../components/OrganiserScoreModal'
 import { ShareQr } from '../components/ShareQr'
 import SponsorStrip from '../components/SponsorStrip'
 import TournamentBracket from '../components/TournamentBracket'
@@ -41,6 +42,8 @@ export default function TournamentDetailPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [shareTab, setShareTab] = useState<'invite' | 'live'>('invite')
+  const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
+  const [opsToast, setOpsToast] = useState('')
   const inviteCode = useMemo(() => {
     const fromUrl = cleanInviteCode(searchParams.get('code') || '')
     if (fromUrl.length >= 6) return fromUrl
@@ -116,6 +119,18 @@ export default function TournamentDetailPage() {
   )
 
   const isOps = !!user && !!tournament?.can_manage
+  const scoringMode =
+    (tournament?.scoring_mode || 'SIMPLE').toUpperCase() === 'BEST_OF_3' ? 'BEST_OF_3' : 'SIMPLE'
+
+  const openOpsMatch = (m: Match) => {
+    if (!isOps) return
+    setScoreMatch(m)
+  }
+
+  const showOpsToast = (msg: string) => {
+    setOpsToast(msg)
+    window.setTimeout(() => setOpsToast(''), 2800)
+  }
 
   const teamForRedirect = playerView?.my_team as
     | {
@@ -150,10 +165,11 @@ export default function TournamentDetailPage() {
   }, [redirectToLive, slug, navigate])
 
   if (isLoading || (user && !isOps && playerViewPending) || redirectToLive) {
-    return (
-      <div className="app-shell">
-        <NavBar />
-        <main className="page">
+  return (
+    <div className="app-shell">
+      <NavBar />
+      {opsToast ? <div className="fixtures-toast">{opsToast}</div> : null}
+      <main className="page">
           <div className="skeleton" style={{ width: '60%', height: 32, marginBottom: 12 }} />
           <div className="skeleton" style={{ width: '40%', height: 18 }} />
         </main>
@@ -289,6 +305,7 @@ export default function TournamentDetailPage() {
   return (
     <div className="app-shell">
       <NavBar />
+      {opsToast ? <div className="tour-ops-toast">{opsToast}</div> : null}
       <main className="page tourney-detail">
         <BackButton fallbackTo="/tournaments" />
         <p className="tour-card-kind tour-detail-kind">
@@ -617,10 +634,16 @@ export default function TournamentDetailPage() {
                 matches={championshipMatches}
                 myTeamId={myTeamId}
                 stage="KNOCKOUT"
+                onScoreMatch={isOps ? openOpsMatch : undefined}
               />
             )}
             {plateMatches.length > 0 && (
-              <TournamentBracket matches={plateMatches} myTeamId={myTeamId} stage="PLATE" />
+              <TournamentBracket
+                matches={plateMatches}
+                myTeamId={myTeamId}
+                stage="PLATE"
+                onScoreMatch={isOps ? openOpsMatch : undefined}
+              />
             )}
           </section>
         )}
@@ -630,7 +653,23 @@ export default function TournamentDetailPage() {
             <h2>Scores to confirm</h2>
             <ul className="match-preview-list">
               {pendingConfirm.map((m) => (
-                <li key={m.id}>
+                <li
+                  key={m.id}
+                  className={isOps ? 'is-interactive' : undefined}
+                  role={isOps ? 'button' : undefined}
+                  tabIndex={isOps ? 0 : undefined}
+                  onClick={isOps ? () => openOpsMatch(m) : undefined}
+                  onKeyDown={
+                    isOps
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            openOpsMatch(m)
+                          }
+                        }
+                      : undefined
+                  }
+                >
                   <span className="match-preview-court">
                     {courtLabel(m.court_name, m.court_number)}
                   </span>
@@ -640,15 +679,16 @@ export default function TournamentDetailPage() {
                   </span>
                   <span className="match-preview-time">
                     {m.score ? formatMatchScore(m.score) : 'Score logged'}
+                    {isOps ? ' · Edit' : ''}
                   </span>
                 </li>
               ))}
             </ul>
-            {hasPaidEntry && (
+            {hasPaidEntry && !isOps ? (
               <Link to={`/t/${tournament.slug}/live`} className="form-inline-link">
                 Confirm on My match
               </Link>
-            )}
+            ) : null}
           </section>
         )}
 
@@ -657,7 +697,23 @@ export default function TournamentDetailPage() {
             <h2>Coming up</h2>
             <ul className="match-preview-list">
               {upcoming.map((m) => (
-                <li key={m.id}>
+                <li
+                  key={m.id}
+                  className={isOps ? 'is-interactive' : undefined}
+                  role={isOps ? 'button' : undefined}
+                  tabIndex={isOps ? 0 : undefined}
+                  onClick={isOps ? () => openOpsMatch(m) : undefined}
+                  onKeyDown={
+                    isOps
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            openOpsMatch(m)
+                          }
+                        }
+                      : undefined
+                  }
+                >
                   <span className="match-preview-court">
                     {courtLabel(m.court_name, m.court_number)}
                   </span>
@@ -665,7 +721,10 @@ export default function TournamentDetailPage() {
                     {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
                     {m.team_b_name || m.team_b_placeholder || 'TBD'}
                   </span>
-                  <span className="match-preview-time">{formatTime(m.scheduled_start)}</span>
+                  <span className="match-preview-time">
+                    {formatTime(m.scheduled_start)}
+                    {isOps ? ' · Score' : ''}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -789,6 +848,20 @@ export default function TournamentDetailPage() {
           )}
         </section>
       </main>
+
+      {scoreMatch && isOps ? (
+        <OrganiserScoreModal
+          match={scoreMatch}
+          scoringMode={scoringMode}
+          courtCount={tournament.number_of_courts || 8}
+          eventDateIso={
+            tournament.event_date ? String(tournament.event_date).slice(0, 10) : null
+          }
+          slug={tournament.slug}
+          onClose={() => setScoreMatch(null)}
+          onSaved={showOpsToast}
+        />
+      ) : null}
     </div>
   )
 }

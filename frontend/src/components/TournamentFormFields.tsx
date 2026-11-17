@@ -41,6 +41,9 @@ export type TournamentFormState = {
   scoring_mode: string
   /** SIMPLE: first team to this many points (default 21) */
   points_to_win: number
+  /** Lunch gap when generating (empty start or 0 mins = off) */
+  lunch_break_start: string
+  lunch_break_minutes: number
 }
 
 export type TournamentFormSection =
@@ -392,6 +395,61 @@ export default function TournamentFormFields({
             value={form.match_duration_minutes}
             onValueChange={(n) => onChange({ match_duration_minutes: n })}
           />
+        </div>
+
+        <div className="tf-lunch-block">
+          <label className="tf-check">
+            <input
+              type="checkbox"
+              checked={
+                (form.lunch_break_minutes || 0) > 0 && !!(form.lunch_break_start || '').trim()
+              }
+              onChange={(e) => {
+                if (e.target.checked) {
+                  onChange({
+                    lunch_break_start: form.lunch_break_start || '14:00',
+                    lunch_break_minutes: form.lunch_break_minutes || 60,
+                  })
+                } else {
+                  onChange({ lunch_break_start: '', lunch_break_minutes: 0 })
+                }
+              }}
+            />
+            <span>Lunch break (skip this window when generating)</span>
+          </label>
+          {(form.lunch_break_minutes || 0) > 0 ? (
+            <div className="admin-form-row admin-form-row-2" style={{ marginTop: '0.65rem' }}>
+              <div className="form-group">
+                <label className="form-label" htmlFor="tf-lunch-start">
+                  Lunch starts
+                </label>
+                <input
+                  id="tf-lunch-start"
+                  type="time"
+                  className="form-input"
+                  value={(form.lunch_break_start || '14:00').slice(0, 5)}
+                  onChange={(e) => onChange({ lunch_break_start: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label" htmlFor="tf-lunch-mins">
+                  Length (minutes)
+                </label>
+                <NumberInput
+                  id="tf-lunch-mins"
+                  className="form-input"
+                  min={15}
+                  max={180}
+                  emptyValue={60}
+                  value={form.lunch_break_minutes || 60}
+                  onValueChange={(n) => onChange({ lunch_break_minutes: Math.max(15, n) })}
+                />
+              </div>
+            </div>
+          ) : null}
+          <p className="form-hint">
+            For an existing draw, use Manage → Edit times to push kickoffs (e.g. lunch 2–3pm).
+          </p>
         </div>
       </section>
       )}
