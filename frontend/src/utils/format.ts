@@ -246,6 +246,28 @@ export function isPastCalendarDate(iso: string | null | undefined) {
   return today > d
 }
 
+/** True once event_date + start_time (local) has been reached — locks late entries. */
+export function eventHasStarted(
+  eventDate: string | null | undefined,
+  startTime: string | null | undefined,
+  nowMs = Date.now(),
+) {
+  if (!eventDate) return false
+  const d = parseCalendarDate(eventDate)
+  if (Number.isNaN(d.getTime())) return false
+  let hours = 0
+  let minutes = 0
+  if (startTime) {
+    const m = String(startTime).match(/(\d{1,2}):(\d{2})/)
+    if (m) {
+      hours = Number(m[1])
+      minutes = Number(m[2])
+    }
+  }
+  d.setHours(hours, minutes, 0, 0)
+  return nowMs >= d.getTime()
+}
+
 /** Whole calendar days from local today to a YYYY-MM-DD (or datetime) date. */
 export function calendarDaysFromToday(iso: string | null | undefined) {
   if (!iso) return null

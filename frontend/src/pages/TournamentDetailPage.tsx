@@ -18,6 +18,7 @@ import { getRememberedPrivateInvite, rememberPrivateInvite } from '../utils/priv
 import {
   bracketFormatHint,
   courtLabel,
+  eventHasStarted,
   formatDate,
   formatMatchScore,
   formatMoney,
@@ -268,10 +269,14 @@ export default function TournamentDetailPage() {
   const myTeamId = hasPaidEntry && myTeamInfo?.id ? myTeamInfo.id : undefined
 
   const singles = tournament.play_format === 'SINGLES'
+  const clockStarted = eventHasStarted(tournament.event_date, tournament.start_time)
   const registrationOpen =
-    tournament.status === 'REGISTRATION_OPEN' && !isPastCalendarDate(tournament.registration_deadline)
+    tournament.status === 'REGISTRATION_OPEN' &&
+    !isPastCalendarDate(tournament.registration_deadline) &&
+    !clockStarted
   const hasSpot = tournament.registered_teams < tournament.max_teams
   const eventStarted =
+    clockStarted ||
     tournament.status === 'LIVE' ||
     tournament.status === 'COMPLETED' ||
     tournament.status === 'CANCELLED'
@@ -539,7 +544,12 @@ export default function TournamentDetailPage() {
                 Sold out
               </button>
             )}
-          {!hasPaidEntry && !canJoin && !canResumePayment && !isListedPartner && tournament.status === 'LIVE' && (
+          {!hasPaidEntry &&
+            !canJoin &&
+            !canResumePayment &&
+            !isListedPartner &&
+            (tournament.status === 'LIVE' || clockStarted || matches.length > 0) &&
+            tournament.status !== 'CANCELLED' && (
             <Link to={livePath} className="btn btn-ghost">
               Live scores
             </Link>

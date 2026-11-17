@@ -214,6 +214,20 @@ html.native-app.has-native-tabs .org-toast {
   line-height: 1.4;
 }
 
+.org-setup-ops-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.org-setup-ops-note {
+  margin: 0;
+  flex: 1 1 12rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
 .org-master-sheet-btn {
   background: #fff !important;
   color: var(--court-deep) !important;

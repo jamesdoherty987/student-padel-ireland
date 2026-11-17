@@ -28,6 +28,7 @@ import {
 import { cleanInviteCode } from '../utils/inviteCode'
 import { getRememberedPrivateInvite, rememberPrivateInvite } from '../utils/privateEventAccess'
 import {
+  eventHasStarted,
   formatMoney,
   formatOnlineFee,
   formatOnlineTotal,
@@ -857,11 +858,12 @@ export default function JoinTournamentPage() {
   const guestSingles = tournament.play_format === 'SINGLES'
   const guestEntryNoun = guestSingles ? 'players' : 'doubles teams'
   const guestDeadlineGone = isPastCalendarDate(tournament.registration_deadline)
+  const guestEventStarted = eventHasStarted(tournament.event_date, tournament.start_time)
   const guestIsFull =
     tournament.max_teams > 0 && tournament.registered_teams >= tournament.max_teams
 
   // Show sold out / closed before asking anyone to log in
-  if (!user && tournament.status !== 'REGISTRATION_OPEN') {
+  if (!user && (tournament.status !== 'REGISTRATION_OPEN' || guestEventStarted)) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -870,7 +872,11 @@ export default function JoinTournamentPage() {
           <div className="tour-entry-banner tour-entry-banner--alert" role="status">
             <p className="tour-entry-badge">Closed</p>
             <h1 className="tour-entry-title">{tournament.name}</h1>
-            <p className="page-sub">Registration is not open for this tournament.</p>
+            <p className="page-sub">
+              {guestEventStarted
+                ? 'This event has started — registration is closed.'
+                : 'Registration is not open for this tournament.'}
+            </p>
             <div className="tour-entry-actions">
               <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
                 View tournament
@@ -1116,12 +1122,14 @@ export default function JoinTournamentPage() {
   const deadlineGone = isPastCalendarDate(tournament.registration_deadline)
   const isFull = tournament.registered_teams >= tournament.max_teams
   const entryNoun = singles ? 'players' : 'doubles teams'
+  const clockStarted = eventHasStarted(tournament.event_date, tournament.start_time)
   const eventStarted =
+    clockStarted ||
     tournament.status === 'LIVE' ||
     tournament.status === 'COMPLETED' ||
     tournament.status === 'CANCELLED'
 
-  if (!resumingPending && tournament.status !== 'REGISTRATION_OPEN') {
+  if (!resumingPending && (tournament.status !== 'REGISTRATION_OPEN' || clockStarted)) {
     return (
       <div className="app-shell">
         <NavBar />
@@ -1130,7 +1138,11 @@ export default function JoinTournamentPage() {
           <div className="tour-entry-banner tour-entry-banner--alert" role="status">
             <p className="tour-entry-badge">Closed</p>
             <h1 className="tour-entry-title">{tournament.name}</h1>
-            <p className="page-sub">Registration is not open for this tournament.</p>
+            <p className="page-sub">
+              {clockStarted
+                ? 'This event has started — registration is closed.'
+                : 'Registration is not open for this tournament.'}
+            </p>
             <div className="tour-entry-actions">
               <Link to={`/t/${tournament.slug}`} className="btn btn-primary">
                 View tournament

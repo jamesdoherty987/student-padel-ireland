@@ -36,6 +36,7 @@ import {
 import {
   calendarDaysFromToday,
   courtLabel,
+  eventHasStarted,
   formatDate,
   formatDateTime,
   formatMatchScore,
@@ -495,15 +496,6 @@ export default function ManageEventPage() {
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not close registration')),
   })
 
-  const goLiveMut = useMutation({
-    mutationFn: () => tournamentApi.update(tid!, { status: 'LIVE' }),
-    onSuccess: () => {
-      invalidateTournamentPublic()
-      showToast('Tournament is now LIVE')
-    },
-    onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not go live')),
-  })
-
   const completeMut = useMutation({
     mutationFn: () => tournamentApi.update(tid!, { status: 'COMPLETED' }),
     onSuccess: () => {
@@ -512,6 +504,29 @@ export default function ManageEventPage() {
     },
     onError: (e: unknown) => showToast(apiErrorMessage(e, 'Could not complete tournament')),
   })
+
+  const confirmComplete = () => {
+    void confirmDialog({
+      title: 'Mark event completed?',
+      message:
+        'Use this when the day is finished. Players see the event as over. You can still view results; scoring and day-of changes stop.',
+      confirmLabel: 'Mark completed',
+    }).then((ok) => {
+      if (ok) completeMut.mutate()
+    })
+  }
+
+  const confirmRedraw = () => {
+    void confirmDialog({
+      title: 'Re-generate the draw?',
+      message:
+        'This replaces the current fixtures. Only do this if the draw is wrong — scores already entered may be lost.',
+      confirmLabel: 'Redraw',
+      danger: true,
+    }).then((ok) => {
+      if (ok) setConfirmGenerate(true)
+    })
+  }
 
   const cancelMut = useMutation({
     mutationFn: () => tournamentApi.update(tid!, { status: 'CANCELLED' }),
@@ -1555,12 +1570,33 @@ export default function ManageEventPage() {
     }
     return null
   })()
+  const eventStartedClock = !!(
+    active &&
+    eventHasStarted(active.tournament.event_date, active.tournament.start_time)
+  )
   const canAddTeams =
     !!active &&
     active.tournament.status !== 'COMPLETED' &&
     active.tournament.status !== 'CANCELLED' &&
     active.tournament.status !== 'LIVE' &&
+    !eventStartedClock &&
     !fixturesExist
+  const canReopenRegistration =
+    !!active &&
+    active.tournament.status === 'REGISTRATION_CLOSED' &&
+    !eventStartedClock
+  const canRedraw =
+    !!active &&
+    fixturesExist &&
+    active.tournament.status !== 'COMPLETED' &&
+    active.tournament.status !== 'CANCELLED' &&
+    !!canOpenGenerate
+  const canMarkDone =
+    !!active &&
+    active.tournament.status !== 'COMPLETED' &&
+    active.tournament.status !== 'CANCELLED' &&
+    active.tournament.status !== 'DRAFT' &&
+    (active.tournament.status === 'LIVE' || (fixturesExist && eventStartedClock))
   const daysToEvent = active ? calendarDaysFromToday(active.tournament.event_date) : null
   const showRemindersSection =
     !!active &&
@@ -2226,16 +2262,19 @@ export default function ManageEventPage() {
                       Open
                     </button>
                   )}
-                  {active.tournament.status === 'REGISTRATION_OPEN' && !fixturesExist && (
-                    <>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => closeRegMut.mutate()}
-                        disabled={closeRegMut.isPending}
-                        title="Close registration"
-                      >
-                        Close
-                      </button>
+                  {active.tournament.status === 'REGISTRATION_OPEN' && (
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => closeRegMut.mutate()}
+                      disabled={closeRegMut.isPending}
+                      title="Close registration"
+                    >
+                      Close
+                    </button>
+                  )}
+                  {(active.tournament.status === 'REGISTRATION_OPEN' ||
+                    active.tournament.status === 'REGISTRATION_CLOSED') &&
+                    !fixturesExist && (
                       <button
                         className="btn btn-primary"
                         onClick={() => setConfirmGenerate(true)}
@@ -2244,86 +2283,11 @@ export default function ManageEventPage() {
                       >
                         Draw
                       </button>
-                    </>
-                  )}
-                  {active.tournament.status === 'REGISTRATION_OPEN' && fixturesExist && (
-                    <>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending || !canOpenGenerate}
-                        title={generateBlockedReason || 'Re-generate draw'}
-                      >
-                        Redraw
-                      </button>
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => goLiveMut.mutate()}
-                        disabled={goLiveMut.isPending}
-                      >
-                        LIVE
-                      </button>
-                    </>
-                  )}
-                  {active.tournament.status === 'REGISTRATION_CLOSED' && !fixturesExist && (
-                    <>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => openMut.mutate()}
-                        disabled={openMut.isPending}
-                        title="Reopen registration"
-                      >
-                        Reopen
-                      </button>
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending || !canOpenGenerate}
-                        title={generateBlockedReason || 'Generate draw'}
-                      >
-                        Draw
-                      </button>
-                    </>
-                  )}
-                  {active.tournament.status === 'REGISTRATION_CLOSED' && fixturesExist && (
-                    <>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => openMut.mutate()}
-                        disabled={openMut.isPending}
-                        title="Reopen registration"
-                      >
-                        Reopen
-                      </button>
-                      <button
-                        className="btn btn-ghost"
-                        onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending || !canOpenGenerate}
-                        title={generateBlockedReason || 'Re-generate draw'}
-                      >
-                        Redraw
-                      </button>
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => goLiveMut.mutate()}
-                        disabled={goLiveMut.isPending}
-                      >
-                        LIVE
-                      </button>
-                    </>
-                  )}
-                  {active.tournament.status === 'LIVE' && (
+                    )}
+                  {canMarkDone && (
                     <button
                       className="btn btn-primary"
-                      onClick={() => {
-                        void confirmDialog({
-                          title: 'Mark completed?',
-                          message: 'This ends the event for players.',
-                          confirmLabel: 'Done',
-                        }).then((ok) => {
-                          if (ok) completeMut.mutate()
-                        })
-                      }}
+                      onClick={confirmComplete}
                       disabled={completeMut.isPending}
                       title="Mark tournament completed"
                     >
@@ -2474,14 +2438,6 @@ export default function ManageEventPage() {
                     <Link to={`/t/${active.tournament.slug}/live`} className="btn btn-ghost btn-sm">
                       Live board
                     </Link>
-                    {fixturesExist ? (
-                      <Link
-                        to={`/t/${active.tournament.slug}/fixtures`}
-                        className="btn btn-ghost btn-sm"
-                      >
-                        Master sheet
-                      </Link>
-                    ) : null}
                     {displayPath ? (
                       <Link to={displayPath} className="btn btn-ghost btn-sm">
                         TV
@@ -2533,8 +2489,10 @@ export default function ManageEventPage() {
                       <p className="muted">Tap Open above so friends can join with this code.</p>
                     ) : fixturesExist ? (
                       <p className="muted">Draw ready — score on the Control tab.</p>
+                    ) : canReopenRegistration ? (
+                      <p className="muted">Need late joiners? Reopen from Setup.</p>
                     ) : (
-                      <p className="muted">Reopen registration if you still need late joiners.</p>
+                      <p className="muted">Registration is locked at the event start time.</p>
                     )}
                     {active.tournament.status === 'REGISTRATION_OPEN' &&
                     active.tournament.slug &&
@@ -4312,6 +4270,51 @@ export default function ManageEventPage() {
               {orgPanel === 'settings' && (
               <>
               <p className="org-setup-lead muted">Optional extras — scoring stays on Control.</p>
+              {(canReopenRegistration || canRedraw || fixturesExist) && (
+                <section className="org-section org-setup-ops">
+                  <div className="org-section-head">
+                    <h2>Draw & entries</h2>
+                  </div>
+                  <p className="muted org-section-lead" style={{ marginTop: 0 }}>
+                    Late entries lock automatically at the event start time
+                    {active
+                      ? ` (${formatDate(active.tournament.event_date, {
+                          day: 'numeric',
+                          month: 'short',
+                        })} · ${formatTime(active.tournament.start_time)})`
+                      : ''}
+                    . Redraw only if the fixtures are wrong.
+                  </p>
+                  <div className="org-setup-ops-actions">
+                    {canReopenRegistration ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={openMut.isPending}
+                        onClick={() => openMut.mutate()}
+                      >
+                        Reopen registration
+                      </button>
+                    ) : null}
+                    {canRedraw ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={generateMut.isPending}
+                        title={generateBlockedReason || 'Re-generate draw'}
+                        onClick={confirmRedraw}
+                      >
+                        Redraw
+                      </button>
+                    ) : null}
+                    {!canReopenRegistration && eventStartedClock ? (
+                      <p className="muted org-setup-ops-note">
+                        Registration is locked — start time has passed.
+                      </p>
+                    ) : null}
+                  </div>
+                </section>
+              )}
               <section className="org-section">
                 <h2>Sponsors</h2>
                 <p className="muted-note" style={{ marginTop: 0 }}>

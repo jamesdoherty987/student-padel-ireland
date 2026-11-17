@@ -579,6 +579,38 @@ def _deadline_passed(t: Tournament) -> bool:
     return datetime.now(timezone.utc) > deadline.astimezone(timezone.utc)
 
 
+def _event_start_utc(t: Tournament) -> datetime:
+    """Event start as UTC (Ireland local date + start_time)."""
+    return datetime.combine(t.event_date, t.start_time, tzinfo=DUBLIN_TZ).astimezone(timezone.utc)
+
+
+def _event_started(t: Tournament) -> bool:
+    """True once the scheduled start date/time has been reached."""
+    return datetime.now(timezone.utc) >= _event_start_utc(t)
+
+
+def _autoclose_registration_if_needed(t: Tournament) -> bool:
+    """Close REGISTRATION_OPEN when deadline or event start has passed. Returns True if changed."""
+    if t.status != TournamentStatus.REGISTRATION_OPEN.value:
+        return False
+    if not (_deadline_passed(t) or _event_started(t)):
+        return False
+    t.status = TournamentStatus.REGISTRATION_CLOSED.value
+    return True
+
+
+def _assert_accepting_new_entries(t: Tournament) -> None:
+    """Block new joins / complimentary / admin adds once locked."""
+    if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
+        raise HTTPException(400, "Cannot add entries to a finished tournament")
+    if t.status == TournamentStatus.LIVE.value or _event_started(t):
+        raise HTTPException(400, "This event has started — registration is closed")
+    if t.status != TournamentStatus.REGISTRATION_OPEN.value:
+        raise HTTPException(400, "Registration is not open")
+    if _deadline_passed(t):
+        raise HTTPException(400, "Registration deadline has passed")
+
+
 def _ensure_ranking(db: Session, user_id: UUID) -> None:
     if not db.query(Ranking).filter(Ranking.user_id == user_id).first():
         db.add(Ranking(user_id=user_id, points=INITIAL_RATING))
@@ -1668,6 +1700,18 @@ def update_tournament(
                 TournamentAdmin.tournament_id == t.id,
                 TournamentAdmin.user_id == new_organiser_id,
             ).delete(synchronize_session=False)
+    if "status" in data:
+        raw_status = data["status"]
+        new_status = raw_status.value if hasattr(raw_status, "value") else raw_status
+        if (
+            new_status == TournamentStatus.REGISTRATION_OPEN.value
+            and _event_started(t)
+        ):
+            raise HTTPException(
+                400,
+                "Can’t reopen registration — the event start time has passed",
+            )
+
     for field, value in data.items():
         if hasattr(value, "value"):
             value = value.value
@@ -1794,21 +1838,24 @@ def register_team(
                 "This is a private event. Join with the invite code from the host.",
             )
 
+    _autoclose_registration_if_needed(t)
+
     if resume_reg:
-        if t.status in (
-            TournamentStatus.LIVE.value,
-            TournamentStatus.COMPLETED.value,
-            TournamentStatus.CANCELLED.value,
+        if (
+            t.status
+            in (
+                TournamentStatus.LIVE.value,
+                TournamentStatus.COMPLETED.value,
+                TournamentStatus.CANCELLED.value,
+            )
+            or _event_started(t)
         ):
             raise HTTPException(
                 400,
                 "This event has started - you can’t finish registration. Leave the entry instead.",
             )
     else:
-        if t.status != TournamentStatus.REGISTRATION_OPEN.value:
-            raise HTTPException(400, "Registration is not open")
-        if _deadline_passed(t):
-            raise HTTPException(400, "Registration deadline has passed")
+        _assert_accepting_new_entries(t)
         if _paid_team_count(db, t.id) >= t.max_teams:
             raise HTTPException(400, "Tournament is full")
 
@@ -1977,10 +2024,8 @@ def organiser_add_team(
     if not t:
         raise HTTPException(404, "Tournament not found")
     _assert_organiser(user, t, db)
-    if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
-        raise HTTPException(400, "Cannot add teams to a finished tournament")
-    if t.status == TournamentStatus.LIVE.value:
-        raise HTTPException(400, "Cannot add teams while the event is live")
+    _autoclose_registration_if_needed(t)
+    _assert_accepting_new_entries(t)
     if _paid_team_count(db, t.id) >= t.max_teams:
         raise HTTPException(400, "Tournament is full")
     if db.query(Match).filter(Match.tournament_id == t.id).count() > 0:
@@ -4346,10 +4391,8 @@ def create_free_team(
     _assert_organiser(user, t, db)
     rate_limit(request, key=f"free-team:{t.id}", limit=40, window_seconds=3600)
 
-    if t.status in (TournamentStatus.COMPLETED.value, TournamentStatus.CANCELLED.value):
-        raise HTTPException(400, "Cannot add entries to a finished tournament")
-    if t.status == TournamentStatus.LIVE.value:
-        raise HTTPException(400, "Cannot add entries while the event is live")
+    _autoclose_registration_if_needed(t)
+    _assert_accepting_new_entries(t)
     if _paid_team_count(db, t.id) >= t.max_teams:
         raise HTTPException(400, "Tournament is full")
     if db.query(Match).filter(Match.tournament_id == t.id).count() > 0:
@@ -5261,7 +5304,10 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
             .all()
         )
     stats = []
+    closed_any = False
     for t in tournaments:
+        if _autoclose_registration_if_needed(t):
+            closed_any = True
         teams = _team_count(db, t.id)
         paid = (
             db.query(Registration)
@@ -5336,4 +5382,6 @@ def organiser_dashboard(user: User = Depends(get_current_user), db: Session = De
                 "can_manage_admins": is_owner,
             }
         )
+    if closed_any:
+        db.commit()
     return {"tournaments": stats}
