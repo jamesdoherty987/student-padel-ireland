@@ -48,6 +48,12 @@ import {
 } from '../utils/format'
 import { mediaUrl } from '../utils/media'
 import {
+  isActiveOnCourt,
+  isCourtsideRelevant,
+  isImminentScheduled,
+  sortByScheduledStart,
+} from '../utils/matchTiming'
+import {
   TEAM_GENDER_OPTIONS,
   TEAM_GENDER_ROW_OPTIONS,
   countTeamGenders,
@@ -1360,29 +1366,17 @@ export default function ManageEventPage() {
     fixturesExist,
   ])
 
-  /** One card per court: LIVE / confirm beat CALLED, then next SCHEDULED. */
+  /** One card per court for live/called, or SCHEDULED within 15 mins of tip-off. */
   const courtsideNow = useMemo(() => {
     type Slot = { courtKey: string; label: string; match: Match; kind: 'live' | 'called' | 'next' }
+    const now = Date.now()
     const byCourt = new Map<number, Match[]>()
     const unassigned: Match[] = []
     for (const m of matches) {
       if (!m.team_a_id || !m.team_b_id) continue
-      if (
-        m.status !== 'LIVE' &&
-        m.status !== 'CALLED' &&
-        m.status !== 'SCHEDULED' &&
-        m.status !== 'AWAITING_CONFIRM'
-      ) {
-        continue
-      }
+      if (!isCourtsideRelevant(m, now)) continue
       if (m.court_number == null) {
-        if (
-          m.status === 'LIVE' ||
-          m.status === 'CALLED' ||
-          m.status === 'AWAITING_CONFIRM'
-        ) {
-          unassigned.push(m)
-        }
+        if (isActiveOnCourt(m.status)) unassigned.push(m)
         continue
       }
       const list = byCourt.get(m.court_number) || []
@@ -1393,23 +1387,19 @@ export default function ManageEventPage() {
       list.find((m) => m.status === 'LIVE') ||
       list.find((m) => m.status === 'AWAITING_CONFIRM') ||
       list.find((m) => m.status === 'CALLED') ||
-      list
-        .filter((m) => m.status === 'SCHEDULED')
-        .sort((a, b) => {
-          const ta = a.scheduled_start ? new Date(a.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
-          const tb = b.scheduled_start ? new Date(b.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
-          if (ta !== tb) return ta - tb
-          return (a.sort_order || 0) - (b.sort_order || 0)
-        })[0] ||
+      list.filter((m) => m.status === 'SCHEDULED').sort(sortByScheduledStart)[0] ||
       null
 
     const slots: Slot[] = []
-    const courtNums = Array.from(byCourt.keys()).sort((a, b) => a - b)
-    for (const num of courtNums) {
+    for (const num of Array.from(byCourt.keys()).sort((a, b) => a - b)) {
       const m = pick(byCourt.get(num) || [])
       if (!m) continue
       const kind =
-        m.status === 'LIVE' ? 'live' : m.status === 'CALLED' || m.status === 'AWAITING_CONFIRM' ? 'called' : 'next'
+        m.status === 'LIVE'
+          ? 'live'
+          : m.status === 'CALLED' || m.status === 'AWAITING_CONFIRM'
+            ? 'called'
+            : 'next'
       slots.push({
         courtKey: `c-${num}`,
         label: courtLabel(m.court_name, m.court_number),
@@ -1427,6 +1417,12 @@ export default function ManageEventPage() {
     }
     return slots
   }, [matches])
+
+  const courtsideTitle = useMemo(() => {
+    if (courtsideNow.some((s) => s.kind === 'live' || s.kind === 'called')) return 'Courts now'
+    if (courtsideNow.length > 0) return 'Up next'
+    return 'Courts now'
+  }, [courtsideNow])
 
   const paymentLabel = (team: TournamentTeam) => {
     if (team.payment_via === 'pay_on_arrival') return 'Not paid · venue'
@@ -1558,30 +1554,19 @@ export default function ManageEventPage() {
 
   const filteredMatches = useMemo(() => {
     const now = Date.now()
-    const windowMs = 45 * 60 * 1000
     const stageRank = (stage: string) =>
       stage === 'KNOCKOUT' ? 0 : stage === 'PLATE' ? 1 : stage === 'GROUP' ? 2 : 3
     const sorted = [...matches].sort((a, b) => {
       const sr = stageRank(a.stage) - stageRank(b.stage)
       if (sr !== 0) return sr
-      const ta = a.scheduled_start ? new Date(a.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
-      const tb = b.scheduled_start ? new Date(b.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
-      if (ta !== tb) return ta - tb
-      return (a.sort_order || 0) - (b.sort_order || 0)
+      return sortByScheduledStart(a, b)
     })
     const bothTeams = (m: Match) => !!(m.team_a_id && m.team_b_id)
     return sorted.filter((m) => {
       if (courtFilter !== 'all' && String(m.court_number) !== courtFilter) return false
       if (matchFilter === 'now') {
         if (!bothTeams(m)) return false
-        return (
-          m.status === 'LIVE' ||
-          m.status === 'CALLED' ||
-          m.status === 'AWAITING_CONFIRM' ||
-          (m.status === 'SCHEDULED' &&
-            !!m.scheduled_start &&
-            Math.abs(new Date(m.scheduled_start).getTime() - now) <= windowMs)
-        )
+        return isCourtsideRelevant(m, now)
       }
       if (matchFilter === 'upcoming') {
         return m.status === 'SCHEDULED' && bothTeams(m)
@@ -3437,7 +3422,7 @@ export default function ManageEventPage() {
               {courtsideNow.length > 0 && (
                 <section className="org-section org-now-board">
                   <div className="org-section-head">
-                    <h2>Courts now</h2>
+                    <h2>{courtsideTitle}</h2>
                     <span className="muted">{courtsideNow.length}</span>
                   </div>
                   <div className="org-now-grid">

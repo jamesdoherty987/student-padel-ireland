@@ -31,6 +31,7 @@ import {
   tournamentFormatSummary,
 } from '../utils/format'
 import { scoringModeLabel } from '../utils/matchRules'
+import { sortByScheduledStart } from '../utils/matchTiming'
 import './Tournament.css'
 
 export default function TournamentDetailPage() {
@@ -185,7 +186,11 @@ export default function TournamentDetailPage() {
   }
 
   const pendingConfirm = matches.filter((m) => m.status === 'AWAITING_CONFIRM').slice(0, 6)
-  const upcoming = matches.filter((m) => m.status === 'SCHEDULED').slice(0, 8)
+  const upcoming = matches
+    .filter((m) => m.status === 'SCHEDULED' && m.team_a_id && m.team_b_id)
+    .slice()
+    .sort(sortByScheduledStart)
+    .slice(0, 8)
   const championshipMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
   const plateMatches = matches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]

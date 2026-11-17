@@ -9,6 +9,12 @@ import { isNativeApp } from '../native/platform'
 import { setStatusBarForDarkScreen, setStatusBarForLightScreen } from '../native/statusBar'
 import { tournamentApi, type Match } from '../services/api'
 import { currentSetScores, formatLiveBoardScore, formatTime } from '../utils/format'
+import {
+  isActiveOnCourt,
+  isCourtsideRelevant,
+  isImminentScheduled,
+  sortByScheduledStart,
+} from '../utils/matchTiming'
 import './TvDisplay.css'
 
 function teamName(m: Match, side: 'a' | 'b') {
@@ -31,33 +37,23 @@ function gridDims(count: number): { cols: number; rows: number } {
   return { cols, rows: Math.ceil(n / cols) }
 }
 
-function isOnCourt(status: string) {
-  return status === 'LIVE' || status === 'CALLED' || status === 'AWAITING_CONFIRM'
-}
-
 function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
-  const activePool = matches.filter(
-    (m) =>
-      m.status === 'LIVE' ||
-      m.status === 'CALLED' ||
-      m.status === 'SCHEDULED' ||
-      m.status === 'AWAITING_CONFIRM',
-  )
+  const now = Date.now()
+  const activePool = matches
+    .filter((m) => !!(m.team_a_id && m.team_b_id) && isCourtsideRelevant(m, now))
+    .slice()
+    .sort(sortByScheduledStart)
   const current =
     activePool.find((m) => m.status === 'LIVE') ||
     activePool.find((m) => m.status === 'CALLED') ||
     activePool.find((m) => m.status === 'AWAITING_CONFIRM') ||
-    activePool.find((m) => m.status === 'SCHEDULED') ||
+    activePool.find((m) => isImminentScheduled(m, now)) ||
     null
   const nextUp =
     current &&
     activePool
-      .filter((m) => m.id !== current.id && m.status === 'SCHEDULED')
-      .sort((a, b) => {
-        const ta = a.scheduled_start ? new Date(a.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
-        const tb = b.scheduled_start ? new Date(b.scheduled_start).getTime() : Number.MAX_SAFE_INTEGER
-        return ta - tb
-      })[0]
+      .filter((m) => m.id !== current.id && isImminentScheduled(m, now))
+      .sort(sortByScheduledStart)[0]
 
   if (!current) {
     return (
@@ -71,7 +67,7 @@ function CourtPanel({ label, matches }: { label: string; matches: Match[] }) {
   const status = current.status
   const board = formatLiveBoardScore(current.score)
   const games = currentSetScores(current.score)
-  const onCourt = isOnCourt(status)
+  const onCourt = isActiveOnCourt(status)
   const hasScore = !!(
     current.score &&
     (current.score.set1_a ||
@@ -148,7 +144,9 @@ function UnassignedPanel({ matches }: { matches: Match[] }) {
       <ul>
         {matches.map((m) => (
           <li key={m.id}>
-            <span className={`tv-pill ${isOnCourt(m.status) ? 'tv-pill-called' : 'tv-pill-next'}`}>
+            <span
+              className={`tv-pill ${isActiveOnCourt(m.status) ? 'tv-pill-called' : 'tv-pill-next'}`}
+            >
               {m.status === 'LIVE' ? 'Live' : m.status === 'CALLED' ? 'Go now' : m.status.replace(/_/g, ' ')}
             </span>
             <span title={`${teamName(m, 'a')} vs ${teamName(m, 'b')}`}>

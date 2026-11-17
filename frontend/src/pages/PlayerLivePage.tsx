@@ -24,6 +24,7 @@ import {
   knockoutRoundLabel,
   reminderPromiseCopy,
 } from '../utils/format'
+import { isSameLocalDay } from '../utils/matchTiming'
 import { getRememberedPrivateInvite } from '../utils/privateEventAccess'
 import './PlayerLive.css'
 import './Tournament.css'
@@ -1280,7 +1281,16 @@ export default function PlayerLivePage() {
 
         {hasPaidEntry && myUpcoming.filter((m) => m.id !== next?.id).length > 0 && (
           <section className="pl-block" id="pl-later">
-            <h2>Later today</h2>
+            <h2>
+              {myUpcoming.some(
+                (m) =>
+                  m.id !== next?.id &&
+                  m.scheduled_start &&
+                  !isSameLocalDay(m.scheduled_start),
+              )
+                ? 'Also scheduled'
+                : 'Later today'}
+            </h2>
             <ul className="pl-schedule">
               {myUpcoming
                 .filter((m) => m.id !== next?.id)
