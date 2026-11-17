@@ -219,6 +219,8 @@ export default function ManageEventPage() {
   const [entriesSort, setEntriesSort] = useState<'newest' | 'oldest' | 'name'>('newest')
   const [checkInFilter, setCheckInFilter] = useState<'all' | 'out' | 'in'>('out')
   const [checkInQuery, setCheckInQuery] = useState('')
+  /** Control desk: score matches vs check-in — avoids scrolling past either. */
+  const [controlDesk, setControlDesk] = useState<'score' | 'checkin'>('score')
   const [orgPanel, setOrgPanel] = useState<OrgPanel>('registration')
   const [scoreForm, setScoreForm] = useState({
     set1_a: 0,
@@ -440,6 +442,9 @@ export default function ManageEventPage() {
     }) => tournamentApi.generate(tid!, payload),
     onSuccess: (res) => {
       setConfirmGenerate(false)
+      setOrgPanel('day-of')
+      setControlDesk('score')
+      setMatchFilter('active')
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
       invalidateTournamentPublic()
@@ -460,6 +465,12 @@ export default function ManageEventPage() {
       } else {
         showToast(`Generated ${groupsN} groups · ${matchesN} matches${sizes}${byes}${adjusted}`)
       }
+      window.setTimeout(() => {
+        const el =
+          document.getElementById('org-desk-tabs') ||
+          document.getElementById('org-score-desk')
+        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 80)
     },
     onError: (e: unknown) => {
       showToast(apiErrorMessage(e, 'Generate failed. You need at least 2 paid entries.'))
@@ -1166,6 +1177,10 @@ export default function ManageEventPage() {
   useEffect(() => {
     if (!active) return
     setOrgPanel(defaultOrgPanel(active.tournament.status, fixturesExist))
+    // Prefer check-in before the draw exists; score desk once fixtures are live.
+    setControlDesk(
+      fixturesExist || active.tournament.status === 'LIVE' ? 'score' : 'checkin',
+    )
   }, [active?.tournament.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Busy day: open matches first when switching into a live / drawn event
@@ -1690,6 +1705,17 @@ export default function ManageEventPage() {
     })
   }
 
+  const switchControlDesk = (desk: 'score' | 'checkin') => {
+    setControlDesk(desk)
+    window.setTimeout(() => {
+      const target =
+        desk === 'checkin'
+          ? document.getElementById('org-checkin') || document.getElementById('org-desk-tabs')
+          : document.getElementById('org-desk-tabs') || document.getElementById('org-score-desk')
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 40)
+  }
+
   const openMove = (m: Match) => {
     setMoveMatch(m)
     const t = m.scheduled_start ? new Date(m.scheduled_start) : null
@@ -2179,7 +2205,7 @@ export default function ManageEventPage() {
                   {fixturesExist && active.tournament.slug ? (
                     <Link
                       to={`/t/${active.tournament.slug}/fixtures`}
-                      className="btn btn-dark"
+                      className="btn org-master-sheet-btn"
                       title="Open the full fixture list — tap any match to score"
                     >
                       Master sheet
@@ -2379,40 +2405,40 @@ export default function ManageEventPage() {
                   </p>
                 )}
 
-              {orgPanel !== 'day-of' && (
-                <div className="org-stats">
-                  <div>
-                    <strong>{active.players}</strong>
-                    <span>Players</span>
-                  </div>
-                  {!isSingles && (
-                    <div>
-                      <strong>{active.teams}</strong>
-                      <span>Teams</span>
-                    </div>
-                  )}
-                  <div>
-                    <strong>{formatMoney(active.revenue_cents)}</strong>
-                    <span>Collected</span>
-                  </div>
-                  <div>
-                    <strong>
-                      {active.paid_registrations}/{active.tournament.max_teams}
-                    </strong>
-                    <span>Registered</span>
-                  </div>
-                  <div>
-                    <strong>{active.live_matches}</strong>
-                    <span>Live matches</span>
-                  </div>
-                  <div>
-                    <strong>
-                      {active.checked_in}/{active.teams}
-                    </strong>
-                    <span>Checked in</span>
-                  </div>
+              <div className="org-stats" aria-label="Event stats">
+                <div className="org-stat org-stat--players">
+                  <strong>{active.players}</strong>
+                  <span>Players</span>
                 </div>
-              )}
+                {!isSingles && (
+                  <div className="org-stat org-stat--teams">
+                    <strong>{active.teams}</strong>
+                    <span>Teams</span>
+                  </div>
+                )}
+                <div className="org-stat org-stat--money">
+                  <strong>{formatMoney(active.revenue_cents)}</strong>
+                  <span>Collected</span>
+                </div>
+                <div className="org-stat org-stat--registered">
+                  <strong>
+                    {active.paid_registrations}/{active.tournament.max_teams}
+                  </strong>
+                  <span>Registered</span>
+                </div>
+                <div className="org-stat org-stat--live">
+                  <strong>{active.live_matches}</strong>
+                  <span>Live matches</span>
+                </div>
+                <div className="org-stat org-stat--checkin">
+                  <strong>
+                    {checkInPool.length > 0
+                      ? `${checkedInCount}/${checkInPool.length}`
+                      : `${active.checked_in}/${active.teams}`}
+                  </strong>
+                  <span>Checked in</span>
+                </div>
+              </div>
 
               <div className="section-tabs org-control-tabs" role="tablist" aria-label="Event sections">
                 {(
@@ -3593,10 +3619,7 @@ export default function ManageEventPage() {
                               className="btn btn-ghost btn-sm org-action-btn"
                               onClick={() => {
                                 setCheckInFilter('out')
-                                document.getElementById('org-checkin')?.scrollIntoView({
-                                  behavior: 'smooth',
-                                  block: 'start',
-                                })
+                                switchControlDesk('checkin')
                               }}
                             >
                               Open
@@ -3675,18 +3698,70 @@ export default function ManageEventPage() {
               )}
 
               {checkInPool.length > 0 && (
-                <details
-                  id="org-checkin"
-                  className={`org-section org-checkin${awaitingCheckInCount > 0 ? ' needs-you' : ''}`}
-                  open={awaitingCheckInCount > 0}
+                <div
+                  id="org-desk-tabs"
+                  className="org-desk-tabs"
+                  role="tablist"
+                  aria-label="Control desk"
                 >
-                  <summary className="org-section-head org-checkin-summary">
+                  <button
+                    type="button"
+                    id="org-desk-tab-score"
+                    role="tab"
+                    aria-selected={controlDesk === 'score'}
+                    aria-controls="org-score-desk"
+                    className={`org-desk-tab${controlDesk === 'score' ? ' is-active' : ''}`}
+                    onClick={() => switchControlDesk('score')}
+                  >
+                    Score & winners
+                    {dayOps.open > 0 ? (
+                      <span className="org-desk-tab-badge" aria-label={`${dayOps.open} open`}>
+                        {dayOps.open}
+                      </span>
+                    ) : null}
+                  </button>
+                  <button
+                    type="button"
+                    id="org-desk-tab-checkin"
+                    role="tab"
+                    aria-selected={controlDesk === 'checkin'}
+                    aria-controls="org-checkin"
+                    className={`org-desk-tab${controlDesk === 'checkin' ? ' is-active' : ''}${
+                      awaitingCheckInCount > 0 ? ' has-alert' : ''
+                    }`}
+                    onClick={() => switchControlDesk('checkin')}
+                  >
+                    Check-in
+                    <span
+                      className="org-desk-tab-badge"
+                      aria-label={
+                        awaitingCheckInCount > 0
+                          ? `${awaitingCheckInCount} still out`
+                          : `All ${checkedInCount} checked in`
+                      }
+                    >
+                      {awaitingCheckInCount > 0
+                        ? `${awaitingCheckInCount} out`
+                        : `${checkedInCount}/${checkInPool.length}`}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {checkInPool.length > 0 && controlDesk === 'checkin' && (
+                <section
+                  id="org-checkin"
+                  role="tabpanel"
+                  aria-labelledby="org-desk-tab-checkin"
+                  className={`org-section org-checkin${awaitingCheckInCount > 0 ? ' needs-you' : ''}`}
+                >
+                  <div className="org-section-head">
                     <h2>Check-in</h2>
                     <span className="org-checkin-count">
                       {checkedInCount}/{checkInPool.length}
                       {awaitingCheckInCount > 0 ? ` · ${awaitingCheckInCount} out` : ' · all in'}
                     </span>
-                  </summary>
+                  </div>
                   <div className="org-checkin-toolbar">
                     <input
                       id="checkin-search"
@@ -3793,9 +3868,11 @@ export default function ManageEventPage() {
                       </p>
                     )}
                   </div>
-                </details>
+                </section>
               )}
 
+              {(checkInPool.length === 0 || controlDesk === 'score') && (
+              <>
               {courtsideNow.length > 0 && (
                 <section className="org-section org-now-board">
                   <div className="org-section-head">
@@ -3870,7 +3947,12 @@ export default function ManageEventPage() {
                 </section>
               )}
 
-              <section className="org-section org-score-desk">
+              <section
+                id="org-score-desk"
+                className="org-section org-score-desk"
+                role={checkInPool.length > 0 ? 'tabpanel' : undefined}
+                aria-labelledby={checkInPool.length > 0 ? 'org-desk-tab-score' : undefined}
+              >
                 <div className="org-section-head">
                   <h2>
                     {hasKnockoutMatches && isKnockoutActive(matches)
@@ -4036,15 +4118,46 @@ export default function ManageEventPage() {
                             <h3>Unassigned</h3>
                             {filteredMatches
                               .filter((m) => m.court_number == null)
-                              .map((m) => (
-                                <div key={m.id} className="org-court-card">
-                                  <strong>
-                                    {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
-                                    {m.team_b_name || m.team_b_placeholder || 'TBD'}
-                                  </strong>
-                                  {renderMatchActions(m, true)}
-                                </div>
-                              ))}
+                              .map((m) => {
+                                const canTap = !!(m.team_a_id && m.team_b_id)
+                                return (
+                                  <div
+                                    key={m.id}
+                                    className={`org-court-card is-${m.status.toLowerCase()}${canTap ? ' is-tap' : ''}`}
+                                    role={canTap ? 'button' : undefined}
+                                    tabIndex={canTap ? 0 : undefined}
+                                    onClick={
+                                      canTap
+                                        ? (e) => {
+                                            if ((e.target as HTMLElement).closest('button')) return
+                                            scoreMatchQuick(m)
+                                          }
+                                        : undefined
+                                    }
+                                    onKeyDown={
+                                      canTap
+                                        ? (e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                              e.preventDefault()
+                                              scoreMatchQuick(m)
+                                            }
+                                          }
+                                        : undefined
+                                    }
+                                  >
+                                    <strong>
+                                      {m.team_a_name || m.team_a_placeholder || 'TBD'} vs{' '}
+                                      {m.team_b_name || m.team_b_placeholder || 'TBD'}
+                                    </strong>
+                                    <span>
+                                      {knockoutRoundLabel(m.round, m.stage)}
+                                      {m.score ? ` · ${formatMatchScore(m.score)}` : ''}
+                                      {m.scheduled_start ? ` · ${formatTime(m.scheduled_start)}` : ''}
+                                    </span>
+                                    {renderMatchActions(m, true)}
+                                  </div>
+                                )
+                              })}
                           </div>
                         )}
                       </>
@@ -4127,6 +4240,8 @@ export default function ManageEventPage() {
                   </div>
                 )}
               </section>
+              </>
+              )}
 
               <details className="org-section org-announce-block">
                 <summary className="org-section-head">
