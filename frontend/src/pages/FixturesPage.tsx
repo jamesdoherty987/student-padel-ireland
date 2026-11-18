@@ -27,6 +27,13 @@ function sideName(m: Match, side: 'a' | 'b') {
   return m.team_b_name || m.team_b_placeholder || 'TBD'
 }
 
+function winnerSide(m: Match): 'a' | 'b' | null {
+  if (!m.winner_id) return null
+  if (m.team_a_id && m.winner_id === m.team_a_id) return 'a'
+  if (m.team_b_id && m.winner_id === m.team_b_id) return 'b'
+  return null
+}
+
 function groupKey(m: Match) {
   if (m.stage === 'GROUP' && m.round?.startsWith('GROUP_')) {
     return m.round.replace('GROUP_', '')
@@ -309,6 +316,9 @@ export default function FixturesPage() {
                           m.status === 'WALKOVER' ||
                           m.status === 'CANCELLED'
                         const scoreText = m.score ? formatMatchScore(m.score) : ''
+                        const hasScore = !!(scoreText && scoreText !== '-')
+                        const win = winnerSide(m)
+                        const winnerName = win ? sideName(m, win) : null
                         const canTap = isOps
                         const actionLabel = !m.team_a_id || !m.team_b_id
                           ? 'Move'
@@ -322,6 +332,7 @@ export default function FixturesPage() {
                             key={m.id}
                             className={[
                               done ? 'is-done' : '',
+                              win ? 'has-winner' : '',
                               canTap ? 'is-interactive' : '',
                             ]
                               .filter(Boolean)
@@ -346,17 +357,54 @@ export default function FixturesPage() {
                             </td>
                             <td className="fixtures-match">
                               <div className="fixtures-sides">
-                                <span className="fixtures-side">{sideName(m, 'a')}</span>
+                                <span
+                                  className={[
+                                    'fixtures-side',
+                                    win === 'a' ? 'is-winner' : '',
+                                    win === 'b' ? 'is-loser' : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' ')}
+                                >
+                                  {sideName(m, 'a')}
+                                  {win === 'a' ? (
+                                    <span className="fixtures-won-tag">Won</span>
+                                  ) : null}
+                                </span>
                                 <span className="fixtures-vs">vs</span>
-                                <span className="fixtures-side">{sideName(m, 'b')}</span>
+                                <span
+                                  className={[
+                                    'fixtures-side',
+                                    win === 'b' ? 'is-winner' : '',
+                                    win === 'a' ? 'is-loser' : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' ')}
+                                >
+                                  {sideName(m, 'b')}
+                                  {win === 'b' ? (
+                                    <span className="fixtures-won-tag">Won</span>
+                                  ) : null}
+                                </span>
                               </div>
                             </td>
-                            <td className="fixtures-status">{statusLabel(m.status)}</td>
+                            <td className="fixtures-status">
+                              {m.status === 'WALKOVER'
+                                ? 'Walkover'
+                                : winnerName
+                                  ? 'Final'
+                                  : statusLabel(m.status)}
+                            </td>
                             <td
                               className="fixtures-score"
-                              data-empty={scoreText ? undefined : 'true'}
+                              data-empty={hasScore || winnerName ? undefined : 'true'}
                             >
-                              {scoreText || '—'}
+                              {hasScore ? <span className="fixtures-score-nums">{scoreText}</span> : null}
+                              {winnerName ? (
+                                <span className="fixtures-winner-line">{winnerName} won</span>
+                              ) : hasScore ? null : (
+                                '—'
+                              )}
                             </td>
                             {isOps ? (
                               <td className="fixtures-action">
