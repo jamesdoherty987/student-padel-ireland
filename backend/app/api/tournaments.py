@@ -1266,6 +1266,88 @@ def _fill_first_round_slots(
     return filled
 
 
+def _groups_finished(db: Session, tournament_id: UUID) -> bool:
+    group_matches = (
+        db.query(Match)
+        .filter(Match.tournament_id == tournament_id, Match.stage == "GROUP")
+        .all()
+    )
+    if not group_matches:
+        return False
+    return all(
+        m.status
+        in (
+            MatchStatus.COMPLETED.value,
+            MatchStatus.WALKOVER.value,
+            MatchStatus.CANCELLED.value,
+        )
+        for m in group_matches
+    )
+
+
+def _knockout_draw_unfilled(db: Session, tournament_id: UUID) -> bool:
+    """True when Cup/Shield rows exist but no team has been seated yet."""
+    ko = (
+        db.query(Match)
+        .filter(Match.tournament_id == tournament_id, Match.stage.in_(["KNOCKOUT", "PLATE"]))
+        .all()
+    )
+    if not ko:
+        return False
+    return all(not m.team_a_id and not m.team_b_id for m in ko)
+
+
+def _awaiting_knockout_placeholder(db: Session, t: Tournament, *, qual: str | None) -> dict:
+    """
+    Soft next-match card so older app builds don't flash “you're out” while the
+    organiser still hasn't filled Cup/Shield. Does not seat any teams.
+    """
+    first = (
+        db.query(Match)
+        .filter(Match.tournament_id == t.id, Match.stage.in_(["KNOCKOUT", "PLATE"]))
+        .order_by(Match.sort_order, Match.scheduled_start)
+        .first()
+    )
+    path = (
+        "Cup"
+        if qual == "cup"
+        else "Shield"
+        if qual == "shield"
+        else "Knockout"
+        if qual in ("qualify", "cup", "shield")
+        else "Knockout"
+    )
+    label = f"{path} draw soon" if qual in ("cup", "shield", "qualify") else "Draw soon"
+    return {
+        "id": first.id if first else t.id,
+        "tournament_id": t.id,
+        "round": first.round if first else "ROUND_OF_16",
+        "stage": first.stage if first else "KNOCKOUT",
+        "court_number": None,
+        "court_name": None,
+        "scheduled_start": first.scheduled_start if first else None,
+        "team_a_id": None,
+        "team_b_id": None,
+        "team_a_name": None,
+        "team_b_name": None,
+        "team_a_placeholder": label,
+        "team_b_placeholder": "Waiting for draw",
+        "status": MatchStatus.SCHEDULED.value,
+        "winner_id": None,
+        "score": None,
+        "ratings_applied": False,
+        "entered_by_id": None,
+        "confirmed_by_id": None,
+        "sort_order": first.sort_order if first else 0,
+        "next_match_id": None,
+        "next_match_slot": None,
+        "can_i_score": False,
+        "needs_my_confirm": False,
+        "score_submitted_by_me": False,
+        "awaiting_knockout_draw": True,
+    }
+
+
 def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
     """
     Fill first-round KO / Plate slots from finished group standings.
@@ -5093,6 +5175,31 @@ def player_view(
         .limit(8)
         .all()
     )
+    standings = _standings_payload(db, t)
+    my_qualification: str | None = None
+    if my_team:
+        for block in standings:
+            for row in block.get("standings") or []:
+                tid = getattr(row, "team_id", None) or (row.get("team_id") if isinstance(row, dict) else None)
+                if tid is not None and str(tid) == str(my_team.id):
+                    my_qualification = getattr(row, "qualification", None) or (
+                        row.get("qualification") if isinstance(row, dict) else None
+                    )
+                    break
+            if my_qualification is not None:
+                break
+
+    # Groups done, Cup/Shield not filled yet — never leave paid players on a blank
+    # next_match (older app builds treat that as “you're out”).
+    awaiting_knockout_draw = bool(
+        my_team
+        and my_payment_status == PaymentStatus.PAID.value
+        and _groups_finished(db, t.id)
+        and _knockout_draw_unfilled(db, t.id)
+    )
+    if awaiting_knockout_draw and next_match is None:
+        next_match = _awaiting_knockout_placeholder(db, t, qual=my_qualification)
+
     return {
         "tournament": _tournament_out(db, t, viewer=user),
         "my_team": (
@@ -5110,6 +5217,7 @@ def player_view(
                 "partner_invite_pending": partner_invite_pending,
                 "needs_partner": needs_partner,
                 "custom_answers": answers_for_team(db, my_team),
+                "qualification": my_qualification,
             }
             if my_team
             else None
@@ -5120,7 +5228,9 @@ def player_view(
         "my_results": my_results,
         "live_matches": [_match_out(db, m, court_names) for m in live],
         "called_matches": [_match_out(db, m, court_names) for m in called],
-        "standings": _standings_payload(db, t),
+        "standings": standings,
+        "awaiting_knockout_draw": awaiting_knockout_draw,
+        "my_qualification": my_qualification,
         "announcements": [
             {
                 "id": a.id,

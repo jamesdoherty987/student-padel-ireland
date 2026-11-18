@@ -1048,8 +1048,6 @@ export default function PlayerLivePage() {
     t.status !== 'CANCELLED'
   const reminderNote = waitingOnDraw ? reminderPromiseCopy(t.event_date) : ''
   const matchDayLive = hasPaidEntry && (t.status === 'LIVE' || drawReady)
-  const myOnCourt =
-    hasPaidEntry && next && (next.status === 'LIVE' || next.status === 'CALLED')
   const championshipMatches = bracketMatches.filter((m) => m.stage === 'KNOCKOUT')
   const plateMatches = bracketMatches.filter((m) => m.stage === 'PLATE')
   const knockoutMatches = [...championshipMatches, ...plateMatches]
@@ -1060,16 +1058,41 @@ export default function PlayerLivePage() {
     allMatches
       .filter((m) => m.stage === 'GROUP')
       .every((m) => m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED')
+  const awaitingKnockoutDraw = !!(data as { awaiting_knockout_draw?: boolean }).awaiting_knockout_draw
+  const apiQualification = (data as { my_qualification?: QualPath | string | null }).my_qualification
+  const myQualification =
+    (apiQualification as QualPath | null | undefined) ||
+    (myTeamId ? qualByTeam[myTeamId] || null : null) ||
+    null
+  // Placeholder next_match from API is only to stop old app builds flashing “you’re out”.
+  const waitingNext = !!(next && (next as { awaiting_knockout_draw?: boolean }).awaiting_knockout_draw)
+  const realNext = waitingNext || awaitingKnockoutDraw ? null : next
+  const myOnCourt =
+    hasPaidEntry && realNext && (realNext.status === 'LIVE' || realNext.status === 'CALLED')
   const playerFate =
-    hasPaidEntry && !next && matchDayLive
-      ? resolvePlayerFate({
-          myTeamId,
-          myResults,
-          allMatches,
-          groupsDone,
-          tournamentDone: t.status === 'COMPLETED',
-          qualification: myTeamId ? qualByTeam[myTeamId] || null : null,
-        })
+    hasPaidEntry && !realNext && matchDayLive
+      ? awaitingKnockoutDraw || !knockoutDrawFilled(allMatches)
+        ? myQualification === 'cup' || myQualification === 'shield' || myQualification === 'qualify'
+          ? {
+              tone: 'wait' as const,
+              title: `Through to the ${
+                myQualification === 'cup' ? 'Cup' : myQualification === 'shield' ? 'Shield' : 'knockout'
+              }`,
+              body: 'Groups are done. Your next match will show here once the knockout draw is ready.',
+            }
+          : {
+              tone: 'wait' as const,
+              title: 'Groups finished',
+              body: 'Waiting for the knockout draw. Check back shortly for what’s next.',
+            }
+        : resolvePlayerFate({
+            myTeamId,
+            myResults,
+            allMatches,
+            groupsDone,
+            tournamentDone: t.status === 'COMPLETED',
+            qualification: myQualification,
+          })
       : null
   // Hide other-courts board when you have your own match focus (or you're out)
   const showVenueBoard =
@@ -1078,29 +1101,29 @@ export default function PlayerLivePage() {
     !isListedPartner &&
     !myOnCourt &&
     !playerFate &&
-    !(hasPaidEntry && next)
+    !(hasPaidEntry && realNext)
 
   const nextActions: NextActions = {
-    onLogScore: () => next && openScoreSheet(next, { mode: 'log' }),
-    onConfirm: () => next && confirmMut.mutate(next.id),
+    onLogScore: () => realNext && openScoreSheet(realNext, { mode: 'log' }),
+    onConfirm: () => realNext && confirmMut.mutate(realNext.id),
     onEditPending: () =>
-      next &&
+      realNext &&
       cancelMut.mutate({
-        matchId: next.id,
+        matchId: realNext.id,
         reopen: true,
         mode: 'edit',
-        draft: pendingDraft(next),
+        draft: pendingDraft(realNext),
       }),
     onDisagree: () =>
-      next &&
+      realNext &&
       cancelMut.mutate({
-        matchId: next.id,
+        matchId: realNext.id,
         reopen: true,
         mode: 'fix',
-        draft: pendingDraft(next),
+        draft: pendingDraft(realNext),
       }),
-    confirming: confirmMut.isPending && confirmMut.variables === next?.id,
-    cancelling: cancelMut.isPending && cancelMut.variables?.matchId === next?.id,
+    confirming: confirmMut.isPending && confirmMut.variables === realNext?.id,
+    cancelling: cancelMut.isPending && cancelMut.variables?.matchId === realNext?.id,
   }
 
   /** Tap own bracket card → score / confirm / edit pending. Organisers score any match. */
@@ -1319,7 +1342,7 @@ export default function PlayerLivePage() {
               </div>
               {leaveBtn}
             </div>
-          ) : next && hasPaidEntry ? (
+          ) : realNext && hasPaidEntry ? (
             <>
               <div className={`pl-next-wrap${scoreSyncing ? ' is-syncing' : ''}`}>
                 {scoreSyncing ? (
@@ -1329,7 +1352,7 @@ export default function PlayerLivePage() {
                   </div>
                 ) : null}
                 <NextMatchCard
-                  next={next}
+                  next={realNext}
                   slug={slug}
                   myTeamId={myTeamId}
                   partnerLabel={partnerLabel}
