@@ -64,7 +64,7 @@ function validateForm(form: TournamentFormState): string | null {
   if (form.format === 'GROUP_KNOCKOUT' && form.enable_plate) {
     const need = form.championship_size + form.plate_size
     if (need > form.max_teams) {
-      return `Championship (${form.championship_size}) + Plate (${form.plate_size}) need ${need} teams, but max entries is ${form.max_teams}`
+      return `Cup (${form.championship_size}) + Shield (${form.plate_size}) need ${need} teams, but max entries is ${form.max_teams}`
     }
   }
   return null

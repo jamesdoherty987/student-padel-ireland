@@ -118,12 +118,12 @@ export function bracketFormatHint(format?: string | null, enablePlate?: boolean)
     return 'Everyone plays everyone in the draw. Standings decide the winner - no knockout stage.'
   }
   if (enablePlate) {
-    return 'Groups first, then a Championship knockout for the top finishers and a Plate knockout for the next tier.'
+    return 'Groups first, then a Cup knockout for the top finishers and a Shield knockout for the next tier.'
   }
   return 'Split into groups first. Top finishers from each group advance to a knockout bracket.'
 }
 
-/** Bare round name without Championship/Plate prefix (for in-bracket tabs). */
+/** Bare round name without Cup/Shield prefix (for in-bracket tabs). */
 export function knockoutRoundBare(round: string) {
   if (!round) return 'Match'
   if (round.startsWith('GROUP_')) return `Group ${round.replace('GROUP_', '')}`
@@ -164,20 +164,20 @@ export function knockoutRoundShort(round: string) {
 /** Display label for knockout / group round codes from the API. */
 export function knockoutRoundLabel(round: string, stage?: string) {
   if (!round) {
-    if (stage === 'PLATE') return 'Plate'
-    if (stage === 'KNOCKOUT') return 'Championship'
+    if (stage === 'PLATE') return 'Shield'
+    if (stage === 'KNOCKOUT') return 'Cup'
     return 'Match'
   }
   const base = knockoutRoundBare(round)
-  if (stage === 'PLATE') return `Plate · ${base}`
-  if (stage === 'KNOCKOUT') return `Championship · ${base}`
+  if (stage === 'PLATE') return `Shield · ${base}`
+  if (stage === 'KNOCKOUT') return `Cup · ${base}`
   return base
 }
 
 /** Short path label for list/TV chips. */
 export function matchPathLabel(stage?: string | null) {
-  if (stage === 'PLATE') return 'Plate'
-  if (stage === 'KNOCKOUT') return 'Championship'
+  if (stage === 'PLATE') return 'Shield'
+  if (stage === 'KNOCKOUT') return 'Cup'
   if (stage === 'GROUP') return 'Groups'
   return ''
 }

@@ -59,7 +59,7 @@ function buildRounds(matches: Match[], stage: 'KNOCKOUT' | 'PLATE'): RoundColumn
     .sort((a, b) => knockoutRoundOrder(a[0]) - knockoutRoundOrder(b[0]))
     .map(([round, list]) => ({
       round,
-      // Bare labels — bracket title already says Championship / Plate
+      // Bare labels — bracket title already says Cup / Shield
       label: knockoutRoundBare(round),
       shortLabel: knockoutRoundShort(round),
       matches: [...list].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
@@ -233,9 +233,9 @@ export default function TournamentBracket({
 
   const roundKey = `${stage}|${rounds.map((r) => r.round).join('|')}`
   const isPlate = stage === 'PLATE'
-  const title = isPlate ? 'Plate' : 'Championship'
-  const lead = isPlate ? 'Consolation path to the plate final.' : 'Path to the final.'
-  const tabsLabel = isPlate ? 'Plate rounds' : 'Championship rounds'
+  const title = isPlate ? 'Shield' : 'Cup'
+  const lead = isPlate ? 'Consolation path to the Shield final.' : 'Path to the Cup final.'
+  const tabsLabel = isPlate ? 'Shield rounds' : 'Cup rounds'
   const championLabel = isPlate ? 'Plate champion' : 'Champion'
 
   useEffect(() => {

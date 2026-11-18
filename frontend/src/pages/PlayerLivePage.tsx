@@ -27,6 +27,11 @@ import {
 } from '../utils/format'
 import { isSameLocalDay } from '../utils/matchTiming'
 import { getRememberedPrivateInvite } from '../utils/privateEventAccess'
+import {
+  qualificationByTeamId,
+  qualificationLabel,
+  type QualPath,
+} from '../utils/qualification'
 import './PlayerLive.css'
 import './Tournament.css'
 
@@ -276,14 +281,14 @@ function resolvePlayerFate(opts: {
     if (won(plateFinal)) {
       return {
         tone: 'champion',
-        title: 'Plate champions',
-        body: 'You won the plate. Great recovery — see results below.',
+        title: 'Shield champions',
+        body: 'You won the Shield. Great recovery — see results below.',
       }
     }
     return {
       tone: 'runner',
-      title: 'Plate runners-up',
-      body: 'You reached the plate final. See your results below.',
+      title: 'Shield runners-up',
+      body: 'You reached the Shield final. See your results below.',
     }
   }
 
@@ -295,11 +300,10 @@ function resolvePlayerFate(opts: {
   )
   const lastLoss = [...myKo].reverse().find(lost)
   if (lastLoss) {
-    const path = lastLoss.stage === 'PLATE' ? 'plate' : 'championship'
     return {
       tone: 'out',
       title: 'You’re out',
-      body: `Knocked out in the ${path} ${knockoutRoundLabel(lastLoss.round, lastLoss.stage).toLowerCase()}. Your results stay below.`,
+      body: `Knocked out in the ${knockoutRoundLabel(lastLoss.round, lastLoss.stage)}. Your results stay below.`,
     }
   }
 
@@ -840,6 +844,29 @@ export default function PlayerLivePage() {
     })
   }, [allMatches, data?.my_upcoming, data?.my_results, data?.next_match])
 
+  const standingsPreview = useMemo(() => {
+    return (data?.standings || []) as Array<{
+      group: string
+      standings: Array<{
+        team_id: string
+        team_name: string
+        points: number
+        qualification?: QualPath | string | null
+      }>
+    }>
+  }, [data?.standings])
+
+  const qualByTeam = useMemo(() => {
+    const tourney = data?.tournament
+    return qualificationByTeamId(standingsPreview, {
+      format: tourney?.format,
+      enablePlate: !!tourney?.enable_plate,
+      championshipSize: tourney?.championship_size ?? 16,
+      plateSize: tourney?.plate_size ?? 16,
+      teamsAdvancePerGroup: tourney?.teams_advance_per_group ?? 2,
+    })
+  }, [standingsPreview, data?.tournament])
+
   // Show next-match as soon as player-view is ready (don’t wait on full fixture list)
   if (isLoading || !viewFetched) {
     return (
@@ -950,10 +977,10 @@ export default function PlayerLivePage() {
   })()
   const liveMatches = (data.live_matches || []) as Match[]
   const calledMatches = (data.called_matches || []) as Match[]
-  const standings = (data.standings || []) as Array<{
-    group: string
-    standings: Array<{ team_id: string; team_name: string; points: number }>
-  }>
+  const standings = standingsPreview
+  const showQualBadges =
+    standings.length > 0 &&
+    (t.format || 'GROUP_KNOCKOUT').toUpperCase() !== 'ROUND_ROBIN'
   const announcements = (data.announcements || []) as LiveAnnouncement[]
   const myUpcoming = (data.my_upcoming || []) as Match[]
   const myResults = (data.my_results || []) as Match[]
@@ -1364,17 +1391,50 @@ export default function PlayerLivePage() {
         {/* Group tables while still in groups — hide once knockout seats fill */}
         {matchesFetched && !knockoutActive && standings.length > 0 && (
           <div id="pl-groups">
+            {showQualBadges ? (
+              <p className="pl-qual-legend">
+                {t.enable_plate
+                  ? groupsDone
+                    ? 'Final path from these tables — Cup or Shield.'
+                    : 'Projected from current tables — updates as results come in. Cup = top knockout · Shield = next tier.'
+                  : groupsDone
+                    ? 'Final path from these tables — who qualifies for the knockout.'
+                    : 'Projected from current tables — top places qualify for the knockout.'}
+              </p>
+            ) : null}
             {standings.map((g) => (
               <section key={g.group} className="pl-block">
                 <h2>Group {g.group}</h2>
-                <ol className="pl-table">
-                  {g.standings.map((row, i) => (
-                    <li key={row.team_id} className={row.team_id === myTeamId ? 'me' : ''}>
-                      <span className="pos">{i + 1}.</span>
-                      <span className="name">{row.team_name}</span>
-                      <span className="pts">{row.points} pts</span>
-                    </li>
-                  ))}
+                <ol className={`pl-table${showQualBadges ? ' pl-table--qual' : ''}`}>
+                  {g.standings.map((row, i) => {
+                    const path = (row.qualification ||
+                      qualByTeam[row.team_id] ||
+                      null) as QualPath | null
+                    const qual = qualificationLabel(path)
+                    return (
+                      <li key={row.team_id} className={row.team_id === myTeamId ? 'me' : ''}>
+                        <span className="pos">{i + 1}.</span>
+                        <span className="name">{row.team_name}</span>
+                        {qual ? (
+                          <span
+                            className={`pl-qual pl-qual--${path || 'out'}`}
+                            title={
+                              path === 'cup'
+                                ? 'Cup knockout'
+                                : path === 'shield'
+                                  ? 'Shield knockout'
+                                  : path === 'qualify'
+                                    ? 'Qualifies for knockout'
+                                    : 'Does not advance'
+                            }
+                          >
+                            {qual}
+                          </span>
+                        ) : null}
+                        <span className="pts">{row.points} pts</span>
+                      </li>
+                    )
+                  })}
                 </ol>
               </section>
             ))}

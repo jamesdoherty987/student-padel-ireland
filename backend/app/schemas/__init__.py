@@ -682,6 +682,8 @@ class StandingOut(BaseModel):
     games_lost: int
     set_difference: int
     game_difference: int
+    # cup | shield | qualify | out — projected knockout path from current tables
+    qualification: Optional[str] = None
 
 
 class CheckInRequest(BaseModel):

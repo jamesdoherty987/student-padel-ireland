@@ -277,14 +277,14 @@ export default function TournamentFormFields({
                 disabled={formatLocked}
                 onChange={(e) => onChange({ enable_plate: e.target.checked })}
               />
-              <span>Championship + Plate</span>
+              <span>Cup + Shield</span>
             </label>
 
             {form.enable_plate ? (
               <div className="admin-form-row admin-form-row-2">
                 <div className="form-group">
                   <label className="form-label" htmlFor="tf-champ-size">
-                    Championship bracket
+                    Cup bracket
                   </label>
                   <select
                     id="tf-champ-size"
@@ -302,7 +302,7 @@ export default function TournamentFormFields({
                 </div>
                 <div className="form-group">
                   <label className="form-label" htmlFor="tf-plate-size">
-                    Plate bracket
+                    Shield bracket
                   </label>
                   <select
                     id="tf-plate-size"

@@ -149,7 +149,7 @@ export function previewDraw(opts: {
     const needed = champ + plate
     if (needed > teamCount) {
       return empty({
-        error: `Championship (${champ}) + Plate (${plate}) need ${needed} teams, but only ${teamCount} are entered`,
+        error: `Cup (${champ}) + Shield (${plate}) need ${needed} teams, but only ${teamCount} are entered`,
         groupCount: groupSizes.length,
         groupSizes,
         groupMatches,
@@ -181,7 +181,7 @@ export function previewDraw(opts: {
       championshipSize: champ,
       plateSize: plate,
       totalMatches: groupMatches + knockoutMatches + plateMatches,
-      note: `${champ} → Championship · ${plate} → Plate`,
+      note: `${champ} → Cup · ${plate} → Shield`,
     }
   }
 
@@ -330,7 +330,7 @@ export function liveDrawStats(opts: {
     if (needed > teamCount) {
       return {
         ok: false,
-        error: `Championship (${champ}) + Plate (${plate}) need ${needed} teams, but only ${teamCount} are entered`,
+        error: `Cup (${champ}) + Shield (${plate}) need ${needed} teams, but only ${teamCount} are entered`,
         groupCount: groupSizes.length,
         groupSizes,
         groupMatches,
@@ -361,7 +361,7 @@ export function liveDrawStats(opts: {
       championshipSize: champ,
       plateSize: plate,
       totalMatches: groupMatches + (champ - 1) + (plate - 1),
-      note: `${champ} → Championship · ${plate} → Plate`,
+      note: `${champ} → Cup · ${plate} → Shield`,
     }
   }
 

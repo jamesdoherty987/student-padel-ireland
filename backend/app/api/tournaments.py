@@ -3994,10 +3994,60 @@ def shift_tournament_schedule(
 
 # ── Standings ─────────────────────────────────────────────────
 
+def _qualification_by_team(
+    ranked_by_group: list[list[str]],
+    *,
+    enable_plate: bool,
+    championship_size: int,
+    plate_size: int,
+    teams_advance_per_group: int,
+    format_name: str,
+) -> dict[str, str]:
+    """Projected Cup/Shield (or Qualify) path from current group tables."""
+    out: dict[str, str] = {}
+    if (format_name or "").upper() == "ROUND_ROBIN":
+        for rows in ranked_by_group:
+            for tid in rows:
+                out[tid] = "out"
+        return out
+
+    if enable_plate:
+        flat: list[str] = []
+        seen: set[str] = set()
+        max_rank = max((len(rows) for rows in ranked_by_group), default=0)
+        for rank in range(max_rank):
+            for rows in ranked_by_group:
+                if rank < len(rows):
+                    tid = rows[rank]
+                    if tid not in seen:
+                        seen.add(tid)
+                        flat.append(tid)
+        champ_n = max(0, championship_size)
+        plate_n = max(0, plate_size)
+        for i, tid in enumerate(flat):
+            if i < champ_n:
+                out[tid] = "cup"
+            elif i < champ_n + plate_n:
+                out[tid] = "shield"
+            else:
+                out[tid] = "out"
+        for rows in ranked_by_group:
+            for tid in rows:
+                out.setdefault(tid, "out")
+        return out
+
+    advance = max(1, teams_advance_per_group or 2)
+    for rows in ranked_by_group:
+        for i, tid in enumerate(rows):
+            out[tid] = "qualify" if i < advance else "out"
+    return out
+
+
 def _standings_payload(db: Session, t: Tournament) -> list[dict]:
     groups = db.query(Group).filter(Group.tournament_id == t.id).order_by(Group.sort_order).all()
     tie_order = [x.strip() for x in (t.tie_break_order or "").split(",") if x.strip()]
-    out: list[dict] = []
+    ranked_team_ids: list[list[str]] = []
+    group_rows: list[tuple[str, list[StandingOut]]] = []
     for g in groups:
         gts = db.query(GroupTeam).filter(GroupTeam.group_id == g.id).all()
         team_ids = [str(gt.team_id) for gt in gts]
@@ -4030,7 +4080,9 @@ def _standings_payload(db: Session, t: Tournament) -> list[dict]:
             )
         rows = accumulate_standings(team_ids, results)
         ranked = rank_standings(rows, tie_order or None)
-        standings = []
+        ranked_ids = [r.team_id for r in ranked]
+        ranked_team_ids.append(ranked_ids)
+        standings: list[StandingOut] = []
         for r in ranked:
             team = db.get(Team, UUID(r.team_id))
             standings.append(
@@ -4049,7 +4101,21 @@ def _standings_payload(db: Session, t: Tournament) -> list[dict]:
                     game_difference=r.game_difference,
                 )
             )
-        out.append({"group": g.name, "standings": standings})
+        group_rows.append((g.name, standings))
+
+    qual = _qualification_by_team(
+        ranked_team_ids,
+        enable_plate=bool(getattr(t, "enable_plate", False)),
+        championship_size=int(getattr(t, "championship_size", 16) or 16),
+        plate_size=int(getattr(t, "plate_size", 16) or 16),
+        teams_advance_per_group=int(getattr(t, "teams_advance_per_group", 2) or 2),
+        format_name=str(getattr(t, "format", "") or ""),
+    )
+    out: list[dict] = []
+    for name, standings in group_rows:
+        for row in standings:
+            row.qualification = qual.get(str(row.team_id))
+        out.append({"group": name, "standings": standings})
     return out
 
 

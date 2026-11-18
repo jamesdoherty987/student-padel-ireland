@@ -717,6 +717,13 @@ html.native-app .pl-page {
   text-align: right;
 }
 
+.pl-qual-legend {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
 .pl-table {
   list-style: none;
   margin: 0;
@@ -727,8 +734,13 @@ html.native-app .pl-page {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr) auto;
   gap: 0.5rem;
+  align-items: center;
   padding: 0.55rem 0;
   border-bottom: 1px solid var(--line);
+}
+
+.pl-table--qual li {
+  grid-template-columns: 2rem minmax(0, 1fr) auto auto;
 }
 
 .pl-table .name {
@@ -754,6 +766,41 @@ html.native-app .pl-page {
   font-weight: 700;
   color: var(--court-deep);
   font-variant-numeric: tabular-nums;
+}
+
+.pl-qual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.6rem;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pl-qual--cup {
+  color: #14301a;
+  background: rgba(200, 230, 0, 0.55);
+}
+
+.pl-qual--shield {
+  color: #1a2a44;
+  background: rgba(120, 170, 255, 0.35);
+}
+
+.pl-qual--qualify {
+  color: #14301a;
+  background: rgba(200, 230, 0, 0.55);
+}
+
+.pl-qual--out {
+  color: var(--muted);
+  background: rgba(0, 0, 0, 0.06);
 }
 
 .live-dot {

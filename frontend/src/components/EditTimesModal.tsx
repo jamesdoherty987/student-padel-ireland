@@ -30,7 +30,7 @@ function stagesForScope(scope: Scope): string[] | undefined {
 }
 
 function scopeLabel(scope: Scope) {
-  if (scope === 'knockout') return 'Championship & Plate only'
+  if (scope === 'knockout') return 'Cup & Shield only'
   if (scope === 'groups') return 'Group stage only'
   return 'All fixtures'
 }
@@ -226,7 +226,7 @@ export default function EditTimesModal({ tournament, onClose, onDone }: Props) {
               disabled={busy}
             >
               <strong>Lunch 2–3pm</strong>
-              <span>Push Championship &amp; Plate from 14:00 by +1 hour</span>
+              <span>Push Cup &amp; Shield from 14:00 by +1 hour</span>
             </button>
 
             <div className="edit-times-grid">
@@ -265,7 +265,7 @@ export default function EditTimesModal({ tournament, onClose, onDone }: Props) {
               <legend>Which matches</legend>
               {(
                 [
-                  ['knockout', 'Championship & Plate'],
+                  ['knockout', 'Cup & Shield'],
                   ['all', 'Everything'],
                   ['groups', 'Groups only'],
                 ] as const

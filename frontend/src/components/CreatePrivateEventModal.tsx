@@ -72,7 +72,7 @@ function validate(form: FormState): string | null {
   if (form.format === 'GROUP_KNOCKOUT' && form.enable_plate) {
     const need = form.championship_size + form.plate_size
     if (need > form.max_teams) {
-      return `Championship (${form.championship_size}) + Plate (${form.plate_size}) need ${need} entries, but max is ${form.max_teams}`
+      return `Cup (${form.championship_size}) + Shield (${form.plate_size}) need ${need} entries, but max is ${form.max_teams}`
     }
   }
   return null
@@ -410,13 +410,13 @@ export default function CreatePrivateEventModal({ onClose, onCreated }: Props) {
                       checked={form.enable_plate}
                       onChange={(e) => patch({ enable_plate: e.target.checked })}
                     />
-                    <span>Championship + Plate brackets</span>
+                    <span>Cup + Shield brackets</span>
                   </label>
                   {form.enable_plate && (
                     <div className="pe-row">
                       <div className="form-group">
                         <label className="form-label" htmlFor="pe-champ">
-                          Championship
+                          Cup
                         </label>
                         <select
                           id="pe-champ"
@@ -433,7 +433,7 @@ export default function CreatePrivateEventModal({ onClose, onCreated }: Props) {
                       </div>
                       <div className="form-group">
                         <label className="form-label" htmlFor="pe-plate">
-                          Plate
+                          Shield
                         </label>
                         <select
                           id="pe-plate"

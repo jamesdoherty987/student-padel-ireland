@@ -662,13 +662,13 @@ export default function GenerateDrawModal({
           {liveStats.enablePlate ? (
             <>
               <li>
-                {liveStats.championshipSize} teams → Championship
+                {liveStats.championshipSize} teams → Cup
                 {liveStats.knockoutRounds.length
                   ? ` (${liveStats.knockoutRounds.map(knockoutRoundLabel).join(' → ')})`
                   : ''}
               </li>
               <li>
-                {liveStats.plateSize} teams → Plate
+                {liveStats.plateSize} teams → Shield
                 {liveStats.plateRounds.length
                   ? ` (${liveStats.plateRounds.map(knockoutRoundLabel).join(' → ')})`
                   : ''}
