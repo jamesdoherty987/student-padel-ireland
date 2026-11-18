@@ -1195,6 +1195,14 @@ def _ordered_group_qualifiers(
     return out
 
 
+def _placeholder_is_seed_slot(label: str | None) -> bool:
+    """Championship/Plate seed labels must not collapse to BYE if unresolved yet."""
+    if not label:
+        return False
+    low = label.strip().lower()
+    return low.startswith("championship seed") or low.startswith("plate seed")
+
+
 def _fill_first_round_slots(
     db: Session,
     first_matches: list[Match],
@@ -1211,7 +1219,7 @@ def _fill_first_round_slots(
                 m.team_a_placeholder = None
                 changed = True
                 filled += 1
-            elif m.team_a_placeholder:
+            elif m.team_a_placeholder and not _placeholder_is_seed_slot(m.team_a_placeholder):
                 m.team_a_placeholder = "BYE"
                 changed = True
         if not m.team_b_id:
@@ -1221,7 +1229,7 @@ def _fill_first_round_slots(
                 m.team_b_placeholder = None
                 changed = True
                 filled += 1
-            elif m.team_b_placeholder:
+            elif m.team_b_placeholder and not _placeholder_is_seed_slot(m.team_b_placeholder):
                 m.team_b_placeholder = "BYE"
                 changed = True
 
@@ -1263,6 +1271,8 @@ def _seed_knockout_from_standings(db: Session, t: Tournament) -> int:
     Fill first-round KO / Plate slots from finished group standings.
     Also auto-advances BYE sides. Returns number of slots filled.
     """
+    # Ensure the just-saved group result is visible to the unfinished query.
+    db.flush()
     groups = db.query(Group).filter(Group.tournament_id == t.id).order_by(Group.sort_order).all()
     if not groups:
         return 0
@@ -5199,7 +5209,18 @@ def seed_knockout(
         )
         if unfinished:
             raise HTTPException(400, f"Finish all group matches first ({unfinished} remaining)")
-        raise HTTPException(400, "No knockout slots to fill (already seeded or no knockout)")
+        already = (
+            db.query(Match)
+            .filter(
+                Match.tournament_id == t.id,
+                Match.stage.in_(["KNOCKOUT", "PLATE"]),
+                (Match.team_a_id.isnot(None) | Match.team_b_id.isnot(None)),
+            )
+            .count()
+        )
+        if already:
+            raise HTTPException(400, "Knockout already has teams assigned")
+        raise HTTPException(400, "No knockout slots to fill (generate a Cup/Shield draw first)")
     db.commit()
     return {"filled": filled}
 

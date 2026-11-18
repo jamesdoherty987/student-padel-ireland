@@ -245,14 +245,23 @@ type PlayerFate = {
   body: string
 }
 
+function knockoutDrawFilled(allMatches: Match[]) {
+  return allMatches.some(
+    (m) =>
+      (m.stage === 'KNOCKOUT' || m.stage === 'PLATE') && !!(m.team_a_id || m.team_b_id),
+  )
+}
+
 function resolvePlayerFate(opts: {
   myTeamId?: string
   myResults: Match[]
   allMatches: Match[]
   groupsDone: boolean
   tournamentDone: boolean
+  /** Projected path from current group tables (Cup / Shield / Out). */
+  qualification?: QualPath | null
 }): PlayerFate | null {
-  const { myTeamId, myResults, allMatches, groupsDone, tournamentDone } = opts
+  const { myTeamId, myResults, allMatches, groupsDone, tournamentDone, qualification } = opts
   if (!myTeamId) return null
 
   const mine = (m: Match) => m.team_a_id === myTeamId || m.team_b_id === myTeamId
@@ -313,7 +322,34 @@ function resolvePlayerFate(opts: {
       (m.stage === 'KNOCKOUT' || m.stage === 'PLATE') &&
       (m.team_a_id === myTeamId || m.team_b_id === myTeamId),
   )
-  if (groupsDone && !inKoDraw && myResults.length > 0) {
+  const drawFilled = knockoutDrawFilled(allMatches)
+
+  // Groups done but Cup/Shield seats not filled yet — don't call qualifiers “out”.
+  if (groupsDone && !inKoDraw && myResults.length > 0 && !drawFilled) {
+    if (qualification === 'cup' || qualification === 'shield' || qualification === 'qualify') {
+      const path =
+        qualification === 'cup' ? 'Cup' : qualification === 'shield' ? 'Shield' : 'knockout'
+      return {
+        tone: 'wait',
+        title: `Through to the ${path}`,
+        body: 'Groups are done. Your next match will show here once the knockout draw is filled.',
+      }
+    }
+    if (qualification === 'out') {
+      return {
+        tone: 'out',
+        title: 'You’re out',
+        body: 'Group stage is done and you didn’t advance. Thanks for playing — results are below.',
+      }
+    }
+    return {
+      tone: 'wait',
+      title: 'Groups finished',
+      body: 'Knockout draw is being set. Check back shortly for your next match.',
+    }
+  }
+
+  if (groupsDone && !inKoDraw && myResults.length > 0 && drawFilled) {
     return {
       tone: 'out',
       title: 'You’re out',
@@ -1013,6 +1049,7 @@ export default function PlayerLivePage() {
           allMatches,
           groupsDone,
           tournamentDone: t.status === 'COMPLETED',
+          qualification: myTeamId ? qualByTeam[myTeamId] || null : null,
         })
       : null
   // Hide other-courts board when you have your own match focus (or you're out)

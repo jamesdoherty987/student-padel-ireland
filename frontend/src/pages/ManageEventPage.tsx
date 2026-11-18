@@ -712,6 +712,26 @@ export default function ManageEventPage() {
     toastOk?: string
   }
 
+  const seedKnockoutMut = useMutation({
+    mutationFn: () => tournamentApi.seedKnockout(tid!),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: ['org-matches'] })
+      qc.invalidateQueries({ queryKey: ['player-view'] })
+      qc.invalidateQueries({ queryKey: ['display'] })
+      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
+      if (slug) qc.invalidateQueries({ queryKey: ['matches', slug] })
+      const filled = (res.data as { filled?: number } | undefined)?.filled
+      showToast(
+        typeof filled === 'number'
+          ? `Cup / Shield draw filled (${filled} seats)`
+          : 'Cup / Shield draw filled',
+      )
+    },
+    onError: (err) => {
+      showToast(apiErrorMessage(err) || 'Couldn’t fill the knockout draw')
+    },
+  })
+
   const scoreMut = useMutation({
     mutationFn: ({ match, form }: ScorePayload) => {
       const simple = scoringMode === 'SIMPLE'
@@ -1703,6 +1723,19 @@ export default function ManageEventPage() {
   const hasKnockoutMatches = matches.some((m) => m.stage === 'KNOCKOUT' || m.stage === 'PLATE')
   const championshipMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
   const plateMatches = matches.filter((m) => m.stage === 'PLATE')
+  const groupMatches = useMemo(() => matches.filter((m) => m.stage === 'GROUP'), [matches])
+  const groupsFinished =
+    groupMatches.length > 0 &&
+    groupMatches.every(
+      (m) =>
+        m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED',
+    )
+  const knockoutSeatsEmpty =
+    hasKnockoutMatches &&
+    matches
+      .filter((m) => m.stage === 'KNOCKOUT' || m.stage === 'PLATE')
+      .every((m) => !m.team_a_id && !m.team_b_id)
+  const needsKnockoutSeed = groupsFinished && knockoutSeatsEmpty
 
   useEffect(() => {
     if (matchView === 'bracket' && !hasKnockoutMatches) {
@@ -3532,6 +3565,24 @@ export default function ManageEventPage() {
                       Generate draw
                     </button>
                   )}
+                </div>
+              ) : null}
+
+              {needsKnockoutSeed ? (
+                <div className="org-control-banner is-prep" role="status">
+                  <strong>Fill Cup / Shield draw</strong>
+                  <p>
+                    Groups are finished, but knockout seats are still placeholders. Fill the draw so
+                    players see their next match (and stop seeing “you’re out” by mistake).
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => seedKnockoutMut.mutate()}
+                    disabled={seedKnockoutMut.isPending || !tid}
+                  >
+                    {seedKnockoutMut.isPending ? 'Filling…' : 'Fill Cup / Shield now'}
+                  </button>
                 </div>
               ) : null}
 
