@@ -323,33 +323,41 @@ function resolvePlayerFate(opts: {
       (m.team_a_id === myTeamId || m.team_b_id === myTeamId),
   )
   const drawFilled = knockoutDrawFilled(allMatches)
+  const throughPath =
+    qualification === 'cup' || qualification === 'shield' || qualification === 'qualify'
+      ? qualification === 'cup'
+        ? 'Cup'
+        : qualification === 'shield'
+          ? 'Shield'
+          : 'knockout'
+      : null
 
-  // Groups done but Cup/Shield seats not filled yet — don't call qualifiers “out”.
+  // Draw not filled yet — never say “you’re out” (organiser fills Cup/Shield manually).
   if (groupsDone && !inKoDraw && myResults.length > 0 && !drawFilled) {
-    if (qualification === 'cup' || qualification === 'shield' || qualification === 'qualify') {
-      const path =
-        qualification === 'cup' ? 'Cup' : qualification === 'shield' ? 'Shield' : 'knockout'
+    if (throughPath) {
       return {
         tone: 'wait',
-        title: `Through to the ${path}`,
-        body: 'Groups are done. Your next match will show here once the knockout draw is filled.',
-      }
-    }
-    if (qualification === 'out') {
-      return {
-        tone: 'out',
-        title: 'You’re out',
-        body: 'Group stage is done and you didn’t advance. Thanks for playing — results are below.',
+        title: `Through to the ${throughPath}`,
+        body: 'Groups are done. Your next match will show here once the knockout draw is ready.',
       }
     }
     return {
       tone: 'wait',
       title: 'Groups finished',
-      body: 'Knockout draw is being set. Check back shortly for your next match.',
+      body: 'Waiting for the knockout draw. Check back shortly for what’s next.',
     }
   }
 
+  // Draw is filled and this team has no Cup/Shield seat → truly out.
   if (groupsDone && !inKoDraw && myResults.length > 0 && drawFilled) {
+    if (throughPath) {
+      // Standings say through but seat not assigned yet — don’t scare them.
+      return {
+        tone: 'wait',
+        title: `Through to the ${throughPath}`,
+        body: 'You’re through. Your knockout match will show here when it’s set.',
+      }
+    }
     return {
       tone: 'out',
       title: 'You’re out',
@@ -365,11 +373,22 @@ function resolvePlayerFate(opts: {
     }
   }
 
-  if (groupsDone && inKoDraw) {
+  if (inKoDraw) {
     return {
       tone: 'wait',
       title: 'Waiting on the draw',
       body: 'You’re through. Your next knockout match will show here when it’s set.',
+    }
+  }
+
+  // Standings already say Cup/Shield — never fall through to a scary out/idle message.
+  if (throughPath) {
+    return {
+      tone: 'wait',
+      title: `Through to the ${throughPath}`,
+      body: drawFilled
+        ? 'You’re through. Your knockout match will show here when it’s set.'
+        : 'Groups are done. Your next match will show here once the knockout draw is ready.',
     }
   }
 
