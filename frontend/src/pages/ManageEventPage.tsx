@@ -208,6 +208,9 @@ export default function ManageEventPage() {
   const [scoreMatch, setScoreMatch] = useState<Match | null>(null)
   const [moveMatch, setMoveMatch] = useState<Match | null>(null)
   const [moveForm, setMoveForm] = useState({ court_number: 1, scheduled_time: '' })
+  const [showSwapTeams, setShowSwapTeams] = useState(false)
+  const [swapTeamA, setSwapTeamA] = useState('')
+  const [swapTeamB, setSwapTeamB] = useState('')
   const [matchView, setMatchView] = useState<'list' | 'courts' | 'bracket'>('list')
   const [courtFilter, setCourtFilter] = useState<string>('all')
   const [matchFilter, setMatchFilter] = useState<'now' | 'upcoming' | 'active' | 'all' | 'done'>(
@@ -285,24 +288,31 @@ export default function ManageEventPage() {
 
   useEffect(() => {
     const open =
-      showEdit || confirmGenerate || !!scoreMatch || showAddTeam || !!moveMatch || !!editTeam
+      showEdit ||
+      confirmGenerate ||
+      !!scoreMatch ||
+      showAddTeam ||
+      !!moveMatch ||
+      !!editTeam ||
+      showSwapTeams
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch, editTeam])
+  }, [showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch, editTeam, showSwapTeams])
 
   useEffect(() => {
     // Generate / edit use ModalShell (own Escape). This covers score / add-team / move / edit entry.
-    if (!scoreMatch && !showAddTeam && !moveMatch && !editTeam) return
+    if (!scoreMatch && !showAddTeam && !moveMatch && !editTeam && !showSwapTeams) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setScoreMatch(null)
       setShowAddTeam(false)
       setMoveMatch(null)
       setEditTeam(null)
+      setShowSwapTeams(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [scoreMatch, showAddTeam, moveMatch, editTeam])
+  }, [scoreMatch, showAddTeam, moveMatch, editTeam, showSwapTeams])
 
   const tournaments: ManageDashRow[] = data?.tournaments || []
 
@@ -729,6 +739,24 @@ export default function ManageEventPage() {
     },
     onError: (err) => {
       showToast(apiErrorMessage(err) || 'Couldn’t fill the knockout draw')
+    },
+  })
+
+  const swapTeamsMut = useMutation({
+    mutationFn: () =>
+      tournamentApi.swapBracketTeams(tid!, { team_a_id: swapTeamA, team_b_id: swapTeamB }),
+    onSuccess: () => {
+      setShowSwapTeams(false)
+      setSwapTeamA('')
+      setSwapTeamB('')
+      qc.invalidateQueries({ queryKey: ['org-matches'] })
+      qc.invalidateQueries({ queryKey: ['player-view'] })
+      qc.invalidateQueries({ queryKey: ['display'] })
+      if (slug) qc.invalidateQueries({ queryKey: ['matches', slug] })
+      showToast('Teams swapped in the draw')
+    },
+    onError: (err) => {
+      showToast(apiErrorMessage(err) || 'Couldn’t swap those teams')
     },
   })
 
@@ -1723,6 +1751,29 @@ export default function ManageEventPage() {
   const hasKnockoutMatches = matches.some((m) => m.stage === 'KNOCKOUT' || m.stage === 'PLATE')
   const championshipMatches = matches.filter((m) => m.stage === 'KNOCKOUT')
   const plateMatches = matches.filter((m) => m.stage === 'PLATE')
+  const swappableBracketTeams = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; path: string }>()
+    for (const m of matches) {
+      if (m.stage !== 'KNOCKOUT' && m.stage !== 'PLATE') continue
+      if (m.status !== 'SCHEDULED' && m.status !== 'CALLED') continue
+      const path = m.stage === 'PLATE' ? 'Shield' : 'Cup'
+      if (m.team_a_id) {
+        map.set(m.team_a_id, {
+          id: m.team_a_id,
+          name: m.team_a_name || 'Team',
+          path,
+        })
+      }
+      if (m.team_b_id) {
+        map.set(m.team_b_id, {
+          id: m.team_b_id,
+          name: m.team_b_name || 'Team',
+          path,
+        })
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [matches])
   const groupMatches = useMemo(() => matches.filter((m) => m.stage === 'GROUP'), [matches])
   const groupsFinished =
     groupMatches.length > 0 &&
@@ -3969,6 +4020,19 @@ export default function ManageEventPage() {
                       : 'Score & winners'}
                   </h2>
                   <div className="org-section-actions">
+                    {fixturesExist && swappableBracketTeams.length >= 2 ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          setSwapTeamA('')
+                          setSwapTeamB('')
+                          setShowSwapTeams(true)
+                        }}
+                      >
+                        Swap teams
+                      </button>
+                    ) : null}
                     {fixturesExist ? (
                       <button
                         type="button"
@@ -5038,6 +5102,80 @@ export default function ManageEventPage() {
                 }}
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSwapTeams && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setShowSwapTeams(false)
+          }}
+        >
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="swap-teams-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="swap-teams-title">Swap bracket teams</h2>
+            <p className="muted-note" style={{ marginTop: 0 }}>
+              Swaps two teams between their Cup/Shield seats. Match times and courts stay where they
+              are.
+            </p>
+            <div className="form-group">
+              <label className="form-label" htmlFor="swap-team-a">
+                Team A
+              </label>
+              <select
+                id="swap-team-a"
+                className="form-select"
+                value={swapTeamA}
+                onChange={(e) => setSwapTeamA(e.target.value)}
+              >
+                <option value="">Select team…</option>
+                {swappableBracketTeams.map((t) => (
+                  <option key={t.id} value={t.id} disabled={t.id === swapTeamB}>
+                    {t.name} ({t.path})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="swap-team-b">
+                Team B
+              </label>
+              <select
+                id="swap-team-b"
+                className="form-select"
+                value={swapTeamB}
+                onChange={(e) => setSwapTeamB(e.target.value)}
+              >
+                <option value="">Select team…</option>
+                {swappableBracketTeams.map((t) => (
+                  <option key={t.id} value={t.id} disabled={t.id === swapTeamA}>
+                    {t.name} ({t.path})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setShowSwapTeams(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={
+                  swapTeamsMut.isPending || !tid || !swapTeamA || !swapTeamB || swapTeamA === swapTeamB
+                }
+                onClick={() => swapTeamsMut.mutate()}
+              >
+                {swapTeamsMut.isPending ? 'Swapping…' : 'Swap teams'}
               </button>
             </div>
           </div>

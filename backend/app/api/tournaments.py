@@ -95,6 +95,7 @@ from app.schemas import (
     MatchOut,
     ScheduleShiftOut,
     ScheduleShiftRequest,
+    SwapBracketTeamsRequest,
     OrganiserAddTeamRequest,
     PartnerInviteRespond,
     PayOnlineNowRequest,
@@ -4031,6 +4032,111 @@ def move_match(
         except Exception:
             logging.getLogger(__name__).exception("Call-to-court email failed for match %s", m.id)
     return _match_out(db, m)
+
+
+def _find_swappable_bracket_seat(
+    db: Session, tournament_id: UUID, team_id: UUID
+) -> tuple[Match, str]:
+    """
+    Locate this team's current unfinished Cup/Shield/KO seat.
+    Returns (match, 'A'|'B').
+    """
+    rows = (
+        db.query(Match)
+        .filter(
+            Match.tournament_id == tournament_id,
+            Match.stage.in_(["KNOCKOUT", "PLATE"]),
+            ((Match.team_a_id == team_id) | (Match.team_b_id == team_id)),
+            Match.status.in_(
+                [
+                    MatchStatus.SCHEDULED.value,
+                    MatchStatus.CALLED.value,
+                ]
+            ),
+        )
+        .order_by(Match.sort_order)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(
+            400,
+            "That team isn’t in a scheduled Cup/Shield match you can edit "
+            "(already live, finished, or not in the draw)",
+        )
+    # Prefer the earliest unfinished seat (current round).
+    m = rows[0]
+    if m.team_a_id == team_id:
+        return m, "A"
+    if m.team_b_id == team_id:
+        return m, "B"
+    raise HTTPException(400, "Could not resolve that team’s bracket seat")
+
+
+@router.post("/tournaments/{tournament_id}/swap-bracket-teams")
+def swap_bracket_teams(
+    tournament_id: UUID,
+    body: SwapBracketTeamsRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Swap two teams between their current Cup/Shield seats.
+    Courts and kickoff times stay with the match slots; only the teams move.
+    """
+    t = db.get(Tournament, tournament_id)
+    if not t:
+        raise HTTPException(404, "Tournament not found")
+    _assert_organiser(user, t, db)
+
+    if body.team_a_id == body.team_b_id:
+        raise HTTPException(400, "Pick two different teams")
+
+    for tid in (body.team_a_id, body.team_b_id):
+        team = db.get(Team, tid)
+        if not team or team.tournament_id != t.id:
+            raise HTTPException(400, "Both teams must belong to this tournament")
+
+    match_a, slot_a = _find_swappable_bracket_seat(db, t.id, body.team_a_id)
+    match_b, slot_b = _find_swappable_bracket_seat(db, t.id, body.team_b_id)
+
+    def _set_side(m: Match, slot: str, team_id: UUID | None) -> None:
+        if slot == "A":
+            m.team_a_id = team_id
+            if team_id:
+                m.team_a_placeholder = None
+        else:
+            m.team_b_id = team_id
+            if team_id:
+                m.team_b_placeholder = None
+
+    if match_a.id == match_b.id:
+        # Same match — swap sides
+        a_id, b_id = match_a.team_a_id, match_a.team_b_id
+        match_a.team_a_id = b_id
+        match_a.team_b_id = a_id
+        match_a.team_a_placeholder = None
+        match_a.team_b_placeholder = None
+        db.add(match_a)
+    else:
+        # Cross-match swap (hold one id so we don't clobber)
+        _set_side(match_a, slot_a, None)
+        _set_side(match_b, slot_b, None)
+        db.flush()
+        _set_side(match_a, slot_a, body.team_b_id)
+        _set_side(match_b, slot_b, body.team_a_id)
+        db.add(match_a)
+        db.add(match_b)
+
+    db.commit()
+    db.refresh(match_a)
+    db.refresh(match_b)
+    return {
+        "ok": True,
+        "matches": [
+            _match_out(db, match_a, viewer=user),
+            _match_out(db, match_b, viewer=user),
+        ],
+    }
 
 
 @router.post(

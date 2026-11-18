@@ -557,6 +557,13 @@ class MatchMove(BaseModel):
     notify_only: Optional[bool] = None
 
 
+class SwapBracketTeamsRequest(BaseModel):
+    """Swap two teams' Cup/Shield (or KO) seats without changing courts/times."""
+
+    team_a_id: UUID
+    team_b_id: UUID
+
+
 class ScheduleShiftRequest(BaseModel):
     """Bulk push/pull match kickoff times from a local clock cutoff."""
 

@@ -478,6 +478,10 @@ export const tournamentApi = {
     api.post(`/api/tournaments/${tournamentId}/generate`, data || {}),
   seedKnockout: (tournamentId: string) =>
     api.post(`/api/tournaments/${tournamentId}/seed-knockout`),
+  swapBracketTeams: (
+    tournamentId: string,
+    data: { team_a_id: string; team_b_id: string },
+  ) => api.post(`/api/tournaments/${tournamentId}/swap-bracket-teams`, data),
   matches: (slugOrId: string, opts?: { code?: string | null }) =>
     api.get<Match[]>(`/api/tournaments/${slugOrId}/matches`, {
       params: privateCodeParams(opts?.code),
