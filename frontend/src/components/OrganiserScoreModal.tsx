@@ -119,37 +119,111 @@ export default function OrganiserScoreModal({
     setMoveError('')
   }, [match])
 
-  const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['matches'] })
-    qc.invalidateQueries({ queryKey: ['org-matches'] })
-    qc.invalidateQueries({ queryKey: ['player-view'] })
-    qc.invalidateQueries({ queryKey: ['rankings'] })
-    qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
-    qc.invalidateQueries({ queryKey: ['display'] })
-    if (slug) qc.invalidateQueries({ queryKey: ['matches', slug] })
+  const softInvalidate = () => {
+    window.setTimeout(() => {
+      void qc.invalidateQueries({ queryKey: ['org-matches'] })
+      void qc.invalidateQueries({ queryKey: ['player-view'] })
+      void qc.invalidateQueries({ queryKey: ['display'] })
+      if (slug) void qc.invalidateQueries({ queryKey: ['matches', slug] })
+      else void qc.invalidateQueries({ queryKey: ['matches'] })
+    }, 900)
+    window.setTimeout(() => {
+      void qc.invalidateQueries({ queryKey: ['rankings'] })
+      void qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
+    }, 2200)
+  }
+
+  const orgMatchesKey = ['org-matches', slug] as const
+  const matchesListKey = ['matches', slug] as const
+
+  const patchCaches = (updated: Match, form: ScoreForm) => {
+    const winnerName =
+      form.winner_id === match.team_a_id
+        ? match.team_a_name || 'Winner'
+        : form.winner_id === match.team_b_id
+          ? match.team_b_name || 'Winner'
+          : 'Winner'
+    const patchList = (old: unknown) => {
+      if (!Array.isArray(old)) return old
+      let next = (old as Match[]).map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+      if (
+        (form.status === 'COMPLETED' || form.status === 'WALKOVER') &&
+        form.winner_id &&
+        match.next_match_id &&
+        match.next_match_slot
+      ) {
+        next = next.map((m) => {
+          if (m.id !== match.next_match_id) return m
+          if (m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED') {
+            return m
+          }
+          if (match.next_match_slot === 'A') {
+            return {
+              ...m,
+              team_a_id: form.winner_id,
+              team_a_name: winnerName,
+              team_a_placeholder: null,
+            }
+          }
+          return {
+            ...m,
+            team_b_id: form.winner_id,
+            team_b_name: winnerName,
+            team_b_placeholder: null,
+          }
+        })
+      }
+      return next
+    }
+    qc.setQueryData(orgMatchesKey, patchList)
+    if (slug) qc.setQueryData(matchesListKey, patchList)
   }
 
   const scoreMut = useMutation({
-    mutationFn: (payload: ScoreForm) => {
+    mutationFn: async (payload: ScoreForm) => {
       const current_set = simple ? 1 : resolveCurrentSet(payload)
-      return tournamentApi.updateScore(match.id, {
-        set1_a: payload.set1_a,
-        set1_b: payload.set1_b,
-        set2_a: simple ? 0 : payload.set2_a,
-        set2_b: simple ? 0 : payload.set2_b,
-        set3_a: simple ? 0 : payload.set3_a,
-        set3_b: simple ? 0 : payload.set3_b,
-        current_set,
+      return (
+        await tournamentApi.updateScore(match.id, {
+          set1_a: payload.set1_a,
+          set1_b: payload.set1_b,
+          set2_a: simple ? 0 : payload.set2_a,
+          set2_b: simple ? 0 : payload.set2_b,
+          set3_a: simple ? 0 : payload.set3_a,
+          set3_b: simple ? 0 : payload.set3_b,
+          current_set,
+          status: payload.status,
+          winner_id: payload.winner_id || null,
+          force: payload.force || !!match.ratings_applied,
+        })
+      ).data
+    },
+    onMutate: async (payload) => {
+      void hapticSuccess()
+      setError('')
+      await qc.cancelQueries({ queryKey: ['org-matches'] })
+      if (slug) await qc.cancelQueries({ queryKey: matchesListKey })
+      const prevOrg = qc.getQueryData(orgMatchesKey)
+      const prevMatches = slug ? qc.getQueryData(matchesListKey) : undefined
+      const pending: Match = {
+        ...match,
         status: payload.status,
         winner_id: payload.winner_id || null,
-        force: payload.force || !!match.ratings_applied,
-      })
+        score: {
+          set1_a: payload.set1_a,
+          set1_b: payload.set1_b,
+          set2_a: payload.set2_a,
+          set2_b: payload.set2_b,
+          set3_a: payload.set3_a,
+          set3_b: payload.set3_b,
+          current_set: payload.current_set || 1,
+        },
+      }
+      patchCaches(pending, payload)
+      return { prevOrg, prevMatches }
     },
-    onMutate: () => {
-      void hapticSuccess()
-    },
-    onSuccess: (_data, vars) => {
-      invalidate()
+    onSuccess: (data, vars) => {
+      patchCaches(data, vars)
+      softInvalidate()
       const name =
         vars.winner_id === match.team_a_id
           ? match.team_a_name || 'Team A'
@@ -165,15 +239,20 @@ export default function OrganiserScoreModal({
       onSaved?.(toast)
       onClose()
     },
-    onError: (e: unknown) => {
+    onError: (e: unknown, _vars, ctx) => {
+      if (ctx?.prevOrg !== undefined) qc.setQueryData(orgMatchesKey, ctx.prevOrg)
+      if (ctx?.prevMatches !== undefined) qc.setQueryData(matchesListKey, ctx.prevMatches)
+      softInvalidate()
       setError(apiErrorMessage(e, 'Could not save score'))
     },
   })
 
   const moveMut = useMutation({
-    mutationFn: (data: Record<string, unknown>) => tournamentApi.moveMatch(match.id, data),
-    onSuccess: () => {
-      invalidate()
+    mutationFn: async (data: Record<string, unknown>) =>
+      (await tournamentApi.moveMatch(match.id, data)).data as Match,
+    onSuccess: (data) => {
+      if (data?.id) patchCaches(data, form)
+      softInvalidate()
       onSaved?.('Court / time updated')
       setMoveError('')
     },

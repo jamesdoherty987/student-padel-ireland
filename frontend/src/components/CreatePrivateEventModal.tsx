@@ -213,9 +213,10 @@ export default function CreatePrivateEventModal({ onClose, onCreated }: Props) {
     >
       <form id="create-private-event-form" onSubmit={onSubmit}>
         <div className="private-event-notice" role="note">
-          <strong>Friends only · not an official SPI event</strong>
+          <strong>Friends only · you run the day</strong>
           <p>
-            Share a code or QR. No card payments — settle court costs yourselves if needed.
+            Share a code or QR, then manage entries, draw, and scoring yourself. You can enter and
+            play too. No card payments in the app.
           </p>
         </div>
 

@@ -79,10 +79,32 @@ export function qualificationByTeamId(
   return map
 }
 
+export function asQualPath(value: unknown): QualPath | null {
+  if (value === 'cup' || value === 'shield' || value === 'qualify' || value === 'out') {
+    return value
+  }
+  return null
+}
+
 export function qualificationLabel(path: QualPath | null | undefined): string {
   if (path === 'cup') return 'Cup'
   if (path === 'shield') return 'Shield'
-  if (path === 'qualify') return 'Qualify'
+  if (path === 'qualify') return 'Through'
   if (path === 'out') return 'Out'
   return ''
+}
+
+/** Short path name for banners / fate cards. */
+export function qualificationPathName(path: QualPath | null | undefined): string {
+  if (path === 'cup') return 'Cup'
+  if (path === 'shield') return 'Shield'
+  if (path === 'qualify') return 'knockout'
+  return ''
+}
+
+export function pathFromMatchStage(stage: string | null | undefined): QualPath | null {
+  const s = (stage || '').toUpperCase()
+  if (s === 'KNOCKOUT') return 'cup'
+  if (s === 'PLATE') return 'shield'
+  return null
 }

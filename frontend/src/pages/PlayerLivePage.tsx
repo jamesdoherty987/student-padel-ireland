@@ -22,14 +22,18 @@ import {
   formatTime,
   courtLabel,
   isKnockoutActive,
+  knockoutRoundBare,
   knockoutRoundLabel,
   reminderPromiseCopy,
 } from '../utils/format'
 import { isSameLocalDay } from '../utils/matchTiming'
 import { getRememberedPrivateInvite } from '../utils/privateEventAccess'
 import {
+  asQualPath,
+  pathFromMatchStage,
   qualificationByTeamId,
   qualificationLabel,
+  qualificationPathName,
   type QualPath,
 } from '../utils/qualification'
 import './PlayerLive.css'
@@ -240,9 +244,11 @@ function proposedWinnerLabel(m: Match, myTeamId?: string) {
 }
 
 type PlayerFate = {
-  tone: 'champion' | 'runner' | 'out' | 'wait'
+  tone: 'champion' | 'runner' | 'out' | 'wait' | 'cup' | 'shield' | 'qualify'
   title: string
   body: string
+  /** Big badge on the card: CUP / SHIELD / OUT / etc. */
+  badge?: string
 }
 
 function knockoutDrawFilled(allMatches: Match[]) {
@@ -275,14 +281,16 @@ function resolvePlayerFate(opts: {
     if (won(champFinal)) {
       return {
         tone: 'champion',
-        title: 'Champions',
-        body: 'You won the tournament. Celebrate — then check the bracket below.',
+        badge: 'CUP',
+        title: 'Cup champions',
+        body: 'You won the Cup. Celebrate — then check the bracket below.',
       }
     }
     return {
       tone: 'runner',
-      title: 'Runners-up',
-      body: 'You reached the final. Huge run — see the full bracket below.',
+      badge: 'CUP',
+      title: 'Cup runners-up',
+      body: 'You reached the Cup final. Huge run — see the full bracket below.',
     }
   }
 
@@ -290,12 +298,14 @@ function resolvePlayerFate(opts: {
     if (won(plateFinal)) {
       return {
         tone: 'champion',
+        badge: 'SHIELD',
         title: 'Shield champions',
         body: 'You won the Shield. Great recovery — see results below.',
       }
     }
     return {
       tone: 'runner',
+      badge: 'SHIELD',
       title: 'Shield runners-up',
       body: 'You reached the Shield final. See your results below.',
     }
@@ -309,10 +319,14 @@ function resolvePlayerFate(opts: {
   )
   const lastLoss = [...myKo].reverse().find(lost)
   if (lastLoss) {
+    const path = pathFromMatchStage(lastLoss.stage)
     return {
       tone: 'out',
-      title: 'You’re out',
-      body: `Knocked out in the ${knockoutRoundLabel(lastLoss.round, lastLoss.stage)}. Your results stay below.`,
+      badge: 'OUT',
+      title: 'Knocked out',
+      body: `Out in the ${knockoutRoundLabel(lastLoss.round, lastLoss.stage)}${
+        path === 'cup' ? ' (Cup)' : path === 'shield' ? ' (Shield)' : ''
+      }. Your results stay below.`,
     }
   }
 
@@ -323,77 +337,95 @@ function resolvePlayerFate(opts: {
       (m.team_a_id === myTeamId || m.team_b_id === myTeamId),
   )
   const drawFilled = knockoutDrawFilled(allMatches)
-  const throughPath =
+  const throughTone: PlayerFate['tone'] | null =
     qualification === 'cup' || qualification === 'shield' || qualification === 'qualify'
-      ? qualification === 'cup'
-        ? 'Cup'
-        : qualification === 'shield'
-          ? 'Shield'
-          : 'knockout'
+      ? qualification
       : null
+  const throughPath = qualificationPathName(qualification)
+
+  const throughFate = (body: string): PlayerFate => ({
+    tone: throughTone || 'wait',
+    badge:
+      throughTone === 'cup'
+        ? 'CUP'
+        : throughTone === 'shield'
+          ? 'SHIELD'
+          : throughTone === 'qualify'
+            ? 'THROUGH'
+            : 'THROUGH',
+    title: throughPath ? `Through to the ${throughPath}` : 'You’re through',
+    body,
+  })
 
   // Draw not filled yet — never say “you’re out” (organiser fills Cup/Shield manually).
   if (groupsDone && !inKoDraw && myResults.length > 0 && !drawFilled) {
-    if (throughPath) {
-      return {
-        tone: 'wait',
-        title: `Through to the ${throughPath}`,
-        body: 'Groups are done. Your next match will show here once the knockout draw is ready.',
-      }
+    if (throughTone) {
+      return throughFate('Groups are done. Your next match shows here when the knockout draw is ready.')
     }
     return {
       tone: 'wait',
+      badge: 'GROUPS',
       title: 'Groups finished',
-      body: 'Waiting for the knockout draw. Check back shortly for what’s next.',
+      body: 'Waiting for the knockout draw. Check back shortly for Cup, Shield, or who’s out.',
     }
   }
 
   // Draw is filled and this team has no Cup/Shield seat → truly out.
   if (groupsDone && !inKoDraw && myResults.length > 0 && drawFilled) {
-    if (throughPath) {
+    if (throughTone) {
       // Standings say through but seat not assigned yet — don’t scare them.
-      return {
-        tone: 'wait',
-        title: `Through to the ${throughPath}`,
-        body: 'You’re through. Your knockout match will show here when it’s set.',
-      }
+      return throughFate('You’re through. Your knockout match will show here when it’s set.')
     }
     return {
       tone: 'out',
-      title: 'You’re out',
-      body: 'Group stage is done and you didn’t advance. Thanks for playing — results are below.',
+      badge: 'OUT',
+      title: 'Didn’t advance',
+      body: 'Group stage is done — you didn’t make Cup or Shield. Thanks for playing — results are below.',
     }
   }
 
   if (tournamentDone) {
     return {
       tone: 'out',
+      badge: 'DONE',
       title: 'Tournament finished',
       body: 'This event is complete. See your results and the bracket below.',
     }
   }
 
   if (inKoDraw) {
+    const myKoOpen = allMatches.find(
+      (m) =>
+        mine(m) &&
+        (m.stage === 'KNOCKOUT' || m.stage === 'PLATE') &&
+        !(m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED'),
+    )
+    const path = pathFromMatchStage(myKoOpen?.stage) || throughTone
     return {
-      tone: 'wait',
-      title: 'Waiting on the draw',
-      body: 'You’re through. Your next knockout match will show here when it’s set.',
+      tone: path === 'cup' || path === 'shield' || path === 'qualify' ? path : 'wait',
+      badge: path === 'cup' ? 'CUP' : path === 'shield' ? 'SHIELD' : 'THROUGH',
+      title:
+        path === 'cup'
+          ? 'You’re in the Cup'
+          : path === 'shield'
+            ? 'You’re in the Shield'
+            : 'You’re through',
+      body: 'Your next knockout match will show here when it’s set.',
     }
   }
 
   // Standings already say Cup/Shield — never fall through to a scary out/idle message.
-  if (throughPath) {
-    return {
-      tone: 'wait',
-      title: `Through to the ${throughPath}`,
-      body: drawFilled
+  if (throughTone) {
+    return throughFate(
+      drawFilled
         ? 'You’re through. Your knockout match will show here when it’s set.'
-        : 'Groups are done. Your next match will show here once the knockout draw is ready.',
-    }
+        : 'Groups are done. Your next match shows here when the knockout draw is ready.',
+    )
   }
 
   return {
     tone: 'wait',
+    badge: 'WAITING',
     title: 'No match right now',
     body: 'You’re between matches. We’ll show your next court here when it’s ready.',
   }
@@ -402,13 +434,14 @@ function resolvePlayerFate(opts: {
 function FateCard({ fate }: { fate: PlayerFate }) {
   return (
     <div className={`pl-next-card pl-fate pl-fate--${fate.tone}`} role="status">
+      {fate.badge ? <p className="pl-fate-badge">{fate.badge}</p> : null}
       <p className="pl-fate-kicker">
-        {fate.tone === 'champion'
-          ? 'Result'
-          : fate.tone === 'runner'
-            ? 'Result'
-            : fate.tone === 'out'
-              ? 'End of run'
+        {fate.tone === 'champion' || fate.tone === 'runner'
+          ? 'Your result'
+          : fate.tone === 'out'
+            ? 'End of run'
+            : fate.tone === 'cup' || fate.tone === 'shield' || fate.tone === 'qualify'
+              ? 'Your path'
               : 'Status'}
       </p>
       <h3 className="pl-fate-title">{fate.title}</h3>
@@ -435,7 +468,10 @@ function NextMatchCard({
   const court = courtLabel(next.court_name, next.court_number)
   const chip = nextStatusChip(next)
   const when = nextWhenParts(next)
-  const round = knockoutRoundLabel(next.round, next.stage)
+  const path = pathFromMatchStage(next.stage)
+  const round = path
+    ? knockoutRoundBare(next.round)
+    : knockoutRoundLabel(next.round, next.stage)
   const sideA = next.team_a_name || next.team_a_placeholder || 'TBD'
   const sideB = next.team_b_name || next.team_b_placeholder || 'TBD'
   const pending = next.status === 'AWAITING_CONFIRM'
@@ -447,7 +483,7 @@ function NextMatchCard({
 
   return (
     <div
-      className={`pl-next-card pl-next-card--glance ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''} ${pending ? 'is-pending' : ''}${canTapScore ? ' is-tap-score' : ''}`}
+      className={`pl-next-card pl-next-card--glance ${next.status === 'CALLED' ? 'is-called' : ''} ${next.status === 'LIVE' ? 'is-live' : ''} ${pending ? 'is-pending' : ''}${canTapScore ? ' is-tap-score' : ''}${path ? ` pl-next-card--${path}` : ''}`}
       role={canTapScore ? 'button' : undefined}
       tabIndex={canTapScore ? 0 : undefined}
       onClick={
@@ -469,6 +505,11 @@ function NextMatchCard({
           : undefined
       }
     >
+      {path ? (
+        <p className={`pl-path-pill pl-path-pill--${path}`}>
+          {path === 'cup' ? 'Cup' : 'Shield'}
+        </p>
+      ) : null}
       <div className="pl-next-top">
         <p className={`pl-go-now${chip.soft ? ' pl-go-now--soft' : ''}`}>{chip.label}</p>
         <p className="pl-round">{round}</p>
@@ -569,6 +610,9 @@ export default function PlayerLivePage() {
   const qc = useQueryClient()
   const privateCode =
     (searchParams.get('code') || '').trim() || getRememberedPrivateInvite(slug) || undefined
+  const codeKey = privateCode || ''
+  const playerViewKey = ['player-view', slug, codeKey] as const
+  const matchesKey = ['matches', slug, codeKey] as const
   const [scoringMatch, setScoringMatch] = useState<Match | null>(null)
   const [opsMatch, setOpsMatch] = useState<Match | null>(null)
   const [opsToast, setOpsToast] = useState('')
@@ -609,7 +653,7 @@ export default function PlayerLivePage() {
     isFetching,
     isFetched: viewFetched,
   } = useQuery({
-    queryKey: ['player-view', slug, privateCode || ''],
+    queryKey: playerViewKey,
     queryFn: async () =>
       (await tournamentApi.playerView(slug, { code: privateCode })).data,
     enabled: !!slug,
@@ -619,14 +663,14 @@ export default function PlayerLivePage() {
   })
 
   const { data: allMatches = [], isFetched: matchesFetched } = useQuery({
-    queryKey: ['matches', slug, privateCode || ''],
+    queryKey: matchesKey,
     queryFn: async () =>
       (await tournamentApi.matches(slug, { code: privateCode })).data,
     enabled: !!slug,
     refetchInterval: 8000,
   })
   const { data: sponsors = [] } = useQuery({
-    queryKey: ['sponsors', slug, privateCode || ''],
+    queryKey: ['sponsors', slug, codeKey],
     queryFn: async () =>
       (await tournamentApi.sponsors(slug, { code: privateCode })).data,
     enabled: !!slug,
@@ -634,14 +678,14 @@ export default function PlayerLivePage() {
   })
 
   const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ['player-view', slug] })
-    void qc.invalidateQueries({ queryKey: ['matches', slug] })
+    void qc.invalidateQueries({ queryKey: playerViewKey })
+    void qc.invalidateQueries({ queryKey: matchesKey })
   }
 
   const softInvalidateSoon = () => {
     window.setTimeout(() => {
-      void qc.invalidateQueries({ queryKey: ['player-view', slug] })
-      void qc.invalidateQueries({ queryKey: ['matches', slug] })
+      void qc.invalidateQueries({ queryKey: playerViewKey })
+      void qc.invalidateQueries({ queryKey: matchesKey })
     }, 900)
   }
 
@@ -653,16 +697,22 @@ export default function PlayerLivePage() {
     setSearchParams(next, { replace: true })
   }, [searchParams, setSearchParams])
 
-  // Drop the hold once the live view has the pending score for real
+  // Drop the hold once the live view has the pending score — or moved on
   useEffect(() => {
     if (!scoreHold) return
     const n = data?.next_match as Match | null | undefined
+    if (!n || n.id !== scoreHold.id) {
+      setScoreHold(null)
+      return
+    }
     if (
-      n &&
-      n.id === scoreHold.id &&
       n.status === 'AWAITING_CONFIRM' &&
-      n.score_submitted_by_me
+      (n.score_submitted_by_me || n.needs_my_confirm)
     ) {
+      setScoreHold(null)
+      return
+    }
+    if (n.status === 'COMPLETED' || n.status === 'WALKOVER' || n.status === 'CANCELLED') {
       setScoreHold(null)
     }
   }, [data?.next_match, scoreHold])
@@ -706,8 +756,8 @@ export default function PlayerLivePage() {
     onMutate: async (vars) => {
       void hapticSuccess()
       // Kill in-flight polls so they can't overwrite the waiting card with stale data
-      await qc.cancelQueries({ queryKey: ['player-view', slug] })
-      await qc.cancelQueries({ queryKey: ['matches', slug] })
+      await qc.cancelQueries({ queryKey: playerViewKey })
+      await qc.cancelQueries({ queryKey: matchesKey })
 
       // Close sheet immediately — all data is in mutate vars (avoids null-id race)
       setScoringMatch(null)
@@ -735,11 +785,11 @@ export default function PlayerLivePage() {
         needs_my_confirm: false,
         score_submitted_by_me: true,
       }
-      const prevView = qc.getQueryData(['player-view', slug])
-      const prevMatches = qc.getQueryData(['matches', slug])
+      const prevView = qc.getQueryData(playerViewKey)
+      const prevMatches = qc.getQueryData(matchesKey)
       setScoreHold(pending)
-      qc.setQueryData(['player-view', slug], (old) => patchMatchInPlayerView(old, pending))
-      qc.setQueryData(['matches', slug], (old) => patchMatchInList(old, pending))
+      qc.setQueryData(playerViewKey, (old) => patchMatchInPlayerView(old, pending))
+      qc.setQueryData(matchesKey, (old) => patchMatchInList(old, pending))
 
       return {
         closed: vars.match,
@@ -759,15 +809,15 @@ export default function PlayerLivePage() {
         status: m.status || 'AWAITING_CONFIRM',
       }
       setScoreHold(held)
-      qc.setQueryData(['player-view', slug], (old) => patchMatchInPlayerView(old, held))
-      qc.setQueryData(['matches', slug], (old) => patchMatchInList(old, held))
+      qc.setQueryData(playerViewKey, (old) => patchMatchInPlayerView(old, held))
+      qc.setQueryData(matchesKey, (old) => patchMatchInList(old, held))
       // Delayed refresh — immediate invalidate races with Render lag and snaps back to Score
       softInvalidateSoon()
     },
     onError: (err, _vars, ctx) => {
       setScoreHold(null)
-      if (ctx?.prevView !== undefined) qc.setQueryData(['player-view', slug], ctx.prevView)
-      if (ctx?.prevMatches !== undefined) qc.setQueryData(['matches', slug], ctx.prevMatches)
+      if (ctx?.prevView !== undefined) qc.setQueryData(playerViewKey, ctx.prevView)
+      if (ctx?.prevMatches !== undefined) qc.setQueryData(matchesKey, ctx.prevMatches)
       if (ctx?.closed) {
         setScoringMatch(ctx.closed)
         setScoreSheetMode(ctx.closedMode)
@@ -786,18 +836,20 @@ export default function PlayerLivePage() {
     },
     onSuccess: (m) => {
       // Patch live board immediately with the confirmed match
-      qc.setQueryData(['player-view', slug], (old: unknown) => {
+      qc.setQueryData(playerViewKey, (old: unknown) => {
         if (!old || typeof old !== 'object') return old
         const view = old as PlayerViewCache & Record<string, unknown>
         const upcoming = (view.my_upcoming || []).filter((x) => x.id !== m.id)
+        const wasNext = view.next_match?.id === m.id
         return {
           ...view,
-          next_match: upcoming[0] || null,
+          // Only advance next_match when the confirmed game was the current one
+          next_match: wasNext ? upcoming[0] || null : view.next_match,
           my_upcoming: upcoming,
           my_results: [m, ...(view.my_results || []).filter((x) => x.id !== m.id)],
         }
       })
-      qc.setQueryData(['matches', slug], (old) => patchMatchInList(old, m))
+      qc.setQueryData(matchesKey, (old) => patchMatchInList(old, m))
       invalidate()
     },
     onError: (err) => setActionError(apiErrorMessage(err)),
@@ -990,11 +1042,11 @@ export default function PlayerLivePage() {
   const scoreSyncing =
     scoreMut.isPending ||
     (!!scoreHold &&
+      !!rawNext &&
+      rawNext.id === scoreHold.id &&
       !(
-        rawNext &&
-        rawNext.id === scoreHold.id &&
         rawNext.status === 'AWAITING_CONFIRM' &&
-        !!rawNext.score_submitted_by_me
+        (!!rawNext.score_submitted_by_me || !!rawNext.needs_my_confirm)
       ))
   const myTeam = data.my_team as {
     id: string
@@ -1059,31 +1111,38 @@ export default function PlayerLivePage() {
       .filter((m) => m.stage === 'GROUP')
       .every((m) => m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED')
   const awaitingKnockoutDraw = !!(data as { awaiting_knockout_draw?: boolean }).awaiting_knockout_draw
-  const apiQualification = (data as { my_qualification?: QualPath | string | null }).my_qualification
+  const apiQualification = asQualPath(
+    (data as { my_qualification?: QualPath | string | null }).my_qualification,
+  )
   const myQualification =
-    (apiQualification as QualPath | null | undefined) ||
-    (myTeamId ? qualByTeam[myTeamId] || null : null) ||
-    null
+    apiQualification || (myTeamId ? asQualPath(qualByTeam[myTeamId]) : null) || null
   // Placeholder next_match from API is only to stop old app builds flashing “you’re out”.
   const waitingNext = !!(next && (next as { awaiting_knockout_draw?: boolean }).awaiting_knockout_draw)
   const realNext = waitingNext || awaitingKnockoutDraw ? null : next
   const myOnCourt =
     hasPaidEntry && realNext && (realNext.status === 'LIVE' || realNext.status === 'CALLED')
+  const drawFilled = knockoutDrawFilled(allMatches)
   const playerFate =
     hasPaidEntry && !realNext && matchDayLive
-      ? awaitingKnockoutDraw || !knockoutDrawFilled(allMatches)
+      ? awaitingKnockoutDraw || !drawFilled
         ? myQualification === 'cup' || myQualification === 'shield' || myQualification === 'qualify'
           ? {
-              tone: 'wait' as const,
-              title: `Through to the ${
-                myQualification === 'cup' ? 'Cup' : myQualification === 'shield' ? 'Shield' : 'knockout'
-              }`,
-              body: 'Groups are done. Your next match will show here once the knockout draw is ready.',
+              tone: myQualification,
+              badge:
+                myQualification === 'cup'
+                  ? 'CUP'
+                  : myQualification === 'shield'
+                    ? 'SHIELD'
+                    : 'THROUGH',
+              title: `Through to the ${qualificationPathName(myQualification)}`,
+              body: 'Groups are done. Your next match shows here when the knockout draw is ready.',
             }
           : {
+              // Never say “you’re out” until Cup/Shield seats are actually filled
               tone: 'wait' as const,
+              badge: 'GROUPS',
               title: 'Groups finished',
-              body: 'Waiting for the knockout draw. Check back shortly for what’s next.',
+              body: 'Waiting for the knockout draw. Check back for Cup, Shield, or who’s out.',
             }
         : resolvePlayerFate({
             myTeamId,
@@ -1094,6 +1153,38 @@ export default function PlayerLivePage() {
             qualification: myQualification,
           })
       : null
+
+  const matchPath = pathFromMatchStage(realNext?.stage)
+  const fatePath: QualPath | null =
+    playerFate?.tone === 'cup' ||
+    playerFate?.tone === 'shield' ||
+    playerFate?.tone === 'qualify'
+      ? playerFate.tone
+      : playerFate?.tone === 'out'
+        ? 'out'
+        : null
+  const standingPath: QualPath | null =
+    myQualification === 'cup' ||
+    myQualification === 'shield' ||
+    myQualification === 'qualify' ||
+    myQualification === 'out'
+      ? myQualification
+      : null
+  /** During groups, only surface Cup/Shield/Through projections — not Out. */
+  const bannerStandingPath: QualPath | null =
+    standingPath &&
+    (groupsDone || knockoutActive || standingPath !== 'out')
+      ? standingPath
+      : null
+  const activePath: QualPath | null = matchPath || fatePath || bannerStandingPath
+  /** Still in groups — standings projection only (not a final seat). */
+  const pathIsProjected = !!(
+    bannerStandingPath &&
+    !matchPath &&
+    !fatePath &&
+    !groupsDone &&
+    !knockoutActive
+  )
   // Hide other-courts board when you have your own match focus (or you're out)
   const showVenueBoard =
     !waitingOnDraw &&
@@ -1243,6 +1334,50 @@ export default function PlayerLivePage() {
         </header>
 
         <section className="pl-next">
+          {hasPaidEntry && activePath && !playerFate ? (
+            <div
+              className={`pl-path-banner pl-path-banner--${activePath}${
+                pathIsProjected ? ' pl-path-banner--projected' : ''
+              }`}
+              role="status"
+            >
+              <span className="pl-path-banner-tag">
+                {activePath === 'cup'
+                  ? 'Cup'
+                  : activePath === 'shield'
+                    ? 'Shield'
+                    : activePath === 'out'
+                      ? 'Out'
+                      : 'Through'}
+              </span>
+              <div className="pl-path-banner-copy">
+                <span className="pl-path-banner-label">
+                  {pathIsProjected
+                    ? activePath === 'cup'
+                      ? 'On track for the Cup'
+                      : activePath === 'shield'
+                        ? 'On track for the Shield'
+                        : activePath === 'out'
+                          ? 'Currently looking like Out'
+                          : 'On track to go through'
+                    : activePath === 'cup'
+                      ? 'You’re in the Cup'
+                      : activePath === 'shield'
+                        ? 'You’re in the Shield'
+                        : activePath === 'out'
+                          ? 'You’re out of the knockouts'
+                          : 'You’re through'}
+                </span>
+                {pathIsProjected ? (
+                  <span className="pl-path-banner-hint">Live from the group tables — can still change</span>
+                ) : activePath === 'out' ? (
+                  <span className="pl-path-banner-hint">Thanks for playing — your results stay below</span>
+                ) : matchPath ? (
+                  <span className="pl-path-banner-hint">Your next match is on this path</span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <h2>
             {waitingOnDraw
               ? 'Waiting for fixtures'
@@ -1251,7 +1386,11 @@ export default function PlayerLivePage() {
                   ? 'Your result'
                   : playerFate.tone === 'out'
                     ? 'Your run'
-                    : 'Your status'
+                    : playerFate.tone === 'cup' ||
+                        playerFate.tone === 'shield' ||
+                        playerFate.tone === 'qualify'
+                      ? 'Your path'
+                      : 'Your status'
                 : hasPaidEntry || hasPendingCaptain || isListedPartner
                   ? 'Your next match'
                   : !user
@@ -1431,6 +1570,7 @@ export default function PlayerLivePage() {
                 .filter((m) => m.id !== next?.id)
                 .map((m) => {
                   const opp = opponentName(m, myTeamId)
+                  const path = pathFromMatchStage(m.stage)
                   return (
                     <li key={m.id} className="pl-sched-row">
                       <div className="pl-sched-court">{courtLabel(m.court_name, m.court_number)}</div>
@@ -1444,7 +1584,14 @@ export default function PlayerLivePage() {
                           <MatchNames m={m} />
                         )}
                       </div>
-                      <div className="pl-sched-round">{knockoutRoundLabel(m.round, m.stage)}</div>
+                      <div className="pl-sched-round">
+                        {path ? (
+                          <span className={`pl-sched-path pl-sched-path--${path}`}>
+                            {path === 'cup' ? 'Cup' : 'Shield'}
+                          </span>
+                        ) : null}
+                        {path ? ` ${knockoutRoundBare(m.round)}` : knockoutRoundLabel(m.round, m.stage)}
+                      </div>
                     </li>
                   )
                 })}
@@ -1459,16 +1606,30 @@ export default function PlayerLivePage() {
               {myResults.map((m) => {
                 const won = m.winner_id ? m.winner_id === myTeamId : null
                 const mark = won === true ? '✓' : won === false ? '✗' : '·'
+                const path = pathFromMatchStage(m.stage)
+                const round = path
+                  ? knockoutRoundBare(m.round)
+                  : m.round?.startsWith('GROUP_')
+                    ? knockoutRoundBare(m.round)
+                    : knockoutRoundLabel(m.round, m.stage)
                 return (
                   <li key={m.id} className={won === true ? 'win' : won === false ? 'loss' : ''}>
                     <span className="pl-result-score">
                       {mark} {formatMatchScore(m.score)}
                     </span>
-                    <span className="pl-result-vs">
-                      vs{' '}
-                      {m.team_a_id === myTeamId
-                        ? m.team_b_name || 'Opponent'
-                        : m.team_a_name || 'Opponent'}
+                    <span className="pl-result-meta">
+                      {path ? (
+                        <span className={`pl-result-path pl-result-path--${path}`}>
+                          {path === 'cup' ? 'Cup' : 'Shield'}
+                        </span>
+                      ) : null}
+                      <span className="pl-result-vs">
+                        {round ? `${round} · ` : ''}
+                        vs{' '}
+                        {m.team_a_id === myTeamId
+                          ? m.team_b_name || 'Opponent'
+                          : m.team_a_name || 'Opponent'}
+                      </span>
                     </span>
                   </li>
                 )
@@ -1481,15 +1642,31 @@ export default function PlayerLivePage() {
         {matchesFetched && !knockoutActive && standings.length > 0 && (
           <div id="pl-groups">
             {showQualBadges ? (
-              <p className="pl-qual-legend">
-                {t.enable_plate
-                  ? groupsDone
-                    ? 'Final path from these tables — Cup or Shield.'
-                    : 'Projected from current tables — updates as results come in. Cup = top knockout · Shield = next tier.'
-                  : groupsDone
-                    ? 'Final path from these tables — who qualifies for the knockout.'
-                    : 'Projected from current tables — top places qualify for the knockout.'}
-              </p>
+              <div className="pl-qual-legend" role="note">
+                <p>
+                  {t.enable_plate
+                    ? groupsDone
+                      ? 'Final paths from these tables:'
+                      : 'Live projection from current tables:'}
+                    : groupsDone
+                      ? 'Final paths from these tables:'
+                      : 'Live projection — top places go through:'}
+                </p>
+                <div className="pl-qual-legend-keys">
+                  {t.enable_plate ? (
+                    <>
+                      <span className="pl-qual pl-qual--cup">Cup</span>
+                      <span className="pl-qual pl-qual--shield">Shield</span>
+                      <span className="pl-qual pl-qual--out">Out</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="pl-qual pl-qual--qualify">Through</span>
+                      <span className="pl-qual pl-qual--out">Out</span>
+                    </>
+                  )}
+                </div>
+              </div>
             ) : null}
             {standings.map((g) => (
               <section key={g.group} className="pl-block">
@@ -1501,7 +1678,12 @@ export default function PlayerLivePage() {
                       null) as QualPath | null
                     const qual = qualificationLabel(path)
                     return (
-                      <li key={row.team_id} className={row.team_id === myTeamId ? 'me' : ''}>
+                      <li
+                        key={row.team_id}
+                        className={`${row.team_id === myTeamId ? 'me' : ''}${
+                          path ? ` pl-row--${path}` : ''
+                        }`}
+                      >
                         <span className="pos">{i + 1}.</span>
                         <span className="name">{row.team_name}</span>
                         {qual ? (
@@ -1509,15 +1691,21 @@ export default function PlayerLivePage() {
                             className={`pl-qual pl-qual--${path || 'out'}`}
                             title={
                               path === 'cup'
-                                ? 'Cup knockout'
+                                ? 'Through to the Cup'
                                 : path === 'shield'
-                                  ? 'Shield knockout'
+                                  ? 'Through to the Shield'
                                   : path === 'qualify'
-                                    ? 'Qualifies for knockout'
+                                    ? 'Through to the knockout'
                                     : 'Does not advance'
                             }
                           >
-                            {qual}
+                            {path === 'cup'
+                              ? '→ Cup'
+                              : path === 'shield'
+                                ? '→ Shield'
+                                : path === 'qualify'
+                                  ? '→ Through'
+                                  : 'Out'}
                           </span>
                         ) : null}
                         <span className="pts">{row.points} pts</span>

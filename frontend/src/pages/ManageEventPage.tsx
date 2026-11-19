@@ -110,6 +110,128 @@ function shortTeamLabel(name: string | null | undefined, fallback: string, max =
   return `${n.slice(0, Math.max(1, max - 1))}…`
 }
 
+type OrgScoreForm = {
+  set1_a: number
+  set1_b: number
+  set2_a: number
+  set2_b: number
+  set3_a: number
+  set3_b: number
+  current_set: number
+  status: string
+  winner_id: string
+  force?: boolean
+}
+
+function patchMatchInOrgList(old: unknown, updated: Match): Match[] | unknown {
+  if (!Array.isArray(old)) return old
+  return (old as Match[]).map((m) => (m.id === updated.id ? { ...m, ...updated } : m))
+}
+
+/** Apply a score save locally, including advancing the winner into the next bracket seat. */
+function applyOrgScoreOptimistic(
+  old: unknown,
+  match: Match,
+  form: OrgScoreForm,
+): Match[] | unknown {
+  if (!Array.isArray(old)) return old
+  const list = old as Match[]
+  const pending: Match = {
+    ...match,
+    status: form.status,
+    winner_id: form.winner_id || null,
+    score: {
+      set1_a: form.set1_a,
+      set1_b: form.set1_b,
+      set2_a: form.set2_a,
+      set2_b: form.set2_b,
+      set3_a: form.set3_a,
+      set3_b: form.set3_b,
+      current_set: form.current_set || 1,
+    },
+  }
+  let next = list.map((m) => (m.id === match.id ? pending : m))
+
+  const advancing =
+    (form.status === 'COMPLETED' || form.status === 'WALKOVER') &&
+    !!form.winner_id &&
+    !!match.next_match_id &&
+    !!match.next_match_slot
+
+  /** Clear a team from open downstream seats (winner corrections / clears). */
+  const clearTeamFromChain = (startId: string | null | undefined, teamId: string | null | undefined) => {
+    if (!startId || !teamId) return
+    let cursor: string | null | undefined = startId
+    const seen = new Set<string>()
+    while (cursor && !seen.has(cursor)) {
+      seen.add(cursor)
+      const cur = next.find((m) => m.id === cursor)
+      if (!cur) break
+      if (cur.status === 'COMPLETED' || cur.status === 'WALKOVER' || cur.status === 'CANCELLED') {
+        break
+      }
+      let changed = false
+      let patched = cur
+      if (cur.team_a_id === teamId) {
+        patched = { ...patched, team_a_id: null, team_a_name: null }
+        changed = true
+      }
+      if (cur.team_b_id === teamId) {
+        patched = { ...patched, team_b_id: null, team_b_name: null }
+        changed = true
+      }
+      if (changed) {
+        next = next.map((m) => (m.id === cur.id ? patched : m))
+      }
+      cursor = cur.next_match_id
+    }
+  }
+
+  if (advancing) {
+    // If correcting a previous winner, clear them from open downstream seats first
+    if (match.winner_id && match.winner_id !== form.winner_id) {
+      clearTeamFromChain(match.next_match_id, match.winner_id)
+    }
+    const winnerName =
+      form.winner_id === match.team_a_id
+        ? match.team_a_name || 'Winner'
+        : form.winner_id === match.team_b_id
+          ? match.team_b_name || 'Winner'
+          : 'Winner'
+    next = next.map((m) => {
+      if (m.id !== match.next_match_id) return m
+      if (m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED') {
+        return m
+      }
+      if (match.next_match_slot === 'A') {
+        return {
+          ...m,
+          team_a_id: form.winner_id,
+          team_a_name: winnerName,
+          team_a_placeholder: null,
+        }
+      }
+      return {
+        ...m,
+        team_b_id: form.winner_id,
+        team_b_name: winnerName,
+        team_b_placeholder: null,
+      }
+    })
+  }
+
+  const clearing =
+    form.status === 'SCHEDULED' &&
+    !!match.next_match_id &&
+    !!match.winner_id
+
+  if (clearing) {
+    clearTeamFromChain(match.next_match_id, match.winner_id)
+  }
+
+  return next
+}
+
 /** Best-of-3 set tallies for admin score validation. */
 function tallySets(form: {
   set1_a: number
@@ -362,11 +484,16 @@ export default function ManageEventPage() {
     refetchInterval: orgPanel === 'day-of' ? 8000 : false,
   })
 
+  const deskPollPausedRef = useRef(false)
+  const deskSyncGenRef = useRef(0)
   const { data: matches = [] } = useQuery({
     queryKey: ['org-matches', slug],
     queryFn: async () => (await tournamentApi.matches(slug!)).data,
     enabled: !!slug && canOrganise,
-    refetchInterval: 4000,
+    refetchInterval: () => {
+      if (deskPollPausedRef.current) return false
+      return orgPanel === 'day-of' ? 4000 : false
+    },
   })
 
   const { data: tournamentDetail } = useQuery({
@@ -436,6 +563,24 @@ export default function ManageEventPage() {
   const showToast = (msg: string) => {
     setToast(msg)
     window.setTimeout(() => setToast(null), 3200)
+  }
+
+  /** After a score save: patch first, then soft-refresh so polls don't wipe the desk. */
+  const softRefreshAfterScore = () => {
+    const gen = deskSyncGenRef.current
+    window.setTimeout(() => {
+      if (gen !== deskSyncGenRef.current) return
+      deskPollPausedRef.current = false
+      void qc.invalidateQueries({ queryKey: ['org-matches', slug] })
+      void qc.invalidateQueries({ queryKey: ['player-view'] })
+      void qc.invalidateQueries({ queryKey: ['display'] })
+      if (slug) void qc.invalidateQueries({ queryKey: ['matches', slug] })
+    }, 900)
+    window.setTimeout(() => {
+      if (gen !== deskSyncGenRef.current) return
+      void qc.invalidateQueries({ queryKey: ['rankings'] })
+      void qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
+    }, 2200)
   }
 
   const invalidateTournamentPublic = () => {
@@ -740,12 +885,14 @@ export default function ManageEventPage() {
 
   const seedKnockoutMut = useMutation({
     mutationFn: () => tournamentApi.seedKnockout(tid!),
+    onMutate: async () => {
+      deskSyncGenRef.current += 1
+      deskPollPausedRef.current = true
+      await qc.cancelQueries({ queryKey: ['org-matches', slug] })
+      showToast('Filling Cup / Shield…')
+    },
     onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['org-matches'] })
-      qc.invalidateQueries({ queryKey: ['player-view'] })
-      qc.invalidateQueries({ queryKey: ['display'] })
-      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
-      if (slug) qc.invalidateQueries({ queryKey: ['matches', slug] })
+      softRefreshAfterScore()
       const filled = (res.data as { filled?: number } | undefined)?.filled
       showToast(
         typeof filled === 'number'
@@ -754,6 +901,7 @@ export default function ManageEventPage() {
       )
     },
     onError: (err) => {
+      deskPollPausedRef.current = false
       showToast(apiErrorMessage(err) || 'Couldn’t fill the knockout draw')
     },
   })
@@ -777,42 +925,66 @@ export default function ManageEventPage() {
   })
 
   const scoreMut = useMutation({
-    mutationFn: ({ match, form }: ScorePayload) => {
+    mutationFn: async ({ match, form }: ScorePayload) => {
       const simple = scoringMode === 'SIMPLE'
       const current_set = simple ? 1 : resolveCurrentSet(form)
-      return tournamentApi.updateScore(match.id, {
-        set1_a: form.set1_a,
-        set1_b: form.set1_b,
-        set2_a: simple ? 0 : form.set2_a,
-        set2_b: simple ? 0 : form.set2_b,
-        set3_a: simple ? 0 : form.set3_a,
-        set3_b: simple ? 0 : form.set3_b,
-        current_set,
-        status: form.status,
-        winner_id: form.winner_id || null,
-        force: form.force || !!match.ratings_applied,
-      })
+      return (
+        await tournamentApi.updateScore(match.id, {
+          set1_a: form.set1_a,
+          set1_b: form.set1_b,
+          set2_a: simple ? 0 : form.set2_a,
+          set2_b: simple ? 0 : form.set2_b,
+          set3_a: simple ? 0 : form.set3_a,
+          set3_b: simple ? 0 : form.set3_b,
+          current_set,
+          status: form.status,
+          winner_id: form.winner_id || null,
+          force: form.force || !!match.ratings_applied,
+        })
+      ).data
     },
-    onMutate: ({ match, form }) => {
+    onMutate: async ({ match, form }) => {
       void hapticSuccess()
+      deskSyncGenRef.current += 1
+      deskPollPausedRef.current = true
       // Close sheet immediately — match + form are in the mutation vars
       setScoreMatch(null)
       setScoreError('')
-      showToast('Saving…')
-      return { closed: match, form }
+      showToast(
+        form.status === 'COMPLETED' || form.status === 'WALKOVER'
+          ? 'Saving result…'
+          : 'Updating…',
+      )
+
+      await qc.cancelQueries({ queryKey: ['org-matches', slug] })
+      const prevMatches = qc.getQueryData<Match[]>(['org-matches', slug])
+      qc.setQueryData(['org-matches', slug], (old) =>
+        applyOrgScoreOptimistic(old, match, form),
+      )
+
+      return { closed: match, form, prevMatches }
     },
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ['org-matches'] })
-      qc.invalidateQueries({ queryKey: ['rankings'] })
-      qc.invalidateQueries({ queryKey: ['player-view'] })
-      qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
-      qc.invalidateQueries({ queryKey: ['display'] })
-      if (slug) {
-        qc.invalidateQueries({ queryKey: ['matches', slug] })
-      }
+    onSuccess: (data, vars) => {
+      // Keep optimistic next-round advance; merge the saved match fields from the API.
+      qc.setQueryData(['org-matches', slug], (old) => {
+        const merged = patchMatchInOrgList(old, data)
+        // If the optimistic advance already ran, keep those seats; otherwise re-apply.
+        if (
+          Array.isArray(merged) &&
+          (vars.form.status === 'COMPLETED' || vars.form.status === 'WALKOVER')
+        ) {
+          return applyOrgScoreOptimistic(merged, { ...vars.match, ...data }, vars.form)
+        }
+        return merged
+      })
+      softRefreshAfterScore()
       showToast(vars.toastOk || 'Score saved')
     },
     onError: (e: unknown, _vars, ctx) => {
+      deskPollPausedRef.current = false
+      if (ctx?.prevMatches !== undefined) {
+        qc.setQueryData(['org-matches', slug], ctx.prevMatches)
+      }
       const msg = apiErrorMessage(e, 'Could not save score')
       if (ctx?.closed) {
         setScoreMatch(ctx.closed)
@@ -945,25 +1117,57 @@ export default function ManageEventPage() {
   }
 
   const moveMut = useMutation({
-    mutationFn: ({
+    mutationFn: async ({
       matchId,
       data,
     }: {
       matchId: string
       data: Record<string, unknown>
       silent?: boolean
-    }) => tournamentApi.moveMatch(matchId, data),
-    onMutate: async () => {
+    }) => (await tournamentApi.moveMatch(matchId, data)).data as Match,
+    onMutate: async (vars) => {
       void hapticLight()
       setMoveMatch(null)
-      return {}
+      if (vars.data?.notify_only) {
+        showToast('Emailing players…')
+        return { prevMatches: undefined }
+      }
+      deskSyncGenRef.current += 1
+      deskPollPausedRef.current = true
+      await qc.cancelQueries({ queryKey: ['org-matches', slug] })
+      const prevMatches = qc.getQueryData<Match[]>(['org-matches', slug])
+      qc.setQueryData<Match[]>(['org-matches', slug], (old) =>
+        (old || []).map((m) => {
+          if (m.id !== vars.matchId) return m
+          return {
+            ...m,
+            ...(vars.data.court_number !== undefined
+              ? { court_number: vars.data.court_number as number | null }
+              : {}),
+            ...(vars.data.court_name !== undefined
+              ? { court_name: vars.data.court_name as string | null }
+              : {}),
+            ...(vars.data.scheduled_start !== undefined
+              ? { scheduled_start: vars.data.scheduled_start as string | null }
+              : {}),
+            ...(vars.data.status !== undefined
+              ? { status: String(vars.data.status) }
+              : {}),
+          }
+        }),
+      )
+      showToast('Updating…')
+      return { prevMatches }
     },
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ['org-matches'] })
-      qc.invalidateQueries({ queryKey: ['player-view'] })
-      qc.invalidateQueries({ queryKey: ['display'] })
-      if (slug) {
-        qc.invalidateQueries({ queryKey: ['matches', slug] })
+    onSuccess: (data, vars) => {
+      if (data?.id) {
+        qc.setQueryData(['org-matches', slug], (old) => patchMatchInOrgList(old, data))
+      }
+      if (vars.data?.notify_only) {
+        deskPollPausedRef.current = false
+      } else {
+        // Keep poll paused until soft refresh so stale frames don’t wipe the optimistic move
+        softRefreshAfterScore()
       }
       if (!vars.silent) {
         if (vars.data?.notify_only) {
@@ -978,7 +1182,11 @@ export default function ManageEventPage() {
         }
       }
     },
-    onError: (e: unknown) => {
+    onError: (e: unknown, _vars, ctx) => {
+      deskPollPausedRef.current = false
+      if (ctx?.prevMatches !== undefined) {
+        qc.setQueryData(['org-matches', slug], ctx.prevMatches)
+      }
       showToast(apiErrorMessage(e, 'Could not update match'))
     },
   })
@@ -2034,20 +2242,24 @@ export default function ManageEventPage() {
 
   const renderMatchActions = (m: Match, compact = false) => {
     const canScore = !!(m.team_a_id && m.team_b_id)
+    const savingThis = scoreMut.isPending && scoreMut.variables?.match.id === m.id
+    const movingThis = moveMut.isPending && moveMut.variables?.matchId === m.id
+    const busyThis = savingThis || movingThis
     if (!canScore) {
       return (
-        <div className={`org-match-actions${compact ? ' is-compact' : ''}`}>
+        <div className={`org-match-actions${compact ? ' is-compact' : ''}${busyThis ? ' is-saving' : ''}`}>
           <span className="badge badge-draft">Waiting</span>
           <button
             type="button"
             className="btn btn-ghost btn-sm"
             title="Change court or time"
+            disabled={busyThis}
             onClick={(e) => {
               e.stopPropagation()
               openMove(m)
             }}
           >
-            Move
+            {movingThis ? 'Updating…' : 'Move'}
           </button>
         </div>
       )
@@ -2055,24 +2267,33 @@ export default function ManageEventPage() {
     const locked = !!m.ratings_applied
     const done = m.status === 'COMPLETED' || m.status === 'WALKOVER' || m.status === 'CANCELLED'
     const pending = m.status === 'AWAITING_CONFIRM'
-    const busy = moveMut.isPending || scoreMut.isPending
     return (
-      <div className={`org-match-actions${compact ? ' is-compact' : ''}`}>
+      <div
+        className={`org-match-actions${compact ? ' is-compact' : ''}${busyThis ? ' is-saving' : ''}`}
+        aria-busy={busyThis || undefined}
+      >
         {!compact && (
           <span className={`badge ${statusBadgeClass(m.status)}`}>
-            {m.status === 'AWAITING_CONFIRM'
-              ? 'Player score'
-              : m.status === 'CALLED'
-                ? 'Queued'
-                : m.status.replace(/_/g, ' ')}
+            {savingThis
+              ? 'Saving…'
+              : m.status === 'AWAITING_CONFIRM'
+                ? 'Player score'
+                : m.status === 'CALLED'
+                  ? 'Queued'
+                  : m.status.replace(/_/g, ' ')}
           </span>
         )}
-        {!done && !pending && (
+        {savingThis ? (
+          <span className="org-saving-chip" role="status">
+            Saving…
+          </span>
+        ) : null}
+        {!done && !pending && !savingThis && (
           <div className="org-quick-wins" role="group" aria-label="Declare winner">
             <button
               type="button"
               className="btn btn-dark btn-sm org-quick-win"
-              disabled={busy}
+              disabled={busyThis}
               title={`${m.team_a_name || 'Team A'} wins`}
               onClick={(e) => {
                 e.stopPropagation()
@@ -2087,7 +2308,7 @@ export default function ManageEventPage() {
             <button
               type="button"
               className="btn btn-dark btn-sm org-quick-win"
-              disabled={busy}
+              disabled={busyThis}
               title={`${m.team_b_name || 'Team B'} wins`}
               onClick={(e) => {
                 e.stopPropagation()
@@ -2101,7 +2322,7 @@ export default function ManageEventPage() {
             </button>
           </div>
         )}
-        {!done && (pending || !compact) && (
+        {!done && (pending || !compact) && !savingThis && (
           <button
             type="button"
             className={`btn btn-sm org-action-btn ${pending ? 'btn-primary' : 'btn-ghost'}`}
@@ -2111,16 +2332,16 @@ export default function ManageEventPage() {
               else scoreMatchQuick(m)
             }}
             title={pending ? 'Confirm the player-submitted score' : 'Add or edit score'}
-            disabled={busy}
+            disabled={busyThis}
           >
             {pending ? 'Confirm' : 'Score'}
           </button>
         )}
-        {pending && !compact && (
+        {pending && !compact && !savingThis && (
           <button
             type="button"
             className="btn btn-ghost btn-sm org-action-btn"
-            disabled={busy}
+            disabled={busyThis}
             onClick={(e) => {
               e.stopPropagation()
               openScore(m)
@@ -2130,7 +2351,7 @@ export default function ManageEventPage() {
             Edit
           </button>
         )}
-        {done && (
+        {done && !savingThis && (
           <button
             type="button"
             className="btn btn-ghost btn-sm org-action-btn"
@@ -2147,18 +2368,19 @@ export default function ManageEventPage() {
           type="button"
           className="btn btn-ghost btn-sm org-action-btn"
           title="Change court or time"
+          disabled={busyThis}
           onClick={(e) => {
             e.stopPropagation()
             openMove(m)
           }}
         >
-          Move
+          {movingThis ? 'Updating…' : 'Move'}
         </button>
-        {!compact && !done && !pending && (
+        {!compact && !done && !pending && !savingThis && (
           <button
             type="button"
             className="btn btn-ghost btn-sm org-action-btn"
-            disabled={busy}
+            disabled={busyThis}
             title="Email players that their match is ready"
             onClick={(e) => {
               e.stopPropagation()
@@ -2171,6 +2393,21 @@ export default function ManageEventPage() {
       </div>
     )
   }
+
+  const deskSyncing =
+    scoreMut.isPending || seedKnockoutMut.isPending || moveMut.isPending
+  // Only show for user-triggered work — not every background poll
+  const deskSyncLabel = seedKnockoutMut.isPending
+    ? 'Filling Cup / Shield…'
+    : scoreMut.isPending
+      ? 'Updating result & bracket…'
+      : moveMut.isPending
+        ? moveMut.variables?.data?.notify_only
+          ? 'Emailing players…'
+          : 'Updating match…'
+        : ''
+  const matchSavingId = scoreMut.isPending ? scoreMut.variables?.match.id : null
+  const matchMovingId = moveMut.isPending ? moveMut.variables?.matchId : null
 
   if (authLoading) {
     return (
@@ -2238,8 +2475,8 @@ export default function ManageEventPage() {
             {isAdmin ? '+ New tournament' : '+ New event'}
           </button>
           <div className="org-aside-note">
-            <strong>Run the day</strong>
-            <p>People to invite and check in. Day to score. More for edit, TV, and extras.</p>
+            <strong>Run your event</strong>
+            <p>People → invite. Day → score. Settings → edit format, times, co-hosts.</p>
           </div>
         </aside>
 
@@ -2324,9 +2561,45 @@ export default function ManageEventPage() {
                   <p className="org-header-meta">
                     {statusLabel(active.tournament.status)}
                     {active.tournament.is_official ? '' : ' · Private'}
+                    {' · '}
+                    <strong>
+                      {active.paid_registrations}/{active.tournament.max_teams}
+                    </strong>{' '}
+                    in
+                    {' · '}
+                    <strong>
+                      {checkInPool.length > 0
+                        ? `${checkedInCount}/${checkInPool.length}`
+                        : `${active.checked_in}/${active.teams}`}
+                    </strong>{' '}
+                    checked in
+                    {fixturesExist || active.live_matches > 0 ? (
+                      <>
+                        {' · '}
+                        <strong>{active.live_matches}</strong> live
+                      </>
+                    ) : null}
+                    {active.revenue_cents > 0 ? (
+                      <>
+                        {' · '}
+                        <strong>{formatMoney(active.revenue_cents)}</strong>
+                      </>
+                    ) : null}
                   </p>
                 </div>
-                <div className="org-header-actions">
+                <div className="org-header-actions" role="group" aria-label="Event actions">
+                  {active.tournament.slug &&
+                  (hostAlsoPlaying ||
+                    fixturesExist ||
+                    active.tournament.status === 'LIVE' ||
+                    active.tournament.status === 'COMPLETED') ? (
+                    <Link
+                      to={`/t/${active.tournament.slug}/live`}
+                      className="btn btn-ghost org-header-play"
+                    >
+                      {hostAlsoPlaying ? 'My match' : 'Live'}
+                    </Link>
+                  ) : null}
                   {active.tournament.status === 'DRAFT' ? (
                     <button
                       type="button"
@@ -2357,7 +2630,7 @@ export default function ManageEventPage() {
                       onClick={confirmComplete}
                       disabled={completeMut.isPending}
                     >
-                      {completeMut.isPending ? 'Saving…' : 'Finish event'}
+                      {completeMut.isPending ? 'Saving…' : 'Finish'}
                     </button>
                   ) : null}
                   {active.tournament.status === 'CANCELLED' ? (
@@ -2377,14 +2650,6 @@ export default function ManageEventPage() {
                     >
                       {restoreMut.isPending ? '…' : 'Restore'}
                     </button>
-                  ) : null}
-                  {hostAlsoPlaying && active.tournament.slug ? (
-                    <Link
-                      to={`/t/${active.tournament.slug}/live`}
-                      className="btn btn-ghost org-header-play"
-                    >
-                      My match
-                    </Link>
                   ) : null}
                   <button
                     type="button"
@@ -2407,88 +2672,81 @@ export default function ManageEventPage() {
                   </p>
                 )}
 
-              <div className="org-meta-strip" aria-label="Event snapshot">
-                <span>
-                  <strong>
-                    {active.paid_registrations}/{active.tournament.max_teams}
-                  </strong>{' '}
-                  in
-                </span>
-                <span>
-                  <strong>
-                    {checkInPool.length > 0
-                      ? `${checkedInCount}/${checkInPool.length}`
-                      : `${active.checked_in}/${active.teams}`}
-                  </strong>{' '}
-                  checked in
-                </span>
-                {fixturesExist || active.live_matches > 0 ? (
-                  <span>
-                    <strong>{active.live_matches}</strong> live
-                  </span>
-                ) : null}
-                {active.revenue_cents > 0 ? (
-                  <span>
-                    <strong>{formatMoney(active.revenue_cents)}</strong> collected
-                  </span>
-                ) : null}
+              <div className="section-tabs org-control-tabs" role="tablist" aria-label="Event sections">
+                {(
+                  [
+                    { id: 'registration' as const, label: 'People' },
+                    { id: 'day-of' as const, label: 'Day' },
+                    { id: 'settings' as const, label: 'Settings' },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={orgPanel === tab.id}
+                    className={`section-tab org-control-tab${orgPanel === tab.id ? ' is-active' : ''}`}
+                    onClick={() => setOrgPanel(tab.id)}
+                  >
+                    <span className="org-control-tab-label">{tab.label}</span>
+                    {tab.id === 'day-of' && dayOps.attentionTotal > 0 ? (
+                      <span
+                        className="section-tab-badge"
+                        aria-label={`${dayOps.attentionTotal} need attention`}
+                      >
+                        {dayOps.attentionTotal}
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
               </div>
 
-              {orgPanel === 'settings' ? (
-                <div className="org-settings-bar">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() =>
-                      setOrgPanel(defaultOrgPanel(active.tournament.status, fixturesExist))
-                    }
-                  >
-                    ← Back
-                  </button>
-                  <span className="org-settings-bar-label">Extras</span>
+              {orgPanel !== 'settings' && active.tournament.status !== 'CANCELLED' ? (
+                <div className="org-guide" role="status">
+                  {active.tournament.status === 'DRAFT' ? (
+                    <p>
+                      <strong>Next:</strong> Open signup, then share the invite code with friends.
+                    </p>
+                  ) : !fixturesExist &&
+                    (active.tournament.status === 'REGISTRATION_OPEN' ||
+                      active.tournament.status === 'REGISTRATION_CLOSED') ? (
+                    <p>
+                      <strong>Next:</strong>{' '}
+                      {!hostAlsoPlaying && active.tournament.status === 'REGISTRATION_OPEN'
+                        ? 'Share the code, enter yourself if you’re playing, then generate the draw.'
+                        : generateBlockedReason
+                          ? generateBlockedReason
+                          : 'When enough people have joined, generate the draw.'}
+                    </p>
+                  ) : fixturesExist && !canMarkDone ? (
+                    <p>
+                      <strong>Next:</strong> Use Day to check people in and score matches
+                      {hostAlsoPlaying ? ' — tap My match for your own court.' : '.'}
+                    </p>
+                  ) : canMarkDone ? (
+                    <p>
+                      <strong>Next:</strong> When play is done, tap Finish.
+                    </p>
+                  ) : null}
                 </div>
-              ) : (
-                <div className="section-tabs org-control-tabs" role="tablist" aria-label="Event sections">
-                  {(
-                    [
-                      { id: 'registration' as const, label: 'People' },
-                      { id: 'day-of' as const, label: 'Day' },
-                    ] as const
-                  ).map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="tab"
-                      aria-selected={orgPanel === tab.id}
-                      className={`section-tab org-control-tab${orgPanel === tab.id ? ' is-active' : ''}`}
-                      onClick={() => setOrgPanel(tab.id)}
-                    >
-                      <span className="org-control-tab-label">{tab.label}</span>
-                      {tab.id === 'day-of' && dayOps.attentionTotal > 0 ? (
-                        <span
-                          className="section-tab-badge"
-                          aria-label={`${dayOps.attentionTotal} need attention`}
-                        >
-                          {dayOps.attentionTotal}
-                        </span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              )}
+              ) : null}
 
               {orgPanel === 'registration' && (
               <>
               <section className="org-section org-invite-card">
                 <div className="org-section-head">
-                  <h2>Invite</h2>
-                  {active.tournament.status === 'REGISTRATION_OPEN' &&
-                  active.tournament.slug &&
-                  !hostAlsoPlaying ? (
-                    <Link to={`/t/${active.tournament.slug}/join`} className="btn btn-ghost btn-sm">
-                      Enter myself
-                    </Link>
-                  ) : null}
+                  <h2>Invite friends</h2>
+                  <div className="org-invite-head-actions">
+                    {tournamentDetail ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setShowEdit(true)}
+                      >
+                        Edit event
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 {inviteCode ? (
                   <div className="org-invite">
@@ -2510,10 +2768,37 @@ export default function ManageEventPage() {
                     ) : fixturesExist ? (
                       <p className="muted">Draw is ready — score on the Day tab.</p>
                     ) : canReopenRegistration ? (
-                      <p className="muted">Need late joiners? Reopen from More.</p>
+                      <p className="muted">Need late joiners? Reopen from Settings.</p>
                     ) : (
                       <p className="muted">Signup locked at event start.</p>
                     )}
+                    {active.tournament.status === 'REGISTRATION_OPEN' &&
+                    active.tournament.slug &&
+                    !hostAlsoPlaying ? (
+                      <div className="org-invite-self">
+                        <Link
+                          to={`/t/${active.tournament.slug}/join`}
+                          className="btn btn-primary"
+                        >
+                          Enter myself as a player
+                        </Link>
+                        <p className="muted org-invite-self-note">
+                          Host and play — you’ll get Manage and My match for this event.
+                        </p>
+                      </div>
+                    ) : hostAlsoPlaying && active.tournament.slug ? (
+                      <div className="org-invite-self org-invite-self--entered">
+                        <p className="org-invite-self-note" style={{ margin: 0 }}>
+                          You’re entered as a player.
+                        </p>
+                        <Link
+                          to={`/t/${active.tournament.slug}/live`}
+                          className="btn btn-ghost"
+                        >
+                          My match
+                        </Link>
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
                   <p className="muted">Code appears after save.</p>
@@ -3499,13 +3784,28 @@ export default function ManageEventPage() {
 
               {orgPanel === 'day-of' && (
               <>
+              {hostAlsoPlaying && active.tournament.slug ? (
+                <div className="org-playing-banner" role="status">
+                  <div>
+                    <strong>You’re playing too</strong>
+                    <p>Check your court and score your match from the player view.</p>
+                  </div>
+                  <Link
+                    to={`/t/${active.tournament.slug}/live`}
+                    className="btn btn-primary btn-sm"
+                  >
+                    My match
+                  </Link>
+                </div>
+              ) : null}
+
               {!fixturesExist ? (
                 <div className="org-control-banner is-prep" role="status">
                   <strong>Before play</strong>
                   <p>
                     {generateBlockedReason
                       ? `Can’t generate yet: ${generateBlockedReason}`
-                      : 'Generate the draw, then score matches here.'}
+                      : 'Generate the draw, then check people in and score matches here.'}
                   </p>
                   {(active.tournament.status === 'REGISTRATION_OPEN' ||
                     active.tournament.status === 'REGISTRATION_CLOSED') && (
@@ -3536,6 +3836,17 @@ export default function ManageEventPage() {
                   >
                     {seedKnockoutMut.isPending ? 'Filling…' : 'Fill Cup / Shield now'}
                   </button>
+                </div>
+              ) : null}
+
+              {deskSyncLabel ? (
+                <div
+                  className={`org-desk-sync${deskSyncing ? ' is-busy' : ''}`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <span className="org-desk-sync-dot" aria-hidden />
+                  <span>{deskSyncLabel}</span>
                 </div>
               ) : null}
 
@@ -3618,8 +3929,13 @@ export default function ManageEventPage() {
                   <ul className="org-player-score-list">
                     {dayOps.pendingMatches.map((m) => {
                       const scoreText = m.score ? formatMatchScore(m.score) : ''
+                      const confirming =
+                        scoreMut.isPending && scoreMut.variables?.match.id === m.id
                       return (
-                        <li key={m.id} className="org-player-score-card">
+                        <li
+                          key={m.id}
+                          className={`org-player-score-card${confirming ? ' is-saving' : ''}`}
+                        >
                           <div className="org-player-score-main">
                             <strong className="org-player-score-vs">
                               {m.team_a_name || 'TBD'} vs {m.team_b_name || 'TBD'}
@@ -3639,14 +3955,15 @@ export default function ManageEventPage() {
                             <button
                               type="button"
                               className="btn btn-primary btn-sm org-action-btn"
-                              disabled={scoreMut.isPending}
+                              disabled={confirming}
                               onClick={() => confirmPendingScore(m)}
                             >
-                              Confirm
+                              {confirming ? 'Confirming…' : 'Confirm'}
                             </button>
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm org-action-btn"
+                              disabled={confirming}
                               onClick={() => openScore(m)}
                             >
                               Edit
@@ -3788,7 +4105,9 @@ export default function ManageEventPage() {
                                 : slot.kind === 'called'
                                   ? 'is-called'
                                   : ''
-                          }${canTapScore ? ' is-tap' : ''}`}
+                          }${canTapScore ? ' is-tap' : ''}${
+                            matchSavingId === m.id || matchMovingId === m.id ? ' is-saving' : ''
+                          }`}
                           role={canTapScore ? 'button' : undefined}
                           tabIndex={canTapScore ? 0 : undefined}
                           onClick={
@@ -3977,7 +4296,9 @@ export default function ManageEventPage() {
                                 return (
                                 <div
                                   key={m.id}
-                                  className={`org-court-card is-${m.status.toLowerCase()}${canTap ? ' is-tap' : ''}`}
+                                  className={`org-court-card is-${m.status.toLowerCase()}${canTap ? ' is-tap' : ''}${
+                                    matchSavingId === m.id || matchMovingId === m.id ? ' is-saving' : ''
+                                  }`}
                                   role={canTap ? 'button' : undefined}
                                   tabIndex={canTap ? 0 : undefined}
                                   onClick={
@@ -4025,7 +4346,9 @@ export default function ManageEventPage() {
                                 return (
                                   <div
                                     key={m.id}
-                                    className={`org-court-card is-${m.status.toLowerCase()}${canTap ? ' is-tap' : ''}`}
+                                    className={`org-court-card is-${m.status.toLowerCase()}${canTap ? ' is-tap' : ''}${
+                                      matchSavingId === m.id || matchMovingId === m.id ? ' is-saving' : ''
+                                    }`}
                                     role={canTap ? 'button' : undefined}
                                     tabIndex={canTap ? 0 : undefined}
                                     onClick={
@@ -4083,7 +4406,9 @@ export default function ManageEventPage() {
                             </p>
                           ) : null}
                           <div
-                            className={`org-row ${m.status === 'CALLED' ? 'is-called' : ''} ${m.status === 'LIVE' ? 'is-live' : ''} ${m.status === 'AWAITING_CONFIRM' ? 'is-awaiting' : ''} ${m.stage === 'PLATE' ? 'is-plate' : ''} ${m.stage === 'KNOCKOUT' ? 'is-champ' : ''}${canScore ? ' is-tap' : ''}`}
+                            className={`org-row ${m.status === 'CALLED' ? 'is-called' : ''} ${m.status === 'LIVE' ? 'is-live' : ''} ${m.status === 'AWAITING_CONFIRM' ? 'is-awaiting' : ''} ${m.stage === 'PLATE' ? 'is-plate' : ''} ${m.stage === 'KNOCKOUT' ? 'is-champ' : ''}${canScore ? ' is-tap' : ''}${
+                              matchSavingId === m.id || matchMovingId === m.id ? ' is-saving' : ''
+                            }`}
                             role={canScore ? 'button' : undefined}
                             tabIndex={canScore ? 0 : undefined}
                             onClick={
@@ -4211,11 +4536,66 @@ export default function ManageEventPage() {
 
               {orgPanel === 'settings' && (
               <>
-              <p className="org-setup-lead muted">Sponsors and co-admins. Day-to-day scoring stays on Day.</p>
+              <section className="org-section org-settings-primary">
+                <div className="org-section-head">
+                  <h2>Event settings</h2>
+                </div>
+                <p className="muted org-section-lead" style={{ marginTop: 0 }}>
+                  Change name, venue, format, courts, and rules
+                  {!fixturesExist ? ' before you generate the draw.' : '.'}
+                </p>
+                <div className="org-settings-primary-actions">
+                  {tournamentDetail ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => setShowEdit(true)}
+                    >
+                      Edit event
+                    </button>
+                  ) : null}
+                  {canReopenRegistration ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={openMut.isPending}
+                      onClick={() => openMut.mutate()}
+                    >
+                      Reopen signup
+                    </button>
+                  ) : null}
+                  {canRedraw ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={generateMut.isPending}
+                      title={generateBlockedReason || 'Re-generate draw'}
+                      onClick={confirmRedraw}
+                    >
+                      Redraw
+                    </button>
+                  ) : null}
+                  {fixturesExist ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setShowEditTimes(true)}
+                    >
+                      Match times
+                    </button>
+                  ) : null}
+                </div>
+                {!canReopenRegistration && eventStartedClock && !fixturesExist ? (
+                  <p className="muted org-setup-ops-note">
+                    Signup locked — event start time has passed.
+                  </p>
+                ) : null}
+              </section>
+
               <section className="org-section">
                 <h2>Sponsors</h2>
                 <p className="muted-note" style={{ marginTop: 0 }}>
-                  Shown on the event page, join flow, and TV.
+                  Optional logos on the event page, join flow, and TV.
                 </p>
                 {sponsors.length > 0 && (
                   <>
@@ -4387,7 +4767,10 @@ export default function ManageEventPage() {
               </section>
 
               <section className="org-section">
-                <h2>Tournament admins</h2>
+                <h2>Co-hosts</h2>
+                <p className="muted-note" style={{ marginTop: 0 }}>
+                  Add a friend who can score and help run the day.
+                </p>
                 <ul className="org-admin-list">
                   {tournamentAdmins.map((a) => (
                     <li key={`${a.user_id}-${a.role}`}>
@@ -4594,7 +4977,7 @@ export default function ManageEventPage() {
                     setOrgPanel('settings')
                   }}
                 >
-                  Sponsors &amp; co-admins
+                  Settings
                 </button>
               </li>
               {active.tournament.status !== 'CANCELLED' &&

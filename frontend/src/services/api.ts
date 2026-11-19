@@ -558,7 +558,7 @@ export const tournamentApi = {
   removeFreeEntry: (tournamentId: string, entryId: string) =>
     api.delete(`/api/tournaments/${tournamentId}/free-entries/${entryId}`),
   updateScore: (matchId: string, data: Record<string, unknown>) =>
-    api.patch(`/api/matches/${matchId}/score`, data),
+    api.patch<Match>(`/api/matches/${matchId}/score`, data),
   playerSubmitScore: (
     matchId: string,
     data: {
