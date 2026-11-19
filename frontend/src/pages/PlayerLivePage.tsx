@@ -1647,7 +1647,7 @@ export default function PlayerLivePage() {
                   {t.enable_plate
                     ? groupsDone
                       ? 'Final paths from these tables:'
-                      : 'Live projection from current tables:'}
+                      : 'Live projection from current tables:'
                     : groupsDone
                       ? 'Final paths from these tables:'
                       : 'Live projection — top places go through:'}
