@@ -171,6 +171,7 @@ export default function ManageEventPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [showEditTimes, setShowEditTimes] = useState(false)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
   const isAdmin = user?.role === 'ADMIN'
   const [showAddTeam, setShowAddTeam] = useState(false)
   const [editTeam, setEditTeam] = useState<TournamentTeam | null>(null)
@@ -223,8 +224,6 @@ export default function ManageEventPage() {
   const [entriesSort, setEntriesSort] = useState<'newest' | 'oldest' | 'name'>('newest')
   const [checkInFilter, setCheckInFilter] = useState<'all' | 'out' | 'in'>('out')
   const [checkInQuery, setCheckInQuery] = useState('')
-  /** Control desk: score matches vs check-in — avoids scrolling past either. */
-  const [controlDesk, setControlDesk] = useState<'score' | 'checkin'>('score')
   const [orgPanel, setOrgPanel] = useState<OrgPanel>('registration')
   const [scoreForm, setScoreForm] = useState({
     set1_a: 0,
@@ -273,6 +272,7 @@ export default function ManageEventPage() {
   }, [params, setSearchParams])
 
   useEffect(() => {
+    setShowMoreMenu(false)
     setPaymentFilter('all')
     setEntriesCheckInFilter('all')
     setEntriesQuery('')
@@ -289,6 +289,7 @@ export default function ManageEventPage() {
   useEffect(() => {
     const open =
       showEdit ||
+      showMoreMenu ||
       confirmGenerate ||
       !!scoreMatch ||
       showAddTeam ||
@@ -297,7 +298,25 @@ export default function ManageEventPage() {
       showSwapTeams
     document.body.classList.toggle('modal-open', open)
     return () => document.body.classList.remove('modal-open')
-  }, [showEdit, confirmGenerate, scoreMatch, showAddTeam, moveMatch, editTeam, showSwapTeams])
+  }, [
+    showEdit,
+    showMoreMenu,
+    confirmGenerate,
+    scoreMatch,
+    showAddTeam,
+    moveMatch,
+    editTeam,
+    showSwapTeams,
+  ])
+
+  useEffect(() => {
+    if (!showMoreMenu) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowMoreMenu(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [showMoreMenu])
 
   useEffect(() => {
     // Generate / edit use ModalShell (own Escape). This covers score / add-team / move / edit entry.
@@ -477,10 +496,10 @@ export default function ManageEventPage() {
         showToast(`Generated ${groupsN} groups · ${matchesN} matches${sizes}${byes}${adjusted}`)
       }
       window.setTimeout(() => {
-        const el =
-          document.getElementById('org-desk-tabs') ||
-          document.getElementById('org-score-desk')
-        el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        document.getElementById('org-score-desk')?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
       }, 80)
     },
     onError: (e: unknown) => {
@@ -1240,10 +1259,6 @@ export default function ManageEventPage() {
   useEffect(() => {
     if (!active) return
     setOrgPanel(defaultOrgPanel(active.tournament.status, fixturesExist))
-    // Prefer check-in before the draw exists; score desk once fixtures are live.
-    setControlDesk(
-      fixturesExist || active.tournament.status === 'LIVE' ? 'score' : 'checkin',
-    )
   }, [active?.tournament.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Busy day: open matches first when switching into a live / drawn event
@@ -1825,16 +1840,17 @@ export default function ManageEventPage() {
     })
   }
 
-  const switchControlDesk = (desk: 'score' | 'checkin') => {
-    setControlDesk(desk)
+  const scrollToCheckIn = () => {
+    setOrgPanel('day-of')
     window.setTimeout(() => {
-      const target =
-        desk === 'checkin'
-          ? document.getElementById('org-checkin') || document.getElementById('org-desk-tabs')
-          : document.getElementById('org-desk-tabs') || document.getElementById('org-score-desk')
+      const target = document.getElementById('org-checkin')
       target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }, 40)
   }
+
+  const hostAlsoPlaying = !!(
+    tournamentDetail?.viewer_entered || active?.tournament.viewer_entered
+  )
 
   const openMove = (m: Match) => {
     setMoveMatch(m)
@@ -2181,8 +2197,11 @@ export default function ManageEventPage() {
       <div className="app-shell">
         <NavBar />
         <main className="page empty-state">
-          <h1 className="page-title">Log in to host</h1>
-          <p className="page-sub">Sign in to manage your private events, draws, and scores.</p>
+          <h1 className="page-title">Log in to manage</h1>
+          <p className="page-sub">
+            Sign in to run your events — same controls as admin for events you create, plus your
+            player view if you enter.
+          </p>
           <div className="header-actions" style={{ justifyContent: 'center', marginTop: 12 }}>
             <Link to="/login?next=%2Fmanage" className="btn btn-primary">
               Log in
@@ -2225,15 +2244,11 @@ export default function ManageEventPage() {
             type="button"
             onClick={() => setShowCreate(true)}
           >
-            {isAdmin ? '+ New tournament' : '+ Host private event'}
+            {isAdmin ? '+ New tournament' : '+ New event'}
           </button>
           <div className="org-aside-note">
-            <strong>{isAdmin ? 'Manage' : 'Private host'}</strong>
-            <p>
-              {isAdmin
-                ? 'Entries, Control, Setup — score winners on Control.'
-                : 'Private events stay off the official list. Share the invite code with friends.'}
-            </p>
+            <strong>Run the day</strong>
+            <p>People to invite and check in. Day to score. More for edit, TV, and extras.</p>
           </div>
         </aside>
 
@@ -2268,7 +2283,7 @@ export default function ManageEventPage() {
                   type="button"
                   className="btn btn-primary org-event-picker-new"
                   onClick={() => setShowCreate(true)}
-                  aria-label={isAdmin ? 'New tournament' : 'Host private event'}
+                  aria-label={isAdmin ? 'New tournament' : 'New event'}
                 >
                   <i className="fas fa-plus" aria-hidden />
                   <span>New</span>
@@ -2302,10 +2317,10 @@ export default function ManageEventPage() {
               <p>
                 {isAdmin
                   ? 'Create an official tournament or a private event, then manage registration and scoring here.'
-                  : 'Host a private event for friends. It won’t show as an official SPI tournament — share the invite code.'}
+                  : 'Create a private event and get the same controls as admin for it — entries, draw, scoring, and setup. Share the invite code with friends.'}
               </p>
               <button className="btn btn-primary" type="button" onClick={() => setShowCreate(true)}>
-                {isAdmin ? 'New tournament' : 'Host private event'}
+                {isAdmin ? 'New tournament' : 'New event'}
               </button>
             </div>
           )}
@@ -2313,72 +2328,48 @@ export default function ManageEventPage() {
           {active && (
             <>
               <header className="org-header">
-                <div>
+                <div className="org-header-text">
                   <h1>{active.tournament.name}</h1>
                   <p className="org-header-meta">
-                    {active.tournament.is_official ? 'Official' : 'Private'}
-                    {' · '}
                     {statusLabel(active.tournament.status)}
+                    {active.tournament.is_official ? '' : ' · Private'}
                   </p>
                 </div>
                 <div className="org-header-actions">
-                  {fixturesExist && active.tournament.slug ? (
-                    <Link
-                      to={`/t/${active.tournament.slug}/fixtures`}
-                      className="btn org-master-sheet-btn"
-                      title="Open the full fixture list — tap any match to score"
-                    >
-                      Master sheet
-                    </Link>
-                  ) : null}
-                  {tournamentDetail && (
-                    <button type="button" className="btn btn-ghost" onClick={() => setShowEdit(true)}>
-                      Edit
-                    </button>
-                  )}
-                  {active.tournament.status === 'DRAFT' && (
+                  {active.tournament.status === 'DRAFT' ? (
                     <button
+                      type="button"
                       className="btn btn-primary"
                       onClick={() => openMut.mutate()}
                       disabled={openMut.isPending}
-                      title="Open registration"
                     >
-                      Open
+                      {openMut.isPending ? 'Opening…' : 'Open signup'}
                     </button>
-                  )}
-                  {active.tournament.status === 'REGISTRATION_OPEN' && (
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => closeRegMut.mutate()}
-                      disabled={closeRegMut.isPending}
-                      title="Close registration"
-                    >
-                      Close
-                    </button>
-                  )}
+                  ) : null}
                   {(active.tournament.status === 'REGISTRATION_OPEN' ||
                     active.tournament.status === 'REGISTRATION_CLOSED') &&
-                    !fixturesExist && (
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => setConfirmGenerate(true)}
-                        disabled={generateMut.isPending || !canOpenGenerate}
-                        title={generateBlockedReason || 'Generate draw'}
-                      >
-                        Draw
-                      </button>
-                    )}
-                  {canMarkDone && (
+                  !fixturesExist ? (
                     <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => setConfirmGenerate(true)}
+                      disabled={generateMut.isPending || !canOpenGenerate}
+                      title={generateBlockedReason || 'Generate draw'}
+                    >
+                      {generateMut.isPending ? 'Working…' : 'Generate draw'}
+                    </button>
+                  ) : null}
+                  {canMarkDone ? (
+                    <button
+                      type="button"
                       className="btn btn-primary"
                       onClick={confirmComplete}
                       disabled={completeMut.isPending}
-                      title="Mark tournament completed"
                     >
-                      Done
+                      {completeMut.isPending ? 'Saving…' : 'Finish event'}
                     </button>
-                  )}
-                  {active.tournament.status === 'CANCELLED' && (
+                  ) : null}
+                  {active.tournament.status === 'CANCELLED' ? (
                     <button
                       type="button"
                       className="btn btn-primary"
@@ -2395,201 +2386,143 @@ export default function ManageEventPage() {
                     >
                       {restoreMut.isPending ? '…' : 'Restore'}
                     </button>
-                  )}
+                  ) : null}
+                  {hostAlsoPlaying && active.tournament.slug ? (
+                    <Link
+                      to={`/t/${active.tournament.slug}/live`}
+                      className="btn btn-ghost org-header-play"
+                    >
+                      My match
+                    </Link>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-ghost org-more-btn"
+                    aria-haspopup="dialog"
+                    aria-expanded={showMoreMenu}
+                    onClick={() => setShowMoreMenu(true)}
+                  >
+                    More
+                  </button>
                 </div>
-                {(active.tournament.status !== 'CANCELLED' &&
-                  active.tournament.status !== 'COMPLETED') ||
-                isOwner ? (
-                  <div className="org-header-danger">
-                    {active.tournament.status !== 'CANCELLED' &&
-                      active.tournament.status !== 'COMPLETED' && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          disabled={cancelMut.isPending}
-                          onClick={() => {
-                            void confirmDialog({
-                              title: 'Cancel event?',
-                              message:
-                                'Players will no longer be able to register or play. You can restore it later as a draft.',
-                              confirmLabel: 'Cancel event',
-                              danger: true,
-                            }).then((ok) => {
-                              if (ok) cancelMut.mutate()
-                            })
-                          }}
-                        >
-                          Cancel event
-                        </button>
-                      )}
-                    {isOwner && (
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        disabled={deleteMut.isPending}
-                        onClick={() => {
-                          void confirmDialog({
-                            title: 'Delete forever?',
-                            message: `Permanently delete “${active.tournament.name}”? This removes teams, matches, and scores.`,
-                            confirmLabel: 'Delete',
-                            danger: true,
-                          }).then((ok) => {
-                            if (ok) deleteMut.mutate()
-                          })
-                        }}
-                      >
-                        {deleteMut.isPending ? 'Deleting…' : 'Delete'}
-                      </button>
-                    )}
-                  </div>
-                ) : null}
               </header>
 
               {generateBlockedReason &&
                 (active.tournament.status === 'REGISTRATION_OPEN' ||
-                  active.tournament.status === 'REGISTRATION_CLOSED') && (
+                  active.tournament.status === 'REGISTRATION_CLOSED') &&
+                !fixturesExist && (
                   <p className="org-generate-hint" role="status">
-                    Can’t generate yet: {generateBlockedReason}
+                    {generateBlockedReason}
                   </p>
                 )}
 
-              <div className="org-stats" aria-label="Event stats">
-                <div className="org-stat org-stat--players">
-                  <strong>{active.players}</strong>
-                  <span>Players</span>
-                </div>
-                {!isSingles && (
-                  <div className="org-stat org-stat--teams">
-                    <strong>{active.teams}</strong>
-                    <span>Teams</span>
-                  </div>
-                )}
-                <div className="org-stat org-stat--money">
-                  <strong>{formatMoney(active.revenue_cents)}</strong>
-                  <span>Collected</span>
-                </div>
-                <div className="org-stat org-stat--registered">
+              <div className="org-meta-strip" aria-label="Event snapshot">
+                <span>
                   <strong>
                     {active.paid_registrations}/{active.tournament.max_teams}
-                  </strong>
-                  <span>Registered</span>
-                </div>
-                <div className="org-stat org-stat--live">
-                  <strong>{active.live_matches}</strong>
-                  <span>Live matches</span>
-                </div>
-                <div className="org-stat org-stat--checkin">
+                  </strong>{' '}
+                  in
+                </span>
+                <span>
                   <strong>
                     {checkInPool.length > 0
                       ? `${checkedInCount}/${checkInPool.length}`
                       : `${active.checked_in}/${active.teams}`}
-                  </strong>
-                  <span>Checked in</span>
-                </div>
+                  </strong>{' '}
+                  checked in
+                </span>
+                {fixturesExist || active.live_matches > 0 ? (
+                  <span>
+                    <strong>{active.live_matches}</strong> live
+                  </span>
+                ) : null}
+                {active.revenue_cents > 0 ? (
+                  <span>
+                    <strong>{formatMoney(active.revenue_cents)}</strong> collected
+                  </span>
+                ) : null}
               </div>
 
-              <div className="section-tabs org-control-tabs" role="tablist" aria-label="Event sections">
-                {(
-                  [
-                    { id: 'registration' as const, label: 'Entries', sub: 'Invite & pay' },
-                    { id: 'day-of' as const, label: 'Control', sub: 'Score & run' },
-                    { id: 'settings' as const, label: 'Setup', sub: 'Extras' },
-                  ] as const
-                ).map((tab) => (
+              {orgPanel === 'settings' ? (
+                <div className="org-settings-bar">
                   <button
-                    key={tab.id}
                     type="button"
-                    role="tab"
-                    aria-selected={orgPanel === tab.id}
-                    className={`section-tab org-control-tab${orgPanel === tab.id ? ' is-active' : ''}`}
-                    onClick={() => setOrgPanel(tab.id)}
+                    className="btn btn-ghost btn-sm"
+                    onClick={() =>
+                      setOrgPanel(defaultOrgPanel(active.tournament.status, fixturesExist))
+                    }
                   >
-                    <span className="org-control-tab-label">{tab.label}</span>
-                    <span className="org-control-tab-sub">{tab.sub}</span>
-                    {tab.id === 'day-of' && dayOps.attentionTotal > 0 ? (
-                      <span className="section-tab-badge" aria-label={`${dayOps.attentionTotal} need attention`}>
-                        {dayOps.attentionTotal}
-                      </span>
-                    ) : null}
+                    ← Back
                   </button>
-                ))}
-              </div>
-
-              {orgPanel === 'day-of' && active.tournament.slug ? (
-                <details className="org-player-screens">
-                  <summary className="org-player-screens-label">Player screens</summary>
-                  <div className="org-player-screens-links">
-                    <Link to={`/t/${active.tournament.slug}/live`} className="btn btn-ghost btn-sm">
-                      Live board
-                    </Link>
-                    {displayPath ? (
-                      <Link to={displayPath} className="btn btn-ghost btn-sm">
-                        TV
-                      </Link>
-                    ) : null}
-                    <Link to={`/t/${active.tournament.slug}`} className="btn btn-ghost btn-sm">
-                      Event page
-                    </Link>
-                  </div>
-                </details>
-              ) : null}
+                  <span className="org-settings-bar-label">Extras</span>
+                </div>
+              ) : (
+                <div className="section-tabs org-control-tabs" role="tablist" aria-label="Event sections">
+                  {(
+                    [
+                      { id: 'registration' as const, label: 'People' },
+                      { id: 'day-of' as const, label: 'Day' },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={orgPanel === tab.id}
+                      className={`section-tab org-control-tab${orgPanel === tab.id ? ' is-active' : ''}`}
+                      onClick={() => setOrgPanel(tab.id)}
+                    >
+                      <span className="org-control-tab-label">{tab.label}</span>
+                      {tab.id === 'day-of' && dayOps.attentionTotal > 0 ? (
+                        <span
+                          className="section-tab-badge"
+                          aria-label={`${dayOps.attentionTotal} need attention`}
+                        >
+                          {dayOps.attentionTotal}
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {orgPanel === 'registration' && (
               <>
-              <section className="org-section">
+              <section className="org-section org-invite-card">
                 <div className="org-section-head">
                   <h2>Invite</h2>
-                  {tournamentDetail && (
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShowEdit(true)}>
-                      Settings
-                    </button>
-                  )}
+                  {active.tournament.status === 'REGISTRATION_OPEN' &&
+                  active.tournament.slug &&
+                  !hostAlsoPlaying ? (
+                    <Link to={`/t/${active.tournament.slug}/join`} className="btn btn-ghost btn-sm">
+                      Enter myself
+                    </Link>
+                  ) : null}
                 </div>
-                {!isAdmin && !active.tournament.is_official ? (
-                  <p className="org-host-tip">
-                    <strong>Private · free.</strong> Share the code or QR. Change format, courts, and
-                    rules anytime with Settings before you generate the draw.
-                  </p>
-                ) : null}
                 {inviteCode ? (
                   <div className="org-invite">
                     <div className="org-invite-code">
                       <span className="org-invite-label">Code</span>
                       <code className="share-code">{inviteCode}</code>
-                      <div className="org-invite-actions">
-                        <button type="button" className="btn btn-ghost" onClick={() => void copyInviteCode()}>
-                          {codeCopied ? 'Copied' : 'Copy code'}
-                        </button>
-                        {active.tournament.slug ? (
-                          <Link to={`/t/${active.tournament.slug}`} className="btn btn-ghost">
-                            Event page
-                          </Link>
-                        ) : null}
-                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary org-invite-copy"
+                        onClick={() => void copyInviteCode()}
+                      >
+                        {codeCopied ? 'Copied' : 'Copy'}
+                      </button>
                     </div>
                     {active.tournament.status === 'REGISTRATION_OPEN' && joinUrl ? (
                       <ShareQr url={joinUrl} openLabel="Join link" />
                     ) : active.tournament.status === 'DRAFT' ? (
-                      <p className="muted">Tap Open above so friends can join with this code.</p>
+                      <p className="muted">Tap Open signup above, then share this code.</p>
                     ) : fixturesExist ? (
-                      <p className="muted">Draw ready — score on the Control tab.</p>
+                      <p className="muted">Draw is ready — score on the Day tab.</p>
                     ) : canReopenRegistration ? (
-                      <p className="muted">Need late joiners? Reopen from Setup.</p>
+                      <p className="muted">Need late joiners? Reopen from More.</p>
                     ) : (
-                      <p className="muted">Registration is locked at the event start time.</p>
+                      <p className="muted">Signup locked at event start.</p>
                     )}
-                    {active.tournament.status === 'REGISTRATION_OPEN' &&
-                    active.tournament.slug &&
-                    !(tournamentDetail?.viewer_entered || active.tournament.viewer_entered) ? (
-                      <div className="org-invite-self">
-                        <Link to={`/t/${active.tournament.slug}/join`} className="btn btn-primary">
-                          Enter myself as a player
-                        </Link>
-                        <p className="muted org-invite-self-note">
-                          You’re the host — you can play too. Same join flow as everyone else.
-                        </p>
-                      </div>
-                    ) : null}
                   </div>
                 ) : (
                   <p className="muted">Code appears after save.</p>
@@ -3211,25 +3144,13 @@ export default function ManageEventPage() {
 
               <section className="org-section">
                 <div className="org-section-head">
-                  <h2>Entries & payments</h2>
+                  <h2>Entries</h2>
                   {canAddTeams && (
                     <button type="button" className="btn btn-dark btn-sm" onClick={() => setShowAddTeam(true)}>
-                      {isSingles ? 'Add player' : 'Add team'}
+                      {isSingles ? 'Add' : 'Add team'}
                     </button>
                   )}
                 </div>
-                {orgTeams.some((t) => !t.withdrawn) && (
-                  <p className="org-entries-gender-tip">
-                    Set <strong>Men / Women</strong> on each entry (dropdown on the right) before
-                    generate if you want same-gender groups.
-                    {entryGenderSummary ? (
-                      <>
-                        {' '}
-                        <span className="org-entries-gender-counts">{entryGenderSummary}</span>
-                      </>
-                    ) : null}
-                  </p>
-                )}
                 {(orgTeams.length > 0 || paymentCounts.withdrawn > 0) && (
                   <div className="org-pay-toolbar">
                     <input
@@ -3239,71 +3160,61 @@ export default function ManageEventPage() {
                       value={entriesQuery}
                       onChange={(e) => setEntriesQuery(e.target.value)}
                       aria-label="Search entries"
+                      enterKeyHint="search"
+                      autoCapitalize="off"
+                      autoCorrect="off"
                     />
-                    <div className="org-view-toggle org-pay-filters" role="group" aria-label="Payment filter">
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${paymentFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setPaymentFilter('all')}
-                      >
-                        All ({paymentCounts.total})
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${paymentFilter === 'paid' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setPaymentFilter('paid')}
-                      >
-                        Paid ({paymentCounts.paid})
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${paymentFilter === 'owing' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setPaymentFilter('owing')}
-                      >
-                        Not paid ({paymentCounts.owing})
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${paymentFilter === 'withdrawn' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setPaymentFilter('withdrawn')}
-                      >
-                        Withdrawn ({paymentCounts.withdrawn})
-                      </button>
-                    </div>
-                    <div className="org-view-toggle org-pay-filters" role="group" aria-label="Check-in filter">
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${entriesCheckInFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setEntriesCheckInFilter('all')}
-                      >
-                        Any check-in
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${entriesCheckInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setEntriesCheckInFilter('in')}
-                      >
-                        Checked in ({orgTeams.filter((t) => !t.withdrawn && t.checked_in).length})
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${entriesCheckInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setEntriesCheckInFilter('out')}
-                      >
-                        Not checked in ({orgTeams.filter((t) => !t.withdrawn && !t.checked_in).length})
-                      </button>
-                    </div>
-                    <div className="org-entries-meta-row">
-                      <label className="org-entries-sort">
-                        Sort
+                    <div className="org-entries-filters">
+                      <label className="org-entries-filter">
+                        <span className="visually-hidden">Payment</span>
                         <select
+                          className="form-select"
+                          value={paymentFilter}
+                          onChange={(e) =>
+                            setPaymentFilter(
+                              e.target.value as 'all' | 'paid' | 'owing' | 'withdrawn',
+                            )
+                          }
+                          aria-label="Filter by payment"
+                        >
+                          <option value="all">All ({paymentCounts.total})</option>
+                          <option value="paid">Paid ({paymentCounts.paid})</option>
+                          <option value="owing">Not paid ({paymentCounts.owing})</option>
+                          <option value="withdrawn">Withdrawn ({paymentCounts.withdrawn})</option>
+                        </select>
+                      </label>
+                      <label className="org-entries-filter">
+                        <span className="visually-hidden">Check-in</span>
+                        <select
+                          className="form-select"
+                          value={entriesCheckInFilter}
+                          onChange={(e) =>
+                            setEntriesCheckInFilter(e.target.value as 'all' | 'in' | 'out')
+                          }
+                          aria-label="Filter by check-in"
+                        >
+                          <option value="all">Any check-in</option>
+                          <option value="in">
+                            Checked in (
+                            {orgTeams.filter((t) => !t.withdrawn && t.checked_in).length})
+                          </option>
+                          <option value="out">
+                            Not in ({orgTeams.filter((t) => !t.withdrawn && !t.checked_in).length})
+                          </option>
+                        </select>
+                      </label>
+                      <label className="org-entries-filter">
+                        <span className="visually-hidden">Sort</span>
+                        <select
+                          className="form-select"
                           value={entriesSort}
                           onChange={(e) =>
                             setEntriesSort(e.target.value as 'newest' | 'oldest' | 'name')
                           }
+                          aria-label="Sort entries"
                         >
-                          <option value="newest">Newest signup</option>
-                          <option value="oldest">Oldest signup</option>
+                          <option value="newest">Newest</option>
+                          <option value="oldest">Oldest</option>
                           <option value="name">Name</option>
                         </select>
                       </label>
@@ -3679,7 +3590,7 @@ export default function ManageEventPage() {
                               className="btn btn-ghost btn-sm org-action-btn"
                               onClick={() => {
                                 setCheckInFilter('out')
-                                switchControlDesk('checkin')
+                                scrollToCheckIn()
                               }}
                             >
                               Open
@@ -3758,70 +3669,21 @@ export default function ManageEventPage() {
               )}
 
               {checkInPool.length > 0 && (
-                <div
-                  id="org-desk-tabs"
-                  className="org-desk-tabs"
-                  role="tablist"
-                  aria-label="Control desk"
-                >
-                  <button
-                    type="button"
-                    id="org-desk-tab-score"
-                    role="tab"
-                    aria-selected={controlDesk === 'score'}
-                    aria-controls="org-score-desk"
-                    className={`org-desk-tab${controlDesk === 'score' ? ' is-active' : ''}`}
-                    onClick={() => switchControlDesk('score')}
-                  >
-                    Score & winners
-                    {dayOps.open > 0 ? (
-                      <span className="org-desk-tab-badge" aria-label={`${dayOps.open} open`}>
-                        {dayOps.open}
-                      </span>
-                    ) : null}
-                  </button>
-                  <button
-                    type="button"
-                    id="org-desk-tab-checkin"
-                    role="tab"
-                    aria-selected={controlDesk === 'checkin'}
-                    aria-controls="org-checkin"
-                    className={`org-desk-tab${controlDesk === 'checkin' ? ' is-active' : ''}${
-                      awaitingCheckInCount > 0 ? ' has-alert' : ''
-                    }`}
-                    onClick={() => switchControlDesk('checkin')}
-                  >
-                    Check-in
-                    <span
-                      className="org-desk-tab-badge"
-                      aria-label={
-                        awaitingCheckInCount > 0
-                          ? `${awaitingCheckInCount} still out`
-                          : `All ${checkedInCount} checked in`
-                      }
-                    >
-                      {awaitingCheckInCount > 0
-                        ? `${awaitingCheckInCount} out`
-                        : `${checkedInCount}/${checkInPool.length}`}
-                    </span>
-                  </button>
-                </div>
-              )}
-
-              {checkInPool.length > 0 && controlDesk === 'checkin' && (
-                <section
+                <details
+                  key={`${tid || 'event'}-checkin-${
+                    awaitingCheckInCount > 0 || !fixturesExist ? 'need' : 'done'
+                  }`}
                   id="org-checkin"
-                  role="tabpanel"
-                  aria-labelledby="org-desk-tab-checkin"
                   className={`org-section org-checkin${awaitingCheckInCount > 0 ? ' needs-you' : ''}`}
+                  defaultOpen={awaitingCheckInCount > 0 || !fixturesExist}
                 >
-                  <div className="org-section-head">
+                  <summary className="org-section-head org-checkin-summary">
                     <h2>Check-in</h2>
                     <span className="org-checkin-count">
                       {checkedInCount}/{checkInPool.length}
                       {awaitingCheckInCount > 0 ? ` · ${awaitingCheckInCount} out` : ' · all in'}
                     </span>
-                  </div>
+                  </summary>
                   <div className="org-checkin-toolbar">
                     <input
                       id="checkin-search"
@@ -3832,34 +3694,21 @@ export default function ManageEventPage() {
                       onChange={(e) => setCheckInQuery(e.target.value)}
                       autoComplete="off"
                       aria-label="Search check-in"
+                      enterKeyHint="search"
                     />
-                    <div
-                      className="org-view-toggle org-pay-filters"
-                      role="group"
-                      aria-label="Check-in filter"
-                    >
-                      <button
-                        type="button"
-                        className={`btn btn-sm org-action-btn ${checkInFilter === 'out' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setCheckInFilter('out')}
+                    <label className="org-entries-filter org-checkin-filter">
+                      <span className="visually-hidden">Check-in filter</span>
+                      <select
+                        className="form-select"
+                        value={checkInFilter}
+                        onChange={(e) => setCheckInFilter(e.target.value as 'all' | 'out' | 'in')}
+                        aria-label="Check-in filter"
                       >
-                        Out ({awaitingCheckInCount})
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm org-action-btn ${checkInFilter === 'in' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setCheckInFilter('in')}
-                      >
-                        In ({checkedInCount})
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm org-action-btn ${checkInFilter === 'all' ? 'btn-dark' : 'btn-ghost'}`}
-                        onClick={() => setCheckInFilter('all')}
-                      >
-                        All
-                      </button>
-                    </div>
+                        <option value="out">Out ({awaitingCheckInCount})</option>
+                        <option value="in">In ({checkedInCount})</option>
+                        <option value="all">All</option>
+                      </select>
+                    </label>
                   </div>
                   <div className="org-table org-checkin-table">
                     {checkInRows.map((team) => {
@@ -3928,11 +3777,9 @@ export default function ManageEventPage() {
                       </p>
                     )}
                   </div>
-                </section>
+                </details>
               )}
 
-              {(checkInPool.length === 0 || controlDesk === 'score') && (
-              <>
               {courtsideNow.length > 0 && (
                 <section className="org-section org-now-board">
                   <div className="org-section-head">
@@ -4007,12 +3854,7 @@ export default function ManageEventPage() {
                 </section>
               )}
 
-              <section
-                id="org-score-desk"
-                className="org-section org-score-desk"
-                role={checkInPool.length > 0 ? 'tabpanel' : undefined}
-                aria-labelledby={checkInPool.length > 0 ? 'org-desk-tab-score' : undefined}
-              >
+              <section id="org-score-desk" className="org-section org-score-desk">
                 <div className="org-section-head">
                   <h2>
                     {hasKnockoutMatches && isKnockoutActive(matches)
@@ -4313,8 +4155,6 @@ export default function ManageEventPage() {
                   </div>
                 )}
               </section>
-              </>
-              )}
 
               <details className="org-section org-announce-block">
                 <summary className="org-section-head">
@@ -4384,56 +4224,11 @@ export default function ManageEventPage() {
 
               {orgPanel === 'settings' && (
               <>
-              <p className="org-setup-lead muted">Optional extras — scoring stays on Control.</p>
-              {(canReopenRegistration || canRedraw || fixturesExist) && (
-                <section className="org-section org-setup-ops">
-                  <div className="org-section-head">
-                    <h2>Draw & entries</h2>
-                  </div>
-                  <p className="muted org-section-lead" style={{ marginTop: 0 }}>
-                    Late entries lock automatically at the event start time
-                    {active
-                      ? ` (${formatDate(active.tournament.event_date, {
-                          day: 'numeric',
-                          month: 'short',
-                        })} · ${formatTime(active.tournament.start_time)})`
-                      : ''}
-                    . Redraw only if the fixtures are wrong.
-                  </p>
-                  <div className="org-setup-ops-actions">
-                    {canReopenRegistration ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        disabled={openMut.isPending}
-                        onClick={() => openMut.mutate()}
-                      >
-                        Reopen registration
-                      </button>
-                    ) : null}
-                    {canRedraw ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        disabled={generateMut.isPending}
-                        title={generateBlockedReason || 'Re-generate draw'}
-                        onClick={confirmRedraw}
-                      >
-                        Redraw
-                      </button>
-                    ) : null}
-                    {!canReopenRegistration && eventStartedClock ? (
-                      <p className="muted org-setup-ops-note">
-                        Registration is locked — start time has passed.
-                      </p>
-                    ) : null}
-                  </div>
-                </section>
-              )}
+              <p className="org-setup-lead muted">Sponsors and co-admins. Day-to-day scoring stays on Day.</p>
               <section className="org-section">
                 <h2>Sponsors</h2>
                 <p className="muted-note" style={{ marginTop: 0 }}>
-                  Logo and name show at the top of the tournament page, join flow, and TV display.
+                  Shown on the event page, join flow, and TV.
                 </p>
                 {sponsors.length > 0 && (
                   <>
@@ -4696,6 +4491,182 @@ export default function ManageEventPage() {
           )}
         </main>
       </div>
+
+      {showMoreMenu && active ? (
+        <div
+          className="org-more-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="org-more-title"
+          onClick={() => setShowMoreMenu(false)}
+        >
+          <div
+            className="org-more-sheet-panel"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="org-more-sheet-handle" aria-hidden />
+            <h2 id="org-more-title">More</h2>
+            <ul className="org-more-list">
+              {tournamentDetail ? (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMoreMenu(false)
+                      setShowEdit(true)
+                    }}
+                  >
+                    Edit event
+                  </button>
+                </li>
+              ) : null}
+              {fixturesExist && active.tournament.slug ? (
+                <li>
+                  <Link
+                    to={`/t/${active.tournament.slug}/fixtures`}
+                    onClick={() => setShowMoreMenu(false)}
+                  >
+                    Master sheet
+                  </Link>
+                </li>
+              ) : null}
+              {active.tournament.slug ? (
+                <li>
+                  <Link
+                    to={`/t/${active.tournament.slug}/live`}
+                    onClick={() => setShowMoreMenu(false)}
+                  >
+                    {hostAlsoPlaying ? 'My match' : 'Live board'}
+                  </Link>
+                </li>
+              ) : null}
+              {displayPath ? (
+                <li>
+                  <Link to={displayPath} onClick={() => setShowMoreMenu(false)}>
+                    TV display
+                  </Link>
+                </li>
+              ) : null}
+              {active.tournament.slug ? (
+                <li>
+                  <Link
+                    to={`/t/${active.tournament.slug}`}
+                    onClick={() => setShowMoreMenu(false)}
+                  >
+                    Event page
+                  </Link>
+                </li>
+              ) : null}
+              {active.tournament.status === 'REGISTRATION_OPEN' ? (
+                <li>
+                  <button
+                    type="button"
+                    disabled={closeRegMut.isPending}
+                    onClick={() => {
+                      setShowMoreMenu(false)
+                      closeRegMut.mutate()
+                    }}
+                  >
+                    Close signup
+                  </button>
+                </li>
+              ) : null}
+              {canReopenRegistration ? (
+                <li>
+                  <button
+                    type="button"
+                    disabled={openMut.isPending}
+                    onClick={() => {
+                      setShowMoreMenu(false)
+                      openMut.mutate()
+                    }}
+                  >
+                    Reopen signup
+                  </button>
+                </li>
+              ) : null}
+              {canRedraw ? (
+                <li>
+                  <button
+                    type="button"
+                    disabled={generateMut.isPending}
+                    onClick={() => {
+                      setShowMoreMenu(false)
+                      confirmRedraw()
+                    }}
+                  >
+                    Redraw
+                  </button>
+                </li>
+              ) : null}
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMoreMenu(false)
+                    setOrgPanel('settings')
+                  }}
+                >
+                  Sponsors &amp; co-admins
+                </button>
+              </li>
+              {active.tournament.status !== 'CANCELLED' &&
+              active.tournament.status !== 'COMPLETED' ? (
+                <li>
+                  <button
+                    type="button"
+                    className="is-danger"
+                    disabled={cancelMut.isPending}
+                    onClick={() => {
+                      setShowMoreMenu(false)
+                      void confirmDialog({
+                        title: 'Cancel event?',
+                        message:
+                          'Players will no longer be able to register or play. You can restore it later as a draft.',
+                        confirmLabel: 'Cancel event',
+                        danger: true,
+                      }).then((ok) => {
+                        if (ok) cancelMut.mutate()
+                      })
+                    }}
+                  >
+                    Cancel event
+                  </button>
+                </li>
+              ) : null}
+              {isOwner ? (
+                <li>
+                  <button
+                    type="button"
+                    className="is-danger"
+                    disabled={deleteMut.isPending}
+                    onClick={() => {
+                      setShowMoreMenu(false)
+                      void confirmDialog({
+                        title: 'Delete forever?',
+                        message: `Permanently delete “${active.tournament.name}”? This removes teams, matches, and scores.`,
+                        confirmLabel: 'Delete',
+                        danger: true,
+                      }).then((ok) => {
+                        if (ok) deleteMut.mutate()
+                      })
+                    }}
+                  >
+                    Delete event
+                  </button>
+                </li>
+              ) : null}
+            </ul>
+            <button
+              type="button"
+              className="btn btn-ghost btn-block org-more-cancel"
+              onClick={() => setShowMoreMenu(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {showCreate && isAdmin && (
         <CreateTournamentModal

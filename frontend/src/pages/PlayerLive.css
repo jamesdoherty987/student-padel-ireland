@@ -176,6 +176,48 @@ html.native-app .pl-page {
   font-size: 0.88rem;
 }
 
+.pl-role-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0.55rem 0 0.15rem;
+  padding: 0.25rem;
+  border-radius: 10px;
+  border: 1px solid rgba(11, 61, 46, 0.16);
+  background: rgba(11, 61, 46, 0.05);
+}
+
+.pl-role-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0.3rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border: none;
+  background: transparent;
+}
+
+.pl-role-switch-btn.is-active {
+  background: var(--court-deep);
+  color: #fff;
+}
+
+a.pl-role-switch-btn:hover {
+  color: var(--court-deep);
+  background: rgba(11, 61, 46, 0.08);
+}
+
+a.pl-role-switch-btn:hover.is-active,
+.pl-role-switch-btn.is-active:hover {
+  color: #fff;
+  background: var(--court-deep);
+}
+
 .pl-live-top {
   display: flex;
   flex-wrap: wrap;

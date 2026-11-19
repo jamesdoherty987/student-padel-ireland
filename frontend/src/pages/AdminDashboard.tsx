@@ -380,11 +380,13 @@ function AdminTournamentCard({
 
       <div className="admin-actions">
         <Link to={`/manage?t=${t.id}`} className="btn btn-primary btn-sm">
-          Manage event
+          Manage
         </Link>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onEntries}>
-          Entries
-        </button>
+        {t.viewer_entered ? (
+          <Link to={`/t/${t.slug}/live`} className="btn btn-ghost btn-sm">
+            My match
+          </Link>
+        ) : null}
         {(t.status === 'DRAFT' || t.status === 'REGISTRATION_CLOSED') && (
           <button
             type="button"
@@ -392,12 +394,9 @@ function AdminTournamentCard({
             disabled={busy}
             onClick={onOpenRegistration}
           >
-            {busy ? 'Updating…' : 'Open registration'}
+            {busy ? '…' : 'Open signup'}
           </button>
         )}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>
-          Edit
-        </button>
         <button
           type="button"
           className="btn btn-ghost btn-sm"
@@ -411,12 +410,17 @@ function AdminTournamentCard({
       {moreOpen && (
         <div className="admin-actions-more">
           <p className="muted-note admin-manage-hint">
-            Draw, scoring, go live, and complete are under <strong>Manage event</strong>. Use{' '}
-            <strong>Entries</strong> to remove players quickly.
+            Day-to-day scoring and the draw live under <strong>Manage</strong>.
           </p>
           <div className="admin-actions-group">
-            <span className="admin-actions-label">Links</span>
+            <span className="admin-actions-label">Quick</span>
             <div className="admin-actions">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onEdit}>
+                Edit
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onEntries}>
+                Entries
+              </button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCopy(publicUrl, 'Public link copied')}>
                 Copy link
               </button>
@@ -424,7 +428,7 @@ function AdminTournamentCard({
                 Copy join link
               </button>
               <Link to={`/t/${t.slug}`} className="btn btn-ghost btn-sm">
-                Public page
+                Event page
               </Link>
             </div>
           </div>

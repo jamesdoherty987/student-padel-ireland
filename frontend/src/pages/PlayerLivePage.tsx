@@ -1194,6 +1194,16 @@ export default function PlayerLivePage() {
               <span className="badge badge-official">Called</span>
             ) : null}
           </div>
+          {isOps ? (
+            <div className="pl-role-switch" role="group" aria-label="View as">
+              <span className="pl-role-switch-btn is-active" aria-current="page">
+                {hasPaidEntry ? 'Play' : 'Live'}
+              </span>
+              <Link to={`/manage?t=${encodeURIComponent(t.id)}`} className="pl-role-switch-btn">
+                Manage
+              </Link>
+            </div>
+          ) : null}
           {drawReady ? (
             <p className="pl-fixtures-link">
               <Link to={`/t/${slug}/fixtures`}>All fixtures</Link>

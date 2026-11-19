@@ -548,6 +548,7 @@ export default function TournamentDetailPage() {
             !canJoin &&
             !canResumePayment &&
             !isListedPartner &&
+            !isOps &&
             (tournament.status === 'LIVE' || clockStarted || matches.length > 0) &&
             tournament.status !== 'CANCELLED' && (
             <Link to={livePath} className="btn btn-ghost">
@@ -557,6 +558,12 @@ export default function TournamentDetailPage() {
           {isOps && (
             <Link to={`/manage?t=${tournament.id}`} className="btn btn-dark">
               Manage event
+            </Link>
+          )}
+          {/* Player CTA lives in the entry banner when entered; ops without a spot use Live board */}
+          {isOps && !hasPaidEntry && (tournament.status === 'LIVE' || matches.length > 0) && (
+            <Link to={livePath} className="btn btn-ghost">
+              Live board
             </Link>
           )}
         </div>
