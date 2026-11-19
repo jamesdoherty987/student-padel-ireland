@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Xcode Cloud - build the Capacitor web bundle before Archive.
 # Runs on Apple's Macs so you can ship iOS updates from Windows.
 set -euo pipefail
@@ -9,6 +9,7 @@ cd "${CI_PRIMARY_REPOSITORY_PATH}/frontend"
 
 export HOMEBREW_NO_AUTO_UPDATE=1
 export HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1
+export HOMEBREW_NO_INSTALL_CLEANUP=1
 
 # Capacitor 8 needs Node 22+
 ensure_node_22() {

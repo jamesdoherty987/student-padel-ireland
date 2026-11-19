@@ -57,8 +57,6 @@ import {
 import {
   TEAM_GENDER_OPTIONS,
   TEAM_GENDER_ROW_OPTIONS,
-  countTeamGenders,
-  formatGenderCounts,
   normalizeTeamGender,
 } from '../utils/teamGender'
 import './ManageEvent.css'
@@ -473,7 +471,6 @@ export default function ManageEventPage() {
     onSuccess: (res) => {
       setConfirmGenerate(false)
       setOrgPanel('day-of')
-      setControlDesk('score')
       setMatchFilter('active')
       qc.invalidateQueries({ queryKey: ['org-matches'] })
       qc.invalidateQueries({ queryKey: ['manage-dashboard'] })
@@ -1372,12 +1369,6 @@ export default function ManageEventPage() {
       }),
     [orgTeams, isSingles],
   )
-  const entryGenderSummary = useMemo(() => {
-    const counts = countTeamGenders(orgTeams.filter((t) => !t.withdrawn))
-    const labeled = counts.men + counts.women + counts.mixed
-    if (labeled === 0 && counts.unset === 0) return null
-    return formatGenderCounts(counts)
-  }, [orgTeams])
   const checkedInCount = checkInPool.filter((t) => t.checked_in).length
   const awaitingCheckInCount = checkInPool.length - checkedInCount
   const checkInRows = useMemo(() => {
@@ -3669,21 +3660,17 @@ export default function ManageEventPage() {
               )}
 
               {checkInPool.length > 0 && (
-                <details
-                  key={`${tid || 'event'}-checkin-${
-                    awaitingCheckInCount > 0 || !fixturesExist ? 'need' : 'done'
-                  }`}
+                <section
                   id="org-checkin"
                   className={`org-section org-checkin${awaitingCheckInCount > 0 ? ' needs-you' : ''}`}
-                  defaultOpen={awaitingCheckInCount > 0 || !fixturesExist}
                 >
-                  <summary className="org-section-head org-checkin-summary">
+                  <div className="org-section-head">
                     <h2>Check-in</h2>
                     <span className="org-checkin-count">
                       {checkedInCount}/{checkInPool.length}
                       {awaitingCheckInCount > 0 ? ` · ${awaitingCheckInCount} out` : ' · all in'}
                     </span>
-                  </summary>
+                  </div>
                   <div className="org-checkin-toolbar">
                     <input
                       id="checkin-search"
@@ -3777,7 +3764,7 @@ export default function ManageEventPage() {
                       </p>
                     )}
                   </div>
-                </details>
+                </section>
               )}
 
               {courtsideNow.length > 0 && (
