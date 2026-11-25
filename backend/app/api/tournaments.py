@@ -5450,6 +5450,11 @@ def _ranking_board_rows(
     """Build public ranking rows, optionally limited to a set of user ids."""
     from app.models import ProfileMedia
     from app.api.profiles import _api_media_path, _public_url
+    from app.services.rating import (
+        _recompute_ireland_ranks,
+        ireland_board_filters,
+        ireland_board_order,
+    )
     from sqlalchemy.orm import aliased
 
     AvatarMedia = aliased(ProfileMedia)
@@ -5461,29 +5466,41 @@ def _ranking_board_rows(
             AvatarMedia,
             (AvatarMedia.user_id == User.id) & (AvatarMedia.is_avatar.is_(True)),
         )
-        .filter(
-            User.is_active.is_(True),
-            or_(Ranking.matches_played > 0, Ranking.tournaments_played > 0),
-            # Exclude dry-run demo logins from public boards / uni filters
-            ~User.email.ilike("dryrun%@example.com"),
-            User.email != "dryrun.host@example.com",
-            or_(User.bio.is_(None), User.bio != "dry-run-demo"),
-        )
+        .filter(*ireland_board_filters())
     )
     if user_ids is not None:
         if not user_ids:
             return []
         q = q.filter(Ranking.user_id.in_(user_ids))
-    q = q.order_by(Ranking.points.desc(), Ranking.wins.desc())
+    q = q.order_by(*ireland_board_order())
     if limit is not None:
         q = q.limit(limit)
     rows = q.all()
+
+    # Heal stale stored ranks on the Ireland board (profiles still read rank_ireland).
+    # Old recompute ranked never-played users too, so #s disagreed with points order.
+    if user_ids is None and rows:
+        out_of_order = any(
+            r.rank_ireland != i + 1 for i, (r, *_rest) in enumerate(rows)
+        )
+        if out_of_order:
+            _recompute_ireland_ranks(db)
+            db.commit()
+            # commit() expires instances; reload so the response loop is clean
+            rows = q.all()
+
     out = []
     for i, (r, u, uni, avatar_m) in enumerate(rows):
         if avatar_m is not None:
             avatar = _public_url(_api_media_path(avatar_m.id))
         else:
             avatar = _public_url(u.avatar_url)
+        # Unfiltered board: list position is Ireland rank. Filtered boards keep the
+        # stored Ireland-wide rank (UI uses local 1..n for those scopes).
+        if user_ids is None:
+            ireland_rank = i + 1
+        else:
+            ireland_rank = r.rank_ireland if r.rank_ireland is not None else (i + 1)
         out.append(
             UserProfilePublic(
                 id=u.id,
@@ -5491,7 +5508,7 @@ def _ranking_board_rows(
                 university_name=uni.name if uni else None,
                 university_short=uni.short_name if uni else None,
                 points=r.points,
-                rank_ireland=r.rank_ireland or (i + 1),
+                rank_ireland=ireland_rank,
                 tournaments_played=r.tournaments_played,
                 matches_played=r.matches_played,
                 wins=r.wins,

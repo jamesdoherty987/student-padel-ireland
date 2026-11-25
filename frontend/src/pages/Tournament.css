@@ -1744,7 +1744,7 @@
 
 .rank-page-row {
   display: grid;
-  grid-template-columns: 3.2rem 2.5rem minmax(0, 1fr) auto;
+  grid-template-columns: 4rem 2.75rem minmax(0, 1fr) auto;
   gap: 0.75rem;
   align-items: center;
   padding: 1rem 1.15rem;
@@ -1816,8 +1816,12 @@
 .rank-page-row .rank-num {
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   color: var(--court-deep);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .rank-page-row .rank-meta {
@@ -1923,9 +1927,14 @@
   }
 
   .rank-page-row {
-    grid-template-columns: 2.5rem 2.5rem minmax(0, 1fr) auto;
+    /* Rank col wide enough for #10 / #100 without colliding with avatar */
+    grid-template-columns: 3.75rem 2.5rem minmax(0, 1fr) auto;
     gap: 0.55rem;
     padding: 0.85rem 0.9rem;
+  }
+
+  .rank-page-row .rank-num {
+    font-size: 1.05rem;
   }
 
   .rank-avatar {

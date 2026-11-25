@@ -19,17 +19,41 @@ from dataclasses import dataclass
 from typing import Iterable, Optional, Sequence
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models import Ranking, RankingHistory, User
 
 INITIAL_RATING = 1500
-K_PROVISIONAL = 40  # fewer than PROVISIONAL_MATCHES games
-K_STANDARD = 24
-K_VETERAN = 16  # many games → more stable
-PROVISIONAL_MATCHES = 15
-VETERAN_MATCHES = 60
+# Higher K → more volatile swings (student events are low volume).
+K_PROVISIONAL = 64  # fewer than PROVISIONAL_MATCHES games
+K_STANDARD = 40
+K_VETERAN = 28  # many games → still moves; just less than provisional
+PROVISIONAL_MATCHES = 12
+VETERAN_MATCHES = 40
 SCALE = 400.0
+
+
+def ireland_board_filters():
+    """SQLAlchemy filters shared by the public rankings board and rank recompute."""
+    return (
+        User.is_active.is_(True),
+        or_(Ranking.matches_played > 0, Ranking.tournaments_played > 0),
+        # Exclude dry-run demo logins from public boards / uni filters
+        ~User.email.ilike("dryrun%@example.com"),
+        User.email != "dryrun.host@example.com",
+        or_(User.bio.is_(None), User.bio != "dry-run-demo"),
+    )
+
+
+def ireland_board_order():
+    """Stable sort: rating, then wins, then experience, then user id."""
+    return (
+        Ranking.points.desc(),
+        Ranking.wins.desc(),
+        Ranking.matches_played.desc(),
+        Ranking.user_id.asc(),
+    )
 
 
 @dataclass
@@ -60,13 +84,13 @@ def k_factor(matches_played: int) -> float:
 
 
 def margin_multiplier(sets_won: int, sets_lost: int) -> float:
-    """Mild score-margin boost so 2-0 moves ratings slightly more than 2-1."""
+    """Score-margin boost so dominant wins move ratings more than close ones."""
     diff = abs(sets_won - sets_lost)
     if diff <= 0:
         return 1.0
     if diff == 1:
-        return 1.0
-    return 1.15  # e.g. 2–0
+        return 1.05
+    return 1.25  # e.g. 2–0
 
 
 def compute_side_updates(
@@ -187,9 +211,20 @@ def apply_rating_updates(
 
 
 def _recompute_ireland_ranks(db: Session) -> None:
-    rows = db.query(Ranking).order_by(Ranking.points.desc(), Ranking.wins.desc()).all()
-    for i, row in enumerate(rows, start=1):
+    """Assign dense Ireland ranks to the same players who appear on the public board."""
+    ranked = (
+        db.query(Ranking)
+        .join(User, Ranking.user_id == User.id)
+        .filter(*ireland_board_filters())
+        .order_by(*ireland_board_order())
+        .all()
+    )
+    ranked_ids = {row.user_id for row in ranked}
+    for i, row in enumerate(ranked, start=1):
         row.rank_ireland = i
+    for row in db.query(Ranking).filter(Ranking.rank_ireland.isnot(None)).all():
+        if row.user_id not in ranked_ids:
+            row.rank_ireland = None
 
 
 def rate_match(

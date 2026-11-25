@@ -150,7 +150,14 @@ export default function RankingsPage() {
     if (uni !== 'all' && scope === 'all') {
       rows = rows.filter((r) => (r.university_short || r.university_name) === uni)
     }
-    return rows
+    // Highest rating first so list # always matches points order.
+    return [...rows].sort(
+      (a, b) =>
+        b.points - a.points ||
+        b.wins - a.wins ||
+        b.matches_played - a.matches_played ||
+        a.id.localeCompare(b.id),
+    )
   }, [sourceRows, scope, uni, friendIds, user, myUniShort, myUniName])
 
   const scopeLoading =
@@ -364,11 +371,10 @@ export default function RankingsPage() {
                 .slice(0, 2)
                 .toUpperCase()
               const isMe = Boolean(user && user.id === r.id)
-              const showIrelandRank = scope === 'all' && uni === 'all'
               return (
                 <li key={r.id}>
                   <Link to={`/players/${r.id}`} className={`rank-page-row ${isMe ? 'is-me' : ''}`}>
-                    <span className="rank-num">#{showIrelandRank ? (r.rank_ireland ?? '-') : idx + 1}</span>
+                    <span className="rank-num">#{idx + 1}</span>
                     {avatar ? (
                       <img src={avatar} alt="" className="rank-avatar" />
                     ) : (
