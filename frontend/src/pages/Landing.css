@@ -675,6 +675,7 @@
 .lp-shot-video {
   background: #0b3d2e;
   position: relative;
+  aspect-ratio: 16 / 9;
 }
 
 .lp-feature-video {
