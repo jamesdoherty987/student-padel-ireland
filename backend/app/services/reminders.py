@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 IRELAND_TZ = ZoneInfo("Europe/Dublin")
 
 # Public App Store listing — players need the app on match day
+# Keep in sync with Settings.app_store_url / frontend storeUrls.ts
 APP_STORE_URL = "https://apps.apple.com/ie/app/student-padel-ireland/id6818780104"
 
 # Editable organiser defaults (placeholders filled per player at send time)

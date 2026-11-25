@@ -692,6 +692,12 @@ export const platformApi = {
       /** Platform fee added on Stripe Checkout only (0 when Stripe off / unset) */
       service_fee_cents?: number
     }>('/api/config/public'),
+  /** Soft native update policy (public, no auth). */
+  appVersion: () =>
+    api.get<{
+      ios: { latest: string; store_url: string }
+      android: { latest: string; store_url: string }
+    }>('/api/app-version'),
   universities: () => api.get<University[]>('/api/universities'),
   rankings: (limit = 50) => api.get<RankingRow[]>('/api/rankings', { params: { limit } }),
   /** Players entered in the same tournaments as the current user (optional per-event filter) */

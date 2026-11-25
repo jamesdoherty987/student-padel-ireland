@@ -49,6 +49,7 @@ import {
   statusLabel,
 } from '../utils/format'
 import { mediaUrl } from '../utils/media'
+import { APP_STORE_URL } from '../utils/storeUrls'
 import {
   isActiveOnCourt,
   isCourtsideRelevant,
@@ -1886,7 +1887,7 @@ export default function ManageEventPage() {
     venue: reminderPreviewWhere,
     schedule: reminderPreviewSchedule,
     time: fixturesExist ? '10:00' : formatTime(active?.tournament.start_time),
-    app: 'https://apps.apple.com/ie/app/student-padel-ireland/id6818780104',
+    app: APP_STORE_URL,
     format: `https://www.studentpadel.ie/t/${reminderPreviewSlug}#tour-rules`,
     fixtures: `https://www.studentpadel.ie/t/${reminderPreviewSlug}/fixtures`,
     rules: 'https://www.studentpadel.ie/padel-rules',

@@ -11,6 +11,7 @@ import { initNativeShell } from './native/shell'
 import {
   clearServiceWorkerReloadGuard,
   reloadOnceForServiceWorker,
+  stashPendingWaitingServiceWorker,
 } from './utils/appRefresh'
 
 /** Wake a sleeping Render free instance as soon as the main module runs. */
@@ -34,26 +35,52 @@ function mount() {
   )
 }
 
+function watchRegistration(reg: ServiceWorkerRegistration) {
+  if (reg.waiting) {
+    stashPendingWaitingServiceWorker(reg.waiting)
+  }
+
+  reg.addEventListener('updatefound', () => {
+    const installing = reg.installing
+    if (!installing) return
+    installing.addEventListener('statechange', () => {
+      // New SW finished installing while an older one still controls the page → waiting
+      if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+        stashPendingWaitingServiceWorker(reg.waiting || installing)
+      }
+    })
+  })
+}
+
 function registerServiceWorker() {
   if (isNativeApp() || !('serviceWorker' in navigator)) return
 
   clearServiceWorkerReloadGuard()
 
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      /* offline / unsupported */
-    })
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        watchRegistration(reg)
+      })
+      .catch(() => {
+        /* offline / unsupported */
+      })
   })
 
-  // New SW took control — silent reload once (no confirm / “refreshing” UI)
+  // New SW took control after user chose Update — reload once
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     reloadOnceForServiceWorker()
   })
 
-  // Quietly look for updates when the tab comes back
+  // Quietly look for updates when the tab comes back (prompt via AppUpdatePrompt)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return
-    void navigator.serviceWorker.getRegistration().then((reg) => reg?.update().catch(() => undefined))
+    void navigator.serviceWorker.getRegistration().then((reg) => {
+      if (!reg) return
+      void reg.update().catch(() => undefined)
+      if (reg.waiting) stashPendingWaitingServiceWorker(reg.waiting)
+    })
   })
 }
 

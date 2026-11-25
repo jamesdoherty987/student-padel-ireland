@@ -16,9 +16,9 @@ export default function HeaderReloadButton() {
     void hapticLight()
     try {
       await softRefreshApp(qc)
+      // Explicit refresh tap — apply waiting SW if present (soft prompt is separate)
       const waiting = await applyWaitingServiceWorker()
       if (waiting) {
-        // New shell is ready — silent reload, no confirm dialog
         window.setTimeout(() => window.location.reload(), 120)
         return
       }

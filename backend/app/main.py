@@ -108,3 +108,18 @@ def public_config():
         # Charged on Stripe Checkout only (not pay-on-arrival)
         "service_fee_cents": fee if settings.stripe_secret_key else 0,
     }
+
+
+@app.get("/api/app-version")
+def app_version():
+    """Public soft-update policy for native iOS/Android shells (no auth)."""
+    return {
+        "ios": {
+            "latest": (settings.app_version_ios_latest or "1.0.8").strip(),
+            "store_url": (settings.app_store_url or "").strip(),
+        },
+        "android": {
+            "latest": (settings.app_version_android_latest or "1.0.7").strip(),
+            "store_url": (settings.play_store_url or "").strip(),
+        },
+    }

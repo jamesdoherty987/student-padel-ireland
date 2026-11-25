@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     # Comma-separated extra CORS origins (Capacitor, preview deploys, custom domains)
     cors_extra_origins: str = ""
 
+    # Soft native update prompt — bump latest after a store release goes live.
+    # Defaults match currently shipped marketing versions so nothing prompts until raised.
+    app_version_ios_latest: str = "1.0.8"
+    app_version_android_latest: str = "1.0.7"
+    app_store_url: str = "https://apps.apple.com/ie/app/student-padel-ireland/id6818780104"
+    play_store_url: str = "https://play.google.com/store/apps/details?id=ie.studentpadel.app"
+
     access_token_expire_minutes: int = 60 * 24 * 30  # 30 days - stay signed in on this browser
 
     @field_validator("database_url", mode="before")

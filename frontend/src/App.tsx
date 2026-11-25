@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfirmDialogProvider } from './components/ConfirmDialog'
+import AppUpdatePrompt from './components/AppUpdatePrompt'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import NativeTabBar from './components/NativeTabBar'
 import OfflineBanner from './components/OfflineBanner'
@@ -294,6 +295,8 @@ export default function App() {
             </Suspense>
             {/* After routes so discard confirms stack above page modals */}
             <ConfirmDialogProvider />
+            {/* After confirm provider so the soft-update dialog can render */}
+            <AppUpdatePrompt />
             <NativeTabBar />
           </AuthPersistBridge>
         </BrowserRouter>

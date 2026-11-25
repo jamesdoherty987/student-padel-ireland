@@ -3,6 +3,34 @@ import { isNativeApp } from '../native/platform'
 
 const SW_RELOAD_KEY = 'spi-sw-reloaded'
 
+/** Dispatched when a new service worker is waiting (PWA only). */
+export const PWA_UPDATE_EVENT = 'spi:pwa-update-available'
+
+declare global {
+  interface Window {
+    /** Stash waiting SW if the update event fires before React mounts. */
+    __SPI_WAITING_SW?: ServiceWorker | null
+  }
+}
+
+export function stashPendingWaitingServiceWorker(worker: ServiceWorker): void {
+  window.__SPI_WAITING_SW = worker
+  window.dispatchEvent(new CustomEvent(PWA_UPDATE_EVENT))
+}
+
+/** Keep the waiting worker without re-firing the update event (e.g. after a stolen dialog). */
+export function rememberWaitingServiceWorker(worker: ServiceWorker): void {
+  window.__SPI_WAITING_SW = worker
+}
+
+export function getPendingWaitingServiceWorker(): ServiceWorker | null {
+  return window.__SPI_WAITING_SW ?? null
+}
+
+export function clearPendingWaitingServiceWorker(): void {
+  window.__SPI_WAITING_SW = null
+}
+
 /** Soft refresh: refetch queries without a full page reload / popup. */
 export async function softRefreshApp(qc: QueryClient): Promise<void> {
   await qc.invalidateQueries({ refetchType: 'active' })
@@ -15,27 +43,23 @@ export async function softRefreshApp(qc: QueryClient): Promise<void> {
   }
 }
 
-/** Apply a waiting service worker, then reload once (no confirm UI). */
+/** Tell a waiting service worker to activate (user chose Update). */
 export async function applyWaitingServiceWorker(): Promise<boolean> {
   if (isNativeApp() || !('serviceWorker' in navigator)) return false
   try {
+    const pending = getPendingWaitingServiceWorker()
     const reg = await navigator.serviceWorker.getRegistration()
-    if (!reg?.waiting) return false
-    reg.waiting.postMessage({ type: 'SKIP_WAITING' })
-    // Fallback if the worker ignores the message
-    try {
-      // skipWaiting is already called on install in sw.js; activate + claim still need a reload
-      reg.waiting.postMessage({ type: 'SKIP_WAITING' })
-    } catch {
-      /* ignore */
-    }
+    const waiting = reg?.waiting || pending
+    if (!waiting) return false
+    waiting.postMessage({ type: 'SKIP_WAITING' })
+    clearPendingWaitingServiceWorker()
     return true
   } catch {
     return false
   }
 }
 
-/** Hard reload once after SW takeover — silent, no dialog. */
+/** Hard reload once after SW takeover. */
 export function reloadOnceForServiceWorker(): void {
   try {
     if (sessionStorage.getItem(SW_RELOAD_KEY) === '1') return

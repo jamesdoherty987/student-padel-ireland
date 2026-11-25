@@ -1,5 +1,5 @@
 /* Student Padel Ireland - lightweight PWA service worker */
-const CACHE = 'spi-shell-v7'
+const CACHE = 'spi-shell-v8'
 const PRECACHE = [
   '/',
   '/index.html',
@@ -11,10 +11,12 @@ const PRECACHE = [
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE)
-      .then((cache) => cache.addAll(PRECACHE))
-      .then(() => self.skipWaiting()),
+    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => {
+      // First install only — updates wait for the page soft-update prompt
+      if (!self.registration.active) {
+        return self.skipWaiting()
+      }
+    }),
   )
 })
 

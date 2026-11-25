@@ -1,4 +1,5 @@
 import { App, type URLOpenListenerEvent } from '@capacitor/app'
+import { AppLauncher } from '@capacitor/app-launcher'
 import { Browser } from '@capacitor/browser'
 import type { PluginListenerHandle } from '@capacitor/core'
 import { Keyboard } from '@capacitor/keyboard'
@@ -52,6 +53,23 @@ export async function openExternalUrl(url: string): Promise<void> {
     presentationStyle: 'fullscreen',
     toolbarColor: '#0b3d2e',
   })
+}
+
+/** Open App Store / Play Store in the system browser (not an in-app sheet). */
+export async function openStoreUrl(url: string): Promise<void> {
+  if (!url) return
+  if (!isNativeApp()) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    return
+  }
+  try {
+    await AppLauncher.openUrl({ url })
+    return
+  } catch {
+    /* plugin / platform quirk */
+  }
+  // Fallback still reaches the store listing
+  await Browser.open({ url })
 }
 
 export async function closeExternalBrowser(): Promise<void> {
